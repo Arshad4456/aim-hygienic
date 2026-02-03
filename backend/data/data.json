@@ -1,0 +1,135 @@
+{
+  "users": [
+    {
+      "id": "u_admin",
+      "username": "admin",
+      "password": "admin123",
+      "role": "ADMIN",
+      "fullName": "Admin",
+      "company": "AIM HYGIENIC (PRIVATE) LIMITED",
+      "status": "Active"
+    },
+    {
+      "id": "u_manager",
+      "username": "manager",
+      "password": "123456",
+      "role": "MANAGER",
+      "fullName": "Manager User",
+      "company": "AIM HYGIENIC (PRIVATE) LIMITED",
+      "status": "Active"
+    }
+  ],
+  "dashboard": {
+    "welcomeCompany": "Aim Hygienics Pvt Limited",
+    "cards": [
+      { "key": "totalSales", "title": "Total Sales", "value": "0 PKR", "sub": "Last Month: 0.09 M", "hint": "Click here for more" },
+      { "key": "outstanding", "title": "Outstanding", "value": "7,299,714 PKR", "sub": "", "hint": "Click here for more" },
+      { "key": "cashOut", "title": "Cash Out", "value": "0 PKR", "sub": "", "hint": "Click here for more" },
+      { "key": "cashIn", "title": "Cash In", "value": "153,920 PKR", "sub": "", "hint": "Click here for more" },
+      { "key": "purchase", "title": "Purchase", "value": "0 PKR", "sub": "", "hint": "" },
+      { "key": "stockValue", "title": "Stock Value", "value": "7,311,582 PKR", "sub": "", "hint": "" },
+      { "key": "stockQty", "title": "Stock Qty", "value": "1,405,817", "sub": "", "hint": "" },
+      { "key": "expenses", "title": "Expenses", "value": "0 PKR", "sub": "", "hint": "" },
+      { "key": "payable", "title": "Payable", "value": "7,657,222 PKR", "sub": "", "hint": "" },
+      { "key": "customers", "title": "Customers", "value": "349", "sub": "", "hint": "" }
+    ]
+  },
+  "menu": [
+    { "title": "Dashboard", "path": "/dashboard", "icon": "dashboard" },
+    { "title": "Sales KPI", "path": "/sales-kpi", "icon": "kpi", "badge": "Premium" },
+    {
+      "title": "Products Management",
+      "icon": "products",
+      "children": [
+        { "title": "Add New Product", "path": "/products/new" },
+        { "title": "View Product List", "path": "/products" },
+        { "title": "Product Barcode List", "path": "/products/barcodes" },
+        { "title": "Price Change", "path": "/products/price-change" }
+      ]
+    },
+    {
+      "title": "Expense Management",
+      "icon": "expense",
+      "children": [
+        { "title": "Add Expense", "path": "/expenses/new" },
+        { "title": "View Expense List", "path": "/expenses" }
+      ]
+    },
+    { "title": "Account Management", "path": "/accounts", "icon": "account" },
+    {
+      "title": "Customer Management",
+      "icon": "customers",
+      "children": [
+        { "title": "Add New Customer", "path": "/customers/new" },
+        { "title": "View Customer List", "path": "/customers" },
+        { "title": "User Credit Limit", "path": "/customers/credit-limit" },
+        { "title": "Customer Coupon Policy", "path": "/customers/coupon-policy" },
+        {
+          "title": "Discount Policy",
+          "children": [
+            { "title": "Item Policy", "path": "/customers/discount/item" },
+            { "title": "Group Policy", "path": "/customers/discount/group" },
+            { "title": "Company Policy", "path": "/customers/discount/company" }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Supplier Management",
+      "icon": "supplier",
+      "children": [
+        { "title": "Add New Supplier", "path": "/suppliers/new" },
+        { "title": "View Supplier List", "path": "/suppliers" }
+      ]
+    },
+    {
+      "title": "Quality Control",
+      "icon": "qc",
+      "children": [
+        { "title": "Raw Material QC", "path": "/qc/raw-material" },
+        { "title": "Production QC", "path": "/qc/production" },
+        { "title": "Finished Goods QC", "path": "/qc/finished-goods" },
+        { "title": "Final Release QC", "path": "/qc/final-release" }
+      ]
+    },
+    { "title": "Finance/Accounts", "path": "/finance", "icon": "finance" },
+    {
+      "title": "Route Management",
+      "icon": "route",
+      "children": [
+        { "title": "Add Route", "path": "/route/new" },
+        { "title": "View Route List", "path": "/route" },
+        { "title": "Add Planner", "path": "/route/planner/new" },
+        { "title": "View Planner List", "path": "/route/planner" }
+      ]
+    },
+    { "title": "Scheme Management", "path": "/schemes", "icon": "scheme" },
+    {
+      "title": "Purchase Management",
+      "icon": "purchase",
+      "children": [
+        { "title": "Purchase Challan", "path": "/purchase/challan" },
+        { "title": "Purchase Order", "path": "/purchase/order" },
+        { "title": "Purchase Invoice", "path": "/purchase/invoice" },
+        { "title": "Purchase Return", "path": "/purchase/return" },
+        { "title": "Stock Transfer", "path": "/purchase/stock-transfer" },
+        { "title": "View Transferred Stock", "path": "/purchase/transferred" }
+      ]
+    },
+    { "title": "Delivery Management", "path": "/delivery", "icon": "delivery" },
+    {
+      "title": "Orders Management",
+      "icon": "orders",
+      "children": [
+        { "title": "Show Orders List", "path": "/orders" },
+        { "title": "Secondary Orders List", "path": "/orders/secondary" }
+      ]
+    },
+    { "title": "User Live Tracking", "path": "/tracking", "icon": "tracking" },
+    { "title": "Godown Summary", "path": "/godown", "icon": "godown" },
+    { "title": "Sales Target", "path": "/targets", "icon": "targets" },
+    { "title": "Reports", "path": "/reports", "icon": "reports" },
+    { "title": "Settings", "path": "/settings", "icon": "settings" },
+    { "title": "API Integrations", "path": "/integrations", "icon": "plug", "badge": "Premium" }
+  ]
+}
