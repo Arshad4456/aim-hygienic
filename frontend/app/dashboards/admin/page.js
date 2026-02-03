@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import AdminShell from "../components/AdminShell";
+import AdminShell from "../admin/components/AdminShell";
 
 export default function AdminDashboardPage() {
   const router = useRouter();
