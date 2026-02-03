@@ -1,267 +1,208 @@
+cat > app/dashboards/components/Sidebar.js <<'EOF'
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
-export default function Sidebar({ user }) {
+function Item({ label, icon, active, onClick, indent = 0 }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        "w-full flex items-center gap-3 rounded-lg px-3 py-2 text-left text-sm",
+        active ? "bg-emerald-50 text-emerald-700" : "text-zinc-700 hover:bg-zinc-100",
+      ].join(" ")}
+      style={{ paddingLeft: 12 + indent * 16 }}
+    >
+      <span className="w-5">{icon}</span>
+      <span className="flex-1">{label}</span>
+    </button>
+  );
+}
+
+function Group({ label, icon, children, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="mt-1">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100"
+      >
+        <span className="w-5">{icon}</span>
+        <span className="flex-1">{label}</span>
+        <span className="text-xs text-zinc-400">{open ? "▾" : "▸"}</span>
+      </button>
+      {open && <div className="mt-1 space-y-1">{children}</div>}
+    </div>
+  );
+}
+
+export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [open, setOpen] = useState({
-    products: true,
-    expense: false,
-    customer: false,
-    supplier: false,
-    qc: false,
-    route: false,
-    purchase: false,
-    orders: false,
-  });
 
   const menu = useMemo(
     () => [
-      { type: "link", title: "Dashboard", href: "/dashboards/admin" },
-
-      { type: "link", title: "Sales KPI", href: "/dashboards/admin/sales-kpi", badge: "Premium" },
+      { type: "item", label: "Dashboard", path: "/dashboards/admin", icon: "🖥️" },
+      { type: "item", label: "Sales KPI", path: "/dashboards/admin/sales-kpi", icon: "📊" },
 
       {
         type: "group",
-        key: "products",
-        title: "Products Management",
+        label: "Products Management",
+        icon: "🅿️",
         children: [
-          { title: "Add New Product", href: "/dashboards/admin/products/add" },
-          { title: "View Product List", href: "/dashboards/admin/products" },
-          { title: "Product Barcode List", href: "/dashboards/admin/products/barcodes" },
-          { title: "Price Change", href: "/dashboards/admin/products/price-change" },
+          { label: "Add New Product", path: "/dashboards/admin/products/add" },
+          { label: "View Product List", path: "/dashboards/admin/products/list" },
+          { label: "Product Barcode List", path: "/dashboards/admin/products/barcodes" },
+          { label: "Price Change", path: "/dashboards/admin/products/price-change" },
         ],
       },
 
       {
         type: "group",
-        key: "expense",
-        title: "Expense Management",
+        label: "Expense Management",
+        icon: "👤",
         children: [
-          { title: "Add Expense", href: "/dashboards/admin/expense/add" },
-          { title: "View Expense List", href: "/dashboards/admin/expense" },
+          { label: "Add Expense", path: "/dashboards/admin/expenses/add" },
+          { label: "View Expense List", path: "/dashboards/admin/expenses/list" },
         ],
       },
 
-      { type: "link", title: "Account Management", href: "/dashboards/admin/account/manage" },
+      { type: "item", label: "Account Management", path: "/dashboards/admin/accounts", icon: "👤" },
 
       {
         type: "group",
-        key: "customer",
-        title: "Customer Management",
+        label: "Customer Management",
+        icon: "👤",
         children: [
-          { title: "Add New Customer", href: "/dashboards/admin/customers/add" },
-          { title: "View Customer List", href: "/dashboards/admin/customers" },
-          { title: "User Credit Limit", href: "/dashboards/admin/customers/credit-limit" },
-          { title: "Customer Coupon Policy", href: "/dashboards/admin/customers/coupon-policy" },
-          {
-            title: "Discount Policy",
-            href: "/dashboards/admin/customers/discount-policy",
-            children: [
-              { title: "Item Policy", href: "/dashboards/admin/customers/discount-policy/item" },
-              { title: "Group Policy", href: "/dashboards/admin/customers/discount-policy/group" },
-              { title: "Company Policy", href: "/dashboards/admin/customers/discount-policy/company" },
-            ],
-          },
+          { label: "Add New Customer", path: "/dashboards/admin/customers/add" },
+          { label: "View Customer List", path: "/dashboards/admin/customers/list" },
+          { label: "User Credit Limit", path: "/dashboards/admin/customers/credit-limit" },
+          { label: "Customer Coupon Policy", path: "/dashboards/admin/customers/coupon-policy" },
+          { label: "Discount Policy", path: "/dashboards/admin/customers/discount-policy" },
         ],
       },
 
       {
         type: "group",
-        key: "supplier",
-        title: "Supplier Management",
+        label: "Supplier Management",
+        icon: "🧑‍🤝‍🧑",
         children: [
-          { title: "Add New Supplier", href: "/dashboards/admin/suppliers/add" },
-          { title: "View Supplier List", href: "/dashboards/admin/suppliers" },
+          { label: "Add New Supplier", path: "/dashboards/admin/suppliers/add" },
+          { label: "View Supplier List", path: "/dashboards/admin/suppliers/list" },
         ],
       },
 
       {
         type: "group",
-        key: "qc",
-        title: "Quality Control",
+        label: "Quality Control",
+        icon: "☑️",
         children: [
-          { title: "Raw Material QC", href: "/dashboards/admin/qc/raw-material" },
-          { title: "Production QC", href: "/dashboards/admin/qc/production" },
-          { title: "Finished Goods QC", href: "/dashboards/admin/qc/finished-goods" },
-          { title: "Final Release QC", href: "/dashboards/admin/qc/final-release" },
+          { label: "Raw Material QC", path: "/dashboards/admin/qc/raw-material" },
+          { label: "Production QC", path: "/dashboards/admin/qc/production" },
+          { label: "Finished Goods QC", path: "/dashboards/admin/qc/finished-goods" },
+          { label: "Final Release QC", path: "/dashboards/admin/qc/final-release" },
         ],
       },
 
-      { type: "link", title: "Finance/Accounts", href: "/dashboards/admin/finance" },
+      { type: "item", label: "Finance/Accounts", path: "/dashboards/admin/finance", icon: "📁" },
 
       {
         type: "group",
-        key: "route",
-        title: "Route Management",
+        label: "Route Management",
+        icon: "🧭",
         children: [
-          { title: "Add Route", href: "/dashboards/admin/route/add" },
-          { title: "View Route List", href: "/dashboards/admin/route" },
-          { title: "Add Planner", href: "/dashboards/admin/route/planner/add" },
-          { title: "View Planner List", href: "/dashboards/admin/route/planner" },
+          { label: "Add Route", path: "/dashboards/admin/routes/add" },
+          { label: "View Route List", path: "/dashboards/admin/routes/list" },
+          { label: "Add Planner", path: "/dashboards/admin/routes/planner/add" },
+          { label: "View Planner List", path: "/dashboards/admin/routes/planner/list" },
         ],
       },
 
-      { type: "link", title: "Scheme Management", href: "/dashboards/admin/schemes" },
+      { type: "item", label: "Scheme Management", path: "/dashboards/admin/schemes", icon: "〰️" },
 
       {
         type: "group",
-        key: "purchase",
-        title: "Purchase Management",
+        label: "Purchase Management",
+        icon: "🛒",
         children: [
-          { title: "Purchase Challan", href: "/dashboards/admin/purchase/challan" },
-          { title: "Purchase Order", href: "/dashboards/admin/purchase/order" },
-          { title: "Purchase Invoice", href: "/dashboards/admin/purchase/invoice" },
-          { title: "Purchase Return", href: "/dashboards/admin/purchase/return" },
-          { title: "Stock Transfer", href: "/dashboards/admin/purchase/stock-transfer" },
-          { title: "View Transfered Stock", href: "/dashboards/admin/purchase/transferred-stock" },
+          { label: "Purchase Challan", path: "/dashboards/admin/purchase/challan" },
+          { label: "Purchase Order", path: "/dashboards/admin/purchase/order" },
+          { label: "Purchase Invoice", path: "/dashboards/admin/purchase/invoice" },
+          { label: "Purchase Return", path: "/dashboards/admin/purchase/return" },
+          { label: "Stock Transfer", path: "/dashboards/admin/purchase/stock-transfer" },
+          { label: "View Transferred Stock", path: "/dashboards/admin/purchase/transferred-stock" },
         ],
       },
 
-      { type: "link", title: "Delivery Management", href: "/dashboards/admin/delivery" },
+      { type: "item", label: "Delivery Management", path: "/dashboards/admin/delivery", icon: "🚚" },
 
       {
         type: "group",
-        key: "orders",
-        title: "Orders Management",
+        label: "Orders Management",
+        icon: "🚚",
         children: [
-          { title: "Show Orders List", href: "/dashboards/admin/orders" },
-          { title: "Secondary Orders List", href: "/dashboards/admin/orders/secondary" },
+          { label: "Show Orders List", path: "/dashboards/admin/orders/list" },
+          { label: "Secondary Orders List", path: "/dashboards/admin/orders/secondary" },
         ],
       },
 
-      { type: "link", title: "User Live Tracking", href: "/dashboards/admin/live-tracking" },
-      { type: "link", title: "Godown Summary", href: "/dashboards/admin/godown-summary" },
-      { type: "link", title: "Sales Target", href: "/dashboards/admin/sales-target" },
-      { type: "link", title: "Reports", href: "/dashboards/admin/reports" },
-      { type: "link", title: "Settings", href: "/dashboards/admin/settings" },
-      { type: "link", title: "API Integrations", href: "/dashboards/admin/integrations", badge: "Premium" },
+      { type: "item", label: "User Live Tracking", path: "/dashboards/admin/tracking", icon: "📍" },
+      { type: "item", label: "Godown Summary", path: "/dashboards/admin/godown", icon: "🏬" },
+      { type: "item", label: "Sales Target", path: "/dashboards/admin/sales-target", icon: "📁" },
+      { type: "item", label: "Reports", path: "/dashboards/admin/reports", icon: "📄" },
+      { type: "item", label: "Settings", path: "/dashboards/admin/settings", icon: "⚙️" },
     ],
     []
   );
 
-  function logout() {
-    localStorage.removeItem("aim_token");
-    localStorage.removeItem("aim_role");
-    localStorage.removeItem("aim_user");
-    document.cookie = "aim_token=; Max-Age=0; path=/";
-    document.cookie = "aim_role=; Max-Age=0; path=/";
-    router.push("/login");
-  }
-
   return (
-    <aside className="w-[280px] hidden md:flex flex-col border-r bg-white min-h-screen sticky top-0">
-      <div className="px-4 py-4 border-b flex items-center gap-3">
-        <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
-          <span className="text-emerald-700 font-bold">AH</span>
-        </div>
-        <div className="leading-tight">
-          <div className="font-semibold text-zinc-900">Admin</div>
-          <div className="text-xs text-zinc-500">{user?.fullName || "System Admin"}</div>
+    <aside className="w-[280px] shrink-0 border-r bg-white min-h-screen">
+      <div className="p-4 border-b">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-full bg-emerald-100 grid place-items-center font-bold text-emerald-700">
+            M
+          </div>
+          <div>
+            <div className="text-sm font-semibold text-zinc-900">Admin</div>
+            <div className="text-xs text-zinc-500">AIM Hygienic</div>
+          </div>
         </div>
       </div>
 
-      <nav className="flex-1 overflow-auto px-2 py-3">
-        {menu.map((item) => {
-          if (item.type === "link") {
-            const active = pathname === item.href;
+      <div className="p-3 space-y-1">
+        {menu.map((m, idx) => {
+          if (m.type === "item") {
             return (
-              <button
-                key={item.title}
-                onClick={() => router.push(item.href)}
-                className={`w-full flex items-center justify-between rounded-xl px-3 py-2 text-sm mb-1 ${
-                  active ? "bg-emerald-50 text-emerald-700" : "text-zinc-700 hover:bg-zinc-50"
-                }`}
-              >
-                <span>{item.title}</span>
-                {item.badge ? (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600">
-                    {item.badge}
-                  </span>
-                ) : null}
-              </button>
+              <Item
+                key={idx}
+                label={m.label}
+                icon={m.icon}
+                active={pathname === m.path}
+                onClick={() => router.push(m.path)}
+              />
             );
           }
 
-          // group
-          const isOpen = !!open[item.key];
           return (
-            <div key={item.title} className="mb-1">
-              <button
-                onClick={() => setOpen((s) => ({ ...s, [item.key]: !s[item.key] }))}
-                className="w-full flex items-center justify-between rounded-xl px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
-              >
-                <span>{item.title}</span>
-                <span className="text-zinc-400">{isOpen ? "▾" : "▸"}</span>
-              </button>
-
-              {isOpen ? (
-                <div className="ml-2 pl-3 border-l">
-                  {item.children.map((c) => {
-                    // nested sub-group support for Discount Policy
-                    if (c.children) {
-                      const key = c.href;
-                      const nestedOpen = !!open[key];
-                      return (
-                        <div key={c.title}>
-                          <button
-                            onClick={() => setOpen((s) => ({ ...s, [key]: !s[key] }))}
-                            className="w-full flex items-center justify-between rounded-lg px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50"
-                          >
-                            <span>{c.title}</span>
-                            <span className="text-zinc-400">{nestedOpen ? "▾" : "▸"}</span>
-                          </button>
-                          {nestedOpen ? (
-                            <div className="ml-2 pl-3 border-l">
-                              {c.children.map((cc) => (
-                                <button
-                                  key={cc.title}
-                                  onClick={() => router.push(cc.href)}
-                                  className={`w-full text-left rounded-lg px-3 py-2 text-sm ${
-                                    pathname === cc.href
-                                      ? "bg-emerald-50 text-emerald-700"
-                                      : "text-zinc-600 hover:bg-zinc-50"
-                                  }`}
-                                >
-                                  {cc.title}
-                                </button>
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
-                      );
-                    }
-
-                    const active = pathname === c.href;
-                    return (
-                      <button
-                        key={c.title}
-                        onClick={() => router.push(c.href)}
-                        className={`w-full text-left rounded-lg px-3 py-2 text-sm ${
-                          active ? "bg-emerald-50 text-emerald-700" : "text-zinc-600 hover:bg-zinc-50"
-                        }`}
-                      >
-                        {c.title}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div>
+            <Group key={idx} label={m.label} icon={m.icon}>
+              {m.children.map((c, j) => (
+                <Item
+                  key={j}
+                  label={c.label}
+                  icon="○"
+                  indent={1}
+                  active={pathname === c.path}
+                  onClick={() => router.push(c.path)}
+                />
+              ))}
+            </Group>
           );
         })}
-      </nav>
-
-      <div className="p-3 border-t">
-        <button
-          onClick={logout}
-          className="w-full rounded-xl border px-3 py-2 text-sm hover:bg-zinc-50"
-        >
-          Logout
-        </button>
       </div>
     </aside>
   );
 }
+EOF
