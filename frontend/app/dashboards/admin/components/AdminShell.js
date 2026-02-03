@@ -1,7 +1,7 @@
 "use client";
 
 import Sidebar from "./Sidebar";
-cat > app/dashboards/components/AdminShell.js <<'EOF'
+// cat > app/dashboards/components/AdminShell.js <<'EOF'
 "use client";
 
 import Sidebar from "./Sidebar";
@@ -37,7 +37,7 @@ export default function AdminShell({ title = "Dashboard", children }) {
     </div>
   );
 }
-EOF
+// EOF
 
 export default function AdminShell({ children, user }) {
   return (

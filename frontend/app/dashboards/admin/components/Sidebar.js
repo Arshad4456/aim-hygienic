@@ -1,4 +1,4 @@
-cat > app/dashboards/components/Sidebar.js <<'EOF'
+// cat > app/dashboards/components/Sidebar.js <<'EOF'
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
@@ -205,4 +205,4 @@ export default function Sidebar() {
     </aside>
   );
 }
-EOF
+// EOF
