@@ -1,93 +1,72 @@
-// "use client";
+"use client";
 
-// import { useState } from "react";
-// import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 
-// export default function LoginPage() {
-//   const router = useRouter();
-//   const [username, setUsername] = useState("admin");
-//   const [password, setPassword] = useState("Admin@123");
-//   const [loading, setLoading] = useState(false);
-//   const [err, setErr] = useState("");
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:5000";
 
-//   async function onSubmit(e) {
-//     e.preventDefault();
-//     setErr("");
-//     setLoading(true);
+export default function LoginPage() {
+  const router = useRouter();
+  const [username, setUsername] = useState("admin");
+  const [password, setPassword] = useState("admin123");
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
 
-//     try {
-//       const res = await fetch("/api/auth/login", {
-//         method: "POST",
-//         headers: { "Content-Type": "application/json" },
-//         body: JSON.stringify({ username, password }),
-//       });
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    setErr("");
+    setLoading(true);
 
-//       const data = await res.json();
-//       if (!res.ok) throw new Error(data?.message || "Login failed");
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
 
-//       localStorage.setItem("aim_token", data.token);
-//       localStorage.setItem("aim_user", JSON.stringify(data.user));
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || "Login failed");
 
-//       // role-based redirect (for now only admin demo)
-//       if (data.user.role === "admin") router.push("/admin/dashboard");
-//       else router.push("/admin/dashboard");
-//     } catch (e) {
-//       setErr(e.message);
-//     } finally {
-//       setLoading(false);
-//     }
-//   }
+      localStorage.setItem("aim_token", data.token);
+      localStorage.setItem("aim_user", JSON.stringify(data.user));
 
-//   return (
-//     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-//       <div className="w-full max-w-md rounded-2xl border bg-white shadow-sm p-6">
-//         <div className="text-center mb-6">
-//           <div className="text-2xl font-bold">AIM Hygienic ERP</div>
-//           <div className="text-sm text-gray-500">Sign in to continue</div>
-//         </div>
+      router.push("/dashboard");
+    } catch (e2) {
+      setErr(e2.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-//         {err ? (
-//           <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-//             {err}
-//           </div>
-//         ) : null}
+  return (
+    <div className="loginRoot">
+      <div className="loginCard">
+        <div className="loginHeader">
+          <div className="logoCircle">AIM</div>
+          <div>
+            <div className="title">AIM Hygienic ERP</div>
+            <div className="subtitle">Login to your dashboard</div>
+          </div>
+        </div>
 
-//         <form onSubmit={onSubmit} className="space-y-4">
-//           <div>
-//             <label className="text-sm font-medium">Username</label>
-//             <input
-//               className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-gray-200"
-//               value={username}
-//               onChange={(e) => setUsername(e.target.value)}
-//               placeholder="admin"
-//               autoComplete="username"
-//             />
-//           </div>
+        <form onSubmit={onSubmit} className="form">
+          <label className="label">Username</label>
+          <input className="input" value={username} onChange={(e) => setUsername(e.target.value)} />
 
-//           <div>
-//             <label className="text-sm font-medium">Password</label>
-//             <input
-//               type="password"
-//               className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-gray-200"
-//               value={password}
-//               onChange={(e) => setPassword(e.target.value)}
-//               placeholder="••••••••"
-//               autoComplete="current-password"
-//             />
-//           </div>
+          <label className="label">Password</label>
+          <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
 
-//           <button
-//             disabled={loading}
-//             className="w-full rounded-xl bg-black text-white py-2 font-medium disabled:opacity-60"
-//           >
-//             {loading ? "Signing in..." : "Sign In"}
-//           </button>
+          {err ? <div className="error">{err}</div> : null}
 
-//           <div className="text-xs text-gray-500 text-center">
-//             Demo credentials are prefilled for recording.
-//           </div>
-//         </form>
-//       </div>
-//     </div>
-//   );
-// }
+          <button className="btn" disabled={loading}>
+            {loading ? "Signing in..." : "Login"}
+          </button>
+
+          <div className="hint">
+            Demo users: <b>admin/admin123</b> or <b>manager/123456</b>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
