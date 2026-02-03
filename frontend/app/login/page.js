@@ -1,96 +1,120 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { roleToDashboard, saveAuth } from "../lib/auth";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
+const API_BASE = "/api"; // nginx proxy -> backend
 
 export default function LoginPage() {
   const router = useRouter();
-
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState("");
+  const [error, setError] = useState("");
 
-  const canSubmit = useMemo(() => username.trim() && password.trim(), [username, password]);
+  // If already logged in
+  useEffect(() => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("aim_token") : null;
+    const role = typeof window !== "undefined" ? localStorage.getItem("aim_role") : null;
+    if (token && role) {
+      router.replace(roleRedirect(role));
+    }
+  }, [router]);
 
-  const onSubmit = async (e) => {
+  const roleRedirect = (role) => {
+    if (role === "admin") return "/dashboards/admin";
+    if (role === "hr") return "/dashboards/hr";
+    if (role === "accounts") return "/dashboards/accounts";
+    if (role === "sales") return "/dashboards/sales";
+    if (role === "warehouse") return "/dashboards/warehouse";
+    return "/dashboards/admin";
+  };
+
+  async function onSubmit(e) {
     e.preventDefault();
-    setErr("");
+    setError("");
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_BASE}/api/auth/login`, {
+      const res = await fetch(`${API_BASE}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // credentials true is only needed if you later switch to httpOnly cookies
+        credentials: "include",
         body: JSON.stringify({ username, password }),
       });
 
-      const data = await res.json().catch(() => ({}));
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || "Login failed");
 
-      if (!res.ok || !data.ok) {
-        setErr(data.message || "Login failed");
-        setLoading(false);
-        return;
-      }
+      // Save token + role (fast production approach)
+      localStorage.setItem("aim_token", data.token);
+      localStorage.setItem("aim_role", data.user?.role || "");
+      localStorage.setItem("aim_user", JSON.stringify(data.user || {}));
 
-      saveAuth(data.token, data.user);
-      router.push(roleToDashboard(data.user.role));
-    } catch (e) {
-      setErr("Network error: API not reachable");
+      // Cookie for middleware/protection (optional now, useful later)
+      document.cookie = `aim_token=${data.token}; path=/; Secure; SameSite=Lax`;
+      document.cookie = `aim_role=${data.user?.role || ""}; path=/; Secure; SameSite=Lax`;
+
+      router.push(roleRedirect(data.user?.role));
+    } catch (err) {
+      setError(err.message || "Failed to login");
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   return (
-    <div className="min-h-screen w-full bg-zinc-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white shadow-xl border">
-        <div className="px-6 py-6 border-b">
-          <div className="text-2xl font-semibold text-zinc-900">AIM Hygienic ERP</div>
-          <div className="text-sm text-zinc-500 mt-1">Sign in to continue</div>
+    <div className="min-h-screen bg-zinc-50 flex items-center justify-center px-4">
+      <div className="w-full max-w-md rounded-2xl bg-white shadow-sm border p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="h-12 w-12 rounded-full bg-emerald-100 flex items-center justify-center">
+            <span className="text-emerald-700 font-bold">AH</span>
+          </div>
+          <div>
+            <h1 className="text-xl font-semibold text-zinc-900">AIM Hygienic ERP</h1>
+            <p className="text-sm text-zinc-500">Login to continue</p>
+          </div>
         </div>
 
-        <form onSubmit={onSubmit} className="px-6 py-6 space-y-4">
+        {error ? (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </div>
+        ) : null}
+
+        <form onSubmit={onSubmit} className="space-y-4">
           <div>
-            <label className="text-sm font-medium text-zinc-700">Username</label>
+            <label className="text-sm text-zinc-700">Username</label>
             <input
               className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
+              placeholder="admin"
               autoComplete="username"
             />
           </div>
 
           <div>
-            <label className="text-sm font-medium text-zinc-700">Password</label>
+            <label className="text-sm text-zinc-700">Password</label>
             <input
-              type="password"
               className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              placeholder="Admin@12345"
+              type="password"
               autoComplete="current-password"
             />
           </div>
 
-          {err ? (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {err}
-            </div>
-          ) : null}
-
           <button
-            disabled={!canSubmit || loading}
-            className="w-full rounded-xl bg-emerald-600 text-white py-2 font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={loading}
+            className="w-full rounded-xl bg-emerald-600 text-white py-2.5 font-medium hover:bg-emerald-700 disabled:opacity-60"
           >
             {loading ? "Signing in..." : "Login"}
           </button>
 
-          <div className="text-xs text-zinc-500 pt-2 border-t">
-            API: <span className="font-mono">{API_BASE}</span>
+          <div className="text-xs text-zinc-500 text-center">
+            Admin creates users and assigns roles.
           </div>
         </form>
       </div>
