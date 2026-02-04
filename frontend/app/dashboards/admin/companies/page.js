@@ -59,23 +59,25 @@ export default function CompanyListPage() {
           <table className="min-w-[800px] w-full text-sm">
             <thead className="bg-zinc-50">
               <tr>
-                <th className="text-left px-3 py-2 border-b">Company Code</th>
+                <th className="text-left px-3 py-2 border-b">Company ID</th>
                 <th className="text-left px-3 py-2 border-b">Company Name</th>
-                <th className="text-left px-3 py-2 border-b">Manager</th>
+                <th className="text-left px-3 py-2 border-b">Phone #1</th>
+                <th className="text-left px-3 py-2 border-b">Email</th>
                 <th className="text-left px-3 py-2 border-b">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={4} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
+                <tr><td colSpan={5} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={4} className="px-3 py-6 text-center text-zinc-500">No companies found</td></tr>
+                <tr><td colSpan={5} className="px-3 py-6 text-center text-zinc-500">No companies found</td></tr>
               ) : (
                 rows.map((c) => (
                   <tr key={c._id} className="hover:bg-zinc-50">
-                    <td className="px-3 py-2 border-b">{c.code}</td>
+                    <td className="px-3 py-2 border-b">{c.companyId}</td>
                     <td className="px-3 py-2 border-b">{c.name}</td>
-                    <td className="px-3 py-2 border-b">{c.managerName || "-"}</td>
+                    <td className="px-3 py-2 border-b">{c.phone1 || "-"}</td>
+                    <td className="px-3 py-2 border-b">{c.email || "-"}</td>
                     <td className="px-3 py-2 border-b">
                       <div className="flex gap-2">
                         <button
@@ -117,16 +119,12 @@ function EditCompanyModal({ id, onClose, onSaved }) {
   const [err, setErr] = useState("");
 
   const [form, setForm] = useState({
-    code: "",
+    companyId: "",
     name: "",
-    managerName: "",
     phone1: "",
     phone2: "",
     email: "",
-    address: "",
-    branches: [],
-    warehouses: [],
-    products: [],
+    mainOfficeAddress: "",
   });
 
   function setField(k, v) {
@@ -138,16 +136,12 @@ function EditCompanyModal({ id, onClose, onSaved }) {
       try {
         const data = await apiFetch(`/companies/${id}`);
         setForm({
-        code: data.company?.code || "",
+          companyId: data.company?.companyId || "",
           name: data.company?.name || "",
-          managerName: data.company?.managerName || "",
           phone1: data.company?.phone1 || "",
           phone2: data.company?.phone2 || "",
           email: data.company?.email || "",
-          address: data.company?.address || "",
-          branches: data.company?.branches || [],
-          warehouses: data.company?.warehouses || [],
-          products: data.company?.products || [],
+          mainOfficeAddress: data.company?.mainOfficeAddress || "",
         });
       } catch (e) {
         setErr(e.message || "Failed to load company");
@@ -189,38 +183,21 @@ function EditCompanyModal({ id, onClose, onSaved }) {
             <div className="text-sm text-zinc-500">Loading...</div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <Field label="Company Code" value={form.code} onChange={(v) => setField("code", v)} />
+              <Field label="Company ID" value={form.companyId} onChange={(v) => setField("companyId", v)} />
               <Field label="Company Name" value={form.name} onChange={(v) => setField("name", v)} />
-              <Field label="Manager Name" value={form.managerName} onChange={(v) => setField("managerName", v)} />
               <Field label="Phone #1" value={form.phone1} onChange={(v) => setField("phone1", v)} />
               <Field label="Phone #2" value={form.phone2} onChange={(v) => setField("phone2", v)} />
               <Field label="Email" value={form.email} onChange={(v) => setField("email", v)} />
 
               <div className="md:col-span-2">
-                <Label>Address</Label>
+                <Label>Main Office Address</Label>
                 <textarea
                   className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200"
                   rows={3}
-                  value={form.address}
-                  onChange={(e) => setField("address", e.target.value)}
+                  value={form.mainOfficeAddress}
+                  onChange={(e) => setField("mainOfficeAddress", e.target.value)}
                 />
               </div>
-
-              <TagsEditor
-                label="Branches"
-                values={form.branches}
-                onChange={(v) => setField("branches", v)}
-              />
-              <TagsEditor
-                label="Warehouses"
-                values={form.warehouses}
-                onChange={(v) => setField("warehouses", v)}
-              />
-              <TagsEditor
-                label="Products"
-                values={form.products}
-                onChange={(v) => setField("products", v)}
-              />
             </div>
           )}
         </div>
@@ -254,48 +231,6 @@ function Field({ label, value, onChange }) {
         onChange={(e) => onChange(e.target.value)}
         className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200"
       />
-    </div>
-  );
-}
-
-// Simple tags editor (chips + add/remove)
-function TagsEditor({ label, values, onChange }) {
-  const [text, setText] = useState("");
-
-  function add() {
-    const v = text.trim();
-    if (!v) return;
-    onChange([...(values || []), v]);
-    setText("");
-  }
-  function remove(i) {
-    const next = [...values];
-    next.splice(i, 1);
-    onChange(next);
-  }
-
-  return (
-    <div className="md:col-span-2">
-      <Label>{label}</Label>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {(values || []).map((v, i) => (
-          <div key={i} className="flex items-center gap-2 rounded-full border px-3 py-1 text-xs">
-            <span>{v}</span>
-            <button className="text-zinc-500 hover:text-red-600" onClick={() => remove(i)}>✕</button>
-          </div>
-        ))}
-      </div>
-      <div className="mt-2 flex gap-2">
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          className="flex-1 rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200"
-          placeholder={`Add ${label}...`}
-        />
-        <button onClick={add} className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50">
-          Add
-        </button>
-      </div>
     </div>
   );
 }
