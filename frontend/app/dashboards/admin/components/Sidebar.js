@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
-export default function Sidebar({ user }) {
+export default function Sidebar({ user, variant = "desktop", onClose }) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState({
@@ -20,7 +20,6 @@ export default function Sidebar({ user }) {
   const menu = useMemo(
     () => [
       { type: "link", title: "Dashboard", href: "/dashboards/admin" },
-
       { type: "link", title: "Sales KPI", href: "/dashboards/admin/sales-kpi", badge: "Premium" },
 
       {
@@ -142,25 +141,48 @@ export default function Sidebar({ user }) {
     []
   );
 
+  function go(href) {
+    router.push(href);
+    if (variant === "mobile" && onClose) onClose();
+  }
+
   function logout() {
     localStorage.removeItem("aim_token");
     localStorage.removeItem("aim_role");
     localStorage.removeItem("aim_user");
     document.cookie = "aim_token=; Max-Age=0; path=/";
     document.cookie = "aim_role=; Max-Age=0; path=/";
+    if (variant === "mobile" && onClose) onClose();
     router.push("/login");
   }
 
   return (
-    <aside className="w-[280px] hidden md:flex flex-col border-r bg-white min-h-screen sticky top-0">
-      <div className="px-4 py-4 border-b flex items-center gap-3">
-        <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
-          <span className="text-emerald-700 font-bold">AH</span>
+    <aside
+      className={[
+        "w-[280px] flex flex-col border-r bg-white min-h-screen",
+        variant === "desktop" ? "hidden md:flex sticky top-0" : "flex",
+      ].join(" ")}
+    >
+      <div className="px-4 py-4 border-b flex items-center gap-3 justify-between">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
+            <span className="text-emerald-700 font-bold">AH</span>
+          </div>
+          <div className="leading-tight">
+            <div className="font-semibold text-zinc-900">Admin</div>
+            <div className="text-xs text-zinc-500">{user?.fullName || "System Admin"}</div>
+          </div>
         </div>
-        <div className="leading-tight">
-          <div className="font-semibold text-zinc-900">Admin</div>
-          <div className="text-xs text-zinc-500">{user?.fullName || "System Admin"}</div>
-        </div>
+
+        {variant === "mobile" ? (
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border px-3 py-2 text-sm hover:bg-zinc-50"
+          >
+            ✕
+          </button>
+        ) : null}
       </div>
 
       <nav className="flex-1 overflow-auto px-2 py-3">
@@ -170,7 +192,7 @@ export default function Sidebar({ user }) {
             return (
               <button
                 key={item.title}
-                onClick={() => router.push(item.href)}
+                onClick={() => go(item.href)}
                 className={`w-full flex items-center justify-between rounded-xl px-3 py-2 text-sm mb-1 ${
                   active ? "bg-emerald-50 text-emerald-700" : "text-zinc-700 hover:bg-zinc-50"
                 }`}
@@ -185,7 +207,6 @@ export default function Sidebar({ user }) {
             );
           }
 
-          // group
           const isOpen = !!open[item.key];
           return (
             <div key={item.title} className="mb-1">
@@ -200,7 +221,6 @@ export default function Sidebar({ user }) {
               {isOpen ? (
                 <div className="ml-2 pl-3 border-l">
                   {item.children.map((c) => {
-                    // nested sub-group support for Discount Policy
                     if (c.children) {
                       const key = c.href;
                       const nestedOpen = !!open[key];
@@ -213,12 +233,13 @@ export default function Sidebar({ user }) {
                             <span>{c.title}</span>
                             <span className="text-zinc-400">{nestedOpen ? "▾" : "▸"}</span>
                           </button>
+
                           {nestedOpen ? (
                             <div className="ml-2 pl-3 border-l">
                               {c.children.map((cc) => (
                                 <button
                                   key={cc.title}
-                                  onClick={() => router.push(cc.href)}
+                                  onClick={() => go(cc.href)}
                                   className={`w-full text-left rounded-lg px-3 py-2 text-sm ${
                                     pathname === cc.href
                                       ? "bg-emerald-50 text-emerald-700"
@@ -238,7 +259,7 @@ export default function Sidebar({ user }) {
                     return (
                       <button
                         key={c.title}
-                        onClick={() => router.push(c.href)}
+                        onClick={() => go(c.href)}
                         className={`w-full text-left rounded-lg px-3 py-2 text-sm ${
                           active ? "bg-emerald-50 text-emerald-700" : "text-zinc-600 hover:bg-zinc-50"
                         }`}
@@ -255,10 +276,7 @@ export default function Sidebar({ user }) {
       </nav>
 
       <div className="p-3 border-t">
-        <button
-          onClick={logout}
-          className="w-full rounded-xl border px-3 py-2 text-sm hover:bg-zinc-50"
-        >
+        <button onClick={logout} className="w-full rounded-xl border px-3 py-2 text-sm hover:bg-zinc-50">
           Logout
         </button>
       </div>

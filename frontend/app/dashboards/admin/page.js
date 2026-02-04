@@ -35,7 +35,7 @@ export default function AdminDashboardPage() {
   }, []);
 
   return (
-    <AdminShell user={user}>
+    <AdminShell user={user} title="Admin Dashboard">
       <div className="space-y-5">
         <div className="rounded-2xl bg-white border shadow-sm p-5 flex items-center justify-between">
           <div>
