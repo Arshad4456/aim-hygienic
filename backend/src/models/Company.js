@@ -2,9 +2,8 @@ const mongoose = require("mongoose");
 
 const CompanySchema = new mongoose.Schema(
   {
-    code: { type: String, required: true, unique: true, trim: true },
+    code: { type: String, required: true, trim: true, unique: true },
     name: { type: String, required: true, trim: true },
-
     managerName: { type: String, trim: true },
 
     branches: [{ type: String, trim: true }],
@@ -13,10 +12,10 @@ const CompanySchema = new mongoose.Schema(
 
     phone1: { type: String, trim: true },
     phone2: { type: String, trim: true },
-    email: { type: String, trim: true },
+    email: { type: String, trim: true, lowercase: true },
     address: { type: String, trim: true },
 
-    status: { type: String, enum: ["active", "inactive"], default: "active" },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }
 );

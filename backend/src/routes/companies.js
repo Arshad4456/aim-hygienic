@@ -1,52 +1,112 @@
 const express = require("express");
-const router = express.Router();
 const Company = require("../models/Company");
 
-// TODO: use your existing auth middleware
-const { requireAuth, requireRole } = require("../middleware/auth");
+const router = express.Router();
 
-// Create
-router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
-  const payload = req.body || {};
-  if (!payload.code || !payload.name) {
-    return res.status(400).json({ message: "Company code and name are required" });
+// helper: "a,b,c" -> ["a","b","c"]
+function csvToArr(v) {
+  if (!v) return [];
+  if (Array.isArray(v)) return v.map((s) => String(s).trim()).filter(Boolean);
+  return String(v)
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+// CREATE
+router.post("/", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const doc = await Company.create({
+      code: String(body.code || "").trim(),
+      name: String(body.name || "").trim(),
+      managerName: String(body.managerName || "").trim(),
+
+      branches: csvToArr(body.branches),
+      warehouses: csvToArr(body.warehouses),
+      products: csvToArr(body.products),
+
+      phone1: String(body.phone1 || "").trim(),
+      phone2: String(body.phone2 || "").trim(),
+      email: String(body.email || "").trim(),
+      address: String(body.address || "").trim(),
+
+      createdBy: req.user?.uid,
+    });
+
+    return res.status(201).json({ ok: true, company: doc });
+  } catch (e) {
+    // duplicate code
+    if (e?.code === 11000) {
+      return res.status(409).json({ ok: false, message: "Company code already exists" });
+    }
+    return res.status(500).json({ ok: false, message: "Failed to create company" });
   }
-
-  const exists = await Company.findOne({ code: payload.code.trim() });
-  if (exists) return res.status(409).json({ message: "Company code already exists" });
-
-  const item = await Company.create(payload);
-  res.json({ ok: true, item });
 });
 
-// List
-router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
-  const items = await Company.find().sort({ createdAt: -1 }).select("code name managerName");
-  res.json({ ok: true, items });
+// LIST
+router.get("/", async (req, res) => {
+  try {
+    const items = await Company.find().sort({ createdAt: -1 }).lean();
+    return res.json({ ok: true, companies: items });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to load companies" });
+  }
 });
 
-// Get one
-router.get("/:id", requireAuth, requireRole("admin"), async (req, res) => {
-  const item = await Company.findById(req.params.id);
-  if (!item) return res.status(404).json({ message: "Company not found" });
-  res.json({ ok: true, item });
+// GET ONE
+router.get("/:id", async (req, res) => {
+  try {
+    const item = await Company.findById(req.params.id).lean();
+    if (!item) return res.status(404).json({ ok: false, message: "Not found" });
+    return res.json({ ok: true, company: item });
+  } catch (e) {
+    return res.status(400).json({ ok: false, message: "Invalid id" });
+  }
 });
 
-// Update
-router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
-  const item = await Company.findByIdAndUpdate(req.params.id, req.body, {
-    new: true,
-    runValidators: true,
-  });
-  if (!item) return res.status(404).json({ message: "Company not found" });
-  res.json({ ok: true, item });
+// UPDATE
+router.put("/:id", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const updated = await Company.findByIdAndUpdate(
+      req.params.id,
+      {
+        code: String(body.code || "").trim(),
+        name: String(body.name || "").trim(),
+        managerName: String(body.managerName || "").trim(),
+
+        branches: csvToArr(body.branches),
+        warehouses: csvToArr(body.warehouses),
+        products: csvToArr(body.products),
+
+        phone1: String(body.phone1 || "").trim(),
+        phone2: String(body.phone2 || "").trim(),
+        email: String(body.email || "").trim(),
+        address: String(body.address || "").trim(),
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!updated) return res.status(404).json({ ok: false, message: "Not found" });
+    return res.json({ ok: true, company: updated });
+  } catch (e) {
+    if (e?.code === 11000) {
+      return res.status(409).json({ ok: false, message: "Company code already exists" });
+    }
+    return res.status(500).json({ ok: false, message: "Failed to update company" });
+  }
 });
 
-// Delete
-router.delete("/:id", requireAuth, requireRole("admin"), async (req, res) => {
-  const item = await Company.findByIdAndDelete(req.params.id);
-  if (!item) return res.status(404).json({ message: "Company not found" });
-  res.json({ ok: true });
+// DELETE
+router.delete("/:id", async (req, res) => {
+  try {
+    const deleted = await Company.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ ok: false, message: "Not found" });
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.status(400).json({ ok: false, message: "Invalid id" });
+  }
 });
 
 module.exports = router;
