@@ -12,6 +12,10 @@ const app = express();
 app.use(helmet());
 app.use(express.json());
 
+//api
+app.use("/api/companies", require("./src/routes/companies"));
+
+
 // CORS for your live domain
 app.use(
   cors({

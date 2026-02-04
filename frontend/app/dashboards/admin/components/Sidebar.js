@@ -32,6 +32,7 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
 
   const [open, setOpen] = useState({
     products: true,
+    company: false,
     expense: false,
     customer: false,
     supplier: false,
@@ -45,6 +46,18 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
     () => [
       { type: "link", title: "Dashboard", href: "/dashboards/admin", icon: "dashboard" },
       { type: "link", title: "Sales KPI", href: "/dashboards/admin/sales-kpi", badge: "Premium", icon: "sales" },
+
+{
+  type: "group",
+  key: "company",
+  title: "Company Management",
+  icon: "account", // you can change icon name if you want
+  children: [
+    { title: "Add New Company", href: "/dashboards/admin/companies/add" },
+    { title: "Company List", href: "/dashboards/admin/companies" },
+  ],
+},
+
 
       { type: "group", key: "products", title: "Products Management", icon: "products", children: [
         { title: "Add New Product", href: "/dashboards/admin/products/add" },
