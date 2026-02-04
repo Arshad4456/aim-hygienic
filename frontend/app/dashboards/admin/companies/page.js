@@ -17,7 +17,7 @@ export default function CompanyListPage() {
     setLoading(true);
     try {
       const data = await apiFetch("/companies");
-      setRows(data?.items || []);
+    setRows(data?.companies || []);
     } catch (e) {
       setErr(e.message || "Failed to load companies");
     } finally {
@@ -138,16 +138,16 @@ function EditCompanyModal({ id, onClose, onSaved }) {
       try {
         const data = await apiFetch(`/companies/${id}`);
         setForm({
-          code: data.item.code || "",
-          name: data.item.name || "",
-          managerName: data.item.managerName || "",
-          phone1: data.item.phone1 || "",
-          phone2: data.item.phone2 || "",
-          email: data.item.email || "",
-          address: data.item.address || "",
-          branches: data.item.branches || [],
-          warehouses: data.item.warehouses || [],
-          products: data.item.products || [],
+        code: data.company?.code || "",
+          name: data.company?.name || "",
+          managerName: data.company?.managerName || "",
+          phone1: data.company?.phone1 || "",
+          phone2: data.company?.phone2 || "",
+          email: data.company?.email || "",
+          address: data.company?.address || "",
+          branches: data.company?.branches || [],
+          warehouses: data.company?.warehouses || [],
+          products: data.company?.products || [],
         });
       } catch (e) {
         setErr(e.message || "Failed to load company");
