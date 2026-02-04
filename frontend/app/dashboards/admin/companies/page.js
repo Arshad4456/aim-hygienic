@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import AdminShell from "../admin/components/AdminShell";
-import { apiFetch } from "../../lib/api";
+import AdminShell from "../components/AdminShell";
+import { apiFetch } from "../../../lib/api";
 
 export default function CompanyListPage() {
   const [rows, setRows] = useState([]);
