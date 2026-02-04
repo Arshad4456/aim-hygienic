@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import AdminShell from "../../admin/components/AdminShell";
-import { apiFetch } from "../../../lib/api";
+import AdminShell from "../../components/AdminShell";
+import { apiFetch } from "../../../../lib/api";
 
 export default function AddCompanyPage() {
   const router = useRouter();
