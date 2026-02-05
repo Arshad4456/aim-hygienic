@@ -35,7 +35,7 @@ const seedUsers = Array.from({ length: 72 }, (_, index) => {
     zoneName: `Zone ${((index % 5) + 1).toString()}`,
     areaName: `Area ${((index % 6) + 1).toString()}`,
     phone: "+92 300 1234567",
-    email: `user${idx}@example.com",
+    email: `user${idx}@example.com`,
   };
 });
 
