@@ -52,9 +52,13 @@ export default function AddProductPage() {
     category: "",
     subCategory: "",
     size: "",
+    unit: "",
     initialPrice: "",
     customerPrice: "",
     salePrice: "",
+    costPrice: "",
+    sellingPrice: "",
+    minStockLevel: "",
     barcode: "",
     sku: "",
     description: "",
@@ -109,9 +113,13 @@ export default function AddProductPage() {
         category: "",
         subCategory: "",
         size: "",
+        unit: "",
         initialPrice: "",
         customerPrice: "",
         salePrice: "",
+        costPrice: "",
+        sellingPrice: "",
+        minStockLevel: "",
         barcode: "",
         sku: "",
         description: "",
@@ -184,9 +192,13 @@ export default function AddProductPage() {
             </div>
 
             <Field label="Size" value={form.size} onChange={(v) => setField("size", v)} placeholder="Small, Medium, Large, 2XL" />
+            <Field label="Unit" value={form.unit} onChange={(v) => setField("unit", v)} placeholder="pcs, box, kg" />
             <Field label="Initial Price" value={form.initialPrice} onChange={(v) => setField("initialPrice", v)} type="number" />
             <Field label="Customer Price" value={form.customerPrice} onChange={(v) => setField("customerPrice", v)} type="number" />
             <Field label="Sale Price" value={form.salePrice} onChange={(v) => setField("salePrice", v)} type="number" />
+            <Field label="Cost Price" value={form.costPrice} onChange={(v) => setField("costPrice", v)} type="number" />
+            <Field label="Selling Price" value={form.sellingPrice} onChange={(v) => setField("sellingPrice", v)} type="number" />
+            <Field label="Minimum Stock Level" value={form.minStockLevel} onChange={(v) => setField("minStockLevel", v)} type="number" />
             <Field label="Barcode" value={form.barcode} onChange={(v) => setField("barcode", v)} />
             <Field label="SKU" value={form.sku} onChange={(v) => setField("sku", v)} />
 

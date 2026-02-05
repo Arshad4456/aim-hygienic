@@ -77,21 +77,29 @@ export default function WarehouseListPage() {
                 <th className="text-left px-3 py-2 border-b">Warehouse ID</th>
                 <th className="text-left px-3 py-2 border-b">Warehouse Name</th>
                 <th className="text-left px-3 py-2 border-b">Phone</th>
+                <th className="text-left px-3 py-2 border-b">City</th>
+                <th className="text-left px-3 py-2 border-b">Manager</th>
+                <th className="text-left px-3 py-2 border-b">Capacity</th>
+                <th className="text-left px-3 py-2 border-b">Status</th>
                 <th className="text-left px-3 py-2 border-b">Address</th>
                 <th className="text-left px-3 py-2 border-b">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={5} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
+                <tr><td colSpan={9} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={5} className="px-3 py-6 text-center text-zinc-500">No warehouses found</td></tr>
+                <tr><td colSpan={9} className="px-3 py-6 text-center text-zinc-500">No warehouses found</td></tr>
               ) : (
                 rows.map((row) => (
                   <tr key={row._id} className="hover:bg-zinc-50">
                     <td className="px-3 py-2 border-b">{row.warehouseId}</td>
                     <td className="px-3 py-2 border-b">{row.name}</td>
                     <td className="px-3 py-2 border-b">{row.phone || "-"}</td>
+                    <td className="px-3 py-2 border-b">{row.city || "-"}</td>
+                    <td className="px-3 py-2 border-b">{row.managerName || "-"}</td>
+                    <td className="px-3 py-2 border-b">{row.capacity || "-"}</td>
+                    <td className="px-3 py-2 border-b">{row.status || "-"}</td>
                     <td className="px-3 py-2 border-b">{row.address || "-"}</td>
                     <td className="px-3 py-2 border-b">
                       <div className="flex gap-2">
@@ -138,6 +146,11 @@ function EditCard({ form, onChange, onClose, onSave }) {
           <Field label="Warehouse ID" value={form.warehouseId} onChange={(v) => onChange((s) => ({ ...s, warehouseId: v }))} />
           <Field label="Warehouse Name" value={form.name} onChange={(v) => onChange((s) => ({ ...s, name: v }))} />
           <Field label="Phone" value={form.phone} onChange={(v) => onChange((s) => ({ ...s, phone: v }))} />
+          <Field label="City" value={form.city} onChange={(v) => onChange((s) => ({ ...s, city: v }))} />
+          <Field label="Region" value={form.region} onChange={(v) => onChange((s) => ({ ...s, region: v }))} />
+          <Field label="Manager" value={form.managerName} onChange={(v) => onChange((s) => ({ ...s, managerName: v }))} />
+          <Field label="Capacity" value={form.capacity} onChange={(v) => onChange((s) => ({ ...s, capacity: v }))} type="number" />
+          <Field label="Status" value={form.status} onChange={(v) => onChange((s) => ({ ...s, status: v }))} />
           <div>
             <Label>Warehouse Address</Label>
             <textarea
@@ -168,13 +181,14 @@ function Label({ children }) {
   return <div className="text-sm font-medium text-zinc-800">{children}</div>;
 }
 
-function Field({ label, value, onChange }) {
+function Field({ label, value, onChange, type = "text" }) {
   return (
     <div>
       <Label>{label}</Label>
       <input
         value={value || ""}
         onChange={(e) => onChange(e.target.value)}
+        type={type}
         className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200"
       />
     </div>

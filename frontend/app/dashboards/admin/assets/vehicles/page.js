@@ -80,14 +80,15 @@ export default function VehicleListPage() {
                 <th className="text-left px-3 py-2 border-b">Plate</th>
                 <th className="text-left px-3 py-2 border-b">Driver ID</th>
                 <th className="text-left px-3 py-2 border-b">Driver Name</th>
+                <th className="text-left px-3 py-2 border-b">Capacity</th>
                 <th className="text-left px-3 py-2 border-b">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
+                <tr><td colSpan={8} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={7} className="px-3 py-6 text-center text-zinc-500">No vehicles found</td></tr>
+                <tr><td colSpan={8} className="px-3 py-6 text-center text-zinc-500">No vehicles found</td></tr>
               ) : (
                 rows.map((row) => (
                   <tr key={row._id} className="hover:bg-zinc-50">
@@ -97,6 +98,7 @@ export default function VehicleListPage() {
                     <td className="px-3 py-2 border-b">{row.plateNumber || "-"}</td>
                     <td className="px-3 py-2 border-b">{row.driverId || "-"}</td>
                     <td className="px-3 py-2 border-b">{row.driverName || "-"}</td>
+                    <td className="px-3 py-2 border-b">{row.deliveryCapacity || "-"}</td>
                     <td className="px-3 py-2 border-b">
                       <div className="flex gap-2">
                         <button
@@ -145,6 +147,7 @@ function EditCard({ form, onChange, onClose, onSave }) {
           <Field label="Plate Number" value={form.plateNumber} onChange={(v) => onChange((s) => ({ ...s, plateNumber: v }))} />
           <Field label="Driver ID" value={form.driverId} onChange={(v) => onChange((s) => ({ ...s, driverId: v }))} />
           <Field label="Driver Name" value={form.driverName} onChange={(v) => onChange((s) => ({ ...s, driverName: v }))} />
+          <Field label="Delivery Capacity" value={form.deliveryCapacity} onChange={(v) => onChange((s) => ({ ...s, deliveryCapacity: v }))} type="number" />
         </div>
         <div className="shrink-0 border-t p-4 flex items-center gap-3">
           <button
@@ -166,13 +169,14 @@ function Label({ children }) {
   return <div className="text-sm font-medium text-zinc-800">{children}</div>;
 }
 
-function Field({ label, value, onChange }) {
+function Field({ label, value, onChange, type = "text" }) {
   return (
     <div>
       <Label>{label}</Label>
       <input
         value={value || ""}
         onChange={(e) => onChange(e.target.value)}
+        type={type}
         className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200"
       />
     </div>

@@ -8,6 +8,7 @@ const VehicleSchema = new mongoose.Schema(
     plateNumber: { type: String, trim: true },
     driverId: { type: String, trim: true },
     driverName: { type: String, trim: true },
+    deliveryCapacity: { type: Number, default: 0 },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }
