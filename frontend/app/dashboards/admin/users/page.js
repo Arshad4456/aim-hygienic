@@ -1,12 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AdminShell from "../components/AdminShell";
-
-const companies = [
-  { id: "C-001", name: "AIM Hygienic" },
-  { id: "C-002", name: "CleanPro Supplies" },
-];
+import { apiFetch } from "../../../lib/api";
 
 const roles = [
   "Sales Manager",
@@ -20,26 +16,109 @@ const roles = [
   "Customer",
 ];
 
-const seedUsers = Array.from({ length: 72 }, (_, index) => {
-  const company = companies[index % companies.length];
-  const role = roles[index % roles.length];
-  const idx = String(index + 1).padStart(3, "0");
-  return {
-    id: `U-${idx}`,
-    name: `${role.split(" ")[0]} User ${idx}`,
-    role,
-    companyId: company.id,
-    companyName: company.name,
-    warehouseName: `Warehouse ${((index % 3) + 1).toString()}`,
-    regionName: `Region ${((index % 4) + 1).toString()}`,
-    zoneName: `Zone ${((index % 5) + 1).toString()}`,
-    areaName: `Area ${((index % 6) + 1).toString()}`,
-    phone: "+92 300 1234567",
-    email: `user${idx}@example.com`,
-  };
-});
+const fieldLabels = {
+  fullName: "Full Name",
+  mobile: "Mobile Number",
+  role: "Role",
+  companyId: "Company ID",
+  companyName: "Company Name",
+  branchId: "Branch ID",
+  branchNameOrNumber: "Branch Name/Number",
+  warehouseId: "Warehouse ID",
+  warehouseName: "Warehouse Name",
+  regionId: "Region ID",
+  regionName: "Region Name",
+  zoneId: "Zone ID",
+  zoneName: "Zone Name",
+  areaId: "Area ID",
+  areaName: "Area Name",
+  shopId: "Shop ID",
+  shopName: "Shop Name",
+  cnicNo: "CNIC No",
+  mobileNumber: "Mobile Number",
+  phoneNumber: "Phone Number",
+  email: "Email",
+  address: "Address",
+  shopAddress: "Shop Address",
+  gpsLatitude: "GPS Latitude",
+  gpsLongitude: "GPS Longitude",
+  managerId: "Manager ID",
+  managerName: "Manager Name",
+  warehouseManagerId: "Warehouse Manager ID",
+  warehouseManagerName: "Warehouse Manager Name",
+  accountantId: "Accountant ID",
+  accountantName: "Accountant Name",
+  distributorId: "Distributor ID",
+  distributorName: "Distributor Name",
+  driverId: "Driver ID",
+  driverName: "Driver Name",
+  deliveryBoyId: "Delivery Boy ID",
+  deliveryBoyName: "Delivery Boy Name",
+  salesmanId: "Salesman ID",
+  salesmanName: "Salesman Name",
+  orderBookerId: "Order Booker ID",
+  orderBookerName: "Order Booker Name",
+  customerId: "Customer ID",
+  customerName: "Customer Name",
+};
+
+const editableFields = [
+  "fullName",
+  "mobile",
+  "role",
+  "companyId",
+  "companyName",
+  "branchId",
+  "branchNameOrNumber",
+  "warehouseId",
+  "warehouseName",
+  "regionId",
+  "regionName",
+  "zoneId",
+  "zoneName",
+  "areaId",
+  "areaName",
+  "shopId",
+  "shopName",
+  "cnicNo",
+  "mobileNumber",
+  "phoneNumber",
+  "email",
+  "address",
+  "shopAddress",
+  "gpsLatitude",
+  "gpsLongitude",
+  "managerId",
+  "managerName",
+  "warehouseManagerId",
+  "warehouseManagerName",
+  "accountantId",
+  "accountantName",
+  "distributorId",
+  "distributorName",
+  "driverId",
+  "driverName",
+  "deliveryBoyId",
+  "deliveryBoyName",
+  "salesmanId",
+  "salesmanName",
+  "orderBookerId",
+  "orderBookerName",
+  "customerId",
+  "customerName",
+];
+
+function validatePassword(value) {
+  if (!value) return "";
+  if (value.length < 8) return "Password must be at least 8 characters long.";
+  if (!/[A-Z]/.test(value)) return "Password must include at least one capital letter.";
+  if (!/[0-9]/.test(value)) return "Password must include at least one number.";
+  if (!/[^A-Za-z0-9]/.test(value)) return "Password must include at least one symbol.";
+  return "";
+}
 
 export default function UserListPage() {
+  const [companies, setCompanies] = useState([]);
   const [companyId, setCompanyId] = useState("");
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
@@ -48,43 +127,76 @@ export default function UserListPage() {
   const [zoneFilter, setZoneFilter] = useState("");
   const [areaFilter, setAreaFilter] = useState("");
   const [page, setPage] = useState(1);
-  const [rows, setRows] = useState(seedUsers);
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
   const [editId, setEditId] = useState(null);
   const [editForm, setEditForm] = useState(null);
+  const [editErr, setEditErr] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
 
-  const selectedCompany = companies.find((c) => c.id === companyId);
+  const selectedCompany = companies.find((c) => c._id === companyId);
+
+  useEffect(() => {
+    async function loadCompanies() {
+      try {
+        const data = await apiFetch("/companies");
+        setCompanies(data.companies || []);
+      } catch (e) {
+        setErr(e.message || "Failed to load companies");
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadCompanies();
+  }, []);
+
+  useEffect(() => {
+    async function loadUsers() {
+      if (!companyId) {
+        setRows([]);
+        return;
+      }
+      setErr("");
+      try {
+        const data = await apiFetch(`/users?companyId=${selectedCompany?.companyId || ""}`);
+        setRows(data.users || []);
+      } catch (e) {
+        setErr(e.message || "Failed to load users");
+      }
+    }
+    loadUsers();
+  }, [companyId, selectedCompany?.companyId]);
 
   const filtered = useMemo(() => {
     let next = rows;
-    if (companyId) {
-      next = next.filter((u) => u.companyId === companyId);
-    }
-    if (roleFilter) {
-      next = next.filter((u) => u.role === roleFilter);
-    }
-    if (warehouseFilter) {
-      next = next.filter((u) => u.warehouseName === warehouseFilter);
-    }
-    if (regionFilter) {
-      next = next.filter((u) => u.regionName === regionFilter);
-    }
-    if (zoneFilter) {
-      next = next.filter((u) => u.zoneName === zoneFilter);
-    }
-    if (areaFilter) {
-      next = next.filter((u) => u.areaName === areaFilter);
-    }
+    if (roleFilter) next = next.filter((u) => u.role === roleFilter);
+    if (warehouseFilter) next = next.filter((u) => u.warehouseName === warehouseFilter);
+    if (regionFilter) next = next.filter((u) => u.regionName === regionFilter);
+    if (zoneFilter) next = next.filter((u) => u.zoneName === zoneFilter);
+    if (areaFilter) next = next.filter((u) => u.areaName === areaFilter);
     if (search.trim()) {
       const q = search.toLowerCase();
       next = next.filter((u) =>
-        [u.id, u.name, u.role, u.companyName, u.companyId, u.warehouseName, u.regionName, u.zoneName, u.areaName]
+        [
+          u.fullName,
+          u.mobile,
+          u.role,
+          u.companyName,
+          u.companyId,
+          u.warehouseName,
+          u.regionName,
+          u.zoneName,
+          u.areaName,
+        ]
+          .filter(Boolean)
           .join(" ")
           .toLowerCase()
           .includes(q)
       );
     }
     return next;
-  }, [rows, companyId, roleFilter, warehouseFilter, regionFilter, zoneFilter, areaFilter, search]);
+  }, [rows, roleFilter, warehouseFilter, regionFilter, zoneFilter, areaFilter, search]);
 
   const roleCounts = useMemo(() => {
     const counts = roles.reduce((acc, r) => ({ ...acc, [r]: 0 }), {});
@@ -117,19 +229,98 @@ export default function UserListPage() {
   }
 
   function startEdit(row) {
-    setEditId(row.id);
-    setEditForm({ ...row });
+    setEditId(row._id);
+    setEditForm({ ...row, password: "" });
+    setEditErr("");
   }
 
-  function onDelete(id) {
+  async function onDelete(id) {
     if (!confirm("Delete this user?")) return;
-    setRows((s) => s.filter((r) => r.id !== id));
+    try {
+      await apiFetch(`/users/${id}`, { method: "DELETE" });
+      setRows((s) => s.filter((r) => r._id !== id));
+    } catch (e) {
+      alert(e.message || "Delete failed");
+    }
   }
 
-  function onSave() {
-    setRows((s) => s.map((r) => (r.id === editId ? editForm : r)));
-    setEditId(null);
-    setEditForm(null);
+  async function onSave() {
+    if (!editForm) return;
+    setEditErr("");
+    const passwordError = validatePassword(editForm.password);
+    if (passwordError) {
+      setEditErr(passwordError);
+      return;
+    }
+    setEditSaving(true);
+    try {
+      const payload = { ...editForm };
+      if (!payload.password) delete payload.password;
+      const data = await apiFetch(`/users/${editId}`, { method: "PUT", body: payload });
+      setRows((s) => s.map((r) => (r._id === editId ? data.user : r)));
+      setEditId(null);
+      setEditForm(null);
+    } catch (e) {
+      setEditErr(e.message || "Update failed");
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  function exportCsv(filename) {
+    const headers = ["User ID", "Name", "Role", "Company", "Mobile", "Email"];
+    const lines = filtered.map((u) =>
+      [u._id, u.fullName, u.role, u.companyName, u.mobile, u.email]
+        .map((v) => `"${String(v || "").replace(/"/g, '""')}"`)
+        .join(",")
+    );
+    const csv = [headers.join(","), ...lines].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportPdf() {
+    const html = `
+      <html>
+        <head><title>User List</title></head>
+        <body>
+          <h2>User List</h2>
+          <table border="1" cellpadding="6" cellspacing="0">
+            <thead>
+              <tr>
+                <th>User ID</th><th>Name</th><th>Role</th><th>Company</th><th>Mobile</th><th>Email</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filtered
+                .map(
+                  (u) => `
+                  <tr>
+                    <td>${u._id || ""}</td>
+                    <td>${u.fullName || ""}</td>
+                    <td>${u.role || ""}</td>
+                    <td>${u.companyName || ""}</td>
+                    <td>${u.mobile || ""}</td>
+                    <td>${u.email || ""}</td>
+                  </tr>`
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
   }
 
   return (
@@ -141,10 +332,24 @@ export default function UserListPage() {
             <div className="text-sm text-zinc-500 mt-1">Select a company to view and filter users.</div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50">Export PDF</button>
-            <button className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50">Export Excel</button>
+            <button
+              className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50"
+              onClick={() => exportPdf()}
+              disabled={!filtered.length}
+            >
+              Export PDF
+            </button>
+            <button
+              className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50"
+              onClick={() => exportCsv("users.xlsx")}
+              disabled={!filtered.length}
+            >
+              Export Excel
+            </button>
           </div>
         </div>
+
+        {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
 
         <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
@@ -161,7 +366,7 @@ export default function UserListPage() {
             >
               <option value="">Choose company...</option>
               {companies.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+                <option key={c._id} value={c._id}>{c.name}</option>
               ))}
             </select>
           </div>
@@ -169,7 +374,7 @@ export default function UserListPage() {
             <Label>Search</Label>
             <input
               className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-              placeholder="Search by id, name, role, company..."
+              placeholder="Search by name, role, company..."
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -307,11 +512,11 @@ export default function UserListPage() {
                     <tr><td colSpan={5} className="px-3 py-6 text-center text-zinc-500">No users found</td></tr>
                   ) : (
                     pageRows.map((row) => (
-                      <tr key={row.id} className="hover:bg-zinc-50">
-                        <td className="px-3 py-2 border-b">{row.id}</td>
-                        <td className="px-3 py-2 border-b">{row.name}</td>
+                      <tr key={row._id} className="hover:bg-zinc-50">
+                        <td className="px-3 py-2 border-b">{row._id}</td>
+                        <td className="px-3 py-2 border-b">{row.fullName}</td>
                         <td className="px-3 py-2 border-b">{row.role}</td>
-                        <td className="px-3 py-2 border-b">{row.companyName}</td>
+                        <td className="px-3 py-2 border-b">{row.companyName || "-"}</td>
                         <td className="px-3 py-2 border-b">
                           <div className="flex gap-2">
                             <button
@@ -321,7 +526,7 @@ export default function UserListPage() {
                               Edit
                             </button>
                             <button
-                              onClick={() => onDelete(row.id)}
+                              onClick={() => onDelete(row._id)}
                               className="rounded-lg border px-3 py-1.5 text-xs hover:bg-zinc-50 text-red-600"
                             >
                               Delete
@@ -361,40 +566,56 @@ export default function UserListPage() {
       </div>
 
       {editId ? (
-        <EditCard form={editForm} onChange={setEditForm} onClose={() => setEditId(null)} onSave={onSave} />
+        <EditCard
+          form={editForm}
+          onChange={setEditForm}
+          onClose={() => setEditId(null)}
+          onSave={onSave}
+          saving={editSaving}
+          err={editErr}
+        />
       ) : null}
     </AdminShell>
   );
 }
 
-function EditCard({ form, onChange, onClose, onSave }) {
+function EditCard({ form, onChange, onClose, onSave, saving, err }) {
   if (!form) return null;
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="absolute right-0 top-0 h-full w-full sm:w-[560px] bg-white shadow-xl flex flex-col">
+      <div className="absolute right-0 top-0 h-full w-full sm:w-[620px] bg-white shadow-xl flex flex-col">
         <div className="shrink-0 border-b px-4 py-3 flex items-center justify-between">
           <div className="text-lg font-semibold text-zinc-900">Edit User</div>
           <button onClick={onClose} className="rounded-xl border px-3 py-2 text-sm hover:bg-zinc-50">✕</button>
         </div>
-        <div className="flex-1 overflow-y-auto p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Field label="User ID" value={form.id} onChange={(v) => onChange((s) => ({ ...s, id: v }))} />
-          <Field label="Name" value={form.name} onChange={(v) => onChange((s) => ({ ...s, name: v }))} />
-          <Field label="Role" value={form.role} onChange={(v) => onChange((s) => ({ ...s, role: v }))} />
-          <Field label="Company" value={form.companyName} onChange={(v) => onChange((s) => ({ ...s, companyName: v }))} />
-          <Field label="Warehouse" value={form.warehouseName} onChange={(v) => onChange((s) => ({ ...s, warehouseName: v }))} />
-          <Field label="Region" value={form.regionName} onChange={(v) => onChange((s) => ({ ...s, regionName: v }))} />
-          <Field label="Zone" value={form.zoneName} onChange={(v) => onChange((s) => ({ ...s, zoneName: v }))} />
-          <Field label="Area" value={form.areaName} onChange={(v) => onChange((s) => ({ ...s, areaName: v }))} />
-          <Field label="Phone" value={form.phone} onChange={(v) => onChange((s) => ({ ...s, phone: v }))} />
-          <Field label="Email" value={form.email} onChange={(v) => onChange((s) => ({ ...s, email: v }))} />
+        <div className="flex-1 overflow-y-auto p-4">
+          {err ? <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {editableFields.map((field) => (
+              <Field
+                key={field}
+                label={fieldLabels[field] || field}
+                value={form[field] || ""}
+                onChange={(v) => onChange((s) => ({ ...s, [field]: v }))}
+              />
+            ))}
+            <Field
+              label="New Password (optional)"
+              value={form.password || ""}
+              onChange={(v) => onChange((s) => ({ ...s, password: v }))}
+              type="password"
+              helper="Leave blank to keep existing password."
+            />
+          </div>
         </div>
         <div className="shrink-0 border-t p-4 flex items-center gap-3">
           <button
             onClick={onSave}
-            className="rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-700"
+            disabled={saving}
+            className="rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-700 disabled:opacity-60"
           >
-            Update
+            {saving ? "Updating..." : "Update"}
           </button>
           <button onClick={onClose} className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50">
             Cancel
@@ -409,15 +630,17 @@ function Label({ children }) {
   return <div className="text-sm font-medium text-zinc-800">{children}</div>;
 }
 
-function Field({ label, value, onChange }) {
+function Field({ label, value, onChange, type = "text", helper }) {
   return (
     <div>
       <Label>{label}</Label>
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        type={type}
         className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200"
       />
+      {helper ? <div className="text-xs text-zinc-500 mt-1">{helper}</div> : null}
     </div>
   );
 }

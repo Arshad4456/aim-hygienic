@@ -1,26 +1,63 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AdminShell from "../../components/AdminShell";
+import { apiFetch } from "../../../../lib/api";
 
 export default function AddRegionPage() {
+  const [companies, setCompanies] = useState([]);
+  const [companyId, setCompanyId] = useState("");
   const [form, setForm] = useState({
     regionId: "",
     name: "",
-    companyId: "",
-    companyName: "",
-    latitude: "",
-    longitude: "",
+    gpsLatitude: "",
+    gpsLongitude: "",
   });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
+
+  useEffect(() => {
+    async function loadCompanies() {
+      try {
+        const data = await apiFetch("/companies");
+        setCompanies(data.companies || []);
+      } catch (e) {
+        setErr(e.message || "Failed to load companies");
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadCompanies();
+  }, []);
 
   function setField(key, value) {
     setForm((s) => ({ ...s, [key]: value }));
   }
 
-  function onSubmit(e) {
+  async function onSubmit(e) {
     e.preventDefault();
-    setOk("✅ Region saved (demo only).");
+    setErr("");
+    setOk("");
+    setSaving(true);
+    try {
+      const company = companies.find((c) => c._id === companyId);
+      await apiFetch("/regions", {
+        method: "POST",
+        body: {
+          ...form,
+          companyId: company?.companyId || "",
+          companyName: company?.name || "",
+        },
+      });
+      setOk("✅ Region saved successfully.");
+      setForm({ regionId: "", name: "", gpsLatitude: "", gpsLongitude: "" });
+    } catch (e2) {
+      setErr(e2.message || "Failed to save region");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -29,22 +66,42 @@ export default function AddRegionPage() {
         <div className="text-xl font-semibold text-zinc-900">Add Region</div>
         <div className="text-sm text-zinc-500 mt-1">Create a region under a company.</div>
 
+        {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
         {ok ? <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{ok}</div> : null}
 
-        <form onSubmit={onSubmit} className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Field label="Region ID" value={form.regionId} onChange={(v) => setField("regionId", v)} required />
-          <Field label="Region Name" value={form.name} onChange={(v) => setField("name", v)} required />
-          <Field label="Company ID" value={form.companyId} onChange={(v) => setField("companyId", v)} required />
-          <Field label="Company Name" value={form.companyName} onChange={(v) => setField("companyName", v)} required />
-          <Field label="GPS Latitude" value={form.latitude} onChange={(v) => setField("latitude", v)} />
-          <Field label="GPS Longitude" value={form.longitude} onChange={(v) => setField("longitude", v)} />
+        {loading ? (
+          <div className="mt-5 text-sm text-zinc-500">Loading companies...</div>
+        ) : (
+          <form onSubmit={onSubmit} className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
+              <Label>Select Company</Label>
+              <select
+                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+                value={companyId}
+                onChange={(e) => setCompanyId(e.target.value)}
+                required
+              >
+                <option value="">Choose company...</option>
+                {companies.map((c) => (
+                  <option key={c._id} value={c._id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <Field label="Region ID" value={form.regionId} onChange={(v) => setField("regionId", v)} required />
+            <Field label="Region Name" value={form.name} onChange={(v) => setField("name", v)} required />
+            <Field label="GPS Latitude" value={form.gpsLatitude} onChange={(v) => setField("gpsLatitude", v)} />
+            <Field label="GPS Longitude" value={form.gpsLongitude} onChange={(v) => setField("gpsLongitude", v)} />
 
-          <div className="md:col-span-2 flex items-center gap-3 mt-2">
-            <button className="rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-700">
-              Save Region
-            </button>
-          </div>
-        </form>
+            <div className="md:col-span-2 flex items-center gap-3 mt-2">
+              <button
+                disabled={saving}
+                className="rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-700 disabled:opacity-60"
+              >
+                {saving ? "Saving..." : "Save Region"}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </AdminShell>
   );

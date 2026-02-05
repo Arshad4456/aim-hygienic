@@ -2,28 +2,29 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const User = require("../models/User");
 const { requireAuth, requireRole } = require("../utils/auth");
+const { validatePassword } = require("../utils/password");
 
 const router = express.Router();
 
 // Admin only
 router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
-  const { username, password, fullName, role, mobile, distributor, company } = req.body || {};
-  if (!username || !password || !fullName || !role) {
+  const { username, password, fullName, role, mobile } = req.body || {};
+  if (!fullName || !role || !mobile || !password) {
     return res.status(400).json({ ok: false, message: "Missing required fields" });
   }
+  const validation = validatePassword(password);
+  if (!validation.ok) return res.status(400).json({ ok: false, message: validation.message });
 
-  const exists = await User.findOne({ username: String(username).toLowerCase().trim() });
-  if (exists) return res.status(409).json({ ok: false, message: "Username already exists" });
+  const exists = await User.findOne({ mobile: String(mobile).trim() });
+  if (exists) return res.status(409).json({ ok: false, message: "Mobile already exists" });
 
   const passwordHash = await bcrypt.hash(password, 12);
 
   const user = await User.create({
-    username: String(username).toLowerCase().trim(),
+    username: String(username || mobile).toLowerCase().trim(),
     fullName,
     role,
-    mobile: mobile || "",
-    distributor: distributor || "",
-    company: company || "AIM Hygienic (Pvt) Limited",
+    mobile: String(mobile).trim(),
     status: "active",
     passwordHash,
   });

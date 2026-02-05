@@ -6,10 +6,13 @@ const { signToken } = require("../utils/auth");
 const router = express.Router();
 
 router.post("/login", async (req, res) => {
-  const { username, password } = req.body || {};
-  if (!username || !password) return res.status(400).json({ ok: false, message: "Missing credentials" });
+  const { mobile, password, username } = req.body || {};
+  const identifier = mobile || username;
+  if (!identifier || !password) return res.status(400).json({ ok: false, message: "Missing credentials" });
 
-  const user = await User.findOne({ username: String(username).toLowerCase().trim() });
+  const user = mobile
+    ? await User.findOne({ mobile: String(mobile).trim() })
+    : await User.findOne({ username: String(username || "").toLowerCase().trim() });
   if (!user) return res.status(401).json({ ok: false, message: "Invalid username/password" });
   if (user.status !== "active") return res.status(403).json({ ok: false, message: "User is deactive" });
 
@@ -26,7 +29,10 @@ router.post("/login", async (req, res) => {
       username: user.username,
       fullName: user.fullName,
       role: user.role,
-      company: user.company,
+      companyId: user.companyId,
+      companyName: user.companyName,
+      mobile: user.mobile,
+      email: user.email,
     },
   });
 });

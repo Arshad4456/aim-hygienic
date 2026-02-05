@@ -1,42 +1,55 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AdminShell from "../components/AdminShell";
-
-const initialWarehouses = [
-  {
-    id: "WH-001",
-    name: "Islamabad Central",
-    phone: "+92 51 555 0111",
-    address: "I-9 Industrial Area, Islamabad",
-  },
-  {
-    id: "WH-002",
-    name: "Lahore Main",
-    phone: "+92 42 555 0211",
-    address: "Ferozepur Road, Lahore",
-  },
-];
+import { apiFetch } from "../../../lib/api";
 
 export default function WarehouseListPage() {
-  const [rows, setRows] = useState(initialWarehouses);
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
   const [editId, setEditId] = useState(null);
   const [editForm, setEditForm] = useState(null);
 
+  async function load() {
+    setErr("");
+    setLoading(true);
+    try {
+      const data = await apiFetch("/warehouses");
+      setRows(data.warehouses || []);
+    } catch (e) {
+      setErr(e.message || "Failed to load warehouses");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
+
   function startEdit(row) {
-    setEditId(row.id);
+    setEditId(row._id);
     setEditForm({ ...row });
   }
 
-  function onDelete(id) {
+  async function onDelete(id) {
     if (!confirm("Delete this warehouse?")) return;
-    setRows((s) => s.filter((r) => r.id !== id));
+    try {
+      await apiFetch(`/warehouses/${id}`, { method: "DELETE" });
+      await load();
+    } catch (e) {
+      alert(e.message || "Delete failed");
+    }
   }
 
-  function onSave() {
-    setRows((s) => s.map((r) => (r.id === editId ? editForm : r)));
-    setEditId(null);
-    setEditForm(null);
+  async function onSave() {
+    try {
+      const data = await apiFetch(`/warehouses/${editId}`, { method: "PUT", body: editForm });
+      setRows((s) => s.map((r) => (r._id === editId ? data.warehouse : r)));
+      setEditId(null);
+      setEditForm(null);
+    } catch (e) {
+      alert(e.message || "Update failed");
+    }
   }
 
   return (
@@ -55,6 +68,8 @@ export default function WarehouseListPage() {
           </a>
         </div>
 
+        {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
+
         <div className="mt-5 overflow-auto rounded-xl border">
           <table className="min-w-[760px] w-full text-sm">
             <thead className="bg-zinc-50">
@@ -67,15 +82,17 @@ export default function WarehouseListPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 ? (
+              {loading ? (
+                <tr><td colSpan={5} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
+              ) : rows.length === 0 ? (
                 <tr><td colSpan={5} className="px-3 py-6 text-center text-zinc-500">No warehouses found</td></tr>
               ) : (
                 rows.map((row) => (
-                  <tr key={row.id} className="hover:bg-zinc-50">
-                    <td className="px-3 py-2 border-b">{row.id}</td>
+                  <tr key={row._id} className="hover:bg-zinc-50">
+                    <td className="px-3 py-2 border-b">{row.warehouseId}</td>
                     <td className="px-3 py-2 border-b">{row.name}</td>
-                    <td className="px-3 py-2 border-b">{row.phone}</td>
-                    <td className="px-3 py-2 border-b">{row.address}</td>
+                    <td className="px-3 py-2 border-b">{row.phone || "-"}</td>
+                    <td className="px-3 py-2 border-b">{row.address || "-"}</td>
                     <td className="px-3 py-2 border-b">
                       <div className="flex gap-2">
                         <button
@@ -85,7 +102,7 @@ export default function WarehouseListPage() {
                           Edit
                         </button>
                         <button
-                          onClick={() => onDelete(row.id)}
+                          onClick={() => onDelete(row._id)}
                           className="rounded-lg border px-3 py-1.5 text-xs hover:bg-zinc-50 text-red-600"
                         >
                           Delete
@@ -118,7 +135,7 @@ function EditCard({ form, onChange, onClose, onSave }) {
           <button onClick={onClose} className="rounded-xl border px-3 py-2 text-sm hover:bg-zinc-50">✕</button>
         </div>
         <div className="flex-1 overflow-y-auto p-4 grid grid-cols-1 gap-3">
-          <Field label="Warehouse ID" value={form.id} onChange={(v) => onChange((s) => ({ ...s, id: v }))} />
+          <Field label="Warehouse ID" value={form.warehouseId} onChange={(v) => onChange((s) => ({ ...s, warehouseId: v }))} />
           <Field label="Warehouse Name" value={form.name} onChange={(v) => onChange((s) => ({ ...s, name: v }))} />
           <Field label="Phone" value={form.phone} onChange={(v) => onChange((s) => ({ ...s, phone: v }))} />
           <div>
@@ -156,7 +173,7 @@ function Field({ label, value, onChange }) {
     <div>
       <Label>{label}</Label>
       <input
-        value={value}
+        value={value || ""}
         onChange={(e) => onChange(e.target.value)}
         className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200"
       />
