@@ -1,41 +1,75 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AdminShell from "../components/AdminShell";
-
-const companies = [
-  { id: "C-001", name: "AIM Hygienic" },
-  { id: "C-002", name: "CleanPro Supplies" },
-];
-
-const initialRegions = [
-  { id: "R-001", name: "North Islamabad", companyId: "C-001", companyName: "AIM Hygienic" },
-  { id: "R-002", name: "Central Lahore", companyId: "C-001", companyName: "AIM Hygienic" },
-  { id: "R-003", name: "Karachi South", companyId: "C-002", companyName: "CleanPro Supplies" },
-];
+import { apiFetch } from "../../../lib/api";
 
 export default function RegionListPage() {
+  const [companies, setCompanies] = useState([]);
   const [companyId, setCompanyId] = useState("");
-  const [rows, setRows] = useState(initialRegions);
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
   const [editId, setEditId] = useState(null);
   const [editForm, setEditForm] = useState(null);
 
-  const filtered = useMemo(() => rows.filter((r) => r.companyId === companyId), [rows, companyId]);
+  useEffect(() => {
+    async function loadCompanies() {
+      try {
+        const data = await apiFetch("/companies");
+        setCompanies(data.companies || []);
+      } catch (e) {
+        setErr(e.message || "Failed to load companies");
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadCompanies();
+  }, []);
+
+  useEffect(() => {
+    async function loadRegions() {
+      if (!companyId) {
+        setRows([]);
+        return;
+      }
+      try {
+        const company = companies.find((c) => c._id === companyId);
+        const data = await apiFetch(`/regions?companyId=${company?.companyId || ""}`);
+        setRows(data.regions || []);
+      } catch (e) {
+        setErr(e.message || "Failed to load regions");
+      }
+    }
+    loadRegions();
+  }, [companyId, companies]);
+
+  const filtered = useMemo(() => rows, [rows]);
 
   function startEdit(row) {
-    setEditId(row.id);
+    setEditId(row._id);
     setEditForm({ ...row });
   }
 
-  function onDelete(id) {
+  async function onDelete(id) {
     if (!confirm("Delete this region?")) return;
-    setRows((s) => s.filter((r) => r.id !== id));
+    try {
+      await apiFetch(`/regions/${id}`, { method: "DELETE" });
+      setRows((s) => s.filter((r) => r._id !== id));
+    } catch (e) {
+      alert(e.message || "Delete failed");
+    }
   }
 
-  function onSave() {
-    setRows((s) => s.map((r) => (r.id === editId ? editForm : r)));
-    setEditId(null);
-    setEditForm(null);
+  async function onSave() {
+    try {
+      const data = await apiFetch(`/regions/${editId}`, { method: "PUT", body: editForm });
+      setRows((s) => s.map((r) => (r._id === editId ? data.region : r)));
+      setEditId(null);
+      setEditForm(null);
+    } catch (e) {
+      alert(e.message || "Update failed");
+    }
   }
 
   return (
@@ -54,6 +88,8 @@ export default function RegionListPage() {
           </a>
         </div>
 
+        {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
+
         <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
             <Label>Select Company</Label>
@@ -64,7 +100,7 @@ export default function RegionListPage() {
             >
               <option value="">Choose company...</option>
               {companies.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+                <option key={c._id} value={c._id}>{c.name}</option>
               ))}
             </select>
           </div>
@@ -86,12 +122,14 @@ export default function RegionListPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 ? (
+                {loading ? (
+                  <tr><td colSpan={4} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
+                ) : filtered.length === 0 ? (
                   <tr><td colSpan={4} className="px-3 py-6 text-center text-zinc-500">No regions found</td></tr>
                 ) : (
                   filtered.map((row) => (
-                    <tr key={row.id} className="hover:bg-zinc-50">
-                      <td className="px-3 py-2 border-b">{row.id}</td>
+                    <tr key={row._id} className="hover:bg-zinc-50">
+                      <td className="px-3 py-2 border-b">{row.regionId}</td>
                       <td className="px-3 py-2 border-b">{row.name}</td>
                       <td className="px-3 py-2 border-b">{row.companyName}</td>
                       <td className="px-3 py-2 border-b">
@@ -103,7 +141,7 @@ export default function RegionListPage() {
                             Edit
                           </button>
                           <button
-                            onClick={() => onDelete(row.id)}
+                            onClick={() => onDelete(row._id)}
                             className="rounded-lg border px-3 py-1.5 text-xs hover:bg-zinc-50 text-red-600"
                           >
                             Delete
@@ -137,10 +175,12 @@ function EditCard({ form, onChange, onClose, onSave }) {
           <button onClick={onClose} className="rounded-xl border px-3 py-2 text-sm hover:bg-zinc-50">✕</button>
         </div>
         <div className="flex-1 overflow-y-auto p-4 grid grid-cols-1 gap-3">
-          <Field label="Region ID" value={form.id} onChange={(v) => onChange((s) => ({ ...s, id: v }))} />
+          <Field label="Region ID" value={form.regionId} onChange={(v) => onChange((s) => ({ ...s, regionId: v }))} />
           <Field label="Region Name" value={form.name} onChange={(v) => onChange((s) => ({ ...s, name: v }))} />
           <Field label="Company ID" value={form.companyId} onChange={(v) => onChange((s) => ({ ...s, companyId: v }))} />
           <Field label="Company Name" value={form.companyName} onChange={(v) => onChange((s) => ({ ...s, companyName: v }))} />
+          <Field label="GPS Latitude" value={form.gpsLatitude} onChange={(v) => onChange((s) => ({ ...s, gpsLatitude: v }))} />
+          <Field label="GPS Longitude" value={form.gpsLongitude} onChange={(v) => onChange((s) => ({ ...s, gpsLongitude: v }))} />
         </div>
         <div className="shrink-0 border-t p-4 flex items-center gap-3">
           <button
@@ -167,7 +207,7 @@ function Field({ label, value, onChange }) {
     <div>
       <Label>{label}</Label>
       <input
-        value={value}
+        value={value || ""}
         onChange={(e) => onChange(e.target.value)}
         className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200"
       />

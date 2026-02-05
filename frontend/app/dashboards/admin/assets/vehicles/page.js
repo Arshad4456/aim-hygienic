@@ -1,32 +1,55 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AdminShell from "../../components/AdminShell";
-
-const initialVehicles = [
-  { id: "VH-101", name: "Delivery Van 1", type: "Van", plate: "LEB-1234", driver: "Aslam" },
-  { id: "VH-102", name: "Truck 2", type: "Truck", plate: "ISB-7788", driver: "Naveed" },
-];
+import { apiFetch } from "../../../../lib/api";
 
 export default function VehicleListPage() {
-  const [rows, setRows] = useState(initialVehicles);
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
   const [editId, setEditId] = useState(null);
   const [editForm, setEditForm] = useState(null);
 
+  async function load() {
+    setErr("");
+    setLoading(true);
+    try {
+      const data = await apiFetch("/vehicles");
+      setRows(data.vehicles || []);
+    } catch (e) {
+      setErr(e.message || "Failed to load vehicles");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
+
   function startEdit(row) {
-    setEditId(row.id);
+    setEditId(row._id);
     setEditForm({ ...row });
   }
 
-  function onDelete(id) {
+  async function onDelete(id) {
     if (!confirm("Delete this vehicle?")) return;
-    setRows((s) => s.filter((r) => r.id !== id));
+    try {
+      await apiFetch(`/vehicles/${id}`, { method: "DELETE" });
+      await load();
+    } catch (e) {
+      alert(e.message || "Delete failed");
+    }
   }
 
-  function onSave() {
-    setRows((s) => s.map((r) => (r.id === editId ? editForm : r)));
-    setEditId(null);
-    setEditForm(null);
+  async function onSave() {
+    try {
+      const data = await apiFetch(`/vehicles/${editId}`, { method: "PUT", body: editForm });
+      setRows((s) => s.map((r) => (r._id === editId ? data.vehicle : r)));
+      setEditId(null);
+      setEditForm(null);
+    } catch (e) {
+      alert(e.message || "Update failed");
+    }
   }
 
   return (
@@ -45,6 +68,8 @@ export default function VehicleListPage() {
           </a>
         </div>
 
+        {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
+
         <div className="mt-5 overflow-auto rounded-xl border">
           <table className="min-w-[760px] w-full text-sm">
             <thead className="bg-zinc-50">
@@ -53,21 +78,25 @@ export default function VehicleListPage() {
                 <th className="text-left px-3 py-2 border-b">Vehicle Name</th>
                 <th className="text-left px-3 py-2 border-b">Type</th>
                 <th className="text-left px-3 py-2 border-b">Plate</th>
-                <th className="text-left px-3 py-2 border-b">Driver</th>
+                <th className="text-left px-3 py-2 border-b">Driver ID</th>
+                <th className="text-left px-3 py-2 border-b">Driver Name</th>
                 <th className="text-left px-3 py-2 border-b">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 ? (
-                <tr><td colSpan={6} className="px-3 py-6 text-center text-zinc-500">No vehicles found</td></tr>
+              {loading ? (
+                <tr><td colSpan={7} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
+              ) : rows.length === 0 ? (
+                <tr><td colSpan={7} className="px-3 py-6 text-center text-zinc-500">No vehicles found</td></tr>
               ) : (
                 rows.map((row) => (
-                  <tr key={row.id} className="hover:bg-zinc-50">
-                    <td className="px-3 py-2 border-b">{row.id}</td>
+                  <tr key={row._id} className="hover:bg-zinc-50">
+                    <td className="px-3 py-2 border-b">{row.vehicleId}</td>
                     <td className="px-3 py-2 border-b">{row.name}</td>
-                    <td className="px-3 py-2 border-b">{row.type}</td>
-                    <td className="px-3 py-2 border-b">{row.plate}</td>
-                    <td className="px-3 py-2 border-b">{row.driver}</td>
+                    <td className="px-3 py-2 border-b">{row.type || "-"}</td>
+                    <td className="px-3 py-2 border-b">{row.plateNumber || "-"}</td>
+                    <td className="px-3 py-2 border-b">{row.driverId || "-"}</td>
+                    <td className="px-3 py-2 border-b">{row.driverName || "-"}</td>
                     <td className="px-3 py-2 border-b">
                       <div className="flex gap-2">
                         <button
@@ -77,7 +106,7 @@ export default function VehicleListPage() {
                           Edit
                         </button>
                         <button
-                          onClick={() => onDelete(row.id)}
+                          onClick={() => onDelete(row._id)}
                           className="rounded-lg border px-3 py-1.5 text-xs hover:bg-zinc-50 text-red-600"
                         >
                           Delete
@@ -110,11 +139,12 @@ function EditCard({ form, onChange, onClose, onSave }) {
           <button onClick={onClose} className="rounded-xl border px-3 py-2 text-sm hover:bg-zinc-50">✕</button>
         </div>
         <div className="flex-1 overflow-y-auto p-4 grid grid-cols-1 gap-3">
-          <Field label="Vehicle ID" value={form.id} onChange={(v) => onChange((s) => ({ ...s, id: v }))} />
+          <Field label="Vehicle ID" value={form.vehicleId} onChange={(v) => onChange((s) => ({ ...s, vehicleId: v }))} />
           <Field label="Vehicle Name" value={form.name} onChange={(v) => onChange((s) => ({ ...s, name: v }))} />
           <Field label="Vehicle Type" value={form.type} onChange={(v) => onChange((s) => ({ ...s, type: v }))} />
-          <Field label="Plate Number" value={form.plate} onChange={(v) => onChange((s) => ({ ...s, plate: v }))} />
-          <Field label="Assigned Driver" value={form.driver} onChange={(v) => onChange((s) => ({ ...s, driver: v }))} />
+          <Field label="Plate Number" value={form.plateNumber} onChange={(v) => onChange((s) => ({ ...s, plateNumber: v }))} />
+          <Field label="Driver ID" value={form.driverId} onChange={(v) => onChange((s) => ({ ...s, driverId: v }))} />
+          <Field label="Driver Name" value={form.driverName} onChange={(v) => onChange((s) => ({ ...s, driverName: v }))} />
         </div>
         <div className="shrink-0 border-t p-4 flex items-center gap-3">
           <button
@@ -141,7 +171,7 @@ function Field({ label, value, onChange }) {
     <div>
       <Label>{label}</Label>
       <input
-        value={value}
+        value={value || ""}
         onChange={(e) => onChange(e.target.value)}
         className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200"
       />

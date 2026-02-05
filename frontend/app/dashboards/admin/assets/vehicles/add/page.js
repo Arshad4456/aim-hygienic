@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import AdminShell from "../../../components/AdminShell";
+import { apiFetch } from "../../../../../lib/api";
 
 export default function AddVehiclePage() {
   const [form, setForm] = useState({
@@ -9,17 +10,31 @@ export default function AddVehiclePage() {
     name: "",
     type: "",
     plateNumber: "",
+    driverId: "",
     driverName: "",
   });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
 
   function setField(key, value) {
     setForm((s) => ({ ...s, [key]: value }));
   }
 
-  function onSubmit(e) {
+  async function onSubmit(e) {
     e.preventDefault();
-    setOk("✅ Vehicle saved (demo only).");
+    setErr("");
+    setOk("");
+    setSaving(true);
+    try {
+      await apiFetch("/vehicles", { method: "POST", body: form });
+      setOk("✅ Vehicle saved successfully.");
+      setForm({ vehicleId: "", name: "", type: "", plateNumber: "", driverId: "", driverName: "" });
+    } catch (e2) {
+      setErr(e2.message || "Failed to save vehicle");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -28,6 +43,7 @@ export default function AddVehiclePage() {
         <div className="text-xl font-semibold text-zinc-900">Add Vehicle</div>
         <div className="text-sm text-zinc-500 mt-1">Register a vehicle asset.</div>
 
+        {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
         {ok ? <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{ok}</div> : null}
 
         <form onSubmit={onSubmit} className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -35,11 +51,15 @@ export default function AddVehiclePage() {
           <Field label="Vehicle Name" value={form.name} onChange={(v) => setField("name", v)} required />
           <Field label="Vehicle Type" value={form.type} onChange={(v) => setField("type", v)} />
           <Field label="Plate Number" value={form.plateNumber} onChange={(v) => setField("plateNumber", v)} />
-          <Field label="Assigned Driver" value={form.driverName} onChange={(v) => setField("driverName", v)} />
+          <Field label="Driver ID" value={form.driverId} onChange={(v) => setField("driverId", v)} />
+          <Field label="Driver Name" value={form.driverName} onChange={(v) => setField("driverName", v)} />
 
           <div className="md:col-span-2 flex items-center gap-3 mt-2">
-            <button className="rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-700">
-              Save Vehicle
+            <button
+              disabled={saving}
+              className="rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-700 disabled:opacity-60"
+            >
+              {saving ? "Saving..." : "Save Vehicle"}
             </button>
           </div>
         </form>

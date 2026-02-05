@@ -1,32 +1,55 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AdminShell from "../components/AdminShell";
-
-const initialZones = [
-  { id: "Z-101", name: "Blue Area", regionId: "R-001", regionName: "North Islamabad" },
-  { id: "Z-102", name: "DHA Phase 4", regionId: "R-002", regionName: "Central Lahore" },
-];
+import { apiFetch } from "../../../lib/api";
 
 export default function ZoneListPage() {
-  const [rows, setRows] = useState(initialZones);
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
   const [editId, setEditId] = useState(null);
   const [editForm, setEditForm] = useState(null);
 
+  async function load() {
+    setErr("");
+    setLoading(true);
+    try {
+      const data = await apiFetch("/zones");
+      setRows(data.zones || []);
+    } catch (e) {
+      setErr(e.message || "Failed to load zones");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
+
   function startEdit(row) {
-    setEditId(row.id);
+    setEditId(row._id);
     setEditForm({ ...row });
   }
 
-  function onDelete(id) {
+  async function onDelete(id) {
     if (!confirm("Delete this zone?")) return;
-    setRows((s) => s.filter((r) => r.id !== id));
+    try {
+      await apiFetch(`/zones/${id}`, { method: "DELETE" });
+      await load();
+    } catch (e) {
+      alert(e.message || "Delete failed");
+    }
   }
 
-  function onSave() {
-    setRows((s) => s.map((r) => (r.id === editId ? editForm : r)));
-    setEditId(null);
-    setEditForm(null);
+  async function onSave() {
+    try {
+      const data = await apiFetch(`/zones/${editId}`, { method: "PUT", body: editForm });
+      setRows((s) => s.map((r) => (r._id === editId ? data.zone : r)));
+      setEditId(null);
+      setEditForm(null);
+    } catch (e) {
+      alert(e.message || "Update failed");
+    }
   }
 
   return (
@@ -45,6 +68,8 @@ export default function ZoneListPage() {
           </a>
         </div>
 
+        {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
+
         <div className="mt-5 overflow-auto rounded-xl border">
           <table className="min-w-[720px] w-full text-sm">
             <thead className="bg-zinc-50">
@@ -56,12 +81,14 @@ export default function ZoneListPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 ? (
+              {loading ? (
+                <tr><td colSpan={4} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
+              ) : rows.length === 0 ? (
                 <tr><td colSpan={4} className="px-3 py-6 text-center text-zinc-500">No zones found</td></tr>
               ) : (
                 rows.map((row) => (
-                  <tr key={row.id} className="hover:bg-zinc-50">
-                    <td className="px-3 py-2 border-b">{row.id}</td>
+                  <tr key={row._id} className="hover:bg-zinc-50">
+                    <td className="px-3 py-2 border-b">{row.zoneId}</td>
                     <td className="px-3 py-2 border-b">{row.name}</td>
                     <td className="px-3 py-2 border-b">{row.regionName}</td>
                     <td className="px-3 py-2 border-b">
@@ -73,7 +100,7 @@ export default function ZoneListPage() {
                           Edit
                         </button>
                         <button
-                          onClick={() => onDelete(row.id)}
+                          onClick={() => onDelete(row._id)}
                           className="rounded-lg border px-3 py-1.5 text-xs hover:bg-zinc-50 text-red-600"
                         >
                           Delete
@@ -106,10 +133,12 @@ function EditCard({ form, onChange, onClose, onSave }) {
           <button onClick={onClose} className="rounded-xl border px-3 py-2 text-sm hover:bg-zinc-50">✕</button>
         </div>
         <div className="flex-1 overflow-y-auto p-4 grid grid-cols-1 gap-3">
-          <Field label="Zone ID" value={form.id} onChange={(v) => onChange((s) => ({ ...s, id: v }))} />
+          <Field label="Zone ID" value={form.zoneId} onChange={(v) => onChange((s) => ({ ...s, zoneId: v }))} />
           <Field label="Zone Name" value={form.name} onChange={(v) => onChange((s) => ({ ...s, name: v }))} />
           <Field label="Region ID" value={form.regionId} onChange={(v) => onChange((s) => ({ ...s, regionId: v }))} />
           <Field label="Region Name" value={form.regionName} onChange={(v) => onChange((s) => ({ ...s, regionName: v }))} />
+          <Field label="GPS Latitude" value={form.gpsLatitude} onChange={(v) => onChange((s) => ({ ...s, gpsLatitude: v }))} />
+          <Field label="GPS Longitude" value={form.gpsLongitude} onChange={(v) => onChange((s) => ({ ...s, gpsLongitude: v }))} />
         </div>
         <div className="shrink-0 border-t p-4 flex items-center gap-3">
           <button
@@ -136,7 +165,7 @@ function Field({ label, value, onChange }) {
     <div>
       <Label>{label}</Label>
       <input
-        value={value}
+        value={value || ""}
         onChange={(e) => onChange(e.target.value)}
         className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200"
       />
