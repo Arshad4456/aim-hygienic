@@ -8,6 +8,7 @@ const authRoutes = require("./src/routes/auth");
 const adminUsersRoutes = require("./src/routes/adminUsers");
 const companiesRouter = require("./src/routes/companies");
 const usersRoutes = require("./src/routes/users");
+const productsRoutes = require("./src/routes/products");
 const warehousesRoutes = require("./src/routes/warehouses");
 const regionsRoutes = require("./src/routes/regions");
 const zonesRoutes = require("./src/routes/zones");
@@ -27,6 +28,7 @@ app.use("/api/regions", regionsRoutes);
 app.use("/api/zones", zonesRoutes);
 app.use("/api/areas", areasRoutes);
 app.use("/api/vehicles", vehiclesRoutes);
+app.use("/api/products", productsRoutes);
 
 
 // CORS for your live domain
