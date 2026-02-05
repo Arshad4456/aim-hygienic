@@ -3,33 +3,18 @@ const Company = require("../models/Company");
 
 const router = express.Router();
 
-// helper: "a,b,c" -> ["a","b","c"]
-function csvToArr(v) {
-  if (!v) return [];
-  if (Array.isArray(v)) return v.map((s) => String(s).trim()).filter(Boolean);
-  return String(v)
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
 // CREATE
 router.post("/", async (req, res) => {
   try {
     const body = req.body || {};
     const doc = await Company.create({
-      code: String(body.code || "").trim(),
+      companyId: String(body.companyId || "").trim(),
       name: String(body.name || "").trim(),
-      managerName: String(body.managerName || "").trim(),
-
-      branches: csvToArr(body.branches),
-      warehouses: csvToArr(body.warehouses),
-      products: csvToArr(body.products),
 
       phone1: String(body.phone1 || "").trim(),
       phone2: String(body.phone2 || "").trim(),
       email: String(body.email || "").trim(),
-      address: String(body.address || "").trim(),
+      mainOfficeAddress: String(body.mainOfficeAddress || "").trim(),
 
       createdBy: req.user?.uid,
     });
@@ -38,7 +23,7 @@ router.post("/", async (req, res) => {
   } catch (e) {
     // duplicate code
     if (e?.code === 11000) {
-      return res.status(409).json({ ok: false, message: "Company code already exists" });
+      return res.status(409).json({ ok: false, message: "Company ID already exists" });
     }
     return res.status(500).json({ ok: false, message: "Failed to create company" });
   }
@@ -72,18 +57,13 @@ router.put("/:id", async (req, res) => {
     const updated = await Company.findByIdAndUpdate(
       req.params.id,
       {
-        code: String(body.code || "").trim(),
+        companyId: String(body.companyId || "").trim(),
         name: String(body.name || "").trim(),
-        managerName: String(body.managerName || "").trim(),
-
-        branches: csvToArr(body.branches),
-        warehouses: csvToArr(body.warehouses),
-        products: csvToArr(body.products),
 
         phone1: String(body.phone1 || "").trim(),
         phone2: String(body.phone2 || "").trim(),
         email: String(body.email || "").trim(),
-        address: String(body.address || "").trim(),
+        mainOfficeAddress: String(body.mainOfficeAddress || "").trim(),
       },
       { new: true, runValidators: true }
     );
@@ -92,7 +72,7 @@ router.put("/:id", async (req, res) => {
     return res.json({ ok: true, company: updated });
   } catch (e) {
     if (e?.code === 11000) {
-      return res.status(409).json({ ok: false, message: "Company code already exists" });
+      return res.status(409).json({ ok: false, message: "Company ID already exists" });
     }
     return res.status(500).json({ ok: false, message: "Failed to update company" });
   }

@@ -23,6 +23,8 @@ function Icon({ name }) {
   if (name === "tracking") return <span className={common}>📍</span>;
   if (name === "reports") return <span className={common}>📄</span>;
   if (name === "settings") return <span className={common}>⚙️</span>;
+  if (name === "territory") return <span className={common}>🧭</span>;
+  if (name === "users") return <span className={common}>🧑‍💼</span>;
   return <span className={common}>•</span>;
 }
 
@@ -40,6 +42,8 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
     route: false,
     purchase: false,
     orders: false,
+    territory: false,
+    users: false,
   });
 
   const menu = useMemo(
@@ -64,6 +68,19 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
         { title: "View Product List", href: "/dashboards/admin/products" },
         { title: "Product Barcode List", href: "/dashboards/admin/products/barcodes" },
         { title: "Price Change", href: "/dashboards/admin/products/price-change" },
+      ]},
+
+      { type: "group", key: "territory", title: "Territory & Assets", icon: "territory", children: [
+        { title: "Add Warehouse", href: "/dashboards/admin/warehouses/add" },
+        { title: "Warehouse List", href: "/dashboards/admin/warehouses" },
+        { title: "Add Region", href: "/dashboards/admin/regions/add" },
+        { title: "Region List", href: "/dashboards/admin/regions" },
+        { title: "Add Zone", href: "/dashboards/admin/zones/add" },
+        { title: "Zone List", href: "/dashboards/admin/zones" },
+        { title: "Add Area", href: "/dashboards/admin/areas/add" },
+        { title: "Area List", href: "/dashboards/admin/areas" },
+        { title: "Add Vehicle", href: "/dashboards/admin/assets/vehicles/add" },
+        { title: "Vehicle List", href: "/dashboards/admin/assets/vehicles" },
       ]},
 
       { type: "group", key: "expense", title: "Expense Management", icon: "expense", children: [
@@ -92,6 +109,11 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
       { type: "group", key: "supplier", title: "Supplier Management", icon: "supplier", children: [
         { title: "Add New Supplier", href: "/dashboards/admin/suppliers/add" },
         { title: "View Supplier List", href: "/dashboards/admin/suppliers" },
+      ]},
+
+      { type: "group", key: "users", title: "User Management", icon: "users", children: [
+        { title: "Add User", href: "/dashboards/admin/users/add" },
+        { title: "User List", href: "/dashboards/admin/users" },
       ]},
 
       { type: "group", key: "qc", title: "Quality Control", icon: "qc", children: [
