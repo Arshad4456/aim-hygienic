@@ -12,6 +12,11 @@ export default function AddWarehousePage() {
     name: "",
     phone: "",
     address: "",
+    city: "",
+    region: "",
+    managerName: "",
+    capacity: "",
+    status: "active",
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -52,7 +57,17 @@ export default function AddWarehousePage() {
         },
       });
       setOk("✅ Warehouse saved successfully.");
-      setForm({ warehouseId: "", name: "", phone: "", address: "" });
+      setForm({
+        warehouseId: "",
+        name: "",
+        phone: "",
+        address: "",
+        city: "",
+        region: "",
+        managerName: "",
+        capacity: "",
+        status: "active",
+      });
     } catch (e2) {
       setErr(e2.message || "Failed to save warehouse");
     } finally {
@@ -90,6 +105,21 @@ export default function AddWarehousePage() {
             <Field label="Warehouse ID" value={form.warehouseId} onChange={(v) => setField("warehouseId", v)} required />
             <Field label="Warehouse Name" value={form.name} onChange={(v) => setField("name", v)} required />
             <Field label="Phone Number" value={form.phone} onChange={(v) => setField("phone", v)} />
+            <Field label="City" value={form.city} onChange={(v) => setField("city", v)} />
+            <Field label="Region" value={form.region} onChange={(v) => setField("region", v)} />
+            <Field label="Manager" value={form.managerName} onChange={(v) => setField("managerName", v)} />
+            <Field label="Capacity" value={form.capacity} onChange={(v) => setField("capacity", v)} type="number" />
+            <div>
+              <Label>Status</Label>
+              <select
+                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+                value={form.status}
+                onChange={(e) => setField("status", e.target.value)}
+              >
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
             <div className="md:col-span-2">
               <Label>Warehouse Address</Label>
               <textarea

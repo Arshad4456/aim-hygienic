@@ -68,14 +68,15 @@ export default function PriceChangePage() {
                 <th className="text-left px-3 py-2 border-b">Initial Price</th>
                 <th className="text-left px-3 py-2 border-b">Customer Price</th>
                 <th className="text-left px-3 py-2 border-b">Sale Price</th>
+                <th className="text-left px-3 py-2 border-b">Selling Price</th>
                 <th className="text-left px-3 py-2 border-b">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
+                <tr><td colSpan={8} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={7} className="px-3 py-6 text-center text-zinc-500">No products found</td></tr>
+                <tr><td colSpan={8} className="px-3 py-6 text-center text-zinc-500">No products found</td></tr>
               ) : (
                 rows.map((row) => (
                   <tr key={row._id} className="hover:bg-zinc-50">
@@ -85,6 +86,7 @@ export default function PriceChangePage() {
                     <td className="px-3 py-2 border-b">{row.initialPrice}</td>
                     <td className="px-3 py-2 border-b">{row.customerPrice}</td>
                     <td className="px-3 py-2 border-b">{row.salePrice}</td>
+                    <td className="px-3 py-2 border-b">{row.sellingPrice ?? "-"}</td>
                     <td className="px-3 py-2 border-b">
                       <button
                         onClick={() => startEdit(row)}
@@ -124,6 +126,7 @@ function EditCard({ form, onChange, onClose, onSave }) {
           <Field label="Initial Price" value={form.initialPrice} onChange={(v) => onChange((s) => ({ ...s, initialPrice: v }))} type="number" />
           <Field label="Customer Price" value={form.customerPrice} onChange={(v) => onChange((s) => ({ ...s, customerPrice: v }))} type="number" />
           <Field label="Sale Price" value={form.salePrice} onChange={(v) => onChange((s) => ({ ...s, salePrice: v }))} type="number" />
+          <Field label="Selling Price" value={form.sellingPrice} onChange={(v) => onChange((s) => ({ ...s, sellingPrice: v }))} type="number" />
         </div>
         <div className="shrink-0 border-t p-4 flex items-center gap-3">
           <button

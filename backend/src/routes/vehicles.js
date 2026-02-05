@@ -14,6 +14,7 @@ router.post("/", requireAuth, async (req, res) => {
       plateNumber: String(body.plateNumber || "").trim(),
       driverId: String(body.driverId || "").trim(),
       driverName: String(body.driverName || "").trim(),
+      deliveryCapacity: Number(body.deliveryCapacity || 0),
       createdBy: req.user?.uid,
     });
     return res.status(201).json({ ok: true, vehicle: doc });
@@ -56,6 +57,7 @@ router.put("/:id", requireAuth, async (req, res) => {
         plateNumber: String(body.plateNumber || "").trim(),
         driverId: String(body.driverId || "").trim(),
         driverName: String(body.driverName || "").trim(),
+        deliveryCapacity: Number(body.deliveryCapacity || 0),
       },
       { new: true, runValidators: true }
     );

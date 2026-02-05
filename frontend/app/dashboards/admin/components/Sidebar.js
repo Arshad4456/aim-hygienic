@@ -25,6 +25,7 @@ function Icon({ name }) {
   if (name === "settings") return <span className={common}>⚙️</span>;
   if (name === "territory") return <span className={common}>🧭</span>;
   if (name === "users") return <span className={common}>🧑‍💼</span>;
+  if (name === "inventory") return <span className={common}>🏬</span>;
   return <span className={common}>•</span>;
 }
 
@@ -44,6 +45,7 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
     orders: false,
     territory: false,
     users: false,
+    inventory: false,
   });
 
   const menu = useMemo(
@@ -68,6 +70,14 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
         { title: "View Product List", href: "/dashboards/admin/products" },
         { title: "Product Barcode List", href: "/dashboards/admin/products/barcodes" },
         { title: "Price Change", href: "/dashboards/admin/products/price-change" },
+      ]},
+
+      { type: "group", key: "inventory", title: "Warehouse & Inventory", icon: "inventory", children: [
+        { title: "Warehouse Master", href: "/dashboards/admin/inventory/warehouses" },
+        { title: "Inventory Ledger", href: "/dashboards/admin/inventory/ledger" },
+        { title: "Stock Transfers", href: "/dashboards/admin/inventory/transfers" },
+        { title: "Stock Summary", href: "/dashboards/admin/inventory/summary" },
+        { title: "Low Stock Alerts", href: "/dashboards/admin/inventory/low-stock" },
       ]},
 
       { type: "group", key: "territory", title: "Territory & Assets", icon: "territory", children: [

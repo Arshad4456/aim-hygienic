@@ -12,6 +12,7 @@ export default function AddVehiclePage() {
     plateNumber: "",
     driverId: "",
     driverName: "",
+    deliveryCapacity: "",
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
@@ -29,7 +30,7 @@ export default function AddVehiclePage() {
     try {
       await apiFetch("/vehicles", { method: "POST", body: form });
       setOk("✅ Vehicle saved successfully.");
-      setForm({ vehicleId: "", name: "", type: "", plateNumber: "", driverId: "", driverName: "" });
+      setForm({ vehicleId: "", name: "", type: "", plateNumber: "", driverId: "", driverName: "", deliveryCapacity: "" });
     } catch (e2) {
       setErr(e2.message || "Failed to save vehicle");
     } finally {
@@ -53,6 +54,7 @@ export default function AddVehiclePage() {
           <Field label="Plate Number" value={form.plateNumber} onChange={(v) => setField("plateNumber", v)} />
           <Field label="Driver ID" value={form.driverId} onChange={(v) => setField("driverId", v)} />
           <Field label="Driver Name" value={form.driverName} onChange={(v) => setField("driverName", v)} />
+          <Field label="Delivery Capacity" value={form.deliveryCapacity} onChange={(v) => setField("deliveryCapacity", v)} type="number" />
 
           <div className="md:col-span-2 flex items-center gap-3 mt-2">
             <button

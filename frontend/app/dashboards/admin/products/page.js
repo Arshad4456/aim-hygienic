@@ -216,14 +216,15 @@ export default function ProductListPage() {
                 <th className="text-left px-3 py-2 border-b">Sub-Category</th>
                 <th className="text-left px-3 py-2 border-b">Size</th>
                 <th className="text-left px-3 py-2 border-b">Sale Price</th>
+                <th className="text-left px-3 py-2 border-b">Min Stock</th>
                 <th className="text-left px-3 py-2 border-b">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
+                <tr><td colSpan={8} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
               ) : pageRows.length === 0 ? (
-                <tr><td colSpan={7} className="px-3 py-6 text-center text-zinc-500">No products found</td></tr>
+                <tr><td colSpan={8} className="px-3 py-6 text-center text-zinc-500">No products found</td></tr>
               ) : (
                 pageRows.map((row) => (
                   <tr key={row._id} className="hover:bg-zinc-50">
@@ -233,6 +234,7 @@ export default function ProductListPage() {
                     <td className="px-3 py-2 border-b">{row.subCategory || "-"}</td>
                     <td className="px-3 py-2 border-b">{row.size || "-"}</td>
                     <td className="px-3 py-2 border-b">{row.salePrice}</td>
+                    <td className="px-3 py-2 border-b">{row.minStockLevel ?? "-"}</td>
                     <td className="px-3 py-2 border-b">
                       <div className="flex gap-2">
                         <button
@@ -302,9 +304,13 @@ function EditCard({ form, onChange, onClose, onSave }) {
           <Field label="Category" value={form.category} onChange={(v) => onChange((s) => ({ ...s, category: v }))} />
           <Field label="Sub-Category" value={form.subCategory} onChange={(v) => onChange((s) => ({ ...s, subCategory: v }))} />
           <Field label="Size" value={form.size} onChange={(v) => onChange((s) => ({ ...s, size: v }))} />
+          <Field label="Unit" value={form.unit} onChange={(v) => onChange((s) => ({ ...s, unit: v }))} />
           <Field label="Initial Price" value={form.initialPrice} onChange={(v) => onChange((s) => ({ ...s, initialPrice: v }))} type="number" />
           <Field label="Customer Price" value={form.customerPrice} onChange={(v) => onChange((s) => ({ ...s, customerPrice: v }))} type="number" />
           <Field label="Sale Price" value={form.salePrice} onChange={(v) => onChange((s) => ({ ...s, salePrice: v }))} type="number" />
+          <Field label="Cost Price" value={form.costPrice} onChange={(v) => onChange((s) => ({ ...s, costPrice: v }))} type="number" />
+          <Field label="Selling Price" value={form.sellingPrice} onChange={(v) => onChange((s) => ({ ...s, sellingPrice: v }))} type="number" />
+          <Field label="Minimum Stock Level" value={form.minStockLevel} onChange={(v) => onChange((s) => ({ ...s, minStockLevel: v }))} type="number" />
           <Field label="Barcode" value={form.barcode} onChange={(v) => onChange((s) => ({ ...s, barcode: v }))} />
           <Field label="SKU" value={form.sku} onChange={(v) => onChange((s) => ({ ...s, sku: v }))} />
           <div className="md:col-span-2">
