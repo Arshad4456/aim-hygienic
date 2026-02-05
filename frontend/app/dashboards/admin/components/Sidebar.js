@@ -34,7 +34,7 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
   const router = useRouter();
 
   const [open, setOpen] = useState({
-    products: true,
+    products: false,
     company: false,
     expense: false,
     customer: false,
@@ -64,6 +64,10 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
   ],
 },
 
+{ type: "group", key: "users", title: "User Management", icon: "users", children: [
+  { title: "Add User", href: "/dashboards/admin/users/add" },
+  { title: "User List", href: "/dashboards/admin/users" },
+]},
 
       { type: "group", key: "products", title: "Products Management", icon: "products", children: [
         { title: "Add New Product", href: "/dashboards/admin/products/add" },
@@ -71,15 +75,7 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
         { title: "Product Barcode List", href: "/dashboards/admin/products/barcodes" },
         { title: "Price Change", href: "/dashboards/admin/products/price-change" },
       ]},
-
-      { type: "group", key: "inventory", title: "Warehouse & Inventory", icon: "inventory", children: [
-        { title: "Warehouse Master", href: "/dashboards/admin/inventory/warehouses" },
-        { title: "Inventory Ledger", href: "/dashboards/admin/inventory/ledger" },
-        { title: "Stock Transfers", href: "/dashboards/admin/inventory/transfers" },
-        { title: "Stock Summary", href: "/dashboards/admin/inventory/summary" },
-        { title: "Low Stock Alerts", href: "/dashboards/admin/inventory/low-stock" },
-      ]},
-
+      
       { type: "group", key: "territory", title: "Territory & Assets", icon: "territory", children: [
         { title: "Add Warehouse", href: "/dashboards/admin/warehouses/add" },
         { title: "Warehouse List", href: "/dashboards/admin/warehouses" },
@@ -92,6 +88,15 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
         { title: "Add Vehicle", href: "/dashboards/admin/assets/vehicles/add" },
         { title: "Vehicle List", href: "/dashboards/admin/assets/vehicles" },
       ]},
+
+      { type: "group", key: "inventory", title: "Warehouse & Inventory", icon: "inventory", children: [
+        { title: "Warehouse Master", href: "/dashboards/admin/inventory/warehouses" },
+        { title: "Inventory Ledger", href: "/dashboards/admin/inventory/ledger" },
+        { title: "Stock Transfers", href: "/dashboards/admin/inventory/transfers" },
+        { title: "Stock Summary", href: "/dashboards/admin/inventory/summary" },
+        { title: "Low Stock Alerts", href: "/dashboards/admin/inventory/low-stock" },
+      ]},
+
 
       { type: "group", key: "expense", title: "Expense Management", icon: "expense", children: [
         { title: "Add Expense", href: "/dashboards/admin/expense/add" },
@@ -121,10 +126,6 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
         { title: "View Supplier List", href: "/dashboards/admin/suppliers" },
       ]},
 
-      { type: "group", key: "users", title: "User Management", icon: "users", children: [
-        { title: "Add User", href: "/dashboards/admin/users/add" },
-        { title: "User List", href: "/dashboards/admin/users" },
-      ]},
 
       { type: "group", key: "qc", title: "Quality Control", icon: "qc", children: [
         { title: "Raw Material QC", href: "/dashboards/admin/qc/raw-material" },
