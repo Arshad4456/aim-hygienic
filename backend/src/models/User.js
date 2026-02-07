@@ -52,6 +52,12 @@ const UserSchema = new mongoose.Schema(
     orderBookerName: { type: String, trim: true },
     customerId: { type: String, trim: true },
     customerName: { type: String, trim: true },
+    supplierId: { type: String, trim: true },
+    supplierName: { type: String, trim: true },
+    supplierWarehouseId1: { type: String, trim: true },
+    supplierWarehouseName1: { type: String, trim: true },
+    supplierWarehouseId2: { type: String, trim: true },
+    supplierWarehouseName2: { type: String, trim: true },
   },
   { timestamps: true }
 );

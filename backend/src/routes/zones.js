@@ -10,6 +10,8 @@ router.post("/", requireAuth, async (req, res) => {
     const doc = await Zone.create({
       zoneId: String(body.zoneId || "").trim(),
       name: String(body.name || "").trim(),
+      warehouseId: String(body.warehouseId || "").trim(),
+      warehouseName: String(body.warehouseName || "").trim(),
       regionId: String(body.regionId || "").trim(),
       regionName: String(body.regionName || "").trim(),
       gpsLatitude: String(body.gpsLatitude || "").trim(),
@@ -28,6 +30,7 @@ router.post("/", requireAuth, async (req, res) => {
 router.get("/", requireAuth, async (req, res) => {
   try {
     const query = {};
+    if (req.query.warehouseId) query.warehouseId = String(req.query.warehouseId);
     if (req.query.regionId) query.regionId = String(req.query.regionId);
     const items = await Zone.find(query).sort({ createdAt: -1 }).lean();
     return res.json({ ok: true, zones: items });
@@ -54,6 +57,8 @@ router.put("/:id", requireAuth, async (req, res) => {
       {
         zoneId: String(body.zoneId || "").trim(),
         name: String(body.name || "").trim(),
+        warehouseId: String(body.warehouseId || "").trim(),
+        warehouseName: String(body.warehouseName || "").trim(),
         regionId: String(body.regionId || "").trim(),
         regionName: String(body.regionName || "").trim(),
         gpsLatitude: String(body.gpsLatitude || "").trim(),

@@ -76,20 +76,22 @@ export default function ZoneListPage() {
               <tr>
                 <th className="text-left px-3 py-2 border-b">Zone ID</th>
                 <th className="text-left px-3 py-2 border-b">Zone Name</th>
+                <th className="text-left px-3 py-2 border-b">Warehouse</th>
                 <th className="text-left px-3 py-2 border-b">Region</th>
                 <th className="text-left px-3 py-2 border-b">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={4} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
+                <tr><td colSpan={5} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={4} className="px-3 py-6 text-center text-zinc-500">No zones found</td></tr>
+                <tr><td colSpan={5} className="px-3 py-6 text-center text-zinc-500">No zones found</td></tr>
               ) : (
                 rows.map((row) => (
                   <tr key={row._id} className="hover:bg-zinc-50">
                     <td className="px-3 py-2 border-b">{row.zoneId}</td>
                     <td className="px-3 py-2 border-b">{row.name}</td>
+                    <td className="px-3 py-2 border-b">{row.warehouseName || "-"}</td>
                     <td className="px-3 py-2 border-b">{row.regionName}</td>
                     <td className="px-3 py-2 border-b">
                       <div className="flex gap-2">
@@ -135,6 +137,8 @@ function EditCard({ form, onChange, onClose, onSave }) {
         <div className="flex-1 overflow-y-auto p-4 grid grid-cols-1 gap-3">
           <Field label="Zone ID" value={form.zoneId} onChange={(v) => onChange((s) => ({ ...s, zoneId: v }))} />
           <Field label="Zone Name" value={form.name} onChange={(v) => onChange((s) => ({ ...s, name: v }))} />
+          <Field label="Warehouse ID" value={form.warehouseId} onChange={(v) => onChange((s) => ({ ...s, warehouseId: v }))} />
+          <Field label="Warehouse Name" value={form.warehouseName} onChange={(v) => onChange((s) => ({ ...s, warehouseName: v }))} />
           <Field label="Region ID" value={form.regionId} onChange={(v) => onChange((s) => ({ ...s, regionId: v }))} />
           <Field label="Region Name" value={form.regionName} onChange={(v) => onChange((s) => ({ ...s, regionName: v }))} />
           <Field label="GPS Latitude" value={form.gpsLatitude} onChange={(v) => onChange((s) => ({ ...s, gpsLatitude: v }))} />

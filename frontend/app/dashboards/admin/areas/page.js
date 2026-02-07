@@ -71,11 +71,12 @@ export default function AreaListPage() {
         {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
 
         <div className="mt-5 overflow-auto rounded-xl border">
-          <table className="min-w-[760px] w-full text-sm">
+          <table className="min-w-[900px] w-full text-sm">
             <thead className="bg-zinc-50">
               <tr>
                 <th className="text-left px-3 py-2 border-b">Area ID</th>
                 <th className="text-left px-3 py-2 border-b">Area Name</th>
+                <th className="text-left px-3 py-2 border-b">Warehouse</th>
                 <th className="text-left px-3 py-2 border-b">Region</th>
                 <th className="text-left px-3 py-2 border-b">Zone</th>
                 <th className="text-left px-3 py-2 border-b">Actions</th>
@@ -83,14 +84,15 @@ export default function AreaListPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={5} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
+                <tr><td colSpan={6} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={5} className="px-3 py-6 text-center text-zinc-500">No areas found</td></tr>
+                <tr><td colSpan={6} className="px-3 py-6 text-center text-zinc-500">No areas found</td></tr>
               ) : (
                 rows.map((row) => (
                   <tr key={row._id} className="hover:bg-zinc-50">
                     <td className="px-3 py-2 border-b">{row.areaId}</td>
                     <td className="px-3 py-2 border-b">{row.name}</td>
+                    <td className="px-3 py-2 border-b">{row.warehouseName || "-"}</td>
                     <td className="px-3 py-2 border-b">{row.regionName}</td>
                     <td className="px-3 py-2 border-b">{row.zoneName}</td>
                     <td className="px-3 py-2 border-b">
@@ -137,6 +139,8 @@ function EditCard({ form, onChange, onClose, onSave }) {
         <div className="flex-1 overflow-y-auto p-4 grid grid-cols-1 gap-3">
           <Field label="Area ID" value={form.areaId} onChange={(v) => onChange((s) => ({ ...s, areaId: v }))} />
           <Field label="Area Name" value={form.name} onChange={(v) => onChange((s) => ({ ...s, name: v }))} />
+          <Field label="Warehouse ID" value={form.warehouseId} onChange={(v) => onChange((s) => ({ ...s, warehouseId: v }))} />
+          <Field label="Warehouse Name" value={form.warehouseName} onChange={(v) => onChange((s) => ({ ...s, warehouseName: v }))} />
           <Field label="Region ID" value={form.regionId} onChange={(v) => onChange((s) => ({ ...s, regionId: v }))} />
           <Field label="Region Name" value={form.regionName} onChange={(v) => onChange((s) => ({ ...s, regionName: v }))} />
           <Field label="Zone ID" value={form.zoneId} onChange={(v) => onChange((s) => ({ ...s, zoneId: v }))} />

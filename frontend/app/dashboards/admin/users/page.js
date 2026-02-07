@@ -14,6 +14,7 @@ const roles = [
   "Sales Man",
   "Order Booker",
   "Customer",
+  "Supplier",
 ];
 
 const fieldLabels = {
@@ -60,6 +61,12 @@ const fieldLabels = {
   orderBookerName: "Order Booker Name",
   customerId: "Customer ID",
   customerName: "Customer Name",
+  supplierId: "Supplier ID",
+  supplierName: "Supplier Name",
+  supplierWarehouseId1: "Warehouse 1 ID",
+  supplierWarehouseName1: "Warehouse 1 Name",
+  supplierWarehouseId2: "Warehouse 2 ID",
+  supplierWarehouseName2: "Warehouse 2 Name",
 };
 
 const editableFields = [
@@ -106,6 +113,12 @@ const editableFields = [
   "orderBookerName",
   "customerId",
   "customerName",
+  "supplierId",
+  "supplierName",
+  "supplierWarehouseId1",
+  "supplierWarehouseName1",
+  "supplierWarehouseId2",
+  "supplierWarehouseName2",
 ];
 
 function validatePassword(value) {

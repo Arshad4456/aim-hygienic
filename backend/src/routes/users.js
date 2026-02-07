@@ -58,6 +58,12 @@ function buildUserPayload(body) {
     orderBookerName: normalize(body.orderBookerName),
     customerId: normalize(body.customerId),
     customerName: normalize(body.customerName),
+    supplierId: normalize(body.supplierId),
+    supplierName: normalize(body.supplierName),
+    supplierWarehouseId1: normalize(body.supplierWarehouseId1),
+    supplierWarehouseName1: normalize(body.supplierWarehouseName1),
+    supplierWarehouseId2: normalize(body.supplierWarehouseId2),
+    supplierWarehouseName2: normalize(body.supplierWarehouseName2),
   };
 }
 

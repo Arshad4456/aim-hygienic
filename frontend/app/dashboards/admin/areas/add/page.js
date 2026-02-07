@@ -10,6 +10,8 @@ export default function AddAreaPage() {
   const [form, setForm] = useState({
     areaId: "",
     name: "",
+    warehouseId: "",
+    warehouseName: "",
     regionId: "",
     regionName: "",
     gpsLatitude: "",
@@ -49,6 +51,8 @@ export default function AddAreaPage() {
         method: "POST",
         body: {
           ...form,
+          warehouseId: zone?.warehouseId || form.warehouseId,
+          warehouseName: zone?.warehouseName || form.warehouseName,
           zoneId: zone?.zoneId || "",
           zoneName: zone?.name || "",
           regionId: zone?.regionId || form.regionId,
@@ -56,7 +60,17 @@ export default function AddAreaPage() {
         },
       });
       setOk("✅ Area saved successfully.");
-      setForm({ areaId: "", name: "", regionId: "", regionName: "", gpsLatitude: "", gpsLongitude: "" });
+      setForm({
+        areaId: "",
+        name: "",
+        warehouseId: "",
+        warehouseName: "",
+        regionId: "",
+        regionName: "",
+        gpsLatitude: "",
+        gpsLongitude: "",
+      });
+      setZoneId("");
     } catch (e2) {
       setErr(e2.message || "Failed to save area");
     } finally {
@@ -82,7 +96,18 @@ export default function AddAreaPage() {
               <select
                 className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
                 value={zoneId}
-                onChange={(e) => setZoneId(e.target.value)}
+                onChange={(e) => {
+                  const selectedId = e.target.value;
+                  setZoneId(selectedId);
+                  const zone = zones.find((z) => z._id === selectedId);
+                  setForm((s) => ({
+                    ...s,
+                    warehouseId: zone?.warehouseId || "",
+                    warehouseName: zone?.warehouseName || "",
+                    regionId: zone?.regionId || "",
+                    regionName: zone?.regionName || "",
+                  }));
+                }}
                 required
               >
                 <option value="">Choose zone...</option>
@@ -93,8 +118,10 @@ export default function AddAreaPage() {
             </div>
             <Field label="Area ID" value={form.areaId} onChange={(v) => setField("areaId", v)} required />
             <Field label="Area Name" value={form.name} onChange={(v) => setField("name", v)} required />
-            <Field label="Region ID" value={form.regionId} onChange={(v) => setField("regionId", v)} required />
-            <Field label="Region Name" value={form.regionName} onChange={(v) => setField("regionName", v)} required />
+            <Field label="Warehouse ID" value={form.warehouseId} onChange={(v) => setField("warehouseId", v)} required disabled />
+            <Field label="Warehouse Name" value={form.warehouseName} onChange={(v) => setField("warehouseName", v)} required disabled />
+            <Field label="Region ID" value={form.regionId} onChange={(v) => setField("regionId", v)} required disabled />
+            <Field label="Region Name" value={form.regionName} onChange={(v) => setField("regionName", v)} required disabled />
             <Field label="GPS Latitude" value={form.gpsLatitude} onChange={(v) => setField("gpsLatitude", v)} />
             <Field label="GPS Longitude" value={form.gpsLongitude} onChange={(v) => setField("gpsLongitude", v)} />
 
@@ -117,7 +144,7 @@ function Label({ children }) {
   return <div className="text-sm font-medium text-zinc-800">{children}</div>;
 }
 
-function Field({ label, value, onChange, type = "text", required = false }) {
+function Field({ label, value, onChange, type = "text", required = false, disabled = false }) {
   return (
     <div>
       <Label>{label}</Label>
@@ -126,7 +153,8 @@ function Field({ label, value, onChange, type = "text", required = false }) {
         required={required}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200"
+        disabled={disabled}
+        className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200 disabled:bg-zinc-100"
       />
     </div>
   );

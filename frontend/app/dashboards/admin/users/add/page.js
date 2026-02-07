@@ -14,6 +14,7 @@ const roleOptions = [
   "Sales Man",
   "Order Booker",
   "Customer",
+  "Supplier",
 ];
 
 const roleFields = {
@@ -204,6 +205,20 @@ const roleFields = {
     "email",
     "shopAddress",
   ],
+  Supplier: [
+    "supplierId",
+    "supplierName",
+    "companyId",
+    "companyName",
+    "supplierWarehouseId1",
+    "supplierWarehouseName1",
+    "supplierWarehouseId2",
+    "supplierWarehouseName2",
+    "cnicNo",
+    "mobileNumber",
+    "password",
+    "address",
+  ],
 };
 
 const labelMap = {
@@ -232,6 +247,12 @@ const labelMap = {
   orderBookerName: "Order Booker Name",
   customerId: "Customer ID",
   customerName: "Customer Name",
+  supplierId: "Supplier ID",
+  supplierName: "Supplier Name",
+  supplierWarehouseId1: "Warehouse 1 ID",
+  supplierWarehouseName1: "Warehouse 1 Name",
+  supplierWarehouseId2: "Warehouse 2 ID",
+  supplierWarehouseName2: "Warehouse 2 Name",
   regionId: "Region ID",
   regionName: "Region Name",
   zoneId: "Zone ID",
