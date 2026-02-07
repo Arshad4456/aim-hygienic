@@ -5,6 +5,8 @@ import AdminShell from "../../components/AdminShell";
 import { apiFetch } from "../../../../lib/api";
 
 export default function AddZonePage() {
+  const [warehouses, setWarehouses] = useState([]);
+  const [warehouseId, setWarehouseId] = useState("");
   const [regions, setRegions] = useState([]);
   const [regionId, setRegionId] = useState("");
   const [form, setForm] = useState({
@@ -19,17 +21,21 @@ export default function AddZonePage() {
   const [ok, setOk] = useState("");
 
   useEffect(() => {
-    async function loadRegions() {
+    async function loadLookups() {
       try {
-        const data = await apiFetch("/regions");
-        setRegions(data.regions || []);
+        const [warehouseData, regionData] = await Promise.all([
+          apiFetch("/warehouses"),
+          apiFetch("/regions"),
+        ]);
+        setWarehouses(warehouseData.warehouses || []);
+        setRegions(regionData.regions || []);
       } catch (e) {
         setErr(e.message || "Failed to load regions");
       } finally {
         setLoading(false);
       }
     }
-    loadRegions();
+    loadLookups();
   }, []);
 
   function setField(key, value) {
@@ -42,17 +48,22 @@ export default function AddZonePage() {
     setOk("");
     setSaving(true);
     try {
+      const warehouse = warehouses.find((w) => w._id === warehouseId);
       const region = regions.find((r) => r._id === regionId);
       await apiFetch("/zones", {
         method: "POST",
         body: {
           ...form,
+          warehouseId: warehouse?.warehouseId || "",
+          warehouseName: warehouse?.name || "",
           regionId: region?.regionId || "",
           regionName: region?.name || "",
         },
       });
       setOk("✅ Zone saved successfully.");
       setForm({ zoneId: "", name: "", gpsLatitude: "", gpsLongitude: "" });
+      setWarehouseId("");
+      setRegionId("");
     } catch (e2) {
       setErr(e2.message || "Failed to save zone");
     } finally {
@@ -73,6 +84,20 @@ export default function AddZonePage() {
           <div className="mt-5 text-sm text-zinc-500">Loading regions...</div>
         ) : (
           <form onSubmit={onSubmit} className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
+              <Label>Select Warehouse</Label>
+              <select
+                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+                value={warehouseId}
+                onChange={(e) => setWarehouseId(e.target.value)}
+                required
+              >
+                <option value="">Choose warehouse...</option>
+                {warehouses.map((w) => (
+                  <option key={w._id} value={w._id}>{w.name}</option>
+                ))}
+              </select>
+            </div>
             <div className="md:col-span-2">
               <Label>Select Region</Label>
               <select

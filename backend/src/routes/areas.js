@@ -10,6 +10,8 @@ router.post("/", requireAuth, async (req, res) => {
     const doc = await Area.create({
       areaId: String(body.areaId || "").trim(),
       name: String(body.name || "").trim(),
+      warehouseId: String(body.warehouseId || "").trim(),
+      warehouseName: String(body.warehouseName || "").trim(),
       regionId: String(body.regionId || "").trim(),
       regionName: String(body.regionName || "").trim(),
       zoneId: String(body.zoneId || "").trim(),
@@ -30,6 +32,7 @@ router.post("/", requireAuth, async (req, res) => {
 router.get("/", requireAuth, async (req, res) => {
   try {
     const query = {};
+    if (req.query.warehouseId) query.warehouseId = String(req.query.warehouseId);
     if (req.query.zoneId) query.zoneId = String(req.query.zoneId);
     if (req.query.regionId) query.regionId = String(req.query.regionId);
     const items = await Area.find(query).sort({ createdAt: -1 }).lean();
@@ -57,6 +60,8 @@ router.put("/:id", requireAuth, async (req, res) => {
       {
         areaId: String(body.areaId || "").trim(),
         name: String(body.name || "").trim(),
+        warehouseId: String(body.warehouseId || "").trim(),
+        warehouseName: String(body.warehouseName || "").trim(),
         regionId: String(body.regionId || "").trim(),
         regionName: String(body.regionName || "").trim(),
         zoneId: String(body.zoneId || "").trim(),
