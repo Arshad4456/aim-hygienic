@@ -26,6 +26,8 @@ function Icon({ name }) {
   if (name === "territory") return <span className={common}>🧭</span>;
   if (name === "users") return <span className={common}>🧑‍💼</span>;
   if (name === "inventory") return <span className={common}>🏬</span>;
+  if (name === "logistics") return <span className={common}>🧭</span>;
+  if (name === "hr") return <span className={common}>👥</span>;
   return <span className={common}>•</span>;
 }
 
@@ -37,12 +39,12 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
     products: true,
     company: false,
     expense: false,
-    customer: false,
-    supplier: false,
     qc: false,
-    route: false,
-    purchase: false,
+    procurement: false,
     orders: false,
+    logistics: false,
+    finance: false,
+    hr: false,
     territory: false,
     users: false,
     inventory: false,
@@ -53,113 +55,156 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
       { type: "link", title: "Dashboard", href: "/dashboards/admin", icon: "dashboard" },
       { type: "link", title: "Sales KPI", href: "/dashboards/admin/sales-kpi", badge: "Premium", icon: "sales" },
 
-{
-  type: "group",
-  key: "company",
-  title: "Company Management",
-  icon: "account", // you can change icon name if you want
-  children: [
-    { title: "Add New Company", href: "/dashboards/admin/companies/add" },
-    { title: "Company List", href: "/dashboards/admin/companies" },
-  ],
-},
+      {
+        type: "group",
+        key: "company",
+        title: "Company Management",
+        icon: "account",
+        children: [
+          { title: "Add New Company", href: "/dashboards/admin/companies/add" },
+          { title: "Company List", href: "/dashboards/admin/companies" },
+        ],
+      },
 
+      {
+        type: "group",
+        key: "products",
+        title: "Products Management",
+        icon: "products",
+        children: [
+          { title: "Add New Product", href: "/dashboards/admin/products/add" },
+          { title: "View Product List", href: "/dashboards/admin/products" },
+          { title: "Product Barcode List", href: "/dashboards/admin/products/barcodes" },
+          { title: "Price Change", href: "/dashboards/admin/products/price-change" },
+        ],
+      },
 
-      { type: "group", key: "products", title: "Products Management", icon: "products", children: [
-        { title: "Add New Product", href: "/dashboards/admin/products/add" },
-        { title: "View Product List", href: "/dashboards/admin/products" },
-        { title: "Product Barcode List", href: "/dashboards/admin/products/barcodes" },
-        { title: "Price Change", href: "/dashboards/admin/products/price-change" },
-      ]},
+      {
+        type: "group",
+        key: "inventory",
+        title: "Warehouse & Inventory",
+        icon: "inventory",
+        children: [
+          { title: "Module Overview", href: "/dashboards/admin/warehouse-inventory" },
+          { title: "Warehouse Master", href: "/dashboards/admin/inventory/warehouses" },
+          { title: "Inventory Ledger", href: "/dashboards/admin/inventory/ledger" },
+          { title: "Stock Transfers", href: "/dashboards/admin/inventory/transfers" },
+          { title: "Stock Summary", href: "/dashboards/admin/inventory/summary" },
+          { title: "Low Stock Alerts", href: "/dashboards/admin/inventory/low-stock" },
+        ],
+      },
 
-      { type: "group", key: "inventory", title: "Warehouse & Inventory", icon: "inventory", children: [
-        { title: "Warehouse Master", href: "/dashboards/admin/inventory/warehouses" },
-        { title: "Inventory Ledger", href: "/dashboards/admin/inventory/ledger" },
-        { title: "Stock Transfers", href: "/dashboards/admin/inventory/transfers" },
-        { title: "Stock Summary", href: "/dashboards/admin/inventory/summary" },
-        { title: "Low Stock Alerts", href: "/dashboards/admin/inventory/low-stock" },
-      ]},
+      {
+        type: "group",
+        key: "territory",
+        title: "Territory & Assets",
+        icon: "territory",
+        children: [
+          { title: "Add Warehouse", href: "/dashboards/admin/warehouses/add" },
+          { title: "Warehouse List", href: "/dashboards/admin/warehouses" },
+          { title: "Add Region", href: "/dashboards/admin/regions/add" },
+          { title: "Region List", href: "/dashboards/admin/regions" },
+          { title: "Add Zone", href: "/dashboards/admin/zones/add" },
+          { title: "Zone List", href: "/dashboards/admin/zones" },
+          { title: "Add Area", href: "/dashboards/admin/areas/add" },
+          { title: "Area List", href: "/dashboards/admin/areas" },
+          { title: "Add Vehicle", href: "/dashboards/admin/assets/vehicles/add" },
+          { title: "Vehicle List", href: "/dashboards/admin/assets/vehicles" },
+        ],
+      },
 
-      { type: "group", key: "territory", title: "Territory & Assets", icon: "territory", children: [
-        { title: "Add Warehouse", href: "/dashboards/admin/warehouses/add" },
-        { title: "Warehouse List", href: "/dashboards/admin/warehouses" },
-        { title: "Add Region", href: "/dashboards/admin/regions/add" },
-        { title: "Region List", href: "/dashboards/admin/regions" },
-        { title: "Add Zone", href: "/dashboards/admin/zones/add" },
-        { title: "Zone List", href: "/dashboards/admin/zones" },
-        { title: "Add Area", href: "/dashboards/admin/areas/add" },
-        { title: "Area List", href: "/dashboards/admin/areas" },
-        { title: "Add Vehicle", href: "/dashboards/admin/assets/vehicles/add" },
-        { title: "Vehicle List", href: "/dashboards/admin/assets/vehicles" },
-      ]},
+      {
+        type: "group",
+        key: "orders",
+        title: "Order Management",
+        icon: "orders",
+        children: [
+          { title: "Module Overview", href: "/dashboards/admin/order-management" },
+          { title: "Sales Orders", href: "/dashboards/admin/order-management/sales-orders" },
+          { title: "Order Approvals", href: "/dashboards/admin/order-management/approvals" },
+          { title: "Pick & Dispatch", href: "/dashboards/admin/order-management/dispatch" },
+          { title: "Returns & Claims", href: "/dashboards/admin/order-management/returns" },
+        ],
+      },
 
-      { type: "group", key: "expense", title: "Expense Management", icon: "expense", children: [
-        { title: "Add Expense", href: "/dashboards/admin/expense/add" },
-        { title: "View Expense List", href: "/dashboards/admin/expense" },
-      ]},
+      {
+        type: "group",
+        key: "procurement",
+        title: "Procurement",
+        icon: "purchase",
+        children: [
+          { title: "Module Overview", href: "/dashboards/admin/procurement" },
+          { title: "Supplier Master", href: "/dashboards/admin/procurement/suppliers" },
+          { title: "Purchase Orders", href: "/dashboards/admin/procurement/purchase-orders" },
+          { title: "Goods Receipt (GRN)", href: "/dashboards/admin/procurement/grn" },
+          { title: "Supplier Payments", href: "/dashboards/admin/procurement/payments" },
+        ],
+      },
+
+      {
+        type: "group",
+        key: "logistics",
+        title: "Distribution & Logistics",
+        icon: "logistics",
+        children: [
+          { title: "Module Overview", href: "/dashboards/admin/logistics" },
+          { title: "Route Planning", href: "/dashboards/admin/logistics/routes" },
+          { title: "Dispatch & Delivery", href: "/dashboards/admin/logistics/dispatch" },
+          { title: "Vehicle Assignment", href: "/dashboards/admin/assets/vehicles" },
+        ],
+      },
+
+      {
+        type: "group",
+        key: "finance",
+        title: "Finance & Accounts",
+        icon: "finance",
+        children: [
+          { title: "Module Overview", href: "/dashboards/admin/finance" },
+          { title: "Invoices", href: "/dashboards/admin/finance/invoices" },
+          { title: "Receipts", href: "/dashboards/admin/finance/receipts" },
+          { title: "Aging Report", href: "/dashboards/admin/finance/aging" },
+        ],
+      },
+
+      {
+        type: "group",
+        key: "hr",
+        title: "HR & Role Management",
+        icon: "hr",
+        children: [
+          { title: "Module Overview", href: "/dashboards/admin/hr" },
+          { title: "Add User", href: "/dashboards/admin/users/add" },
+          { title: "User List", href: "/dashboards/admin/users" },
+        ],
+      },
+
+      {
+        type: "group",
+        key: "qc",
+        title: "Quality & Compliance",
+        icon: "qc",
+        children: [
+          { title: "Module Overview", href: "/dashboards/admin/quality" },
+          { title: "Raw Material QC", href: "/dashboards/admin/quality/raw-material" },
+          { title: "Production QC", href: "/dashboards/admin/quality/production" },
+          { title: "Finished Goods QC", href: "/dashboards/admin/quality/finished-goods" },
+          { title: "Final Release QC", href: "/dashboards/admin/quality/final-release" },
+        ],
+      },
+
+      {
+        type: "group",
+        key: "expense",
+        title: "Expense Management",
+        icon: "expense",
+        children: [
+          { title: "Add Expense", href: "/dashboards/admin/expense/add" },
+          { title: "View Expense List", href: "/dashboards/admin/expense" },
+        ],
+      },
 
       { type: "link", title: "Account Management", href: "/dashboards/admin/account/manage", icon: "account" },
-
-      { type: "group", key: "customer", title: "Customer Management", icon: "customer", children: [
-        { title: "Add New Customer", href: "/dashboards/admin/customers/add" },
-        { title: "View Customer List", href: "/dashboards/admin/customers" },
-        { title: "User Credit Limit", href: "/dashboards/admin/customers/credit-limit" },
-        { title: "Customer Coupon Policy", href: "/dashboards/admin/customers/coupon-policy" },
-        {
-          title: "Discount Policy",
-          href: "/dashboards/admin/customers/discount-policy",
-          children: [
-            { title: "Item Policy", href: "/dashboards/admin/customers/discount-policy/item" },
-            { title: "Group Policy", href: "/dashboards/admin/customers/discount-policy/group" },
-            { title: "Company Policy", href: "/dashboards/admin/customers/discount-policy/company" },
-          ],
-        },
-      ]},
-
-      { type: "group", key: "supplier", title: "Supplier Management", icon: "supplier", children: [
-        { title: "Add New Supplier", href: "/dashboards/admin/suppliers/add" },
-        { title: "View Supplier List", href: "/dashboards/admin/suppliers" },
-      ]},
-
-      { type: "group", key: "users", title: "User Management", icon: "users", children: [
-        { title: "Add User", href: "/dashboards/admin/users/add" },
-        { title: "User List", href: "/dashboards/admin/users" },
-      ]},
-
-      { type: "group", key: "qc", title: "Quality Control", icon: "qc", children: [
-        { title: "Raw Material QC", href: "/dashboards/admin/qc/raw-material" },
-        { title: "Production QC", href: "/dashboards/admin/qc/production" },
-        { title: "Finished Goods QC", href: "/dashboards/admin/qc/finished-goods" },
-        { title: "Final Release QC", href: "/dashboards/admin/qc/final-release" },
-      ]},
-
-      { type: "link", title: "Finance/Accounts", href: "/dashboards/admin/finance", icon: "finance" },
-
-      { type: "group", key: "route", title: "Route Management", icon: "route", children: [
-        { title: "Add Route", href: "/dashboards/admin/route/add" },
-        { title: "View Route List", href: "/dashboards/admin/route" },
-        { title: "Add Planner", href: "/dashboards/admin/route/planner/add" },
-        { title: "View Planner List", href: "/dashboards/admin/route/planner" },
-      ]},
-
-      { type: "link", title: "Scheme Management", href: "/dashboards/admin/schemes", icon: "scheme" },
-
-      { type: "group", key: "purchase", title: "Purchase Management", icon: "purchase", children: [
-        { title: "Purchase Challan", href: "/dashboards/admin/purchase/challan" },
-        { title: "Purchase Order", href: "/dashboards/admin/purchase/order" },
-        { title: "Purchase Invoice", href: "/dashboards/admin/purchase/invoice" },
-        { title: "Purchase Return", href: "/dashboards/admin/purchase/return" },
-        { title: "Stock Transfer", href: "/dashboards/admin/purchase/stock-transfer" },
-        { title: "View Transfered Stock", href: "/dashboards/admin/purchase/transferred-stock" },
-      ]},
-
-      { type: "link", title: "Delivery Management", href: "/dashboards/admin/delivery", icon: "delivery" },
-
-      { type: "group", key: "orders", title: "Orders Management", icon: "orders", children: [
-        { title: "Show Orders List", href: "/dashboards/admin/orders" },
-        { title: "Secondary Orders List", href: "/dashboards/admin/orders/secondary" },
-      ]},
-
       { type: "link", title: "User Live Tracking", href: "/dashboards/admin/live-tracking", icon: "tracking" },
       { type: "link", title: "Reports", href: "/dashboards/admin/reports", icon: "reports" },
       { type: "link", title: "Settings", href: "/dashboards/admin/settings", icon: "settings" },
