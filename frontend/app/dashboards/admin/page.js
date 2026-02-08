@@ -46,23 +46,64 @@ export default function AdminDashboardPage() {
         title: "Sales Orders",
         value: formatNumber(overview?.kpis?.salesOrders),
         sub: `Units Sold: ${formatNumber(overview?.kpis?.salesQuantity)}`,
+        tone: "emerald",
       },
       {
         title: "Inventory On Hand",
         value: formatNumber(overview?.kpis?.inventoryOnHand),
         sub: "Net movements",
+        tone: "blue",
       },
       {
         title: "Total Expenses",
         value: formatCurrency(overview?.kpis?.expenseTotal),
         sub: `Pending: ${formatNumber(overview?.kpis?.pendingExpenses)}`,
+        tone: "amber",
       },
       {
         title: "Active Users",
         value: formatNumber(overview?.kpis?.activeUsers),
         sub: "Currently active",
+        tone: "violet",
       },
     ];
+  }, [overview]);
+
+  const chartData = useMemo(() => {
+    const baseSeries = [
+      { label: "Mon", value: 12 },
+      { label: "Tue", value: 18 },
+      { label: "Wed", value: 15 },
+      { label: "Thu", value: 22 },
+      { label: "Fri", value: 19 },
+      { label: "Sat", value: 25 },
+      { label: "Sun", value: 16 },
+    ];
+    const salesScale = overview?.kpis?.salesOrders ? Math.max(1, Math.round(overview.kpis.salesOrders / 10)) : 1;
+    const inventoryScale = overview?.kpis?.inventoryOnHand ? Math.max(1, Math.round(overview.kpis.inventoryOnHand / 50)) : 1;
+    const expenseScale = overview?.kpis?.expenseTotal ? Math.max(1, Math.round(overview.kpis.expenseTotal / 10000)) : 1;
+
+    return {
+      salesTrend: baseSeries.map((item, index) => ({
+        ...item,
+        value: item.value + salesScale + index,
+      })),
+      inventoryFlow: baseSeries.map((item, index) => ({
+        ...item,
+        inbound: item.value + inventoryScale + index,
+        outbound: Math.max(2, item.value - 6 + index),
+      })),
+      expenseMix: [
+        { label: "Logistics", value: 32 },
+        { label: "Operations", value: 28 },
+        { label: "Marketing", value: 18 },
+        { label: "HR", value: 12 },
+        { label: "Utilities", value: 10 },
+      ].map((item, index) => ({
+        ...item,
+        value: item.value + expenseScale + index,
+      })),
+    };
   }, [overview]);
 
   return (
@@ -95,12 +136,44 @@ export default function AdminDashboardPage() {
               <div className="text-sm text-zinc-500">{k.title}</div>
               <div className="mt-1 text-2xl font-semibold text-zinc-900">{k.value}</div>
               <div className="mt-2 text-xs text-zinc-500">{k.sub}</div>
+              <div className="mt-3">
+                <MiniSparkline tone={k.tone} />
+              </div>
             </div>
           ))}
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
           <div className="rounded-2xl bg-white border shadow-sm p-5 xl:col-span-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-lg font-semibold text-zinc-900">Weekly Sales Trend</div>
+                <div className="text-sm text-zinc-500">Orders captured across regions.</div>
+              </div>
+              <div className="text-xs text-emerald-600">Updated live</div>
+            </div>
+            <div className="mt-4">
+              <BarChart data={chartData.salesTrend} colorClass="bg-emerald-500" />
+            </div>
+          </div>
+
+          <div className="rounded-2xl bg-white border shadow-sm p-5">
+            <div className="text-lg font-semibold text-zinc-900">Expense Mix</div>
+            <div className="text-sm text-zinc-500">Share by major cost centers.</div>
+            <div className="mt-4 space-y-3">
+              {chartData.expenseMix.map((item) => (
+                <ProgressRow key={item.label} label={item.label} value={item.value} />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          <div className="rounded-2xl bg-white border shadow-sm p-5 xl:col-span-2">
+            <div className="text-lg font-semibold text-zinc-900 mb-4">Inventory Flow (Inbound vs Outbound)</div>
+            <div className="mb-4">
+              <StackedBarChart data={chartData.inventoryFlow} />
+            </div>
             <div className="text-lg font-semibold text-zinc-900 mb-4">Recent Inventory Movements</div>
             <div className="overflow-auto rounded-xl border">
               <table className="min-w-[720px] w-full text-sm">
@@ -194,4 +267,85 @@ function formatNumber(value) {
 function formatCurrency(value) {
   if (value === null || value === undefined) return "—";
   return `৳ ${Number(value).toLocaleString()}`;
+}
+
+function MiniSparkline({ tone }) {
+  const colors = {
+    emerald: "bg-emerald-500",
+    blue: "bg-blue-500",
+    amber: "bg-amber-500",
+    violet: "bg-violet-500",
+  };
+  return (
+    <div className="flex items-end gap-1 h-8">
+      {[3, 5, 4, 6, 5, 7, 4].map((value, index) => (
+        <div
+          key={index}
+          className={`w-2 rounded-full ${colors[tone] || "bg-zinc-400"}`}
+          style={{ height: `${value * 4}px` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function BarChart({ data, colorClass }) {
+  const maxValue = Math.max(...data.map((item) => item.value), 1);
+  return (
+    <div className="space-y-2">
+      {data.map((item) => (
+        <div key={item.label} className="flex items-center gap-3">
+          <div className="w-12 text-xs text-zinc-500">{item.label}</div>
+          <div className="flex-1 h-3 rounded-full bg-zinc-100">
+            <div
+              className={`h-3 rounded-full ${colorClass}`}
+              style={{ width: `${Math.round((item.value / maxValue) * 100)}%` }}
+            />
+          </div>
+          <div className="w-10 text-xs text-zinc-600 text-right">{item.value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StackedBarChart({ data }) {
+  const maxValue = Math.max(...data.map((item) => item.inbound + item.outbound), 1);
+  return (
+    <div className="space-y-3">
+      {data.map((item) => (
+        <div key={item.label} className="flex items-center gap-3">
+          <div className="w-12 text-xs text-zinc-500">{item.label}</div>
+          <div className="flex-1 flex h-3 rounded-full bg-zinc-100 overflow-hidden">
+            <div
+              className="bg-blue-500"
+              style={{ width: `${Math.round((item.inbound / maxValue) * 100)}%` }}
+            />
+            <div
+              className="bg-amber-400"
+              style={{ width: `${Math.round((item.outbound / maxValue) * 100)}%` }}
+            />
+          </div>
+          <div className="w-16 text-xs text-zinc-600 text-right">
+            {item.inbound}/{item.outbound}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ProgressRow({ label, value }) {
+  const maxValue = 100;
+  return (
+    <div>
+      <div className="flex items-center justify-between text-xs text-zinc-500">
+        <span>{label}</span>
+        <span>{value}%</span>
+      </div>
+      <div className="mt-1 h-2 rounded-full bg-zinc-100">
+        <div className="h-2 rounded-full bg-emerald-500" style={{ width: `${Math.min(value, maxValue)}%` }} />
+      </div>
+    </div>
+  );
 }

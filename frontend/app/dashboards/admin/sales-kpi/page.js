@@ -36,6 +36,15 @@ export default function SalesKpiPage() {
     ];
   }, [summary, regions]);
 
+  const regionMix = useMemo(() => {
+    if (regions.length) return regions.slice(0, 5);
+    return [
+      { region: "Dhaka", orders: 0, quantity: 0 },
+      { region: "Chattogram", orders: 0, quantity: 0 },
+      { region: "Khulna", orders: 0, quantity: 0 },
+    ];
+  }, [regions]);
+
   return (
     <AdminShell title="Sales KPI" user={null}>
       <div className="rounded-2xl bg-white border shadow-sm p-5">
@@ -97,6 +106,20 @@ export default function SalesKpiPage() {
           </div>
 
           <div className="space-y-4">
+            <div className="rounded-2xl border bg-white p-4">
+              <div className="text-sm font-semibold text-zinc-900">Regional Mix</div>
+              <div className="mt-3 space-y-3">
+                {regionMix.map((row, index) => (
+                  <MixRow
+                    key={`${row.region}-${index}`}
+                    label={row.region}
+                    value={row.quantity}
+                    total={regionMix.reduce((sum, item) => sum + Number(item.quantity || 0), 0)}
+                    colorIndex={index}
+                  />
+                ))}
+              </div>
+            </div>
             <InsightCard
               title="Top Products"
               rows={topProducts}
@@ -143,4 +166,24 @@ function InsightCard({ title, rows, labelKey, valueKey, valueLabel }) {
 function formatNumber(value) {
   if (value === null || value === undefined) return "—";
   return Number(value).toLocaleString();
+}
+
+function MixRow({ label, value, total, colorIndex }) {
+  const colors = ["bg-emerald-500", "bg-blue-500", "bg-amber-500", "bg-violet-500", "bg-rose-500"];
+  const safeTotal = total || 1;
+  const percentage = Math.round((Number(value || 0) / safeTotal) * 100);
+  return (
+    <div>
+      <div className="flex items-center justify-between text-xs text-zinc-500">
+        <span>{label}</span>
+        <span>{percentage}%</span>
+      </div>
+      <div className="mt-1 h-2 rounded-full bg-zinc-100">
+        <div
+          className={`h-2 rounded-full ${colors[colorIndex % colors.length]}`}
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
+    </div>
+  );
 }
