@@ -3,10 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AdminShell from "../admin/components/AdminShell";
+import { apiFetch } from "../../lib/api";
 
 export default function AdminDashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState(null);
+  const [overview, setOverview] = useState(null);
+  const [err, setErr] = useState("");
 
   useEffect(() => {
     const token = localStorage.getItem("aim_token");
@@ -24,15 +27,43 @@ export default function AdminDashboardPage() {
     setUser(u ? JSON.parse(u) : null);
   }, [router]);
 
-  const kpis = useMemo(() => {
-    // These are UI demo KPIs for now. Next phase we will load real KPIs from API.
-    return [
-      { title: "Total Sales", value: "0 PKR", sub: "Last Month: 0.09 M" },
-      { title: "Purchase", value: "0 PKR", sub: "Today: 0" },
-      { title: "Stock Value", value: "0", sub: "Items: 0" },
-      { title: "Total Invoices", value: "0", sub: "Month: 0" },
-    ];
+  useEffect(() => {
+    async function loadOverview() {
+      setErr("");
+      try {
+        const data = await apiFetch("/dashboard/overview");
+        setOverview(data);
+      } catch (e) {
+        setErr(e.message || "Failed to load dashboard");
+      }
+    }
+    loadOverview();
   }, []);
+
+  const kpis = useMemo(() => {
+    return [
+      {
+        title: "Sales Orders",
+        value: formatNumber(overview?.kpis?.salesOrders),
+        sub: `Units Sold: ${formatNumber(overview?.kpis?.salesQuantity)}`,
+      },
+      {
+        title: "Inventory On Hand",
+        value: formatNumber(overview?.kpis?.inventoryOnHand),
+        sub: "Net movements",
+      },
+      {
+        title: "Total Expenses",
+        value: formatCurrency(overview?.kpis?.expenseTotal),
+        sub: `Pending: ${formatNumber(overview?.kpis?.pendingExpenses)}`,
+      },
+      {
+        title: "Active Users",
+        value: formatNumber(overview?.kpis?.activeUsers),
+        sub: "Currently active",
+      },
+    ];
+  }, [overview]);
 
   return (
     <AdminShell user={user} title="Admin Dashboard">
@@ -52,6 +83,12 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
+        {err ? (
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {err}
+          </div>
+        ) : null}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {kpis.map((k) => (
             <div key={k.title} className="rounded-2xl bg-white border shadow-sm p-4">
@@ -62,52 +99,86 @@ export default function AdminDashboardPage() {
           ))}
         </div>
 
-        <div className="rounded-2xl bg-white border shadow-sm p-5">
-          <div className="text-lg font-semibold text-zinc-900 mb-4">Monthly Salesman Evaluation</div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-            <select className="rounded-xl border px-3 py-2 bg-white">
-              <option>Distributor: All</option>
-            </select>
-            <input className="rounded-xl border px-3 py-2" placeholder="Start Date (dd/mm/yyyy)" />
-            <input className="rounded-xl border px-3 py-2" placeholder="End Date (dd/mm/yyyy)" />
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          <div className="rounded-2xl bg-white border shadow-sm p-5 xl:col-span-2">
+            <div className="text-lg font-semibold text-zinc-900 mb-4">Recent Inventory Movements</div>
+            <div className="overflow-auto rounded-xl border">
+              <table className="min-w-[720px] w-full text-sm">
+                <thead className="bg-zinc-50">
+                  <tr>
+                    <th className="text-left px-3 py-2 border-b">Product</th>
+                    <th className="text-left px-3 py-2 border-b">Warehouse</th>
+                    <th className="text-left px-3 py-2 border-b">Type</th>
+                    <th className="text-left px-3 py-2 border-b">Qty</th>
+                    <th className="text-left px-3 py-2 border-b">When</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {overview?.recent?.movements?.length ? (
+                    overview.recent.movements.map((row) => (
+                      <tr key={row._id} className="hover:bg-zinc-50">
+                        <td className="px-3 py-2 border-b">{row.productName || row.productId}</td>
+                        <td className="px-3 py-2 border-b">{row.warehouseName || row.warehouseId}</td>
+                        <td className="px-3 py-2 border-b">{row.movementType}</td>
+                        <td className="px-3 py-2 border-b">{formatNumber(row.quantity)}</td>
+                        <td className="px-3 py-2 border-b">
+                          {row.createdAt ? new Date(row.createdAt).toLocaleString() : "—"}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-6 text-center text-zinc-500">
+                        No recent movements
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-            <MiniStat label="Total Invoices" value="0 = 0.00 PKR" />
-            <MiniStat label="Salesman" value="0" />
-            <MiniStat label="Target" value="0" />
-            <MiniStat label="Sale" value="0" />
-          </div>
+          <div className="space-y-4">
+            <div className="rounded-2xl bg-white border shadow-sm p-5">
+              <div className="text-lg font-semibold text-zinc-900 mb-4">Recent Expenses</div>
+              <div className="space-y-3">
+                {overview?.recent?.expenses?.length ? (
+                  overview.recent.expenses.map((expense) => (
+                    <div key={expense._id} className="rounded-xl border px-3 py-2">
+                      <div className="text-sm font-semibold text-zinc-900">{expense.title}</div>
+                      <div className="text-xs text-zinc-500 mt-1">{expense.category || "Uncategorized"}</div>
+                      <div className="text-sm font-semibold text-zinc-900 mt-2">
+                        ৳ {formatNumber(expense.amount)}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-sm text-zinc-500">No recent expenses.</div>
+                )}
+              </div>
+            </div>
 
-          <div className="overflow-auto rounded-xl border">
-            <table className="min-w-[700px] w-full text-sm">
-              <thead className="bg-zinc-50">
-                <tr>
-                  <th className="text-left px-3 py-2 border-b">Sr#</th>
-                  <th className="text-left px-3 py-2 border-b">Description</th>
-                  <th className="text-left px-3 py-2 border-b">Invoices</th>
-                  <th className="text-left px-3 py-2 border-b">Sale (PKR)</th>
-                  <th className="text-left px-3 py-2 border-b">Recovery (PKR)</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td className="px-3 py-2 border-b">1</td>
-                  <td className="px-3 py-2 border-b">Rawalpindi</td>
-                  <td className="px-3 py-2 border-b">0</td>
-                  <td className="px-3 py-2 border-b">0</td>
-                  <td className="px-3 py-2 border-b">0</td>
-                </tr>
-                <tr>
-                  <td className="px-3 py-2">2</td>
-                  <td className="px-3 py-2">Islamabad</td>
-                  <td className="px-3 py-2">0</td>
-                  <td className="px-3 py-2">0</td>
-                  <td className="px-3 py-2">0</td>
-                </tr>
-              </tbody>
-            </table>
+            <div className="rounded-2xl bg-white border shadow-sm p-5">
+              <div className="text-lg font-semibold text-zinc-900 mb-4">Stock Transfers</div>
+              <div className="space-y-3">
+                {overview?.recent?.transfers?.length ? (
+                  overview.recent.transfers.map((transfer) => (
+                    <div key={transfer._id} className="rounded-xl border px-3 py-2">
+                      <div className="text-sm font-semibold text-zinc-900">
+                        {transfer.productName || transfer.productId}
+                      </div>
+                      <div className="text-xs text-zinc-500 mt-1">
+                        {transfer.fromWarehouseName || transfer.fromWarehouseId} →{" "}
+                        {transfer.toWarehouseName || transfer.toWarehouseId}
+                      </div>
+                      <div className="text-xs text-zinc-500 mt-1">Status: {transfer.status}</div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-sm text-zinc-500">No recent transfers.</div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -115,11 +186,12 @@ export default function AdminDashboardPage() {
   );
 }
 
-function MiniStat({ label, value }) {
-  return (
-    <div className="rounded-xl border bg-white p-3">
-      <div className="text-xs text-zinc-500">{label}</div>
-      <div className="text-sm font-semibold text-zinc-900 mt-1">{value}</div>
-    </div>
-  );
+function formatNumber(value) {
+  if (value === null || value === undefined) return "—";
+  return Number(value).toLocaleString();
+}
+
+function formatCurrency(value) {
+  if (value === null || value === undefined) return "—";
+  return `৳ ${Number(value).toLocaleString()}`;
 }
