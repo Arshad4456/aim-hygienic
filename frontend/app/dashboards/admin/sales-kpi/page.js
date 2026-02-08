@@ -9,6 +9,7 @@ export default function SalesKpiPage() {
   const [regions, setRegions] = useState([]);
   const [topProducts, setTopProducts] = useState([]);
   const [topWarehouses, setTopWarehouses] = useState([]);
+  const [trend, setTrend] = useState([]);
   const [err, setErr] = useState("");
 
   useEffect(() => {
@@ -20,6 +21,7 @@ export default function SalesKpiPage() {
         setRegions(data.regions || []);
         setTopProducts(data.topProducts || []);
         setTopWarehouses(data.topWarehouses || []);
+        setTrend(data.trend || []);
       } catch (e) {
         setErr(e.message || "Failed to load sales KPI");
       }
@@ -28,10 +30,15 @@ export default function SalesKpiPage() {
   }, []);
 
   const metrics = useMemo(() => {
+    const avgDaily = summary?.weekQuantity ? Math.round(summary.weekQuantity / 7) : null;
     return [
       { label: "Sales Orders", value: formatNumber(summary?.orders) },
       { label: "Units Sold", value: formatNumber(summary?.quantity) },
+      { label: "Orders (Last 7 Days)", value: formatNumber(summary?.weekOrders) },
+      { label: "Units (Last 7 Days)", value: formatNumber(summary?.weekQuantity) },
       { label: "Regions Covered", value: formatNumber(summary?.regions) },
+      { label: "Avg Daily Units", value: avgDaily !== null ? formatNumber(avgDaily) : "—" },
+      { label: "Week-over-Week", value: summary?.weekOverWeek !== undefined ? `${summary.weekOverWeek}%` : "—" },
       { label: "Top Region", value: regions[0]?.region || "—" },
     ];
   }, [summary, regions]);
@@ -59,7 +66,7 @@ export default function SalesKpiPage() {
           </div>
         ) : null}
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {metrics.map((metric) => (
             <div key={metric.label} className="rounded-2xl border bg-zinc-50 p-4">
               <div className="text-xs text-zinc-500">{metric.label}</div>
@@ -69,7 +76,14 @@ export default function SalesKpiPage() {
         </div>
 
         <div className="mt-6 grid grid-cols-1 xl:grid-cols-3 gap-4">
-          <div className="rounded-2xl border bg-white p-4 xl:col-span-2">
+          <div className="rounded-2xl border bg-white p-4 xl:col-span-2 space-y-4">
+            <div>
+              <div className="text-sm font-semibold text-zinc-900">Weekly Sales Trend</div>
+              <div className="text-xs text-zinc-500">Orders and units sold in the last 7 days.</div>
+              <div className="mt-3">
+                <TrendChart data={trend} />
+              </div>
+            </div>
             <div className="text-sm font-semibold text-zinc-900">Regional Contribution</div>
             <div className="mt-3 overflow-auto rounded-xl border">
               <table className="min-w-[640px] w-full text-sm">
@@ -186,4 +200,36 @@ function MixRow({ label, value, total, colorIndex }) {
       </div>
     </div>
   );
+}
+
+function TrendChart({ data }) {
+  const maxOrders = Math.max(...data.map((item) => item.orders), 1);
+  return (
+    <div className="space-y-2">
+      {data.length === 0 ? (
+        <div className="text-sm text-zinc-500">No trend data available.</div>
+      ) : (
+        data.map((item) => (
+          <div key={item.day} className="flex items-center gap-3">
+            <div className="w-20 text-xs text-zinc-500">{formatDate(item.day)}</div>
+            <div className="flex-1 h-3 rounded-full bg-zinc-100">
+              <div
+                className="h-3 rounded-full bg-emerald-500"
+                style={{ width: `${Math.round((item.orders / maxOrders) * 100)}%` }}
+              />
+            </div>
+            <div className="w-24 text-xs text-zinc-600 text-right">
+              {formatNumber(item.orders)} / {formatNumber(item.quantity)}
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function formatDate(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
