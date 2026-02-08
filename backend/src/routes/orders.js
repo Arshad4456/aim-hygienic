@@ -25,6 +25,32 @@ router.get("/", requireAuth, async (req, res) => {
   }
 });
 
+router.get("/approvals", requireAuth, async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const orders = await SalesOrder.find({ status: "pending" })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+    return res.json({ ok: true, orders });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to load approval queue" });
+  }
+});
+
+router.get("/dispatch", requireAuth, async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const orders = await SalesOrder.find({ status: { $in: ["approved", "dispatched"] } })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+    return res.json({ ok: true, orders });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to load dispatch queue" });
+  }
+});
+
 router.get("/summary", requireAuth, async (req, res) => {
   try {
     const [summary] = await SalesOrder.aggregate([
@@ -57,6 +83,30 @@ router.get("/summary", requireAuth, async (req, res) => {
     });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to load sales order summary" });
+  }
+});
+
+router.patch("/:id/status", requireAuth, async (req, res) => {
+  try {
+    const { status, dispatchTracking, cancellationReason } = req.body || {};
+    const allowed = ["pending", "approved", "dispatched", "completed", "cancelled"];
+    if (!allowed.includes(status)) {
+      return res.status(400).json({ ok: false, message: "Invalid status" });
+    }
+
+    const updates = { status };
+    if (dispatchTracking) updates.dispatchTracking = String(dispatchTracking).trim();
+    if (cancellationReason) updates.cancellationReason = String(cancellationReason).trim();
+    if (status === "dispatched") updates.dispatchedAt = new Date();
+    if (status === "completed") updates.completedAt = new Date();
+
+    const order = await SalesOrder.findByIdAndUpdate(req.params.id, updates, { new: true });
+    if (!order) {
+      return res.status(404).json({ ok: false, message: "Order not found" });
+    }
+    return res.json({ ok: true, order });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to update order status" });
   }
 });
 
