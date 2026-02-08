@@ -57,7 +57,7 @@ export default function AdminDashboardPage() {
       },
       {
         title: "Total Expenses",
-        value: formatPKR(overview?.kpis?.expenseTotal),
+        value: formatCurrency(overview?.kpis?.expenseTotal),
         sub: `Pending: ${formatNumber(overview?.kpis?.pendingExpenses)}`,
         tone: "amber",
       },
