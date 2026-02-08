@@ -9,10 +9,21 @@ const StockTransferSchema = new mongoose.Schema(
     toWarehouseId: { type: String, required: true, trim: true },
     toWarehouseName: { type: String, trim: true },
     quantity: { type: Number, required: true },
-    status: { type: String, enum: ["pending", "in-transit", "completed"], default: "pending" },
+    status: { type: String, enum: ["pending", "approved", "transit-in", "completed"], default: "pending" },
     requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    driverId: { type: String, trim: true },
+    driverName: { type: String, trim: true },
+    vehicleId: { type: String, trim: true },
+    vehicleName: { type: String, trim: true },
     note: { type: String, trim: true },
+    statusHistory: [
+      {
+        status: { type: String, trim: true },
+        at: { type: Date },
+        by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      },
+    ],
   },
   { timestamps: true }
 );

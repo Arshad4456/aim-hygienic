@@ -6,6 +6,12 @@ import { apiFetch } from "../../../lib/api";
 
 export default function ZoneListPage() {
   const [rows, setRows] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
+  const [regions, setRegions] = useState([]);
+  const [companyId, setCompanyId] = useState("");
+  const [warehouseFilter, setWarehouseFilter] = useState("");
+  const [regionFilter, setRegionFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [editId, setEditId] = useState(null);
@@ -15,8 +21,16 @@ export default function ZoneListPage() {
     setErr("");
     setLoading(true);
     try {
-      const data = await apiFetch("/zones");
-      setRows(data.zones || []);
+      const [zonesRes, companiesRes, warehousesRes, regionsRes] = await Promise.all([
+        apiFetch("/zones"),
+        apiFetch("/companies"),
+        apiFetch("/warehouses"),
+        apiFetch("/regions"),
+      ]);
+      setRows(zonesRes.zones || []);
+      setCompanies(companiesRes.companies || []);
+      setWarehouses(warehousesRes.warehouses || []);
+      setRegions(regionsRes.regions || []);
     } catch (e) {
       setErr(e.message || "Failed to load zones");
     } finally {
@@ -52,6 +66,16 @@ export default function ZoneListPage() {
     }
   }
 
+  const filteredRows = rows.filter((row) => {
+    if (warehouseFilter && row.warehouseName !== warehouseFilter) return false;
+    if (regionFilter && row.regionName !== regionFilter) return false;
+    if (companyId) {
+      const wh = warehouses.find((w) => w.warehouseId === row.warehouseId);
+      if (!wh || wh.companyId !== companyId) return false;
+    }
+    return true;
+  });
+
   return (
     <AdminShell title="Zone List" user={null}>
       <div className="rounded-2xl bg-white border shadow-sm p-5">
@@ -70,6 +94,48 @@ export default function ZoneListPage() {
 
         {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
 
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <Label>Company</Label>
+            <select
+              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              value={companyId}
+              onChange={(e) => setCompanyId(e.target.value)}
+            >
+              <option value="">All companies</option>
+              {companies.map((c) => (
+                <option key={c._id} value={c.companyId}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label>Warehouse</Label>
+            <select
+              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              value={warehouseFilter}
+              onChange={(e) => setWarehouseFilter(e.target.value)}
+            >
+              <option value="">All warehouses</option>
+              {warehouses.map((w) => (
+                <option key={w._id} value={w.name}>{w.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label>Region</Label>
+            <select
+              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              value={regionFilter}
+              onChange={(e) => setRegionFilter(e.target.value)}
+            >
+              <option value="">All regions</option>
+              {regions.map((r) => (
+                <option key={r._id} value={r.name}>{r.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         <div className="mt-5 overflow-auto rounded-xl border">
           <table className="min-w-[720px] w-full text-sm">
             <thead className="bg-zinc-50">
@@ -84,10 +150,10 @@ export default function ZoneListPage() {
             <tbody>
               {loading ? (
                 <tr><td colSpan={5} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
-              ) : rows.length === 0 ? (
+              ) : filteredRows.length === 0 ? (
                 <tr><td colSpan={5} className="px-3 py-6 text-center text-zinc-500">No zones found</td></tr>
               ) : (
-                rows.map((row) => (
+                filteredRows.map((row) => (
                   <tr key={row._id} className="hover:bg-zinc-50">
                     <td className="px-3 py-2 border-b">{row.zoneId}</td>
                     <td className="px-3 py-2 border-b">{row.name}</td>

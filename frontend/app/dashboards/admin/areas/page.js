@@ -6,6 +6,14 @@ import { apiFetch } from "../../../lib/api";
 
 export default function AreaListPage() {
   const [rows, setRows] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
+  const [regions, setRegions] = useState([]);
+  const [zones, setZones] = useState([]);
+  const [companyId, setCompanyId] = useState("");
+  const [warehouseFilter, setWarehouseFilter] = useState("");
+  const [regionFilter, setRegionFilter] = useState("");
+  const [zoneFilter, setZoneFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [editId, setEditId] = useState(null);
@@ -15,8 +23,18 @@ export default function AreaListPage() {
     setErr("");
     setLoading(true);
     try {
-      const data = await apiFetch("/areas");
-      setRows(data.areas || []);
+      const [areasRes, companiesRes, warehousesRes, regionsRes, zonesRes] = await Promise.all([
+        apiFetch("/areas"),
+        apiFetch("/companies"),
+        apiFetch("/warehouses"),
+        apiFetch("/regions"),
+        apiFetch("/zones"),
+      ]);
+      setRows(areasRes.areas || []);
+      setCompanies(companiesRes.companies || []);
+      setWarehouses(warehousesRes.warehouses || []);
+      setRegions(regionsRes.regions || []);
+      setZones(zonesRes.zones || []);
     } catch (e) {
       setErr(e.message || "Failed to load areas");
     } finally {
@@ -52,6 +70,17 @@ export default function AreaListPage() {
     }
   }
 
+  const filteredRows = rows.filter((row) => {
+    if (warehouseFilter && row.warehouseName !== warehouseFilter) return false;
+    if (regionFilter && row.regionName !== regionFilter) return false;
+    if (zoneFilter && row.zoneName !== zoneFilter) return false;
+    if (companyId) {
+      const wh = warehouses.find((w) => w.warehouseId === row.warehouseId);
+      if (!wh || wh.companyId !== companyId) return false;
+    }
+    return true;
+  });
+
   return (
     <AdminShell title="Area List" user={null}>
       <div className="rounded-2xl bg-white border shadow-sm p-5">
@@ -70,6 +99,61 @@ export default function AreaListPage() {
 
         {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
 
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div>
+            <Label>Company</Label>
+            <select
+              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              value={companyId}
+              onChange={(e) => setCompanyId(e.target.value)}
+            >
+              <option value="">All companies</option>
+              {companies.map((c) => (
+                <option key={c._id} value={c.companyId}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label>Warehouse</Label>
+            <select
+              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              value={warehouseFilter}
+              onChange={(e) => setWarehouseFilter(e.target.value)}
+            >
+              <option value="">All warehouses</option>
+              {warehouses.map((w) => (
+                <option key={w._id} value={w.name}>{w.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label>Region</Label>
+            <select
+              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              value={regionFilter}
+              onChange={(e) => setRegionFilter(e.target.value)}
+            >
+              <option value="">All regions</option>
+              {regions.map((r) => (
+                <option key={r._id} value={r.name}>{r.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label>Zone</Label>
+            <select
+              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              value={zoneFilter}
+              onChange={(e) => setZoneFilter(e.target.value)}
+            >
+              <option value="">All zones</option>
+              {zones.map((z) => (
+                <option key={z._id} value={z.name}>{z.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         <div className="mt-5 overflow-auto rounded-xl border">
           <table className="min-w-[900px] w-full text-sm">
             <thead className="bg-zinc-50">
@@ -85,10 +169,10 @@ export default function AreaListPage() {
             <tbody>
               {loading ? (
                 <tr><td colSpan={6} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
-              ) : rows.length === 0 ? (
+              ) : filteredRows.length === 0 ? (
                 <tr><td colSpan={6} className="px-3 py-6 text-center text-zinc-500">No areas found</td></tr>
               ) : (
-                rows.map((row) => (
+                filteredRows.map((row) => (
                   <tr key={row._id} className="hover:bg-zinc-50">
                     <td className="px-3 py-2 border-b">{row.areaId}</td>
                     <td className="px-3 py-2 border-b">{row.name}</td>

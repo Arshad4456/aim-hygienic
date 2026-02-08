@@ -6,6 +6,14 @@ import { apiFetch } from "../../../../lib/api";
 
 export default function VehicleListPage() {
   const [rows, setRows] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
+  const [regions, setRegions] = useState([]);
+  const [zones, setZones] = useState([]);
+  const [areas, setAreas] = useState([]);
+  const [warehouseFilter, setWarehouseFilter] = useState("");
+  const [regionFilter, setRegionFilter] = useState("");
+  const [zoneFilter, setZoneFilter] = useState("");
+  const [areaFilter, setAreaFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [editId, setEditId] = useState(null);
@@ -15,8 +23,18 @@ export default function VehicleListPage() {
     setErr("");
     setLoading(true);
     try {
-      const data = await apiFetch("/vehicles");
-      setRows(data.vehicles || []);
+      const [vehiclesRes, warehousesRes, regionsRes, zonesRes, areasRes] = await Promise.all([
+        apiFetch("/vehicles"),
+        apiFetch("/warehouses"),
+        apiFetch("/regions"),
+        apiFetch("/zones"),
+        apiFetch("/areas"),
+      ]);
+      setRows(vehiclesRes.vehicles || []);
+      setWarehouses(warehousesRes.warehouses || []);
+      setRegions(regionsRes.regions || []);
+      setZones(zonesRes.zones || []);
+      setAreas(areasRes.areas || []);
     } catch (e) {
       setErr(e.message || "Failed to load vehicles");
     } finally {
@@ -52,6 +70,14 @@ export default function VehicleListPage() {
     }
   }
 
+  const filteredRows = rows.filter((row) => {
+    if (warehouseFilter && row.warehouseName !== warehouseFilter) return false;
+    if (regionFilter && row.regionName !== regionFilter) return false;
+    if (zoneFilter && row.zoneName !== zoneFilter) return false;
+    if (areaFilter && row.areaName !== areaFilter) return false;
+    return true;
+  });
+
   return (
     <AdminShell title="Vehicle List" user={null}>
       <div className="rounded-2xl bg-white border shadow-sm p-5">
@@ -70,14 +96,73 @@ export default function VehicleListPage() {
 
         {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
 
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div>
+            <Label>Warehouse</Label>
+            <select
+              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              value={warehouseFilter}
+              onChange={(e) => setWarehouseFilter(e.target.value)}
+            >
+              <option value="">All warehouses</option>
+              {warehouses.map((w) => (
+                <option key={w._id} value={w.name}>{w.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label>Region</Label>
+            <select
+              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              value={regionFilter}
+              onChange={(e) => setRegionFilter(e.target.value)}
+            >
+              <option value="">All regions</option>
+              {regions.map((r) => (
+                <option key={r._id} value={r.name}>{r.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label>Zone</Label>
+            <select
+              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              value={zoneFilter}
+              onChange={(e) => setZoneFilter(e.target.value)}
+            >
+              <option value="">All zones</option>
+              {zones.map((z) => (
+                <option key={z._id} value={z.name}>{z.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label>Area</Label>
+            <select
+              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              value={areaFilter}
+              onChange={(e) => setAreaFilter(e.target.value)}
+            >
+              <option value="">All areas</option>
+              {areas.map((a) => (
+                <option key={a._id} value={a.name}>{a.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         <div className="mt-5 overflow-auto rounded-xl border">
-          <table className="min-w-[760px] w-full text-sm">
+          <table className="min-w-[980px] w-full text-sm">
             <thead className="bg-zinc-50">
               <tr>
                 <th className="text-left px-3 py-2 border-b">Vehicle ID</th>
                 <th className="text-left px-3 py-2 border-b">Vehicle Name</th>
                 <th className="text-left px-3 py-2 border-b">Type</th>
                 <th className="text-left px-3 py-2 border-b">Plate</th>
+                <th className="text-left px-3 py-2 border-b">Warehouse</th>
+                <th className="text-left px-3 py-2 border-b">Region</th>
+                <th className="text-left px-3 py-2 border-b">Zone</th>
+                <th className="text-left px-3 py-2 border-b">Area</th>
                 <th className="text-left px-3 py-2 border-b">Driver ID</th>
                 <th className="text-left px-3 py-2 border-b">Driver Name</th>
                 <th className="text-left px-3 py-2 border-b">Capacity</th>
@@ -86,16 +171,20 @@ export default function VehicleListPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={8} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
-              ) : rows.length === 0 ? (
-                <tr><td colSpan={8} className="px-3 py-6 text-center text-zinc-500">No vehicles found</td></tr>
+                <tr><td colSpan={12} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
+              ) : filteredRows.length === 0 ? (
+                <tr><td colSpan={12} className="px-3 py-6 text-center text-zinc-500">No vehicles found</td></tr>
               ) : (
-                rows.map((row) => (
+                filteredRows.map((row) => (
                   <tr key={row._id} className="hover:bg-zinc-50">
                     <td className="px-3 py-2 border-b">{row.vehicleId}</td>
                     <td className="px-3 py-2 border-b">{row.name}</td>
                     <td className="px-3 py-2 border-b">{row.type || "-"}</td>
                     <td className="px-3 py-2 border-b">{row.plateNumber || "-"}</td>
+                    <td className="px-3 py-2 border-b">{row.warehouseName || "-"}</td>
+                    <td className="px-3 py-2 border-b">{row.regionName || "-"}</td>
+                    <td className="px-3 py-2 border-b">{row.zoneName || "-"}</td>
+                    <td className="px-3 py-2 border-b">{row.areaName || "-"}</td>
                     <td className="px-3 py-2 border-b">{row.driverId || "-"}</td>
                     <td className="px-3 py-2 border-b">{row.driverName || "-"}</td>
                     <td className="px-3 py-2 border-b">{row.deliveryCapacity || "-"}</td>
@@ -145,6 +234,11 @@ function EditCard({ form, onChange, onClose, onSave }) {
           <Field label="Vehicle Name" value={form.name} onChange={(v) => onChange((s) => ({ ...s, name: v }))} />
           <Field label="Vehicle Type" value={form.type} onChange={(v) => onChange((s) => ({ ...s, type: v }))} />
           <Field label="Plate Number" value={form.plateNumber} onChange={(v) => onChange((s) => ({ ...s, plateNumber: v }))} />
+          <Field label="Attach Level" value={form.attachLevel} onChange={(v) => onChange((s) => ({ ...s, attachLevel: v }))} />
+          <Field label="Warehouse Name" value={form.warehouseName} onChange={(v) => onChange((s) => ({ ...s, warehouseName: v }))} />
+          <Field label="Region Name" value={form.regionName} onChange={(v) => onChange((s) => ({ ...s, regionName: v }))} />
+          <Field label="Zone Name" value={form.zoneName} onChange={(v) => onChange((s) => ({ ...s, zoneName: v }))} />
+          <Field label="Area Name" value={form.areaName} onChange={(v) => onChange((s) => ({ ...s, areaName: v }))} />
           <Field label="Driver ID" value={form.driverId} onChange={(v) => onChange((s) => ({ ...s, driverId: v }))} />
           <Field label="Driver Name" value={form.driverName} onChange={(v) => onChange((s) => ({ ...s, driverName: v }))} />
           <Field label="Delivery Capacity" value={form.deliveryCapacity} onChange={(v) => onChange((s) => ({ ...s, deliveryCapacity: v }))} type="number" />

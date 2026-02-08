@@ -69,57 +69,211 @@ const fieldLabels = {
   supplierWarehouseName2: "Warehouse 2 Name",
 };
 
-const editableFields = [
-  "fullName",
-  "mobile",
-  "role",
-  "companyId",
-  "companyName",
-  "branchId",
-  "branchNameOrNumber",
-  "warehouseId",
-  "warehouseName",
-  "regionId",
-  "regionName",
-  "zoneId",
-  "zoneName",
-  "areaId",
-  "areaName",
-  "shopId",
-  "shopName",
-  "cnicNo",
-  "mobileNumber",
-  "phoneNumber",
-  "email",
-  "address",
-  "shopAddress",
-  "gpsLatitude",
-  "gpsLongitude",
-  "managerId",
-  "managerName",
-  "warehouseManagerId",
-  "warehouseManagerName",
-  "accountantId",
-  "accountantName",
-  "distributorId",
-  "distributorName",
-  "driverId",
-  "driverName",
-  "deliveryBoyId",
-  "deliveryBoyName",
-  "salesmanId",
-  "salesmanName",
-  "orderBookerId",
-  "orderBookerName",
-  "customerId",
-  "customerName",
-  "supplierId",
-  "supplierName",
-  "supplierWarehouseId1",
-  "supplierWarehouseName1",
-  "supplierWarehouseId2",
-  "supplierWarehouseName2",
-];
+const roleFields = {
+  "Sales Manager": [
+    "managerId",
+    "managerName",
+    "companyId",
+    "companyName",
+    "companyBranchId",
+    "branchNameOrNumber",
+    "cnicNo",
+    "mobileNumber",
+    "phoneNumber",
+    "email",
+    "address",
+  ],
+  "Warehouse Manager": [
+    "warehouseManagerId",
+    "warehouseManagerName",
+    "companyId",
+    "companyName",
+    "branchId",
+    "branchNameOrNumber",
+    "warehouseId",
+    "warehouseName",
+    "cnicNo",
+    "mobileNumber",
+    "phoneNumber",
+    "email",
+    "address",
+  ],
+  Accountant: [
+    "accountantId",
+    "accountantName",
+    "companyId",
+    "companyName",
+    "branchId",
+    "branchNameOrNumber",
+    "warehouseId",
+    "regionId",
+    "regionName",
+    "cnicNo",
+    "mobileNumber",
+    "phoneNumber",
+    "email",
+    "address",
+  ],
+  Distributor: [
+    "distributorId",
+    "distributorName",
+    "companyId",
+    "companyName",
+    "branchId",
+    "branchNameOrNumber",
+    "warehouseId",
+    "warehouseName",
+    "regionId",
+    "regionName",
+    "zoneId",
+    "zoneName",
+    "cnicNo",
+    "mobileNumber",
+    "phoneNumber",
+    "email",
+    "address",
+  ],
+  Driver: [
+    "driverId",
+    "driverName",
+    "companyId",
+    "companyName",
+    "branchId",
+    "branchNameOrNumber",
+    "warehouseId",
+    "warehouseName",
+    "regionId",
+    "regionName",
+    "zoneId",
+    "zoneName",
+    "areaId",
+    "areaName",
+    "cnicNo",
+    "mobileNumber",
+    "phoneNumber",
+    "email",
+    "address",
+    "gpsLatitude",
+    "gpsLongitude",
+  ],
+  "Delivery Boy": [
+    "deliveryBoyId",
+    "deliveryBoyName",
+    "companyId",
+    "companyName",
+    "branchId",
+    "branchNameOrNumber",
+    "warehouseId",
+    "warehouseName",
+    "regionId",
+    "regionName",
+    "zoneId",
+    "zoneName",
+    "areaId",
+    "areaName",
+    "cnicNo",
+    "mobileNumber",
+    "phoneNumber",
+    "email",
+    "address",
+    "gpsLatitude",
+    "gpsLongitude",
+  ],
+  "Sales Man": [
+    "salesmanId",
+    "salesmanName",
+    "companyId",
+    "companyName",
+    "branchId",
+    "branchNameOrNumber",
+    "warehouseId",
+    "warehouseName",
+    "regionId",
+    "regionName",
+    "zoneId",
+    "zoneName",
+    "areaId",
+    "areaName",
+    "cnicNo",
+    "mobileNumber",
+    "phoneNumber",
+    "email",
+    "address",
+    "gpsLatitude",
+    "gpsLongitude",
+  ],
+  "Order Booker": [
+    "orderBookerId",
+    "orderBookerName",
+    "companyId",
+    "companyName",
+    "branchId",
+    "branchNameOrNumber",
+    "warehouseId",
+    "warehouseName",
+    "regionId",
+    "regionName",
+    "zoneId",
+    "zoneName",
+    "areaId",
+    "areaName",
+    "cnicNo",
+    "mobileNumber",
+    "phoneNumber",
+    "email",
+    "address",
+  ],
+  Customer: [
+    "customerId",
+    "customerName",
+    "companyId",
+    "companyName",
+    "branchId",
+    "branchNameOrNumber",
+    "warehouseId",
+    "warehouseName",
+    "regionId",
+    "regionName",
+    "zoneId",
+    "zoneName",
+    "areaId",
+    "areaName",
+    "shopId",
+    "shopName",
+    "cnicNo",
+    "mobileNumber",
+    "phoneNumber",
+    "email",
+    "shopAddress",
+  ],
+  Supplier: [
+    "supplierId",
+    "supplierName",
+    "companyId",
+    "companyName",
+    "supplierWarehouseId1",
+    "supplierWarehouseName1",
+    "supplierWarehouseId2",
+    "supplierWarehouseName2",
+    "cnicNo",
+    "mobileNumber",
+    "email",
+    "address",
+  ],
+};
+
+const roleIdFieldMap = {
+  "Sales Manager": "managerId",
+  "Warehouse Manager": "warehouseManagerId",
+  Accountant: "accountantId",
+  Distributor: "distributorId",
+  Driver: "driverId",
+  "Delivery Boy": "deliveryBoyId",
+  "Sales Man": "salesmanId",
+  "Order Booker": "orderBookerId",
+  Customer: "customerId",
+  Supplier: "supplierId",
+};
 
 function validatePassword(value) {
   if (!value) return "";
@@ -283,7 +437,7 @@ export default function UserListPage() {
   function exportCsv(filename) {
     const headers = ["User ID", "Name", "Role", "Company", "Mobile", "Email"];
     const lines = filtered.map((u) =>
-      [u._id, u.fullName, u.role, u.companyName, u.mobile, u.email]
+      [getDisplayId(u), u.fullName, u.role, u.companyName, u.mobile, u.email]
         .map((v) => `"${String(v || "").replace(/"/g, '""')}"`)
         .join(",")
     );
@@ -314,7 +468,7 @@ export default function UserListPage() {
                 .map(
                   (u) => `
                   <tr>
-                    <td>${u._id || ""}</td>
+                    <td>${getDisplayId(u) || ""}</td>
                     <td>${u.fullName || ""}</td>
                     <td>${u.role || ""}</td>
                     <td>${u.companyName || ""}</td>
@@ -526,7 +680,7 @@ export default function UserListPage() {
                   ) : (
                     pageRows.map((row) => (
                       <tr key={row._id} className="hover:bg-zinc-50">
-                        <td className="px-3 py-2 border-b">{row._id}</td>
+                        <td className="px-3 py-2 border-b">{getDisplayId(row)}</td>
                         <td className="px-3 py-2 border-b">{row.fullName}</td>
                         <td className="px-3 py-2 border-b">{row.role}</td>
                         <td className="px-3 py-2 border-b">{row.companyName || "-"}</td>
@@ -594,6 +748,7 @@ export default function UserListPage() {
 
 function EditCard({ form, onChange, onClose, onSave, saving, err }) {
   if (!form) return null;
+  const activeFields = roleFields[form.role] || [];
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
@@ -605,7 +760,7 @@ function EditCard({ form, onChange, onClose, onSave, saving, err }) {
         <div className="flex-1 overflow-y-auto p-4">
           {err ? <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {editableFields.map((field) => (
+            {activeFields.map((field) => (
               <Field
                 key={field}
                 label={fieldLabels[field] || field}
@@ -637,6 +792,12 @@ function EditCard({ form, onChange, onClose, onSave, saving, err }) {
       </div>
     </div>
   );
+}
+
+function getDisplayId(user) {
+  const key = roleIdFieldMap[user?.role];
+  if (key && user?.[key]) return user[key];
+  return user?.username || user?.mobile || user?._id || "";
 }
 
 function Label({ children }) {

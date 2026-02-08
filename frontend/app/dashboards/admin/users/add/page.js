@@ -78,8 +78,6 @@ const roleFields = {
     "regionName",
     "zoneId",
     "zoneName",
-    "areaId",
-    "areaName",
     "cnicNo",
     "mobileNumber",
     "phoneNumber",
@@ -221,6 +219,19 @@ const roleFields = {
   ],
 };
 
+const roleNameFieldMap = {
+  "Sales Manager": "managerName",
+  "Warehouse Manager": "warehouseManagerName",
+  Accountant: "accountantName",
+  Distributor: "distributorName",
+  Driver: "driverName",
+  "Delivery Boy": "deliveryBoyName",
+  "Sales Man": "salesmanName",
+  "Order Booker": "orderBookerName",
+  Customer: "customerName",
+  Supplier: "supplierName",
+};
+
 const labelMap = {
   managerId: "Manager ID",
   managerName: "Manager Name",
@@ -282,6 +293,10 @@ function validatePassword(value) {
 
 export default function AddUserPage() {
   const [companies, setCompanies] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
+  const [regions, setRegions] = useState([]);
+  const [zones, setZones] = useState([]);
+  const [areas, setAreas] = useState([]);
   const [companyId, setCompanyId] = useState("");
   const [role, setRole] = useState("");
   const [form, setForm] = useState({ fullName: "", mobile: "", role: "" });
@@ -294,8 +309,18 @@ export default function AddUserPage() {
     async function loadCompanies() {
       setErr("");
       try {
-        const data = await apiFetch("/companies");
-        setCompanies(data.companies || []);
+        const [companiesRes, warehousesRes, regionsRes, zonesRes, areasRes] = await Promise.all([
+          apiFetch("/companies"),
+          apiFetch("/warehouses"),
+          apiFetch("/regions"),
+          apiFetch("/zones"),
+          apiFetch("/areas"),
+        ]);
+        setCompanies(companiesRes.companies || []);
+        setWarehouses(warehousesRes.warehouses || []);
+        setRegions(regionsRes.regions || []);
+        setZones(zonesRes.zones || []);
+        setAreas(areasRes.areas || []);
       } catch (e) {
         setErr(e.message || "Failed to load companies");
       } finally {
@@ -307,6 +332,21 @@ export default function AddUserPage() {
 
   const activeFields = useMemo(() => roleFields[role] || [], [role]);
   const selectedCompany = companies.find((c) => c._id === companyId);
+  const displayFields = activeFields.filter(
+    (field) =>
+      ![
+        "companyId",
+        "companyName",
+        "warehouseId",
+        "warehouseName",
+        "regionId",
+        "regionName",
+        "zoneId",
+        "zoneName",
+        "areaId",
+        "areaName",
+      ].includes(field)
+  );
 
   function setField(key, value) {
     setForm((s) => ({ ...s, [key]: value }));
@@ -324,6 +364,9 @@ export default function AddUserPage() {
 
     setSaving(true);
     try {
+      const roleNameField = roleNameFieldMap[role];
+      const fullName = form.fullName || (roleNameField ? form[roleNameField] : "");
+      const mobile = form.mobile || form.mobileNumber || "";
       await apiFetch("/users", {
         method: "POST",
         body: {
@@ -331,8 +374,8 @@ export default function AddUserPage() {
           role,
           companyId: selectedCompany?.companyId || "",
           companyName: selectedCompany?.name || "",
-          fullName: form.fullName,
-          mobile: form.mobile,
+          fullName,
+          mobile,
         },
       });
       setOk(`✅ ${role} saved successfully.`);
@@ -403,19 +446,83 @@ export default function AddUserPage() {
 
             {role ? (
               <form onSubmit={onSubmit} className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Field
-                  label="Full Name"
-                  value={form.fullName || ""}
-                  onChange={(v) => setField("fullName", v)}
-                  required
-                />
-                <Field
-                  label="Mobile Number"
-                  value={form.mobile || ""}
-                  onChange={(v) => setField("mobile", v)}
-                  required
-                />
-                {activeFields.map((field) => (
+                {activeFields.includes("warehouseName") ? (
+                  <div>
+                    <Label>Warehouse Name</Label>
+                    <select
+                      className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+                      value={form.warehouseId || ""}
+                      onChange={(e) => {
+                        const wh = warehouses.find((w) => w._id === e.target.value);
+                        setField("warehouseId", wh?.warehouseId || "");
+                        setField("warehouseName", wh?.name || "");
+                      }}
+                    >
+                      <option value="">Choose warehouse...</option>
+                      {warehouses.map((w) => (
+                        <option key={w._id} value={w._id}>{w.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+                {activeFields.includes("regionName") ? (
+                  <div>
+                    <Label>Region Name</Label>
+                    <select
+                      className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+                      value={form.regionId || ""}
+                      onChange={(e) => {
+                        const region = regions.find((r) => r._id === e.target.value);
+                        setField("regionId", region?.regionId || "");
+                        setField("regionName", region?.name || "");
+                      }}
+                    >
+                      <option value="">Choose region...</option>
+                      {regions.map((r) => (
+                        <option key={r._id} value={r._id}>{r.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+                {activeFields.includes("zoneName") ? (
+                  <div>
+                    <Label>Zone Name</Label>
+                    <select
+                      className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+                      value={form.zoneId || ""}
+                      onChange={(e) => {
+                        const zone = zones.find((z) => z._id === e.target.value);
+                        setField("zoneId", zone?.zoneId || "");
+                        setField("zoneName", zone?.name || "");
+                      }}
+                    >
+                      <option value="">Choose zone...</option>
+                      {zones.map((z) => (
+                        <option key={z._id} value={z._id}>{z.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+                {activeFields.includes("areaName") ? (
+                  <div>
+                    <Label>Area Name</Label>
+                    <select
+                      className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+                      value={form.areaId || ""}
+                      onChange={(e) => {
+                        const area = areas.find((a) => a._id === e.target.value);
+                        setField("areaId", area?.areaId || "");
+                        setField("areaName", area?.name || "");
+                      }}
+                    >
+                      <option value="">Choose area...</option>
+                      {areas.map((a) => (
+                        <option key={a._id} value={a._id}>{a.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+                {displayFields.map((field) => (
                   <Field
                     key={field}
                     label={labelMap[field] || field}
