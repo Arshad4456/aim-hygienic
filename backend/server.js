@@ -22,6 +22,7 @@ const reportsRoutes = require("./src/routes/reports");
 const liveTrackingRoutes = require("./src/routes/liveTracking");
 const dashboardRoutes = require("./src/routes/dashboard");
 const salesKpiRoutes = require("./src/routes/salesKpi");
+const ordersRoutes = require("./src/routes/orders");
 
 const app = express();
 
@@ -45,6 +46,7 @@ app.use("/api/reports", reportsRoutes);
 app.use("/api/live-tracking", liveTrackingRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/sales-kpi", salesKpiRoutes);
+app.use("/api/orders", ordersRoutes);
 
 // CORS for your live domain
 app.use(
