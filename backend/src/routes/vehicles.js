@@ -15,6 +15,15 @@ router.post("/", requireAuth, async (req, res) => {
       driverId: String(body.driverId || "").trim(),
       driverName: String(body.driverName || "").trim(),
       deliveryCapacity: Number(body.deliveryCapacity || 0),
+      attachLevel: String(body.attachLevel || "warehouse").trim(),
+      warehouseId: String(body.warehouseId || "").trim(),
+      warehouseName: String(body.warehouseName || "").trim(),
+      regionId: String(body.regionId || "").trim(),
+      regionName: String(body.regionName || "").trim(),
+      zoneId: String(body.zoneId || "").trim(),
+      zoneName: String(body.zoneName || "").trim(),
+      areaId: String(body.areaId || "").trim(),
+      areaName: String(body.areaName || "").trim(),
       createdBy: req.user?.uid,
     });
     return res.status(201).json({ ok: true, vehicle: doc });
@@ -58,6 +67,15 @@ router.put("/:id", requireAuth, async (req, res) => {
         driverId: String(body.driverId || "").trim(),
         driverName: String(body.driverName || "").trim(),
         deliveryCapacity: Number(body.deliveryCapacity || 0),
+        attachLevel: String(body.attachLevel || "warehouse").trim(),
+        warehouseId: String(body.warehouseId || "").trim(),
+        warehouseName: String(body.warehouseName || "").trim(),
+        regionId: String(body.regionId || "").trim(),
+        regionName: String(body.regionName || "").trim(),
+        zoneId: String(body.zoneId || "").trim(),
+        zoneName: String(body.zoneName || "").trim(),
+        areaId: String(body.areaId || "").trim(),
+        areaName: String(body.areaName || "").trim(),
       },
       { new: true, runValidators: true }
     );

@@ -1,7 +1,8 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { apiFetch } from "../../../lib/api";
 
 function Icon({ name }) {
   // No extra library required — simple, safe icons
@@ -28,6 +29,7 @@ function Icon({ name }) {
   if (name === "inventory") return <span className={common}>🏬</span>;
   if (name === "logistics") return <span className={common}>🧭</span>;
   if (name === "hr") return <span className={common}>👥</span>;
+  if (name === "messages") return <span className={common}>💬</span>;
   return <span className={common}>•</span>;
 }
 
@@ -49,6 +51,23 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
     users: false,
     inventory: false,
   });
+  const [hasLowStock, setHasLowStock] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadLowStock() {
+      try {
+        const data = await apiFetch("/inventory/low-stock");
+        if (isMounted) setHasLowStock((data.lowStock || []).length > 0);
+      } catch {
+        if (isMounted) setHasLowStock(false);
+      }
+    }
+    loadLowStock();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const menu = useMemo(
     () => [
@@ -90,7 +109,11 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
           { title: "Inventory Ledger", href: "/dashboards/admin/inventory/ledger" },
           { title: "Stock Transfers", href: "/dashboards/admin/inventory/transfers" },
           { title: "Stock Summary", href: "/dashboards/admin/inventory/summary" },
-          { title: "Low Stock Alerts", href: "/dashboards/admin/inventory/low-stock" },
+          {
+            title: "Low Stock Alerts",
+            href: "/dashboards/admin/inventory/low-stock",
+            badge: hasLowStock ? "!" : null,
+          },
         ],
       },
 
@@ -205,6 +228,7 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
       },
 
       { type: "link", title: "Account Management", href: "/dashboards/admin/account/manage", icon: "account" },
+      { type: "link", title: "Messages", href: "/dashboards/admin/messages", icon: "messages" },
       { type: "link", title: "User Live Tracking", href: "/dashboards/admin/live-tracking", icon: "tracking" },
       { type: "link", title: "Reports", href: "/dashboards/admin/reports", icon: "reports" },
       { type: "link", title: "Settings", href: "/dashboards/admin/settings", icon: "settings" },
@@ -354,7 +378,14 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
                           active ? "bg-emerald-50 text-emerald-700" : "text-zinc-600 hover:bg-zinc-50",
                         ].join(" ")}
                       >
-                        {c.title}
+                        <span className="flex items-center justify-between">
+                          <span>{c.title}</span>
+                          {c.badge ? (
+                            <span className="ml-2 rounded-full bg-red-100 text-red-600 text-[10px] px-2 py-0.5">
+                              {c.badge}
+                            </span>
+                          ) : null}
+                        </span>
                       </button>
                     );
                   })}

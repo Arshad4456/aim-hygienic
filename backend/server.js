@@ -15,6 +15,7 @@ const regionsRoutes = require("./src/routes/regions");
 const zonesRoutes = require("./src/routes/zones");
 const areasRoutes = require("./src/routes/areas");
 const vehiclesRoutes = require("./src/routes/vehicles");
+const messagesRoutes = require("./src/routes/messages");
 
 const app = express();
 
@@ -31,6 +32,7 @@ app.use("/api/areas", areasRoutes);
 app.use("/api/vehicles", vehiclesRoutes);
 app.use("/api/products", productsRoutes);
 app.use("/api/inventory", inventoryRoutes);
+app.use("/api/messages", messagesRoutes);
 
 
 // CORS for your live domain
