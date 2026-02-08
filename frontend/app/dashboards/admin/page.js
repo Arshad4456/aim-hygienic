@@ -57,7 +57,7 @@ export default function AdminDashboardPage() {
       },
       {
         title: "Total Expenses",
-        value: formatCurrency(overview?.kpis?.expenseTotal),
+        value: formatPKR(overview?.kpis?.expenseTotal),
         sub: `Pending: ${formatNumber(overview?.kpis?.pendingExpenses)}`,
         tone: "amber",
       },
@@ -174,7 +174,7 @@ export default function AdminDashboardPage() {
             <div key={k.title} className="rounded-2xl bg-white border shadow-sm p-4">
               <div className="text-sm text-zinc-500">{k.title}</div>
               <div className="mt-1 text-2xl font-semibold text-zinc-900">{k.value}</div>
-              <div className="mt-2 text-xs text-zinc-500">Rs. {k.sub}</div>
+              <div className="mt-2 text-xs text-zinc-500">{k.sub}</div>
               <div className="mt-3">
                 <MiniSparkline tone={k.tone} />
               </div>
