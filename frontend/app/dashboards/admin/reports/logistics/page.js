@@ -1,36 +1,39 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import AdminShell from "../../components/AdminShell";
-
-const metrics = [
-  { label: "On-time Delivery", value: "96.4%" },
-  { label: "Active Routes", value: "38" },
-  { label: "Fleet Utilization", value: "82%" },
-  { label: "Avg. Delivery Time", value: "2.4 hrs" },
-];
-
-const rows = [
-  {
-    route: "Dhaka Central",
-    deliveries: 128,
-    onTime: "97%",
-    utilization: "85%",
-  },
-  {
-    route: "Chattogram Coastal",
-    deliveries: 94,
-    onTime: "95%",
-    utilization: "79%",
-  },
-  {
-    route: "Khulna Metro",
-    deliveries: 76,
-    onTime: "96%",
-    utilization: "82%",
-  },
-];
+import { apiFetch } from "../../../../lib/api";
 
 export default function LogisticsReportPage() {
+  const [report, setReport] = useState({ vehicleCount: 0, transferCounts: [] });
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    async function load() {
+      setErr("");
+      try {
+        const data = await apiFetch("/reports/logistics");
+        setReport({
+          vehicleCount: data.vehicleCount || 0,
+          transferCounts: data.transferCounts || [],
+        });
+      } catch (e) {
+        setErr(e.message || "Failed to load logistics report");
+      }
+    }
+    load();
+  }, []);
+
+  const metrics = useMemo(() => {
+    const totalTransfers = report.transferCounts.reduce((sum, row) => sum + Number(row.count || 0), 0);
+    return [
+      { label: "Vehicles Tracked", value: formatNumber(report.vehicleCount) },
+      { label: "Transfers Logged", value: formatNumber(totalTransfers) },
+      { label: "Status Buckets", value: formatNumber(report.transferCounts.length) },
+      { label: "Active Transfers", value: formatNumber(activeTransfers(report.transferCounts)) },
+    ];
+  }, [report]);
+
   return (
     <AdminShell title="Logistics Reports" user={null}>
       <div className="rounded-2xl border bg-white p-6 shadow-sm">
@@ -38,6 +41,12 @@ export default function LogisticsReportPage() {
         <div className="text-sm text-zinc-500 mt-1">
           Route performance, fleet utilization, and delivery efficiency.
         </div>
+
+        {err ? (
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {err}
+          </div>
+        ) : null}
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {metrics.map((item) => (
@@ -52,25 +61,41 @@ export default function LogisticsReportPage() {
           <table className="min-w-[640px] w-full text-sm">
             <thead className="bg-zinc-50">
               <tr>
-                <th className="text-left px-3 py-2 border-b">Route</th>
-                <th className="text-left px-3 py-2 border-b">Deliveries</th>
-                <th className="text-left px-3 py-2 border-b">On-time</th>
-                <th className="text-left px-3 py-2 border-b">Utilization</th>
+                <th className="text-left px-3 py-2 border-b">Transfer Status</th>
+                <th className="text-left px-3 py-2 border-b">Count</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr key={row.route} className="hover:bg-zinc-50">
-                  <td className="px-3 py-2 border-b font-medium text-zinc-900">{row.route}</td>
-                  <td className="px-3 py-2 border-b">{row.deliveries}</td>
-                  <td className="px-3 py-2 border-b">{row.onTime}</td>
-                  <td className="px-3 py-2 border-b">{row.utilization}</td>
+              {report.transferCounts.length === 0 ? (
+                <tr>
+                  <td colSpan={2} className="px-3 py-6 text-center text-zinc-500">
+                    No stock transfers found
+                  </td>
                 </tr>
-              ))}
+              ) : (
+                report.transferCounts.map((row) => (
+                  <tr key={row.status} className="hover:bg-zinc-50">
+                    <td className="px-3 py-2 border-b font-medium text-zinc-900">{row.status}</td>
+                    <td className="px-3 py-2 border-b">{formatNumber(row.count)}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
     </AdminShell>
   );
+}
+
+function formatNumber(value) {
+  if (value === null || value === undefined) return "—";
+  return Number(value).toLocaleString();
+}
+
+function activeTransfers(rows) {
+  return rows.reduce((sum, row) => {
+    if (row.status === "completed") return sum;
+    return sum + Number(row.count || 0);
+  }, 0);
 }

@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AdminShell from "../components/AdminShell";
+import { apiFetch } from "../../../lib/api";
 
 const cards = [
   {
@@ -43,46 +44,77 @@ const defaultFilters = {
   status: "all",
 };
 
-const quickMetrics = [
-  { label: "Total Revenue", value: "৳ 12.4M", delta: "+8.1%" },
-  { label: "Open Expenses", value: "142", delta: "-3.4%" },
-  { label: "Inventory Coverage", value: "38 days", delta: "+2.2%" },
-  { label: "On-time Delivery", value: "96.4%", delta: "+1.1%" },
-];
-
-const reportRows = [
-  {
-    title: "Monthly Sales Summary",
-    owner: "Finance",
-    cadence: "Monthly",
-    lastRun: "Sep 12, 2024",
-    status: "Ready",
-  },
-  {
-    title: "Inventory Aging & Slow Movers",
-    owner: "Supply Chain",
-    cadence: "Weekly",
-    lastRun: "Sep 10, 2024",
-    status: "Needs review",
-  },
-  {
-    title: "Expense Approval Tracker",
-    owner: "Accounts",
-    cadence: "Daily",
-    lastRun: "Sep 13, 2024",
-    status: "Ready",
-  },
-  {
-    title: "Route Efficiency Snapshot",
-    owner: "Logistics",
-    cadence: "Weekly",
-    lastRun: "Sep 09, 2024",
-    status: "Draft",
-  },
-];
-
 export default function ReportsModulePage() {
   const [filters, setFilters] = useState(defaultFilters);
+  const [metrics, setMetrics] = useState(null);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    async function loadOverview() {
+      setErr("");
+      try {
+        const data = await apiFetch("/reports/overview");
+        setMetrics(data.metrics || null);
+      } catch (e) {
+        setErr(e.message || "Failed to load reports overview");
+      }
+    }
+    loadOverview();
+  }, []);
+
+  const quickMetrics = [
+    {
+      label: "Sales Orders",
+      value: formatNumber(metrics?.totalSalesOrders),
+      delta: `${formatNumber(metrics?.salesRegions)} regions`,
+    },
+    {
+      label: "Total Expenses",
+      value: formatCurrency(metrics?.totalExpenses),
+      delta: `${formatNumber(metrics?.pendingExpenses)} pending`,
+    },
+    {
+      label: "Active Users",
+      value: formatNumber(metrics?.activeUsers),
+      delta: `${formatNumber(metrics?.userRoles)} roles`,
+    },
+    {
+      label: "Warehouses",
+      value: formatNumber(metrics?.totalWarehouses),
+      delta: `${formatNumber(metrics?.totalProducts)} products`,
+    },
+  ];
+
+  const reportRows = [
+    {
+      title: "Sales Performance Snapshot",
+      owner: "Finance",
+      cadence: "Daily",
+      lastRun: "Auto-updated",
+      status: metrics ? "Ready" : "Draft",
+    },
+    {
+      title: "Inventory Health Overview",
+      owner: "Supply Chain",
+      cadence: "Weekly",
+      lastRun: "Auto-updated",
+      status: metrics?.totalWarehouses ? "Ready" : "Draft",
+    },
+    {
+      title: "Expense Category Tracker",
+      owner: "Accounts",
+      cadence: "Weekly",
+      lastRun: "Auto-updated",
+      status: metrics?.expenseCategories ? "Ready" : "Needs review",
+    },
+    {
+      title: "Transfer Status Monitor",
+      owner: "Logistics",
+      cadence: "Daily",
+      lastRun: "Auto-updated",
+      status: metrics?.transferStatuses ? "Ready" : "Draft",
+    },
+  ];
 
   const filteredRows = useMemo(() => {
     if (filters.status === "all") return reportRows;
@@ -109,12 +141,18 @@ export default function ReportsModulePage() {
           </div>
         </div>
 
+        {err ? (
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {err}
+          </div>
+        ) : null}
+
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {quickMetrics.map((metric) => (
             <div key={metric.label} className="rounded-2xl border bg-zinc-50 p-4">
               <div className="text-sm text-zinc-500">{metric.label}</div>
               <div className="text-2xl font-semibold text-zinc-900 mt-2">{metric.value}</div>
-              <div className="text-xs text-emerald-600 mt-2">{metric.delta} vs last period</div>
+              <div className="text-xs text-emerald-600 mt-2">{metric.delta}</div>
             </div>
           ))}
         </div>
@@ -239,4 +277,14 @@ function StatusPill({ status }) {
       {status}
     </span>
   );
+}
+
+function formatNumber(value) {
+  if (value === null || value === undefined) return "—";
+  return Number(value).toLocaleString();
+}
+
+function formatCurrency(value) {
+  if (value === null || value === undefined) return "—";
+  return `৳ ${Number(value).toLocaleString()}`;
 }

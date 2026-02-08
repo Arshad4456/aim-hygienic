@@ -1,39 +1,40 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import AdminShell from "../../components/AdminShell";
-
-const metrics = [
-  { label: "Total Expenses", value: "৳ 2.3M" },
-  { label: "Approved This Month", value: "৳ 1.7M" },
-  { label: "Outstanding Payables", value: "৳ 480K" },
-  { label: "Cash on Hand", value: "৳ 620K" },
-];
-
-const rows = [
-  {
-    category: "Logistics",
-    budget: "৳ 780K",
-    actual: "৳ 690K",
-    variance: "-11.5%",
-    status: "On track",
-  },
-  {
-    category: "Marketing",
-    budget: "৳ 420K",
-    actual: "৳ 510K",
-    variance: "+21.4%",
-    status: "Over budget",
-  },
-  {
-    category: "Operations",
-    budget: "৳ 610K",
-    actual: "৳ 590K",
-    variance: "-3.3%",
-    status: "On track",
-  },
-];
+import { apiFetch } from "../../../../lib/api";
 
 export default function FinanceReportPage() {
+  const [report, setReport] = useState({ totals: {}, expensesByCategory: [], accounts: [] });
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    async function load() {
+      setErr("");
+      try {
+        const data = await apiFetch("/reports/finance");
+        setReport({
+          totals: data.totals || {},
+          expensesByCategory: data.expensesByCategory || [],
+          accounts: data.accounts || [],
+        });
+      } catch (e) {
+        setErr(e.message || "Failed to load finance report");
+      }
+    }
+    load();
+  }, []);
+
+  const metrics = useMemo(() => {
+    const totalBalance = report.accounts.reduce((sum, row) => sum + Number(row.currentBalance || 0), 0);
+    return [
+      { label: "Total Expenses", value: formatCurrency(report.totals.totalExpenses) },
+      { label: "Approved Expenses", value: formatCurrency(report.totals.approvedExpenses) },
+      { label: "Accounts Tracked", value: formatNumber(report.accounts.length) },
+      { label: "Total Balances", value: formatCurrency(totalBalance) },
+    ];
+  }, [report]);
+
   return (
     <AdminShell title="Finance Reports" user={null}>
       <div className="rounded-2xl border bg-white p-6 shadow-sm">
@@ -41,6 +42,12 @@ export default function FinanceReportPage() {
         <div className="text-sm text-zinc-500 mt-1">
           Track budget utilization, approvals, and cash position.
         </div>
+
+        {err ? (
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {err}
+          </div>
+        ) : null}
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {metrics.map((item) => (
@@ -56,26 +63,61 @@ export default function FinanceReportPage() {
             <thead className="bg-zinc-50">
               <tr>
                 <th className="text-left px-3 py-2 border-b">Category</th>
-                <th className="text-left px-3 py-2 border-b">Budget</th>
-                <th className="text-left px-3 py-2 border-b">Actual</th>
-                <th className="text-left px-3 py-2 border-b">Variance</th>
-                <th className="text-left px-3 py-2 border-b">Status</th>
+                <th className="text-left px-3 py-2 border-b">Expense Count</th>
+                <th className="text-left px-3 py-2 border-b">Total Spent</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr key={row.category} className="hover:bg-zinc-50">
-                  <td className="px-3 py-2 border-b font-medium text-zinc-900">{row.category}</td>
-                  <td className="px-3 py-2 border-b">{row.budget}</td>
-                  <td className="px-3 py-2 border-b">{row.actual}</td>
-                  <td className="px-3 py-2 border-b">{row.variance}</td>
-                  <td className="px-3 py-2 border-b">{row.status}</td>
+              {report.expensesByCategory.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="px-3 py-6 text-center text-zinc-500">
+                    No expenses recorded
+                  </td>
                 </tr>
-              ))}
+              ) : (
+                report.expensesByCategory.map((row) => (
+                  <tr key={row.category} className="hover:bg-zinc-50">
+                    <td className="px-3 py-2 border-b font-medium text-zinc-900">{row.category}</td>
+                    <td className="px-3 py-2 border-b">{formatNumber(row.count)}</td>
+                    <td className="px-3 py-2 border-b">{formatCurrency(row.total)}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
+        </div>
+
+        <div className="mt-6">
+          <div className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Account Balances</div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {report.accounts.length === 0 ? (
+              <div className="rounded-xl border bg-zinc-50 px-4 py-3 text-sm text-zinc-500">
+                No accounts configured.
+              </div>
+            ) : (
+              report.accounts.map((account) => (
+                <div key={account.accountName} className="rounded-xl border bg-white px-4 py-3">
+                  <div className="text-sm font-semibold text-zinc-900">{account.accountName}</div>
+                  <div className="text-xs text-zinc-500 mt-1 capitalize">{account.accountType}</div>
+                  <div className="text-lg font-semibold text-zinc-900 mt-2">
+                    {account.currency || "BDT"} {formatNumber(account.currentBalance)}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
     </AdminShell>
   );
+}
+
+function formatNumber(value) {
+  if (value === null || value === undefined) return "—";
+  return Number(value).toLocaleString();
+}
+
+function formatCurrency(value) {
+  if (value === null || value === undefined) return "—";
+  return `৳ ${Number(value).toLocaleString()}`;
 }
