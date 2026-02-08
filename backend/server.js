@@ -18,6 +18,8 @@ const vehiclesRoutes = require("./src/routes/vehicles");
 const messagesRoutes = require("./src/routes/messages");
 const expensesRoutes = require("./src/routes/expenses");
 const accountsRoutes = require("./src/routes/accounts");
+const reportsRoutes = require("./src/routes/reports");
+const liveTrackingRoutes = require("./src/routes/liveTracking");
 
 const app = express();
 
@@ -37,6 +39,8 @@ app.use("/api/inventory", inventoryRoutes);
 app.use("/api/messages", messagesRoutes);
 app.use("/api/expenses", expensesRoutes);
 app.use("/api/accounts", accountsRoutes);
+app.use("/api/reports", reportsRoutes);
+app.use("/api/live-tracking", liveTrackingRoutes);
 
 
 // CORS for your live domain

@@ -1,39 +1,38 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import AdminShell from "../../components/AdminShell";
-
-const highlights = [
-  { label: "Gross Revenue", value: "৳ 8.7M" },
-  { label: "Net Revenue", value: "৳ 7.9M" },
-  { label: "Top Region", value: "Dhaka" },
-  { label: "Top Customer", value: "Green Mart" },
-];
-
-const rows = [
-  {
-    region: "Dhaka",
-    orders: 412,
-    revenue: "৳ 3.2M",
-    margin: "21%",
-    growth: "+9.2%",
-  },
-  {
-    region: "Chattogram",
-    orders: 288,
-    revenue: "৳ 2.1M",
-    margin: "18%",
-    growth: "+4.6%",
-  },
-  {
-    region: "Khulna",
-    orders: 190,
-    revenue: "৳ 1.3M",
-    margin: "19%",
-    growth: "+6.1%",
-  },
-];
+import { apiFetch } from "../../../../lib/api";
 
 export default function SalesReportPage() {
+  const [rows, setRows] = useState([]);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    async function load() {
+      setErr("");
+      try {
+        const data = await apiFetch("/reports/sales");
+        setRows(data.regions || []);
+      } catch (e) {
+        setErr(e.message || "Failed to load sales report");
+      }
+    }
+    load();
+  }, []);
+
+  const highlights = useMemo(() => {
+    const totalOrders = rows.reduce((sum, row) => sum + Number(row.orders || 0), 0);
+    const totalQuantity = rows.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
+    const topRegion = rows[0]?.region || "—";
+    return [
+      { label: "Sales Orders", value: formatNumber(totalOrders) },
+      { label: "Units Sold", value: formatNumber(totalQuantity) },
+      { label: "Top Region", value: topRegion },
+      { label: "Regions Covered", value: formatNumber(rows.length) },
+    ];
+  }, [rows]);
+
   return (
     <AdminShell title="Sales Reports" user={null}>
       <div className="rounded-2xl border bg-white p-6 shadow-sm">
@@ -41,6 +40,12 @@ export default function SalesReportPage() {
         <div className="text-sm text-zinc-500 mt-1">
           Revenue, order velocity, and regional performance snapshots.
         </div>
+
+        {err ? (
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {err}
+          </div>
+        ) : null}
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {highlights.map((item) => (
@@ -57,25 +62,38 @@ export default function SalesReportPage() {
               <tr>
                 <th className="text-left px-3 py-2 border-b">Region</th>
                 <th className="text-left px-3 py-2 border-b">Orders</th>
-                <th className="text-left px-3 py-2 border-b">Revenue</th>
-                <th className="text-left px-3 py-2 border-b">Margin</th>
-                <th className="text-left px-3 py-2 border-b">Growth</th>
+                <th className="text-left px-3 py-2 border-b">Units Sold</th>
+                <th className="text-left px-3 py-2 border-b">Last Movement</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr key={row.region} className="hover:bg-zinc-50">
-                  <td className="px-3 py-2 border-b font-medium text-zinc-900">{row.region}</td>
-                  <td className="px-3 py-2 border-b">{row.orders}</td>
-                  <td className="px-3 py-2 border-b">{row.revenue}</td>
-                  <td className="px-3 py-2 border-b">{row.margin}</td>
-                  <td className="px-3 py-2 border-b text-emerald-600">{row.growth}</td>
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-3 py-6 text-center text-zinc-500">
+                    No sales movements found
+                  </td>
                 </tr>
-              ))}
+              ) : (
+                rows.map((row) => (
+                  <tr key={row.region} className="hover:bg-zinc-50">
+                    <td className="px-3 py-2 border-b font-medium text-zinc-900">{row.region}</td>
+                    <td className="px-3 py-2 border-b">{formatNumber(row.orders)}</td>
+                    <td className="px-3 py-2 border-b">{formatNumber(row.quantity)}</td>
+                    <td className="px-3 py-2 border-b">
+                      {row.lastMovementAt ? new Date(row.lastMovementAt).toLocaleDateString() : "—"}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
     </AdminShell>
   );
+}
+
+function formatNumber(value) {
+  if (value === null || value === undefined) return "—";
+  return Number(value).toLocaleString();
 }

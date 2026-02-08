@@ -1,7 +1,9 @@
 export async function apiFetch(path, { method = "GET", body, token } = {}) {
   const t = token || (typeof window !== "undefined" ? localStorage.getItem("aim_token") : null);
+  const apiBase = process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") || "";
+  const baseUrl = apiBase ? `${apiBase}/api` : "/api";
 
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${baseUrl}${path}`, {
     method,
     headers: {
       "Content-Type": "application/json",
