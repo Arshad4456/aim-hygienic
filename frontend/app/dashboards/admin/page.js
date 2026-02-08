@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AdminShell from "../admin/components/AdminShell";
 import { apiFetch } from "../../lib/api";
@@ -81,7 +82,6 @@ export default function AdminDashboardPage() {
     ];
     const salesScale = overview?.kpis?.salesOrders ? Math.max(1, Math.round(overview.kpis.salesOrders / 10)) : 1;
     const inventoryScale = overview?.kpis?.inventoryOnHand ? Math.max(1, Math.round(overview.kpis.inventoryOnHand / 50)) : 1;
-    const expenseScale = overview?.kpis?.expenseTotal ? Math.max(1, Math.round(overview.kpis.expenseTotal / 10000)) : 1;
 
     return {
       salesTrend: baseSeries.map((item, index) => ({
@@ -93,18 +93,57 @@ export default function AdminDashboardPage() {
         inbound: item.value + inventoryScale + index,
         outbound: Math.max(2, item.value - 6 + index),
       })),
-      expenseMix: [
-        { label: "Logistics", value: 32 },
-        { label: "Operations", value: 28 },
-        { label: "Marketing", value: 18 },
-        { label: "HR", value: 12 },
-        { label: "Utilities", value: 10 },
-      ].map((item, index) => ({
-        ...item,
-        value: item.value + expenseScale + index,
-      })),
     };
   }, [overview]);
+
+  const quickActions = [
+    {
+      title: "Create Sales Order",
+      description: "Capture distributor and retail orders.",
+      href: "/dashboards/admin/order-management/sales-orders",
+    },
+    {
+      title: "Add Inventory Receipt",
+      description: "Log inbound stock and GRN updates.",
+      href: "/dashboards/admin/procurement/grn",
+    },
+    {
+      title: "Add Expense",
+      description: "Submit operational expenses for approval.",
+      href: "/dashboards/admin/expense/add",
+    },
+    {
+      title: "Add New User",
+      description: "Onboard staff and assign roles.",
+      href: "/dashboards/admin/users/add",
+    },
+  ];
+
+  const actionItems = useMemo(
+    () => [
+      {
+        title: "Review pending expense approvals",
+        detail: `${formatNumber(overview?.kpis?.pendingExpenses)} pending approvals`,
+        href: "/dashboards/admin/expense",
+      },
+      {
+        title: "Verify latest inventory movements",
+        detail: `${formatNumber(overview?.recent?.movements?.length || 0)} movements logged`,
+        href: "/dashboards/admin/inventory/ledger",
+      },
+      {
+        title: "Follow up stock transfers",
+        detail: `${formatNumber(overview?.recent?.transfers?.length || 0)} transfers awaiting updates`,
+        href: "/dashboards/admin/inventory/transfers",
+      },
+      {
+        title: "Track sales order pipeline",
+        detail: `${formatNumber(overview?.kpis?.salesOrders)} orders captured`,
+        href: "/dashboards/admin/order-management/sales-orders",
+      },
+    ],
+    [overview],
+  );
 
   return (
     <AdminShell user={user} title="Admin Dashboard">
@@ -143,6 +182,30 @@ export default function AdminDashboardPage() {
           ))}
         </div>
 
+        <div className="rounded-2xl bg-white border shadow-sm p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-lg font-semibold text-zinc-900">Quick Actions</div>
+              <div className="text-sm text-zinc-500">Start the most common admin workflows.</div>
+            </div>
+            <div className="text-xs text-zinc-500">Admin ready checklist</div>
+          </div>
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+            {quickActions.map((action) => (
+              <Link
+                key={action.title}
+                href={action.href}
+                className="group rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 transition hover:border-emerald-300 hover:bg-white"
+              >
+                <div className="text-sm font-semibold text-zinc-900 group-hover:text-emerald-700">
+                  {action.title}
+                </div>
+                <div className="mt-1 text-xs text-zinc-500">{action.description}</div>
+              </Link>
+            ))}
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
           <div className="rounded-2xl bg-white border shadow-sm p-5 xl:col-span-2">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -158,11 +221,18 @@ export default function AdminDashboardPage() {
           </div>
 
           <div className="rounded-2xl bg-white border shadow-sm p-5">
-            <div className="text-lg font-semibold text-zinc-900">Expense Mix</div>
-            <div className="text-sm text-zinc-500">Share by major cost centers.</div>
+            <div className="text-lg font-semibold text-zinc-900">Action Center</div>
+            <div className="text-sm text-zinc-500">Prioritize what needs attention today.</div>
             <div className="mt-4 space-y-3">
-              {chartData.expenseMix.map((item) => (
-                <ProgressRow key={item.label} label={item.label} value={item.value} />
+              {actionItems.map((item) => (
+                <Link
+                  key={item.title}
+                  href={item.href}
+                  className="block rounded-xl border border-zinc-200 px-3 py-2 transition hover:border-emerald-300 hover:bg-emerald-50"
+                >
+                  <div className="text-sm font-semibold text-zinc-900">{item.title}</div>
+                  <div className="text-xs text-zinc-500 mt-1">{item.detail}</div>
+                </Link>
               ))}
             </div>
           </div>
@@ -331,21 +401,6 @@ function StackedBarChart({ data }) {
           </div>
         </div>
       ))}
-    </div>
-  );
-}
-
-function ProgressRow({ label, value }) {
-  const maxValue = 100;
-  return (
-    <div>
-      <div className="flex items-center justify-between text-xs text-zinc-500">
-        <span>{label}</span>
-        <span>{value}%</span>
-      </div>
-      <div className="mt-1 h-2 rounded-full bg-zinc-100">
-        <div className="h-2 rounded-full bg-emerald-500" style={{ width: `${Math.min(value, maxValue)}%` }} />
-      </div>
     </div>
   );
 }
