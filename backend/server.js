@@ -16,6 +16,8 @@ const zonesRoutes = require("./src/routes/zones");
 const areasRoutes = require("./src/routes/areas");
 const vehiclesRoutes = require("./src/routes/vehicles");
 const messagesRoutes = require("./src/routes/messages");
+const expensesRoutes = require("./src/routes/expenses");
+const accountsRoutes = require("./src/routes/accounts");
 
 const app = express();
 
@@ -33,6 +35,8 @@ app.use("/api/vehicles", vehiclesRoutes);
 app.use("/api/products", productsRoutes);
 app.use("/api/inventory", inventoryRoutes);
 app.use("/api/messages", messagesRoutes);
+app.use("/api/expenses", expensesRoutes);
+app.use("/api/accounts", accountsRoutes);
 
 
 // CORS for your live domain
