@@ -369,6 +369,256 @@ router.get("/overview", requireAuth, async (req, res) => {
   }
 });
 
+router.get("/operations", requireAuth, async (req, res) => {
+  try {
+    const activityStart = new Date();
+    activityStart.setHours(0, 0, 0, 0);
+    activityStart.setDate(activityStart.getDate() - 13);
+
+    const [
+      totalOrders,
+      orderStatusAgg,
+      onTimeDispatchCount,
+      dispatchedWithEtaCount,
+      cycleTimeAgg,
+      totalVehicles,
+      trackedVehicles,
+      totalWarehouses,
+      activeWarehousesAgg,
+      totalTransfers,
+      completedTransfers,
+      pendingTransfers,
+      pendingExpenses,
+      pendingReturns,
+      lowStockItems,
+      regionalActivityAgg,
+    ] = await Promise.all([
+      SalesOrder.countDocuments(),
+      SalesOrder.aggregate([{ $group: { _id: "$status", total: { $sum: 1 } } }]),
+      SalesOrder.countDocuments({
+        status: { $in: ["dispatched", "completed"] },
+        dispatchedAt: { $ne: null },
+        expectedDelivery: { $ne: null },
+        $expr: { $lte: ["$dispatchedAt", "$expectedDelivery"] },
+      }),
+      SalesOrder.countDocuments({
+        status: { $in: ["dispatched", "completed"] },
+        dispatchedAt: { $ne: null },
+        expectedDelivery: { $ne: null },
+      }),
+      SalesOrder.aggregate([
+        { $match: { status: "completed", completedAt: { $ne: null } } },
+        {
+          $project: {
+            hours: {
+              $divide: [{ $subtract: ["$completedAt", "$createdAt"] }, 1000 * 60 * 60],
+            },
+          },
+        },
+        { $group: { _id: null, avgHours: { $avg: "$hours" } } },
+      ]),
+      Vehicle.countDocuments(),
+      Vehicle.countDocuments({ gpsLatitude: { $ne: "" }, gpsLongitude: { $ne: "" } }),
+      Warehouse.countDocuments(),
+      InventoryMovement.aggregate([
+        { $match: { createdAt: { $gte: activityStart } } },
+        { $group: { _id: "$warehouseId" } },
+      ]),
+      StockTransfer.countDocuments(),
+      StockTransfer.countDocuments({ status: "completed" }),
+      StockTransfer.countDocuments({ status: { $in: ["pending", "approved", "transit-in"] } }),
+      Expense.countDocuments({ status: "pending" }),
+      ReturnClaim.countDocuments({ status: { $in: ["pending", "in_review"] } }),
+      (async () => {
+        const summary = await InventoryMovement.aggregate([
+          {
+            $group: {
+              _id: { productId: "$productId", warehouseId: "$warehouseId" },
+              quantity: { $sum: "$quantity" },
+            },
+          },
+        ]);
+        const products = await Product.find().select("productId minStockLevel").lean();
+        return products.flatMap((product) => {
+          const matches = summary.filter((s) => s._id.productId === product.productId);
+          if (!matches.length) {
+            return [
+              {
+                productId: product.productId,
+                minStockLevel: product.minStockLevel || 0,
+                quantity: 0,
+              },
+            ];
+          }
+          return matches.map((s) => ({
+            productId: product.productId,
+            minStockLevel: product.minStockLevel || 0,
+            quantity: s.quantity || 0,
+          }));
+        });
+      })(),
+      InventoryMovement.aggregate([
+        { $match: { movementType: "SALE_OUT", createdAt: { $gte: activityStart } } },
+        {
+          $group: {
+            _id: "$regionName",
+            orders: { $sum: 1 },
+            quantity: { $sum: "$quantity" },
+          },
+        },
+        { $sort: { orders: -1 } },
+        { $limit: 3 },
+      ]),
+    ]);
+
+    const statusMap = orderStatusAgg.reduce((acc, entry) => {
+      acc[entry._id] = safeNumber(entry.total);
+      return acc;
+    }, {});
+
+    const pendingOrders = safeNumber(statusMap.pending);
+    const approvedOrders = safeNumber(statusMap.approved);
+    const dispatchedOrders = safeNumber(statusMap.dispatched);
+    const completedOrders = safeNumber(statusMap.completed);
+    const totalActiveOrders = totalOrders || 0;
+
+    const orderFillRate =
+      totalActiveOrders === 0
+        ? 0
+        : Math.round(((dispatchedOrders + completedOrders) / totalActiveOrders) * 1000) / 10;
+
+    const onTimeDispatchRate =
+      dispatchedWithEtaCount === 0
+        ? 0
+        : Math.round((onTimeDispatchCount / dispatchedWithEtaCount) * 1000) / 10;
+
+    const [cycleTimeDoc] = cycleTimeAgg;
+    const cycleTimeHours = cycleTimeDoc?.avgHours ? Math.round(cycleTimeDoc.avgHours * 10) / 10 : 0;
+
+    const activeWarehouses = activeWarehousesAgg.length;
+    const warehouseUtilization =
+      totalWarehouses === 0 ? 0 : Math.round((activeWarehouses / totalWarehouses) * 100);
+
+    const fleetCoverage =
+      totalVehicles === 0 ? 0 : Math.round((trackedVehicles / totalVehicles) * 100);
+
+    const approvalRate =
+      totalActiveOrders === 0
+        ? 0
+        : Math.round(((approvedOrders + dispatchedOrders + completedOrders) / totalActiveOrders) * 100);
+
+    const transferCompletionRate =
+      totalTransfers === 0 ? 0 : Math.round((completedTransfers / totalTransfers) * 100);
+
+    const lowStockCount = lowStockItems.filter((item) => item.quantity <= item.minStockLevel).length;
+
+    const alerts = [
+      {
+        title: "Pending order approvals",
+        detail: `${pendingOrders + approvedOrders} orders awaiting dispatch readiness.`,
+        severity: pendingOrders + approvedOrders > 20 ? "High" : "Medium",
+      },
+      {
+        title: "Low stock risk",
+        detail: `${lowStockCount} SKUs at or below minimum stock level.`,
+        severity: lowStockCount > 0 ? "Medium" : "Low",
+      },
+      {
+        title: "Stock transfers in progress",
+        detail: `${pendingTransfers} transfers still in transit or pending approval.`,
+        severity: pendingTransfers > 10 ? "Medium" : "Low",
+      },
+    ];
+
+    const focusItems = [
+      {
+        title: "Clear backlog approvals",
+        owner: "Order Desk",
+        time: `${pendingOrders} pending orders`,
+      },
+      {
+        title: "Resolve low stock replenishment",
+        owner: "Inventory Team",
+        time: `${lowStockCount} items below threshold`,
+      },
+      {
+        title: "Complete transfer confirmations",
+        owner: "Warehouse Ops",
+        time: `${pendingTransfers} transfers open`,
+      },
+      {
+        title: "Review pending expenses",
+        owner: "Finance Ops",
+        time: `${pendingExpenses} expense requests`,
+      },
+      {
+        title: "Review return claims",
+        owner: "Quality Team",
+        time: `${pendingReturns} claims pending`,
+      },
+    ];
+
+    const totalRegionalOrders = regionalActivityAgg.reduce((sum, row) => sum + safeNumber(row.orders), 0);
+    const regionalCompletion = regionalActivityAgg.map((row) => {
+      const percentage =
+        totalRegionalOrders === 0 ? 0 : Math.round((safeNumber(row.orders) / totalRegionalOrders) * 100);
+      return {
+        region: row._id || "Unassigned",
+        value: percentage,
+        orders: safeNumber(row.orders),
+      };
+    });
+
+    return res.json({
+      ok: true,
+      kpis: {
+        orderFillRate,
+        onTimeDispatchRate,
+        cycleTimeHours,
+        backlogOrders: pendingOrders + approvedOrders,
+        totalOrders: totalActiveOrders,
+        approvedOrders,
+        dispatchedOrders,
+        completedOrders,
+      },
+      serviceHealth: [
+        {
+          title: "Fleet Tracking Coverage",
+          value: fleetCoverage,
+          note: `${trackedVehicles}/${totalVehicles} vehicles reporting`,
+        },
+        {
+          title: "Warehouse Activity",
+          value: warehouseUtilization,
+          note: `${activeWarehouses}/${totalWarehouses} active in last 14 days`,
+        },
+        {
+          title: "Order Approval Rate",
+          value: approvalRate,
+          note: `${approvedOrders + dispatchedOrders + completedOrders} of ${totalActiveOrders} orders`,
+        },
+        {
+          title: "Transfer Completion",
+          value: transferCompletionRate,
+          note: `${completedTransfers}/${totalTransfers} transfers closed`,
+        },
+      ],
+      alerts,
+      focusItems,
+      pipeline: [
+        { label: "Orders Captured", value: totalActiveOrders },
+        { label: "Orders Approved", value: approvedOrders },
+        { label: "Picking & Packing", value: approvedOrders + dispatchedOrders },
+        { label: "Dispatched", value: dispatchedOrders + completedOrders },
+      ],
+      regionalCompletion,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to load operations dashboard" });
+  }
+});
+
 function getIsoWeek(date) {
   const target = new Date(date.valueOf());
   const dayNr = (date.getDay() + 6) % 7;
