@@ -26,7 +26,7 @@ export default function LoginPage() {
     if (role === "admin") return "/dashboards/admin";
     if (role === "hr") return "/dashboards/hr";
     if (role === "accounts") return "/dashboards/accounts";
-    if (role === "sales") return "/dashboards/sales";
+    if (role === "Sales Manager") return "/dashboards/sales";
     if (role === "warehouse") return "/dashboards/warehouse";
     // return "/dashboards/admin";
   };
