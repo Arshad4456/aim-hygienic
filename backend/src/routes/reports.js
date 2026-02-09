@@ -74,6 +74,108 @@ router.get("/overview", requireAuth, async (req, res) => {
   }
 });
 
+router.get("/builder", requireAuth, async (req, res) => {
+  try {
+    const [salesAgg] = await InventoryMovement.aggregate([
+      { $match: { movementType: "SALE_OUT" } },
+      {
+        $group: {
+          _id: null,
+          orders: { $sum: 1 },
+          lastRunAt: { $max: "$createdAt" },
+        },
+      },
+    ]);
+
+    const [inventoryAgg] = await InventoryMovement.aggregate([
+      {
+        $group: {
+          _id: null,
+          movementCount: { $sum: 1 },
+          lastRunAt: { $max: "$createdAt" },
+        },
+      },
+    ]);
+
+    const [expenseAgg] = await Expense.aggregate([
+      {
+        $group: {
+          _id: null,
+          count: { $sum: 1 },
+          pending: {
+            $sum: {
+              $cond: [{ $eq: ["$status", "pending"] }, 1, 0],
+            },
+          },
+          lastRunAt: { $max: "$createdAt" },
+        },
+      },
+    ]);
+
+    const [transferAgg] = await StockTransfer.aggregate([
+      {
+        $group: {
+          _id: null,
+          count: { $sum: 1 },
+          inProgress: {
+            $sum: {
+              $cond: [{ $in: ["$status", ["pending", "in_transit"]] }, 1, 0],
+            },
+          },
+          lastRunAt: { $max: "$createdAt" },
+        },
+      },
+    ]);
+
+    const rows = [
+      {
+        id: "sales-performance",
+        title: "Sales Performance Snapshot",
+        owner: "Finance",
+        cadence: "Daily",
+        lastRunAt: salesAgg?.lastRunAt || null,
+        recordCount: safeNumber(salesAgg?.orders),
+        status: salesAgg?.orders ? "Ready" : "Draft",
+      },
+      {
+        id: "inventory-health",
+        title: "Inventory Health Overview",
+        owner: "Supply Chain",
+        cadence: "Weekly",
+        lastRunAt: inventoryAgg?.lastRunAt || null,
+        recordCount: safeNumber(inventoryAgg?.movementCount),
+        status: inventoryAgg?.movementCount ? "Ready" : "Draft",
+      },
+      {
+        id: "expense-category",
+        title: "Expense Category Tracker",
+        owner: "Accounts",
+        cadence: "Weekly",
+        lastRunAt: expenseAgg?.lastRunAt || null,
+        recordCount: safeNumber(expenseAgg?.count),
+        status: expenseAgg?.pending ? "Needs review" : expenseAgg?.count ? "Ready" : "Draft",
+      },
+      {
+        id: "transfer-status",
+        title: "Transfer Status Monitor",
+        owner: "Logistics",
+        cadence: "Daily",
+        lastRunAt: transferAgg?.lastRunAt || null,
+        recordCount: safeNumber(transferAgg?.count),
+        status: transferAgg?.inProgress ? "Needs review" : transferAgg?.count ? "Ready" : "Draft",
+      },
+    ];
+
+    return res.json({
+      ok: true,
+      generatedAt: new Date().toISOString(),
+      rows,
+    });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to load report builder data" });
+  }
+});
+
 router.get("/sales", requireAuth, async (req, res) => {
   try {
     const rows = await InventoryMovement.aggregate([
