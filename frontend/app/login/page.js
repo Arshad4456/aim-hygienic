@@ -24,11 +24,7 @@ export default function LoginPage() {
 
   const roleRedirect = (role) => {
     if (role === "admin") return "/dashboards/admin";
-    if (role === "hr") return "/dashboards/hr";
-    if (role === "accounts") return "/dashboards/accounts";
-    if (role === "sales") return "/dashboards/sales";
-    if (role === "warehouse") return "/dashboards/warehouse";
-    return "/dashboards/admin";
+    return "/dashboards/sales-manager";
   };
 
   async function onSubmit(e) {
