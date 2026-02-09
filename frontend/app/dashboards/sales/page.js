@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "../../lib/api";
+import SalesShell from "./components/SalesShell";
 
 export default function SalesManagerDashboardPage() {
   const router = useRouter();
@@ -77,23 +78,23 @@ export default function SalesManagerDashboardPage() {
   const companyName = overview?.company?.name || user?.companyName || "—";
 
   return (
-    <div className="min-h-screen bg-zinc-50">
-      <div className="border-b bg-white">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-4">
-          <div>
-            <div className="text-xs uppercase tracking-wide text-zinc-400">Sales Manager</div>
-            <h1 className="text-xl font-semibold text-zinc-900">Company Sales Dashboard</h1>
-            <p className="text-sm text-zinc-500">
-              Company: <span className="font-medium text-zinc-700">{companyName}</span>
-            </p>
-          </div>
-          <div className="rounded-2xl border bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
-            Welcome back, {user?.fullName || "Sales Manager"}
+    <SalesShell title="Company Sales Dashboard" user={user}>
+      <div className="mx-auto max-w-6xl space-y-6">
+        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-xs uppercase tracking-wide text-zinc-400">Sales Manager</div>
+              <h1 className="text-xl font-semibold text-zinc-900">Company Sales Dashboard</h1>
+              <p className="text-sm text-zinc-500">
+                Company: <span className="font-medium text-zinc-700">{companyName}</span>
+              </p>
+            </div>
+            <div className="rounded-2xl border bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
+              Welcome back, {user?.fullName || "Sales Manager"}
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="mx-auto max-w-6xl space-y-6 px-4 py-6">
         {err ? (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {err}
@@ -158,7 +159,7 @@ export default function SalesManagerDashboardPage() {
           </div>
         </div>
       </div>
-    </div>
+    </SalesShell>
   );
 }
 
