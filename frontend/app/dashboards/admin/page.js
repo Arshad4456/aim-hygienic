@@ -39,6 +39,8 @@ export default function AdminDashboardPage() {
       }
     }
     loadOverview();
+    const interval = setInterval(loadOverview, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const kpis = useMemo(() => {
@@ -56,15 +58,27 @@ export default function AdminDashboardPage() {
         tone: "blue",
       },
       {
-        title: "Total Expenses",
-        value: formatCurrency(overview?.kpis?.expenseTotal),
-        sub: `Pending: ${formatNumber(overview?.kpis?.pendingExpenses)}`,
+        title: "Total Revenue",
+        value: formatCurrency(overview?.kpis?.totalRevenue),
+        sub: `Dispatched: ${formatNumber(overview?.kpis?.dispatchedOrders)}`,
+        tone: "emerald",
+      },
+      {
+        title: "Active Workforce",
+        value: formatNumber(overview?.kpis?.activeUsers),
+        sub: `Total Users: ${formatNumber(overview?.kpis?.totalUsers)}`,
+        tone: "blue",
+      },
+      {
+        title: "Tracked Vehicles",
+        value: formatNumber(overview?.kpis?.trackedVehicles),
+        sub: `Fleet: ${formatNumber(overview?.kpis?.totalVehicles)}`,
         tone: "amber",
       },
       {
-        title: "Active Users",
-        value: formatNumber(overview?.kpis?.activeUsers),
-        sub: "Currently active",
+        title: "Pending Expenses",
+        value: formatNumber(overview?.kpis?.pendingExpenses),
+        sub: `Total: ${formatCurrency(overview?.kpis?.expenseTotal)}`,
         tone: "violet",
       },
     ];
@@ -88,8 +102,74 @@ export default function AdminDashboardPage() {
       inventoryFlow: overview?.charts?.inventoryFlow?.length
         ? overview.charts.inventoryFlow
         : fallbackSeries.map((item) => ({ ...item, inbound: 0, outbound: 0 })),
+      dailyOrders: overview?.charts?.dailyOrders?.length
+        ? overview.charts.dailyOrders
+        : Array.from({ length: 14 }, (_, index) => ({ label: `Day ${index + 1}`, value: 0 })),
+      weeklyRevenue: overview?.charts?.weeklyRevenue?.length
+        ? overview.charts.weeklyRevenue
+        : Array.from({ length: 8 }, (_, index) => ({ label: `W${index + 1}`, value: 0 })),
+      monthlyRevenue: overview?.charts?.monthlyRevenue?.length
+        ? overview.charts.monthlyRevenue
+        : Array.from({ length: 12 }, (_, index) => ({ label: `M${index + 1}`, value: 0 })),
+      yearlyRevenue: overview?.charts?.yearlyRevenue?.length
+        ? overview.charts.yearlyRevenue
+        : Array.from({ length: 3 }, (_, index) => ({ label: `Y${index + 1}`, value: 0 })),
     };
   }, [overview]);
+
+  const moduleCards = useMemo(
+    () => [
+      {
+        title: "Sales & Orders",
+        value: formatNumber(overview?.modules?.salesOrders),
+        sub: `${formatNumber(overview?.modules?.dispatchedOrders)} dispatched`,
+        href: "/dashboards/admin/order-management",
+      },
+      {
+        title: "Inventory & Warehousing",
+        value: formatNumber(overview?.modules?.warehouses),
+        sub: `${formatNumber(overview?.modules?.products)} products`,
+        href: "/dashboards/admin/warehouse-inventory",
+      },
+      {
+        title: "Logistics & Fleet",
+        value: formatNumber(overview?.modules?.vehicles),
+        sub: `${formatNumber(overview?.kpis?.trackedVehicles)} tracked`,
+        href: "/dashboards/admin/logistics",
+      },
+      {
+        title: "Finance & Expenses",
+        value: formatCurrency(overview?.kpis?.expenseTotal),
+        sub: `${formatNumber(overview?.kpis?.pendingExpenses)} pending`,
+        href: "/dashboards/admin/finance",
+      },
+      {
+        title: "HR & Users",
+        value: formatNumber(overview?.kpis?.totalUsers),
+        sub: `${formatNumber(overview?.kpis?.activeUsers)} active`,
+        href: "/dashboards/admin/hr",
+      },
+      {
+        title: "Returns & Claims",
+        value: formatNumber(overview?.modules?.returns),
+        sub: "Claims in queue",
+        href: "/dashboards/admin/order-management/returns",
+      },
+      {
+        title: "Messages",
+        value: formatNumber(overview?.modules?.messages),
+        sub: "Ops communications",
+        href: "/dashboards/admin/messages",
+      },
+      {
+        title: "Reports & Analytics",
+        value: "View",
+        sub: "Cross-module dashboards",
+        href: "/dashboards/admin/reports",
+      },
+    ],
+    [overview],
+  );
 
   const quickActions = [
     {
@@ -164,7 +244,7 @@ export default function AdminDashboardPage() {
           </div>
         ) : null}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           {kpis.map((k) => (
             <div key={k.title} className="rounded-2xl bg-white border shadow-sm p-4">
               <div className="text-sm text-zinc-500">{k.title}</div>
@@ -175,6 +255,29 @@ export default function AdminDashboardPage() {
               </div>
             </div>
           ))}
+        </div>
+
+        <div className="rounded-2xl bg-white border shadow-sm p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-lg font-semibold text-zinc-900">Module Intelligence</div>
+              <div className="text-sm text-zinc-500">Real-time rollups across every business function.</div>
+            </div>
+            <div className="text-xs text-emerald-600">Refreshing every 30 seconds</div>
+          </div>
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+            {moduleCards.map((card) => (
+              <Link
+                key={card.title}
+                href={card.href}
+                className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 transition hover:border-emerald-300 hover:bg-white"
+              >
+                <div className="text-sm text-zinc-500">{card.title}</div>
+                <div className="mt-1 text-xl font-semibold text-zinc-900">{card.value}</div>
+                <div className="mt-1 text-xs text-zinc-500">{card.sub}</div>
+              </Link>
+            ))}
+          </div>
         </div>
 
         <div className="rounded-2xl bg-white border shadow-sm p-5">
@@ -239,6 +342,10 @@ export default function AdminDashboardPage() {
             <div className="mb-4">
               <StackedBarChart data={chartData.inventoryFlow} />
             </div>
+            <div className="text-lg font-semibold text-zinc-900 mb-4">Daily Orders (Last 14 Days)</div>
+            <div className="mb-4">
+              <BarChart data={chartData.dailyOrders} colorClass="bg-blue-500" />
+            </div>
             <div className="text-lg font-semibold text-zinc-900 mb-4">Recent Inventory Movements</div>
             <div className="overflow-auto rounded-xl border">
               <table className="min-w-[720px] w-full text-sm">
@@ -277,6 +384,18 @@ export default function AdminDashboardPage() {
           </div>
 
           <div className="space-y-4">
+            <div className="rounded-2xl bg-white border shadow-sm p-5">
+              <div className="text-lg font-semibold text-zinc-900 mb-4">Weekly Revenue (8 Weeks)</div>
+              <BarChart data={chartData.weeklyRevenue} colorClass="bg-emerald-500" />
+            </div>
+            <div className="rounded-2xl bg-white border shadow-sm p-5">
+              <div className="text-lg font-semibold text-zinc-900 mb-4">Monthly Revenue (12 Months)</div>
+              <BarChart data={chartData.monthlyRevenue} colorClass="bg-amber-500" />
+            </div>
+            <div className="rounded-2xl bg-white border shadow-sm p-5">
+              <div className="text-lg font-semibold text-zinc-900 mb-4">Yearly Revenue (3 Years)</div>
+              <BarChart data={chartData.yearlyRevenue} colorClass="bg-violet-500" />
+            </div>
             <div className="rounded-2xl bg-white border shadow-sm p-5">
               <div className="text-lg font-semibold text-zinc-900 mb-4">Recent Expenses</div>
               <div className="space-y-3">

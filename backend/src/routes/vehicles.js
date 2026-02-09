@@ -1,101 +1,151 @@
 const express = require("express");
-const Vehicle = require("../models/Vehicle");
 const { requireAuth } = require("../utils/auth");
+const SalesOrder = require("../models/SalesOrder");
 
 const router = express.Router();
 
-router.post("/", requireAuth, async (req, res) => {
-  try {
-    const body = req.body || {};
-    const doc = await Vehicle.create({
-      vehicleId: String(body.vehicleId || "").trim(),
-      name: String(body.name || "").trim(),
-      type: String(body.type || "").trim(),
-      plateNumber: String(body.plateNumber || "").trim(),
-      driverId: String(body.driverId || "").trim(),
-      driverName: String(body.driverName || "").trim(),
-      deliveryCapacity: Number(body.deliveryCapacity || 0),
-      attachLevel: String(body.attachLevel || "warehouse").trim(),
-      warehouseId: String(body.warehouseId || "").trim(),
-      warehouseName: String(body.warehouseName || "").trim(),
-      regionId: String(body.regionId || "").trim(),
-      regionName: String(body.regionName || "").trim(),
-      zoneId: String(body.zoneId || "").trim(),
-      zoneName: String(body.zoneName || "").trim(),
-      areaId: String(body.areaId || "").trim(),
-      areaName: String(body.areaName || "").trim(),
-      createdBy: req.user?.uid,
-    });
-    return res.status(201).json({ ok: true, vehicle: doc });
-  } catch (e) {
-    if (e?.code === 11000) {
-      return res.status(409).json({ ok: false, message: "Vehicle ID already exists" });
-    }
-    return res.status(500).json({ ok: false, message: "Failed to create vehicle" });
-  }
-});
+function normalizeItems(items = []) {
+  return items
+    .filter((item) => item && item.productName && Number(item.quantity) > 0)
+    .map((item) => ({
+      productName: String(item.productName).trim(),
+      productCode: item.productCode ? String(item.productCode).trim() : undefined,
+      quantity: Number(item.quantity),
+      unitPrice: Number(item.unitPrice || 0),
+    }));
+}
 
 router.get("/", requireAuth, async (req, res) => {
   try {
-    const items = await Vehicle.find().sort({ createdAt: -1 }).lean();
-    return res.json({ ok: true, vehicles: items });
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const orders = await SalesOrder.find().sort({ createdAt: -1 }).limit(limit).lean();
+    return res.json({ ok: true, orders });
   } catch (e) {
-    return res.status(500).json({ ok: false, message: "Failed to load vehicles" });
+    return res.status(500).json({ ok: false, message: "Failed to load sales orders" });
   }
 });
 
-router.get("/:id", requireAuth, async (req, res) => {
+router.get("/approvals", requireAuth, async (req, res) => {
   try {
-    const item = await Vehicle.findById(req.params.id).lean();
-    if (!item) return res.status(404).json({ ok: false, message: "Not found" });
-    return res.json({ ok: true, vehicle: item });
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const orders = await SalesOrder.find({ status: "pending" })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+    return res.json({ ok: true, orders });
   } catch (e) {
-    return res.status(400).json({ ok: false, message: "Invalid id" });
+    return res.status(500).json({ ok: false, message: "Failed to load approval queue" });
   }
 });
 
-router.put("/:id", requireAuth, async (req, res) => {
+router.get("/dispatch", requireAuth, async (req, res) => {
   try {
-    const body = req.body || {};
-    const updated = await Vehicle.findByIdAndUpdate(
-      req.params.id,
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const orders = await SalesOrder.find({ status: { $in: ["approved", "dispatched"] } })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+    return res.json({ ok: true, orders });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to load dispatch queue" });
+  }
+});
+
+router.get("/summary", requireAuth, async (req, res) => {
+  try {
+    const [summary] = await SalesOrder.aggregate([
       {
-        vehicleId: String(body.vehicleId || "").trim(),
-        name: String(body.name || "").trim(),
-        type: String(body.type || "").trim(),
-        plateNumber: String(body.plateNumber || "").trim(),
-        driverId: String(body.driverId || "").trim(),
-        driverName: String(body.driverName || "").trim(),
-        deliveryCapacity: Number(body.deliveryCapacity || 0),
-        attachLevel: String(body.attachLevel || "warehouse").trim(),
-        warehouseId: String(body.warehouseId || "").trim(),
-        warehouseName: String(body.warehouseName || "").trim(),
-        regionId: String(body.regionId || "").trim(),
-        regionName: String(body.regionName || "").trim(),
-        zoneId: String(body.zoneId || "").trim(),
-        zoneName: String(body.zoneName || "").trim(),
-        areaId: String(body.areaId || "").trim(),
-        areaName: String(body.areaName || "").trim(),
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          pending: { $sum: { $cond: [{ $eq: ["$status", "pending"] }, 1, 0] } },
+          approved: { $sum: { $cond: [{ $eq: ["$status", "approved"] }, 1, 0] } },
+          dispatched: { $sum: { $cond: [{ $eq: ["$status", "dispatched"] }, 1, 0] } },
+          completed: { $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] } },
+          totalAmount: { $sum: "$totalAmount" },
+        },
       },
-      { new: true, runValidators: true }
-    );
-    if (!updated) return res.status(404).json({ ok: false, message: "Not found" });
-    return res.json({ ok: true, vehicle: updated });
+    ]);
+
+    const recentOrders = await SalesOrder.find().sort({ createdAt: -1 }).limit(5).lean();
+
+    return res.json({
+      ok: true,
+      summary: {
+        total: summary?.total || 0,
+        pending: summary?.pending || 0,
+        approved: summary?.approved || 0,
+        dispatched: summary?.dispatched || 0,
+        completed: summary?.completed || 0,
+        totalAmount: summary?.totalAmount || 0,
+      },
+      recentOrders,
+    });
   } catch (e) {
-    if (e?.code === 11000) {
-      return res.status(409).json({ ok: false, message: "Vehicle ID already exists" });
-    }
-    return res.status(500).json({ ok: false, message: "Failed to update vehicle" });
+    return res.status(500).json({ ok: false, message: "Failed to load sales order summary" });
   }
 });
 
-router.delete("/:id", requireAuth, async (req, res) => {
+router.patch("/:id/status", requireAuth, async (req, res) => {
   try {
-    const deleted = await Vehicle.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ ok: false, message: "Not found" });
-    return res.json({ ok: true });
+    const {
+      status,
+      dispatchTracking,
+      dispatchVehicleId,
+      dispatchVehicleName,
+      dispatchDriverId,
+      dispatchDriverName,
+      cancellationReason,
+    } = req.body || {};
+    const allowed = ["pending", "approved", "dispatched", "completed", "cancelled"];
+    if (!allowed.includes(status)) {
+      return res.status(400).json({ ok: false, message: "Invalid status" });
+    }
+
+    const updates = { status };
+    if (dispatchTracking) updates.dispatchTracking = String(dispatchTracking).trim();
+    if (dispatchVehicleId) updates.dispatchVehicleId = String(dispatchVehicleId).trim();
+    if (dispatchVehicleName) updates.dispatchVehicleName = String(dispatchVehicleName).trim();
+    if (dispatchDriverId) updates.dispatchDriverId = String(dispatchDriverId).trim();
+    if (dispatchDriverName) updates.dispatchDriverName = String(dispatchDriverName).trim();
+    if (cancellationReason) updates.cancellationReason = String(cancellationReason).trim();
+    if (status === "dispatched") updates.dispatchedAt = new Date();
+    if (status === "completed") updates.completedAt = new Date();
+
+    const order = await SalesOrder.findByIdAndUpdate(req.params.id, updates, { new: true });
+    if (!order) {
+      return res.status(404).json({ ok: false, message: "Order not found" });
+    }
+    return res.json({ ok: true, order });
   } catch (e) {
-    return res.status(400).json({ ok: false, message: "Invalid id" });
+    return res.status(500).json({ ok: false, message: "Failed to update order status" });
+  }
+});
+
+router.post("/", requireAuth, async (req, res) => {
+  try {
+    const { orderNo, customerName, customerType, expectedDelivery, notes } = req.body || {};
+    const items = normalizeItems(req.body?.items || []);
+
+    if (!customerName || !items.length) {
+      return res.status(400).json({ ok: false, message: "Customer name and order items are required" });
+    }
+
+    const totalAmount = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+    const order = await SalesOrder.create({
+      orderNo: orderNo || `SO-${Date.now()}`,
+      customerName: String(customerName).trim(),
+      customerType: customerType || "customer",
+      expectedDelivery: expectedDelivery ? new Date(expectedDelivery) : undefined,
+      items,
+      totalAmount,
+      notes: notes ? String(notes).trim() : undefined,
+      createdBy: req.user?._id,
+    });
+
+    return res.status(201).json({ ok: true, order });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to create sales order" });
   }
 });
 

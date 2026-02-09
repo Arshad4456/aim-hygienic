@@ -88,7 +88,15 @@ router.get("/summary", requireAuth, async (req, res) => {
 
 router.patch("/:id/status", requireAuth, async (req, res) => {
   try {
-    const { status, dispatchTracking, cancellationReason } = req.body || {};
+    const {
+      status,
+      dispatchTracking,
+      dispatchVehicleId,
+      dispatchVehicleName,
+      dispatchDriverId,
+      dispatchDriverName,
+      cancellationReason,
+    } = req.body || {};
     const allowed = ["pending", "approved", "dispatched", "completed", "cancelled"];
     if (!allowed.includes(status)) {
       return res.status(400).json({ ok: false, message: "Invalid status" });
@@ -96,6 +104,10 @@ router.patch("/:id/status", requireAuth, async (req, res) => {
 
     const updates = { status };
     if (dispatchTracking) updates.dispatchTracking = String(dispatchTracking).trim();
+    if (dispatchVehicleId) updates.dispatchVehicleId = String(dispatchVehicleId).trim();
+    if (dispatchVehicleName) updates.dispatchVehicleName = String(dispatchVehicleName).trim();
+    if (dispatchDriverId) updates.dispatchDriverId = String(dispatchDriverId).trim();
+    if (dispatchDriverName) updates.dispatchDriverName = String(dispatchDriverName).trim();
     if (cancellationReason) updates.cancellationReason = String(cancellationReason).trim();
     if (status === "dispatched") updates.dispatchedAt = new Date();
     if (status === "completed") updates.completedAt = new Date();
