@@ -45,6 +45,8 @@ export default function OrderManagementModulePage() {
       }
     }
     loadSummary();
+    const interval = setInterval(loadSummary, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const stats = useMemo(
@@ -70,6 +72,7 @@ export default function OrderManagementModulePage() {
                 Manage the end-to-end sales order lifecycle from request to delivery.
               </div>
             </div>
+            <div className="text-xs text-emerald-600">Auto-refreshing every 30 seconds</div>
             <Link
               href="/dashboards/admin/order-management/sales-orders"
               className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
