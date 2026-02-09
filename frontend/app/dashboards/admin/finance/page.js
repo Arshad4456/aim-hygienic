@@ -78,17 +78,23 @@ export default function FinanceModulePage() {
             </div>
           ))}
         </div>
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {cards.map((card) => (
-            <Link
-              key={card.title}
-              href={card.href}
-              className="rounded-2xl border bg-zinc-50 p-4 hover:bg-white hover:shadow"
-            >
-              <div className="text-sm font-semibold text-zinc-900">{card.title}</div>
-              <div className="text-xs text-zinc-500 mt-2">{card.description}</div>
-            </Link>
-          ))}
+        <div className="mt-6">
+          <div className="text-sm font-semibold text-zinc-900">Master Modules</div>
+          <div className="text-xs text-zinc-500 mt-1">
+            Invoices, receipts, and aging reports live under Finance & Accounts.
+          </div>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {cards.map((card) => (
+              <Link
+                key={card.title}
+                href={card.href}
+                className="rounded-2xl border bg-zinc-50 p-4 hover:bg-white hover:shadow"
+              >
+                <div className="text-sm font-semibold text-zinc-900">{card.title}</div>
+                <div className="text-xs text-zinc-500 mt-2">{card.description}</div>
+              </Link>
+            ))}
+          </div>
         </div>
       </div>
     </AdminShell>
