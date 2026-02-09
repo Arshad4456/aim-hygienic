@@ -28,6 +28,8 @@ export function roleToDashboard(role) {
       return "/dashboards/tse";
     case "salesman":
       return "/dashboards/salesman";
+    case "sales":
+      return "/dashboards/sales";
     default:
       return "/dashboards/admin";
   }

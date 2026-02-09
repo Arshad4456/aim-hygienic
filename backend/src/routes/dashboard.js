@@ -17,6 +17,26 @@ function safeNumber(value) {
   return Number.isFinite(Number(value)) ? Number(value) : 0;
 }
 
+function mergeMatch(base, extra) {
+  return extra ? { ...base, ...extra } : base;
+}
+
+async function getCompanyScope(userId) {
+  if (!userId) return null;
+  const user = await User.findById(userId).lean();
+  if (!user) return null;
+  const companyId = user.companyId;
+  const companyName = user.companyName;
+  if (!companyId && !companyName) return { user, companyQuery: null, userIds: [] };
+  const companyQuery = companyId ? { companyId } : { companyName };
+  const companyUsers = await User.find(companyQuery).select("_id").lean();
+  return {
+    user,
+    companyQuery,
+    userIds: companyUsers.map((entry) => entry._id),
+  };
+}
+
 function buildDateSeries({ startDate, days }) {
   return Array.from({ length: days }, (_, index) => {
     const date = new Date(startDate);
@@ -39,6 +59,12 @@ function formatYearKey(date) {
 
 router.get("/overview", requireAuth, async (req, res) => {
   try {
+    const isSalesManager = req.user?.role === "sales";
+    const companyScope = isSalesManager ? await getCompanyScope(req.user?.uid) : null;
+    const createdByMatch =
+      companyScope?.userIds?.length ? { createdBy: { $in: companyScope.userIds } } : null;
+    const companyMatch = companyScope?.companyQuery || null;
+
     const startDate = new Date();
     startDate.setHours(0, 0, 0, 0);
     startDate.setDate(startDate.getDate() - 6);
@@ -85,10 +111,11 @@ router.get("/overview", requireAuth, async (req, res) => {
       yearlyRevenueAgg,
     ] = await Promise.all([
       InventoryMovement.aggregate([
-        { $match: { movementType: "SALE_OUT" } },
+        { $match: mergeMatch({ movementType: "SALE_OUT" }, createdByMatch) },
         { $group: { _id: null, orders: { $sum: 1 }, quantity: { $sum: "$quantity" } } },
       ]),
       InventoryMovement.aggregate([
+        ...(createdByMatch ? [{ $match: createdByMatch }] : []),
         {
           $group: {
             _id: null,
@@ -114,6 +141,7 @@ router.get("/overview", requireAuth, async (req, res) => {
         },
       ]),
       Expense.aggregate([
+        ...(createdByMatch ? [{ $match: createdByMatch }] : []),
         {
           $group: {
             _id: null,
@@ -122,15 +150,18 @@ router.get("/overview", requireAuth, async (req, res) => {
           },
         },
       ]),
-      User.countDocuments({ status: "active" }),
-      User.countDocuments(),
-      Product.countDocuments(),
-      Warehouse.countDocuments(),
-      Vehicle.countDocuments(),
-      Vehicle.countDocuments({ gpsLatitude: { $ne: "" }, gpsLongitude: { $ne: "" } }),
+      User.countDocuments(mergeMatch({ status: "active" }, companyMatch)),
+      User.countDocuments(companyMatch || {}),
+      Product.countDocuments(companyMatch || {}),
+      Warehouse.countDocuments(companyMatch || {}),
+      Vehicle.countDocuments(createdByMatch || {}),
+      Vehicle.countDocuments(
+        mergeMatch({ gpsLatitude: { $ne: "" }, gpsLongitude: { $ne: "" } }, createdByMatch)
+      ),
       Message.countDocuments(),
       ReturnClaim.countDocuments(),
       SalesOrder.aggregate([
+        ...(createdByMatch ? [{ $match: createdByMatch }] : []),
         {
           $group: {
             _id: null,
@@ -143,11 +174,14 @@ router.get("/overview", requireAuth, async (req, res) => {
           },
         },
       ]),
-      InventoryMovement.find().sort({ createdAt: -1 }).limit(5).lean(),
-      Expense.find().sort({ createdAt: -1 }).limit(5).lean(),
-      StockTransfer.find().sort({ createdAt: -1 }).limit(5).lean(),
+      InventoryMovement.find(createdByMatch || {}).sort({ createdAt: -1 }).limit(5).lean(),
+      Expense.find(createdByMatch || {}).sort({ createdAt: -1 }).limit(5).lean(),
+      StockTransfer.find(createdByMatch ? { requestedBy: { $in: companyScope.userIds } } : {})
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean(),
       InventoryMovement.aggregate([
-        { $match: { movementType: "SALE_OUT", createdAt: { $gte: startDate } } },
+        { $match: mergeMatch({ movementType: "SALE_OUT", createdAt: { $gte: startDate } }, createdByMatch) },
         {
           $group: {
             _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
@@ -157,7 +191,7 @@ router.get("/overview", requireAuth, async (req, res) => {
         },
       ]),
       InventoryMovement.aggregate([
-        { $match: { createdAt: { $gte: startDate } } },
+        { $match: mergeMatch({ createdAt: { $gte: startDate } }, createdByMatch) },
         {
           $group: {
             _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
@@ -183,7 +217,7 @@ router.get("/overview", requireAuth, async (req, res) => {
         },
       ]),
       SalesOrder.aggregate([
-        { $match: { createdAt: { $gte: dailyStart } } },
+        { $match: mergeMatch({ createdAt: { $gte: dailyStart } }, createdByMatch) },
         {
           $group: {
             _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
@@ -193,7 +227,7 @@ router.get("/overview", requireAuth, async (req, res) => {
         },
       ]),
       SalesOrder.aggregate([
-        { $match: { createdAt: { $gte: weekStart } } },
+        { $match: mergeMatch({ createdAt: { $gte: weekStart } }, createdByMatch) },
         {
           $group: {
             _id: { year: { $isoWeekYear: "$createdAt" }, week: { $isoWeek: "$createdAt" } },
@@ -202,7 +236,7 @@ router.get("/overview", requireAuth, async (req, res) => {
         },
       ]),
       SalesOrder.aggregate([
-        { $match: { createdAt: { $gte: monthStart } } },
+        { $match: mergeMatch({ createdAt: { $gte: monthStart } }, createdByMatch) },
         {
           $group: {
             _id: { $dateToString: { format: "%Y-%m", date: "$createdAt" } },
@@ -211,7 +245,7 @@ router.get("/overview", requireAuth, async (req, res) => {
         },
       ]),
       SalesOrder.aggregate([
-        { $match: { createdAt: { $gte: yearStart } } },
+        { $match: mergeMatch({ createdAt: { $gte: yearStart } }, createdByMatch) },
         {
           $group: {
             _id: { $dateToString: { format: "%Y", date: "$createdAt" } },
