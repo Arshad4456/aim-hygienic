@@ -49,7 +49,7 @@ export default function SalesManagerDashboardPage() {
       {
         label: "Revenue Captured",
         value: formatCurrency(overview?.orders?.revenue),
-        helper: `Rs. {formatNumber(overview?.orders?.byStatus?.dispatched)} dispatched`,
+        helper: `${formatNumber(overview?.orders?.byStatus?.dispatched)} dispatched`,
       },
       {
         label: "Active Sales Team",
