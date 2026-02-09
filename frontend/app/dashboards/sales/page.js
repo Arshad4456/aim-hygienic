@@ -48,7 +48,7 @@ export default function SalesManagerDashboardPage() {
       },
       {
         label: "Revenue Captured",
-        value: formatCurrency(overview?.orders?.revenue),
+        value:Rs formatCurrency(overview?.orders?.revenue),
         helper: `${formatNumber(overview?.orders?.byStatus?.dispatched)} dispatched`,
       },
       {
