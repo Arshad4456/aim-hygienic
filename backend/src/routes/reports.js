@@ -256,4 +256,72 @@ router.get("/compliance", requireAuth, async (req, res) => {
   }
 });
 
+router.get("/procurement", requireAuth, async (req, res) => {
+  try {
+    const startDate = new Date();
+    startDate.setHours(0, 0, 0, 0);
+    startDate.setDate(startDate.getDate() - 6);
+
+    const [supplierTotal, supplierActive, purchaseAgg, recentPurchases, trendAgg] = await Promise.all([
+      User.countDocuments({ role: { $regex: /supplier/i } }),
+      User.countDocuments({ role: { $regex: /supplier/i }, status: "active" }),
+      InventoryMovement.aggregate([
+        { $match: { movementType: "PURCHASE_IN" } },
+        { $group: { _id: null, count: { $sum: 1 }, quantity: { $sum: "$quantity" } } },
+      ]),
+      InventoryMovement.find({ movementType: "PURCHASE_IN" })
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean(),
+      InventoryMovement.aggregate([
+        { $match: { movementType: "PURCHASE_IN", createdAt: { $gte: startDate } } },
+        {
+          $group: {
+            _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+            quantity: { $sum: "$quantity" },
+            count: { $sum: 1 },
+          },
+        },
+      ]),
+    ]);
+
+    const trendMap = trendAgg.reduce((acc, row) => {
+      acc[row._id] = {
+        quantity: safeNumber(row.quantity),
+        count: safeNumber(row.count),
+      };
+      return acc;
+    }, {});
+
+    const trendDates = Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(startDate);
+      date.setDate(startDate.getDate() + index);
+      return date;
+    });
+
+    const inboundTrend = trendDates.map((date) => {
+      const key = date.toISOString().slice(0, 10);
+      return {
+        label: date.toLocaleDateString("en-US", { weekday: "short" }),
+        quantity: trendMap[key]?.quantity || 0,
+        count: trendMap[key]?.count || 0,
+      };
+    });
+
+    return res.json({
+      ok: true,
+      kpis: {
+        totalSuppliers: supplierTotal,
+        activeSuppliers: supplierActive,
+        totalReceipts: purchaseAgg?.[0]?.count || 0,
+        totalQuantity: safeNumber(purchaseAgg?.[0]?.quantity),
+      },
+      recentPurchases,
+      inboundTrend,
+    });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to load procurement report" });
+  }
+});
+
 module.exports = router;
