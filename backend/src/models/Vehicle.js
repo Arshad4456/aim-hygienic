@@ -18,6 +18,9 @@ const VehicleSchema = new mongoose.Schema(
     zoneName: { type: String, trim: true },
     areaId: { type: String, trim: true },
     areaName: { type: String, trim: true },
+    gpsLatitude: { type: String, trim: true },
+    gpsLongitude: { type: String, trim: true },
+    lastReportedAt: { type: Date },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }

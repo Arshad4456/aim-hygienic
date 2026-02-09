@@ -4,9 +4,16 @@ const { requireAuth } = require("../utils/auth");
 
 const router = express.Router();
 
+function normalizeCoordinate(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 router.post("/", requireAuth, async (req, res) => {
   try {
     const body = req.body || {};
+    const gpsLatitude = normalizeCoordinate(body.gpsLatitude);
+    const gpsLongitude = normalizeCoordinate(body.gpsLongitude);
     const doc = await Vehicle.create({
       vehicleId: String(body.vehicleId || "").trim(),
       name: String(body.name || "").trim(),
@@ -24,6 +31,9 @@ router.post("/", requireAuth, async (req, res) => {
       zoneName: String(body.zoneName || "").trim(),
       areaId: String(body.areaId || "").trim(),
       areaName: String(body.areaName || "").trim(),
+      gpsLatitude: gpsLatitude !== null ? String(gpsLatitude) : "",
+      gpsLongitude: gpsLongitude !== null ? String(gpsLongitude) : "",
+      lastReportedAt: gpsLatitude !== null && gpsLongitude !== null ? new Date() : undefined,
       createdBy: req.user?.uid,
     });
     return res.status(201).json({ ok: true, vehicle: doc });
@@ -57,6 +67,8 @@ router.get("/:id", requireAuth, async (req, res) => {
 router.put("/:id", requireAuth, async (req, res) => {
   try {
     const body = req.body || {};
+    const gpsLatitude = normalizeCoordinate(body.gpsLatitude);
+    const gpsLongitude = normalizeCoordinate(body.gpsLongitude);
     const updated = await Vehicle.findByIdAndUpdate(
       req.params.id,
       {
@@ -76,6 +88,9 @@ router.put("/:id", requireAuth, async (req, res) => {
         zoneName: String(body.zoneName || "").trim(),
         areaId: String(body.areaId || "").trim(),
         areaName: String(body.areaName || "").trim(),
+        gpsLatitude: gpsLatitude !== null ? String(gpsLatitude) : "",
+        gpsLongitude: gpsLongitude !== null ? String(gpsLongitude) : "",
+        lastReportedAt: gpsLatitude !== null && gpsLongitude !== null ? new Date() : undefined,
       },
       { new: true, runValidators: true }
     );
