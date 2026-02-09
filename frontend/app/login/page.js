@@ -28,7 +28,7 @@ export default function LoginPage() {
     if (role === "accounts") return "/dashboards/accounts";
     if (role === "sales") return "/dashboards/sales";
     if (role === "warehouse") return "/dashboards/warehouse";
-    return "/dashboards/admin";
+    // return "/dashboards/admin";
   };
 
   async function onSubmit(e) {
