@@ -71,28 +71,23 @@ export default function AdminDashboardPage() {
   }, [overview]);
 
   const chartData = useMemo(() => {
-    const baseSeries = [
-      { label: "Mon", value: 12 },
-      { label: "Tue", value: 18 },
-      { label: "Wed", value: 15 },
-      { label: "Thu", value: 22 },
-      { label: "Fri", value: 19 },
-      { label: "Sat", value: 25 },
-      { label: "Sun", value: 16 },
+    const fallbackSeries = [
+      { label: "Mon", value: 0 },
+      { label: "Tue", value: 0 },
+      { label: "Wed", value: 0 },
+      { label: "Thu", value: 0 },
+      { label: "Fri", value: 0 },
+      { label: "Sat", value: 0 },
+      { label: "Sun", value: 0 },
     ];
-    const salesScale = overview?.kpis?.salesOrders ? Math.max(1, Math.round(overview.kpis.salesOrders / 10)) : 1;
-    const inventoryScale = overview?.kpis?.inventoryOnHand ? Math.max(1, Math.round(overview.kpis.inventoryOnHand / 50)) : 1;
 
     return {
-      salesTrend: baseSeries.map((item, index) => ({
-        ...item,
-        value: item.value + salesScale + index,
-      })),
-      inventoryFlow: baseSeries.map((item, index) => ({
-        ...item,
-        inbound: item.value + inventoryScale + index,
-        outbound: Math.max(2, item.value - 6 + index),
-      })),
+      salesTrend: overview?.charts?.salesTrend?.length
+        ? overview.charts.salesTrend
+        : fallbackSeries,
+      inventoryFlow: overview?.charts?.inventoryFlow?.length
+        ? overview.charts.inventoryFlow
+        : fallbackSeries.map((item) => ({ ...item, inbound: 0, outbound: 0 })),
     };
   }, [overview]);
 
@@ -291,7 +286,7 @@ export default function AdminDashboardPage() {
                       <div className="text-sm font-semibold text-zinc-900">{expense.title}</div>
                       <div className="text-xs text-zinc-500 mt-1">{expense.category || "Uncategorized"}</div>
                       <div className="text-sm font-semibold text-zinc-900 mt-2">
-                        ৳ {formatNumber(expense.amount)}
+                        ₨ {formatNumber(expense.amount)}
                       </div>
                     </div>
                   ))
@@ -336,7 +331,7 @@ function formatNumber(value) {
 
 function formatCurrency(value) {
   if (value === null || value === undefined) return "—";
-  return `৳ ${Number(value).toLocaleString()}`;
+  return `₨ ${Number(value).toLocaleString()}`;
 }
 
 function MiniSparkline({ tone }) {

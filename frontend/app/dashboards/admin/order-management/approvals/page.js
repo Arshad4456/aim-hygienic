@@ -65,7 +65,7 @@ export default function OrderApprovalsPage() {
                   <tr key={order._id} className="hover:bg-zinc-50">
                     <td className="px-3 py-2 border-b font-medium text-zinc-900">{order.orderNo}</td>
                     <td className="px-3 py-2 border-b">{order.customerName}</td>
-                    <td className="px-3 py-2 border-b">৳ {formatNumber(order.totalAmount)}</td>
+                    <td className="px-3 py-2 border-b">₨ {formatNumber(order.totalAmount)}</td>
                     <td className="px-3 py-2 border-b">
                       {order.orderDate ? new Date(order.orderDate).toLocaleDateString() : "—"}
                     </td>
