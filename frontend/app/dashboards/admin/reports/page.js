@@ -49,6 +49,8 @@ export default function ReportsModulePage() {
   const [filters, setFilters] = useState(defaultFilters);
   const [metrics, setMetrics] = useState(null);
   const [err, setErr] = useState("");
+  const [builderRows, setBuilderRows] = useState([]);
+  const [builderErr, setBuilderErr] = useState("");
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -63,6 +65,33 @@ export default function ReportsModulePage() {
     }
     loadOverview();
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadBuilder() {
+      setBuilderErr("");
+      try {
+        const query = new URLSearchParams(filters).toString();
+        const data = await apiFetch(`/reports/builder?${query}`);
+        if (isMounted) {
+          setBuilderRows(Array.isArray(data.rows) ? data.rows : []);
+        }
+      } catch (e) {
+        if (isMounted) {
+          setBuilderErr(e.message || "Failed to load report builder data");
+        }
+      }
+    }
+
+    loadBuilder();
+    const interval = setInterval(loadBuilder, 30000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [filters]);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000);
@@ -92,41 +121,10 @@ export default function ReportsModulePage() {
     },
   ];
 
-  const reportRows = [
-    {
-      title: "Sales Performance Snapshot",
-      owner: "Finance",
-      cadence: "Daily",
-      lastRun: "Auto-updated",
-      status: metrics ? "Ready" : "Draft",
-    },
-    {
-      title: "Inventory Health Overview",
-      owner: "Supply Chain",
-      cadence: "Weekly",
-      lastRun: "Auto-updated",
-      status: metrics?.totalWarehouses ? "Ready" : "Draft",
-    },
-    {
-      title: "Expense Category Tracker",
-      owner: "Accounts",
-      cadence: "Weekly",
-      lastRun: "Auto-updated",
-      status: metrics?.expenseCategories ? "Ready" : "Needs review",
-    },
-    {
-      title: "Transfer Status Monitor",
-      owner: "Logistics",
-      cadence: "Daily",
-      lastRun: "Auto-updated",
-      status: metrics?.transferStatuses ? "Ready" : "Draft",
-    },
-  ];
-
   const filteredRows = useMemo(() => {
-    if (filters.status === "all") return reportRows;
-    return reportRows.filter((row) => row.status.toLowerCase() === filters.status);
-  }, [filters.status]);
+    if (filters.status === "all") return builderRows;
+    return builderRows.filter((row) => row.status?.toLowerCase() === filters.status);
+  }, [builderRows, filters.status]);
 
   return (
     <AdminShell title="Reports" user={null}>
@@ -154,6 +152,11 @@ export default function ReportsModulePage() {
         {err ? (
           <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {err}
+          </div>
+        ) : null}
+        {builderErr ? (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+            {builderErr}
           </div>
         ) : null}
 
@@ -250,11 +253,11 @@ export default function ReportsModulePage() {
               </thead>
               <tbody>
                 {filteredRows.map((row) => (
-                  <tr key={row.title} className="hover:bg-zinc-50">
+                  <tr key={row.id || row.title} className="hover:bg-zinc-50">
                     <td className="px-3 py-2 border-b font-medium text-zinc-900">{row.title}</td>
                     <td className="px-3 py-2 border-b">{row.owner}</td>
                     <td className="px-3 py-2 border-b">{row.cadence}</td>
-                    <td className="px-3 py-2 border-b">{row.lastRun}</td>
+                    <td className="px-3 py-2 border-b">{formatDateTime(row.lastRunAt)}</td>
                     <td className="px-3 py-2 border-b">
                       <StatusPill status={row.status} />
                     </td>
@@ -298,4 +301,11 @@ function formatNumber(value) {
 function formatCurrency(value) {
   if (value === null || value === undefined) return "—";
   return `₨ ${Number(value).toLocaleString()}`;
+}
+
+function formatDateTime(value) {
+  if (!value) return "—";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString();
 }
