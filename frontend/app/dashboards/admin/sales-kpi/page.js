@@ -45,11 +45,7 @@ export default function SalesKpiPage() {
 
   const regionMix = useMemo(() => {
     if (regions.length) return regions.slice(0, 5);
-    return [
-      { region: "Islamabad", orders: 0, quantity: 0 },
-      { region: "Lahore", orders: 0, quantity: 0 },
-      { region: "Peshawar", orders: 0, quantity: 0 },
-    ];
+    return [];
   }, [regions]);
 
   return (
@@ -123,15 +119,19 @@ export default function SalesKpiPage() {
             <div className="rounded-2xl border bg-white p-4">
               <div className="text-sm font-semibold text-zinc-900">Regional Mix</div>
               <div className="mt-3 space-y-3">
-                {regionMix.map((row, index) => (
-                  <MixRow
-                    key={`${row.region}-${index}`}
-                    label={row.region}
-                    value={row.quantity}
-                    total={regionMix.reduce((sum, item) => sum + Number(item.quantity || 0), 0)}
-                    colorIndex={index}
-                  />
-                ))}
+                {regionMix.length === 0 ? (
+                  <div className="text-sm text-zinc-500">No regional mix data available.</div>
+                ) : (
+                  regionMix.map((row, index) => (
+                    <MixRow
+                      key={`${row.region}-${index}`}
+                      label={row.region}
+                      value={row.quantity}
+                      total={regionMix.reduce((sum, item) => sum + Number(item.quantity || 0), 0)}
+                      colorIndex={index}
+                    />
+                  ))
+                )}
               </div>
             </div>
             <InsightCard
