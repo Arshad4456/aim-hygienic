@@ -286,5 +286,5 @@ function formatNumber(value) {
 
 function formatCurrency(value) {
   if (value === null || value === undefined) return "—";
-  return `৳ ${Number(value).toLocaleString()}`;
+  return `₨ ${Number(value).toLocaleString()}`;
 }
