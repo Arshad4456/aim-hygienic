@@ -126,6 +126,12 @@ export default function AdminDashboardPage() {
         href: "/dashboards/admin/order-management",
       },
       {
+        title: "Operations Command Center",
+        value: "Live",
+        sub: "Service health overview",
+        href: "/dashboards/admin/operations",
+      },
+      {
         title: "Inventory & Warehousing",
         value: formatNumber(overview?.modules?.warehouses),
         sub: `${formatNumber(overview?.modules?.products)} products`,
