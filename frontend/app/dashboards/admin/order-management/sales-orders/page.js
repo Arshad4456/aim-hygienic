@@ -220,7 +220,7 @@ export default function SalesOrdersPage() {
               </div>
               <div className="mt-4 flex items-center justify-between text-sm font-semibold text-zinc-900">
                 <span>Total Amount</span>
-                <span>৳ {formatNumber(totalAmount)}</span>
+                <span>₨ {formatNumber(totalAmount)}</span>
               </div>
             </div>
 
@@ -288,7 +288,7 @@ export default function SalesOrdersPage() {
                       <td className="px-3 py-2 border-b">{order.customerName}</td>
                       <td className="px-3 py-2 border-b capitalize">{order.customerType}</td>
                       <td className="px-3 py-2 border-b capitalize">{order.status}</td>
-                      <td className="px-3 py-2 border-b">৳ {formatNumber(order.totalAmount)}</td>
+                      <td className="px-3 py-2 border-b">₨ {formatNumber(order.totalAmount)}</td>
                       <td className="px-3 py-2 border-b">
                         {order.orderDate ? new Date(order.orderDate).toLocaleDateString() : "—"}
                       </td>
