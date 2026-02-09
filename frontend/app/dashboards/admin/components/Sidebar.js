@@ -30,6 +30,7 @@ function Icon({ name }) {
   if (name === "logistics") return <span className={common}>🧭</span>;
   if (name === "hr") return <span className={common}>👥</span>;
   if (name === "messages") return <span className={common}>💬</span>;
+  if (name === "operations") return <span className={common}>🛰️</span>;
   return <span className={common}>•</span>;
 }
 
@@ -72,6 +73,12 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
   const menu = useMemo(
     () => [
       { type: "link", title: "Dashboard", href: "/dashboards/admin", icon: "dashboard" },
+      {
+        type: "link",
+        title: "Operations Command Center",
+        href: "/dashboards/admin/operations",
+        icon: "operations",
+      },
       { type: "link", title: "Sales KPI", href: "/dashboards/admin/sales-kpi", badge: "Premium", icon: "sales" },
 
       {
@@ -233,7 +240,7 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
       { type: "link", title: "Reports", href: "/dashboards/admin/reports", icon: "reports" },
       { type: "link", title: "Settings", href: "/dashboards/admin/settings", icon: "settings" },
     ],
-    []
+    [hasLowStock]
   );
 
   function go(href) {
