@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import AdminShell from "../components/AdminShell";
 import { apiFetch } from "../../../lib/api";
@@ -48,6 +49,7 @@ export default function ReportsModulePage() {
   const [filters, setFilters] = useState(defaultFilters);
   const [metrics, setMetrics] = useState(null);
   const [err, setErr] = useState("");
+  const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
     async function loadOverview() {
@@ -60,6 +62,11 @@ export default function ReportsModulePage() {
       }
     }
     loadOverview();
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(interval);
   }, []);
 
   const quickMetrics = [
@@ -131,6 +138,9 @@ export default function ReportsModulePage() {
               Build operational intelligence with curated dashboards across departments.
             </div>
           </div>
+          <div className="rounded-full border bg-zinc-50 px-3 py-1 text-xs text-zinc-600">
+            {now.toLocaleString()}
+          </div>
           <div className="flex items-center gap-2">
             <button className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50">
               Schedule Report
@@ -158,19 +168,20 @@ export default function ReportsModulePage() {
         </div>
 
         <div className="mt-8">
-          <div className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-            Department Report Library
+          <div className="text-sm font-semibold text-zinc-900">Master Reports</div>
+          <div className="text-xs text-zinc-500 mt-1">
+            Quick access to the core departmental dashboards.
           </div>
           <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {cards.map((card) => (
-              <a
+              <Link
                 key={card.title}
                 href={card.href}
                 className="rounded-2xl border bg-white p-4 hover:shadow"
               >
                 <div className="text-sm font-semibold text-zinc-900">{card.title}</div>
                 <div className="text-xs text-zinc-500 mt-2">{card.description}</div>
-              </a>
+              </Link>
             ))}
           </div>
         </div>
