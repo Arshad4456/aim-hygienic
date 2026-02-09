@@ -26,10 +26,12 @@ export default function LogisticsModulePage() {
   const [report, setReport] = useState(null);
   const [dispatchQueue, setDispatchQueue] = useState([]);
   const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       setErr("");
+      setLoading(true);
       try {
         const [logisticsData, dispatchData] = await Promise.all([
           apiFetch("/reports/logistics"),
@@ -39,6 +41,8 @@ export default function LogisticsModulePage() {
         setDispatchQueue(dispatchData?.orders || []);
       } catch (e) {
         setErr(e.message || "Failed to load logistics data");
+      } finally {
+        setLoading(false);
       }
     }
     load();
@@ -86,6 +90,10 @@ export default function LogisticsModulePage() {
             <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {err}
             </div>
+          ) : loading ? (
+            <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-500">
+              Loading logistics data...
+            </div>
           ) : null}
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -125,7 +133,13 @@ export default function LogisticsModulePage() {
                 </tr>
               </thead>
               <tbody>
-                {transferSummary.length === 0 ? (
+                {loading ? (
+                  <tr>
+                    <td colSpan={2} className="px-3 py-6 text-center text-zinc-500">
+                      Loading transfer status...
+                    </td>
+                  </tr>
+                ) : transferSummary.length === 0 ? (
                   <tr>
                     <td colSpan={2} className="px-3 py-6 text-center text-zinc-500">
                       No transfer status data available.
@@ -160,7 +174,13 @@ export default function LogisticsModulePage() {
                 </tr>
               </thead>
               <tbody>
-                {dispatchQueue.length === 0 ? (
+                {loading ? (
+                  <tr>
+                    <td colSpan={4} className="px-3 py-6 text-center text-zinc-500">
+                      Loading dispatch queue...
+                    </td>
+                  </tr>
+                ) : dispatchQueue.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="px-3 py-6 text-center text-zinc-500">
                       No dispatch-ready orders.
