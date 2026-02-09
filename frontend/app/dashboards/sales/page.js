@@ -48,8 +48,8 @@ export default function SalesManagerDashboardPage() {
       },
       {
         label: "Revenue Captured",
-        value:Rs formatCurrency(overview?.orders?.revenue),
-        helper: `${formatNumber(overview?.orders?.byStatus?.dispatched)} dispatched`,
+        value: formatCurrency(overview?.orders?.revenue),
+        helper: `Rs. {formatNumber(overview?.orders?.byStatus?.dispatched)} dispatched`,
       },
       {
         label: "Active Sales Team",
