@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import AdminShell from "../components/AdminShell";
 import { apiFetch } from "../../../lib/api";
@@ -29,9 +30,9 @@ export default function LogisticsModulePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function load() {
+    async function load({ showLoading } = {}) {
       setErr("");
-      setLoading(true);
+      if (showLoading) setLoading(true);
       try {
         const [logisticsData, dispatchData] = await Promise.all([
           apiFetch("/reports/logistics"),
@@ -42,10 +43,12 @@ export default function LogisticsModulePage() {
       } catch (e) {
         setErr(e.message || "Failed to load logistics data");
       } finally {
-        setLoading(false);
+        if (showLoading) setLoading(false);
       }
     }
-    load();
+    load({ showLoading: true });
+    const interval = setInterval(() => load(), 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const transferSummary = useMemo(() => {
@@ -85,6 +88,7 @@ export default function LogisticsModulePage() {
           <div className="text-sm text-zinc-500 mt-1">
             Plan routes, dispatch deliveries, and track fleet utilization.
           </div>
+          <div className="text-xs text-emerald-600 mt-1">Auto-refreshing every 30 seconds</div>
 
           {err ? (
             <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -107,14 +111,14 @@ export default function LogisticsModulePage() {
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {cards.map((card) => (
-              <a
+              <Link
                 key={card.title}
                 href={card.href}
                 className="rounded-2xl border bg-zinc-50 p-4 hover:bg-white hover:shadow"
               >
                 <div className="text-sm font-semibold text-zinc-900">{card.title}</div>
                 <div className="text-xs text-zinc-500 mt-2">{card.description}</div>
-              </a>
+              </Link>
             ))}
           </div>
         </div>
