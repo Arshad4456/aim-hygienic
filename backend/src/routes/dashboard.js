@@ -7,6 +7,7 @@ const User = require("../models/User");
 const SalesOrder = require("../models/SalesOrder");
 const Product = require("../models/Product");
 const Warehouse = require("../models/Warehouse");
+const Region = require("../models/Region");
 const Vehicle = require("../models/Vehicle");
 const Message = require("../models/Message");
 const ReturnClaim = require("../models/ReturnClaim");
@@ -366,6 +367,85 @@ router.get("/overview", requireAuth, async (req, res) => {
     });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to load dashboard" });
+  }
+});
+
+router.get("/sales-manager", requireAuth, async (req, res) => {
+  try {
+    const currentUser = await User.findById(req.user?.uid).lean();
+    if (!currentUser) {
+      return res.status(404).json({ ok: false, message: "User not found" });
+    }
+
+    const companyId = String(currentUser.companyId || "").trim();
+    const companyName = String(currentUser.companyName || "").trim();
+    const teamQuery = companyId ? { companyId } : { _id: currentUser._id };
+
+    const [teamUsers, activeUsers, productCount, warehouseCount, regionCount] = await Promise.all([
+      User.find(teamQuery).select("_id status").lean(),
+      User.countDocuments({ ...teamQuery, status: "active" }),
+      Product.countDocuments(companyId ? { companyId } : { createdBy: currentUser._id }),
+      Warehouse.countDocuments(companyId ? { companyId } : { createdBy: currentUser._id }),
+      Region.countDocuments(companyId ? { companyId } : { createdBy: currentUser._id }),
+    ]);
+
+    const teamIds = teamUsers.map((user) => user._id);
+    const orderMatch = teamIds.length ? { createdBy: { $in: teamIds } } : { createdBy: currentUser._id };
+
+    const [orderAgg, statusAgg, recentOrders] = await Promise.all([
+      SalesOrder.aggregate([
+        { $match: orderMatch },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            revenue: { $sum: "$totalAmount" },
+          },
+        },
+      ]),
+      SalesOrder.aggregate([
+        { $match: orderMatch },
+        { $group: { _id: "$status", total: { $sum: 1 } } },
+      ]),
+      SalesOrder.find(orderMatch).sort({ createdAt: -1 }).limit(5).lean(),
+    ]);
+
+    const [orderDoc] = orderAgg;
+    const statusMap = statusAgg.reduce((acc, entry) => {
+      acc[entry._id] = safeNumber(entry.total);
+      return acc;
+    }, {});
+
+    return res.json({
+      ok: true,
+      company: {
+        id: companyId || null,
+        name: companyName || null,
+      },
+      team: {
+        totalUsers: teamUsers.length,
+        activeUsers,
+      },
+      assets: {
+        products: productCount,
+        warehouses: warehouseCount,
+        regions: regionCount,
+      },
+      orders: {
+        total: safeNumber(orderDoc?.total),
+        revenue: safeNumber(orderDoc?.revenue),
+        byStatus: {
+          pending: safeNumber(statusMap.pending),
+          approved: safeNumber(statusMap.approved),
+          dispatched: safeNumber(statusMap.dispatched),
+          completed: safeNumber(statusMap.completed),
+          cancelled: safeNumber(statusMap.cancelled),
+        },
+      },
+      recentOrders,
+    });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to load sales dashboard" });
   }
 });
 
