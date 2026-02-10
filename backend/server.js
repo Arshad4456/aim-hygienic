@@ -29,9 +29,19 @@ const app = express();
 app.use(express.json());
 
 // CORS for your live domain
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(",").map((value) => value.trim())
+  : ["https://aimhygienics.com", "https://www.aimhygienics.com", "http://localhost:3000"];
+
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN?.split(",") || ["https://aimhygienics.com"],
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error("Not allowed by CORS"));
+    },
     credentials: true,
   })
 );
