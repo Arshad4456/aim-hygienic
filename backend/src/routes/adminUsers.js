@@ -1,8 +1,8 @@
 const express = require("express");
-const bcrypt = require("bcryptjs");
 const User = require("../models/User");
 const { requireAuth, requireRole } = require("../utils/auth");
 const { validatePassword } = require("../utils/password");
+const { hashPassword } = require("../utils/passwordHash");
 
 const router = express.Router();
 
@@ -18,7 +18,7 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
   const exists = await User.findOne({ mobile: String(mobile).trim() });
   if (exists) return res.status(409).json({ ok: false, message: "Mobile already exists" });
 
-  const passwordHash = await bcrypt.hash(password, 12);
+  const passwordHash = await hashPassword(password);
 
   const user = await User.create({
     username: String(username || mobile).toLowerCase().trim(),

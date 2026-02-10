@@ -75,7 +75,8 @@ app.use("/api/admin/users", adminUsersRoutes);
 
 const PORT = process.env.PORT || 5000;
 
-(async () => {
-  await connectDB(process.env.MONGODB_URI);
-  app.listen(PORT, () => console.log("Backend running on port", PORT));
-})();
+app.listen(PORT, () => {
+  console.log("Backend running on port", PORT);
+});
+
+connectDB(process.env.MONGODB_URI);
