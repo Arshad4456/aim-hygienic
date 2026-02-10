@@ -14,61 +14,45 @@ function normalizeApiBase(rawApiBase) {
   return /\/api(\/|$)/.test(withProtocol) ? withProtocol : `${withProtocol}/api`;
 }
 
-function resolveApiBase() {
-  const normalized = normalizeApiBase(process.env.NEXT_PUBLIC_API_BASE);
+function toHttpsIfNeeded(base) {
+  if (typeof window === "undefined") return base;
 
-  if (typeof window === "undefined") {
-    return normalized;
+  const isHttpsPage = window.location.protocol === "https:";
+  const isHttpBase = /^http:\/\//i.test(base);
+  const pointsToLocalApi = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(base);
+
+  if (isHttpsPage && isHttpBase && !pointsToLocalApi) {
+    return base.replace(/^http:/i, "https:");
   }
 
-  const isLocalHost = /^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(window.location.host);
-  const pointsToLocalApi = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(normalized);
-
-  if (!isLocalHost && pointsToLocalApi) {
-    return "/api";
-  }
-
-  return normalized;
+  return base;
 }
 
-export async function apiFetch(path, { method = "GET", body, token, credentials } = {}) {
-  const t = token || (typeof window !== "undefined" ? localStorage.getItem("aim_token") : null);
-  const baseUrl = resolveApiBase();
+function resolveApiCandidates() {
+  const normalized = normalizeApiBase(process.env.NEXT_PUBLIC_API_BASE);
+  const candidates = [toHttpsIfNeeded(normalized)];
 
-  let res;
-  try {
-    res = await fetch(`${baseUrl}${path}`, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        ...(t ? { Authorization: `Bearer ${t}` } : {}),
-      },
-      credentials,
-      body: body ? JSON.stringify(body) : undefined,
-    });
-  } catch {
-    if (typeof window !== "undefined" && baseUrl !== "/api") {
-      try {
-        res = await fetch(`/api${path}`, {
-          method,
-          headers: {
-            "Content-Type": "application/json",
-            ...(t ? { Authorization: `Bearer ${t}` } : {}),
-          },
-          credentials,
-          body: body ? JSON.stringify(body) : undefined,
-        });
-      } catch {
-        throw new Error(
-          "Could not reach the API server. Verify NEXT_PUBLIC_API_BASE/proxy configuration and that the backend is running.",
-        );
-      }
-    } else {
-      throw new Error(
-        "Could not reach the API server. Verify NEXT_PUBLIC_API_BASE/proxy configuration and that the backend is running.",
-      );
+  if (typeof window !== "undefined") {
+    const isLocalHost = /^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(window.location.host);
+    const pointsToLocalApi = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(normalized);
+
+    if (!isLocalHost && pointsToLocalApi) {
+      candidates.unshift("/api");
+    } else if (candidates[0] !== "/api") {
+      candidates.push("/api");
     }
   }
+
+  return [...new Set(candidates)];
+}
+
+async function fetchJson(url, { method, body, headers, credentials }) {
+  const res = await fetch(url, {
+    method,
+    headers,
+    credentials,
+    body: body ? JSON.stringify(body) : undefined,
+  });
 
   const data = await res.json().catch(() => null);
 
@@ -76,5 +60,33 @@ export async function apiFetch(path, { method = "GET", body, token, credentials 
     const msg = data?.message || data?.error || `Request failed (${res.status})`;
     throw new Error(msg);
   }
+
   return data;
+}
+
+export async function apiFetch(path, { method = "GET", body, token, credentials } = {}) {
+  const t = token || (typeof window !== "undefined" ? localStorage.getItem("aim_token") : null);
+  const headers = {
+    "Content-Type": "application/json",
+    ...(t ? { Authorization: `Bearer ${t}` } : {}),
+  };
+
+  const candidates = resolveApiCandidates();
+  let lastError = null;
+
+  for (const baseUrl of candidates) {
+    try {
+      return await fetchJson(`${baseUrl}${path}`, { method, body, headers, credentials });
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (lastError && !/Failed to fetch|NetworkError/i.test(lastError.message || "")) {
+    throw lastError;
+  }
+
+  throw new Error(
+    "Could not reach the API server. Verify NEXT_PUBLIC_API_BASE/API_BASE configuration and that the backend is running.",
+  );
 }
