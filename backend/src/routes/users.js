@@ -1,8 +1,8 @@
 const express = require("express");
-const bcrypt = require("bcryptjs");
 const User = require("../models/User");
 const { requireAuth, requireRole } = require("../utils/auth");
 const { validatePassword } = require("../utils/password");
+const { hashPassword, verifyPassword } = require("../utils/passwordHash");
 
 const router = express.Router();
 
@@ -95,10 +95,10 @@ router.put("/change-password", requireAuth, async (req, res) => {
 
   const user = await User.findById(req.user.uid);
   if (!user) return res.status(404).json({ ok: false, message: "User not found" });
-  const ok = await bcrypt.compare(String(currentPassword || ""), user.passwordHash);
+  const ok = await verifyPassword(String(currentPassword || ""), user.passwordHash);
   if (!ok) return res.status(401).json({ ok: false, message: "Current password is incorrect" });
 
-  user.passwordHash = await bcrypt.hash(newPassword, 12);
+  user.passwordHash = await hashPassword(newPassword);
   await user.save();
   return res.json({ ok: true });
 });
@@ -116,7 +116,7 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
 
   const payload = buildUserPayload(body);
   payload.username = payload.username || payload.mobile;
-  payload.passwordHash = await bcrypt.hash(body.password, 12);
+  payload.passwordHash = await hashPassword(body.password);
 
   const user = await User.create(payload);
   return res.status(201).json({ ok: true, user: { id: user._id } });
@@ -142,7 +142,7 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
   if (body.password) {
     const validation = validatePassword(body.password);
     if (!validation.ok) return res.status(400).json({ ok: false, message: validation.message });
-    payload.passwordHash = await bcrypt.hash(body.password, 12);
+    payload.passwordHash = await hashPassword(body.password);
   }
 
   const updated = await User.findByIdAndUpdate(req.params.id, payload, {
