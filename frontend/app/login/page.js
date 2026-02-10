@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-
-const API_BASE = "/api"; // nginx proxy -> backend
+import { apiFetch } from "../lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -37,15 +36,11 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_BASE}/auth/login`, {
+      const data = await apiFetch("/auth/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ mobile, password }),
+        body: { mobile, password },
       });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || "Login failed");
 
       // Save token + role (fast production approach)
       localStorage.setItem("aim_token", data.token);
