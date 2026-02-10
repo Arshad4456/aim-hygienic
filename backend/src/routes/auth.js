@@ -1,7 +1,7 @@
 const express = require("express");
-const bcrypt = require("bcryptjs");
 const User = require("../models/User");
 const { signToken } = require("../utils/auth");
+const { verifyPassword } = require("../utils/passwordHash");
 
 const router = express.Router();
 
@@ -16,7 +16,7 @@ router.post("/login", async (req, res) => {
   if (!user) return res.status(401).json({ ok: false, message: "Invalid username/password" });
   if (user.status !== "active") return res.status(403).json({ ok: false, message: "User is deactive" });
 
-  const ok = await bcrypt.compare(password, user.passwordHash);
+  const ok = await verifyPassword(password, user.passwordHash);
   if (!ok) return res.status(401).json({ ok: false, message: "Invalid username/password" });
 
   const token = signToken(user);
