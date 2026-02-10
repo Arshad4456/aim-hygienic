@@ -1,6 +1,5 @@
 const express = require("express");
 const cors = require("cors");
-const helmet = require("helmet");
 require("dotenv").config();
 
 const { connectDB } = require("./src/db");
@@ -27,8 +26,15 @@ const returnsRoutes = require("./src/routes/returns");
 
 const app = express();
 
-app.use(helmet());
 app.use(express.json());
+
+// CORS for your live domain
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGIN?.split(",") || ["https://aimhygienics.com"],
+    credentials: true,
+  })
+);
 
 //api
 app.use("/api/companies", companiesRouter);
@@ -49,14 +55,6 @@ app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/sales-kpi", salesKpiRoutes);
 app.use("/api/orders", ordersRoutes);
 app.use("/api/returns", returnsRoutes);
-
-// CORS for your live domain
-app.use(
-  cors({
-    origin: process.env.CORS_ORIGIN?.split(",") || ["https://aimhygienics.com"],
-    credentials: true,
-  })
-);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true, service: "aim-api", time: new Date().toISOString() });
