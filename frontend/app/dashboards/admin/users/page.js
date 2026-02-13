@@ -21,6 +21,7 @@ export default function UserListPage() {
 
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [fieldsWarning, setFieldsWarning] = useState("");
 
   const [editUser, setEditUser] = useState(null);
   const [editSaving, setEditSaving] = useState(false);
@@ -38,13 +39,19 @@ export default function UserListPage() {
         apiFetch("/zones"),
         apiFetch("/areas"),
       ]);
-      const fieldsRes = await listFieldsCompat();
       setRows(usersRes.users || []);
       setWarehouses(warehousesRes.warehouses || []);
       setRegions(regionsRes.regions || []);
       setZones(zonesRes.zones || []);
       setAreas(areasRes.areas || []);
-      setFields(fieldsRes.fields || []);
+      try {
+        const fieldsRes = await listFieldsCompat();
+        setFields(fieldsRes.fields || []);
+        setFieldsWarning("");
+      } catch (fieldErr) {
+        setFields([]);
+        setFieldsWarning(fieldErr.message || "Fields API unavailable");
+      }
     } catch (e) {
       setErr(e.message || "Failed to load users");
     } finally {
@@ -357,6 +364,7 @@ export default function UserListPage() {
         <div className="mt-1 text-sm text-zinc-500">All users list with role-based details and edit support.</div>
 
         {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
+        {fieldsWarning ? <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">{fieldsWarning} (User list is loaded without Field master mapping.)</div> : null}
 
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
           <input
