@@ -27,18 +27,19 @@ async function hashPassword(password) {
 
 async function verifyPassword(password, passwordHash) {
   const raw = String(passwordHash || "");
+  const provided = String(password || "");
   const parts = raw.split("$");
 
   if (parts[0] !== "scrypt" || parts.length !== 6) {
     // Backward-compatible fallback for legacy/dev records.
-    return password === raw;
+    return provided === raw || provided === raw.trim();
   }
 
   const [, n, r, p, salt, storedHex] = parts;
   const keylen = Buffer.from(storedHex, "hex").length;
   const derived = await new Promise((resolve, reject) => {
     crypto.scrypt(
-      password,
+      provided,
       salt,
       keylen,
       { N: Number(n), r: Number(r), p: Number(p) },

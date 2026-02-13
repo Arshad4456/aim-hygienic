@@ -37,42 +37,48 @@ function isUserActive(status) {
 }
 
 router.post("/login", async (req, res) => {
-  const { mobile, password, username } = req.body || {};
-  const identifier = mobile || username;
-  if (!identifier || !password) return res.status(400).json({ ok: false, message: "Missing credentials" });
+  try {
+    const { mobile, password, username } = req.body || {};
+    const identifier = mobile || username;
+    if (!identifier || !password) return res.status(400).json({ ok: false, message: "Missing credentials" });
 
-  const identifiers = buildIdentifierCandidates(identifier);
-  const user = await User.findOne({
-    $or: [
-      { mobile: { $in: identifiers } },
-      { mobileNumber: { $in: identifiers } },
-      { username: { $in: identifiers.map((value) => value.toLowerCase()) } },
-    ],
-  });
+    const identifiers = buildIdentifierCandidates(identifier);
+    const user = await User.findOne({
+      $or: [
+        { mobile: { $in: identifiers } },
+        { mobileNumber: { $in: identifiers } },
+        { username: { $in: identifiers } },
+        { username: { $in: identifiers.map((value) => value.toLowerCase()) } },
+        { phoneNumber: { $in: identifiers } },
+      ],
+    }).lean();
 
-  if (!user) return res.status(401).json({ ok: false, message: "Invalid username/password" });
-  if (!isUserActive(user.status)) return res.status(403).json({ ok: false, message: "User is deactive" });
+    if (!user) return res.status(401).json({ ok: false, message: "Invalid username/password" });
+    if (!isUserActive(user.status)) return res.status(403).json({ ok: false, message: "User is deactive" });
 
-  const storedPassword = user.passwordHash || user.password;
-  const ok = await verifyPassword(password, storedPassword);
-  if (!ok) return res.status(401).json({ ok: false, message: "Invalid username/password" });
+    const storedPassword = user.passwordHash || user.password;
+    const ok = await verifyPassword(password, storedPassword);
+    if (!ok) return res.status(401).json({ ok: false, message: "Invalid username/password" });
 
-  const token = signToken(user);
+    const token = signToken(user);
 
-  return res.json({
-    ok: true,
-    token,
-    user: {
-      id: user._id,
-      username: user.username,
-      fullName: user.fullName,
-      role: user.role,
-      companyId: user.companyId,
-      companyName: user.companyName,
-      mobile: user.mobile,
-      email: user.email,
-    },
-  });
+    return res.json({
+      ok: true,
+      token,
+      user: {
+        id: user._id,
+        username: user.username,
+        fullName: user.fullName,
+        role: user.role,
+        companyId: user.companyId,
+        companyName: user.companyName,
+        mobile: user.mobile || user.mobileNumber,
+        email: user.email,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: "Login failed" });
+  }
 });
 
 module.exports = router;
