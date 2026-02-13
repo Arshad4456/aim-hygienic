@@ -3,818 +3,445 @@
 import { useEffect, useMemo, useState } from "react";
 import AdminShell from "../components/AdminShell";
 import { apiFetch } from "../../../lib/api";
+import { AIM_USER_ROLES, FIELD_LABELS, ROLE_EXTRA_FIELDS, validatePassword } from "./roleConfig";
 
-const roles = [
-  "Sales Manager",
-  "Warehouse Manager",
-  "Accountant",
-  "Distributor",
-  "Driver",
-  "Delivery Boy",
-  "Sales Man",
-  "Order Booker",
-  "Customer",
-  "Supplier",
-];
-
-const fieldLabels = {
-  fullName: "Full Name",
-  mobile: "Mobile Number",
-  role: "Role",
-  companyId: "Company ID",
-  companyName: "Company Name",
-  branchId: "Branch ID",
-  branchNameOrNumber: "Branch Name/Number",
-  warehouseId: "Warehouse ID",
-  warehouseName: "Warehouse Name",
-  regionId: "Region ID",
-  regionName: "Region Name",
-  zoneId: "Zone ID",
-  zoneName: "Zone Name",
-  areaId: "Area ID",
-  areaName: "Area Name",
-  shopId: "Shop ID",
-  shopName: "Shop Name",
-  cnicNo: "CNIC No",
-  mobileNumber: "Mobile Number",
-  phoneNumber: "Phone Number",
-  email: "Email",
-  address: "Address",
-  shopAddress: "Shop Address",
-  gpsLatitude: "GPS Latitude",
-  gpsLongitude: "GPS Longitude",
-  managerId: "Manager ID",
-  managerName: "Manager Name",
-  warehouseManagerId: "Warehouse Manager ID",
-  warehouseManagerName: "Warehouse Manager Name",
-  accountantId: "Accountant ID",
-  accountantName: "Accountant Name",
-  distributorId: "Distributor ID",
-  distributorName: "Distributor Name",
-  driverId: "Driver ID",
-  driverName: "Driver Name",
-  deliveryBoyId: "Delivery Boy ID",
-  deliveryBoyName: "Delivery Boy Name",
-  salesmanId: "Salesman ID",
-  salesmanName: "Salesman Name",
-  orderBookerId: "Order Booker ID",
-  orderBookerName: "Order Booker Name",
-  customerId: "Customer ID",
-  customerName: "Customer Name",
-  supplierId: "Supplier ID",
-  supplierName: "Supplier Name",
-  supplierWarehouseId1: "Warehouse 1 ID",
-  supplierWarehouseName1: "Warehouse 1 Name",
-  supplierWarehouseId2: "Warehouse 2 ID",
-  supplierWarehouseName2: "Warehouse 2 Name",
-};
-
-const roleFields = {
-  "Sales Manager": [
-    "managerId",
-    "managerName",
-    "companyId",
-    "companyName",
-    "companyBranchId",
-    "branchNameOrNumber",
-    "cnicNo",
-    "mobileNumber",
-    "phoneNumber",
-    "email",
-    "address",
-  ],
-  "Warehouse Manager": [
-    "warehouseManagerId",
-    "warehouseManagerName",
-    "companyId",
-    "companyName",
-    "branchId",
-    "branchNameOrNumber",
-    "warehouseId",
-    "warehouseName",
-    "cnicNo",
-    "mobileNumber",
-    "phoneNumber",
-    "email",
-    "address",
-  ],
-  Accountant: [
-    "accountantId",
-    "accountantName",
-    "companyId",
-    "companyName",
-    "branchId",
-    "branchNameOrNumber",
-    "warehouseId",
-    "regionId",
-    "regionName",
-    "cnicNo",
-    "mobileNumber",
-    "phoneNumber",
-    "email",
-    "address",
-  ],
-  Distributor: [
-    "distributorId",
-    "distributorName",
-    "companyId",
-    "companyName",
-    "branchId",
-    "branchNameOrNumber",
-    "warehouseId",
-    "warehouseName",
-    "regionId",
-    "regionName",
-    "zoneId",
-    "zoneName",
-    "cnicNo",
-    "mobileNumber",
-    "phoneNumber",
-    "email",
-    "address",
-  ],
-  Driver: [
-    "driverId",
-    "driverName",
-    "companyId",
-    "companyName",
-    "branchId",
-    "branchNameOrNumber",
-    "warehouseId",
-    "warehouseName",
-    "regionId",
-    "regionName",
-    "zoneId",
-    "zoneName",
-    "areaId",
-    "areaName",
-    "cnicNo",
-    "mobileNumber",
-    "phoneNumber",
-    "email",
-    "address",
-    "gpsLatitude",
-    "gpsLongitude",
-  ],
-  "Delivery Boy": [
-    "deliveryBoyId",
-    "deliveryBoyName",
-    "companyId",
-    "companyName",
-    "branchId",
-    "branchNameOrNumber",
-    "warehouseId",
-    "warehouseName",
-    "regionId",
-    "regionName",
-    "zoneId",
-    "zoneName",
-    "areaId",
-    "areaName",
-    "cnicNo",
-    "mobileNumber",
-    "phoneNumber",
-    "email",
-    "address",
-    "gpsLatitude",
-    "gpsLongitude",
-  ],
-  "Sales Man": [
-    "salesmanId",
-    "salesmanName",
-    "companyId",
-    "companyName",
-    "branchId",
-    "branchNameOrNumber",
-    "warehouseId",
-    "warehouseName",
-    "regionId",
-    "regionName",
-    "zoneId",
-    "zoneName",
-    "areaId",
-    "areaName",
-    "cnicNo",
-    "mobileNumber",
-    "phoneNumber",
-    "email",
-    "address",
-    "gpsLatitude",
-    "gpsLongitude",
-  ],
-  "Order Booker": [
-    "orderBookerId",
-    "orderBookerName",
-    "companyId",
-    "companyName",
-    "branchId",
-    "branchNameOrNumber",
-    "warehouseId",
-    "warehouseName",
-    "regionId",
-    "regionName",
-    "zoneId",
-    "zoneName",
-    "areaId",
-    "areaName",
-    "cnicNo",
-    "mobileNumber",
-    "phoneNumber",
-    "email",
-    "address",
-  ],
-  Customer: [
-    "customerId",
-    "customerName",
-    "companyId",
-    "companyName",
-    "branchId",
-    "branchNameOrNumber",
-    "warehouseId",
-    "warehouseName",
-    "regionId",
-    "regionName",
-    "zoneId",
-    "zoneName",
-    "areaId",
-    "areaName",
-    "shopId",
-    "shopName",
-    "cnicNo",
-    "mobileNumber",
-    "phoneNumber",
-    "email",
-    "shopAddress",
-  ],
-  Supplier: [
-    "supplierId",
-    "supplierName",
-    "companyId",
-    "companyName",
-    "supplierWarehouseId1",
-    "supplierWarehouseName1",
-    "supplierWarehouseId2",
-    "supplierWarehouseName2",
-    "cnicNo",
-    "mobileNumber",
-    "email",
-    "address",
-  ],
-};
-
-const roleIdFieldMap = {
-  "Sales Manager": "managerId",
-  "Warehouse Manager": "warehouseManagerId",
-  Accountant: "accountantId",
-  Distributor: "distributorId",
-  Driver: "driverId",
-  "Delivery Boy": "deliveryBoyId",
-  "Sales Man": "salesmanId",
-  "Order Booker": "orderBookerId",
-  Customer: "customerId",
-  Supplier: "supplierId",
-};
-
-function validatePassword(value) {
-  if (!value) return "";
-  if (value.length < 8) return "Password must be at least 8 characters long.";
-  if (!/[A-Z]/.test(value)) return "Password must include at least one capital letter.";
-  if (!/[0-9]/.test(value)) return "Password must include at least one number.";
-  if (!/[^A-Za-z0-9]/.test(value)) return "Password must include at least one symbol.";
-  return "";
-}
+const BASE_EDIT_FIELDS = ["fullName", "email", "mobileNumber", "cnicNo", "address", "businessType", "businessName"];
 
 export default function UserListPage() {
-  const [companies, setCompanies] = useState([]);
-  const [companyId, setCompanyId] = useState("");
+  const [rows, setRows] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
+  const [regions, setRegions] = useState([]);
+  const [zones, setZones] = useState([]);
+  const [areas, setAreas] = useState([]);
+
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
-  const [warehouseFilter, setWarehouseFilter] = useState("");
-  const [regionFilter, setRegionFilter] = useState("");
-  const [zoneFilter, setZoneFilter] = useState("");
-  const [areaFilter, setAreaFilter] = useState("");
-  const [page, setPage] = useState(1);
-  const [rows, setRows] = useState([]);
+
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
-  const [editId, setEditId] = useState(null);
-  const [editForm, setEditForm] = useState(null);
-  const [editErr, setEditErr] = useState("");
-  const [editSaving, setEditSaving] = useState(false);
 
-  const selectedCompany = companies.find((c) => c._id === companyId);
+  const [editUser, setEditUser] = useState(null);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editErr, setEditErr] = useState("");
+  const [editShowPassword, setEditShowPassword] = useState(false);
+
+  async function load() {
+    setErr("");
+    setLoading(true);
+    try {
+      const [usersRes, warehousesRes, regionsRes, zonesRes, areasRes] = await Promise.all([
+        apiFetch("/users"),
+        apiFetch("/warehouses"),
+        apiFetch("/regions"),
+        apiFetch("/zones"),
+        apiFetch("/areas"),
+      ]);
+      setRows(usersRes.users || []);
+      setWarehouses(warehousesRes.warehouses || []);
+      setRegions(regionsRes.regions || []);
+      setZones(zonesRes.zones || []);
+      setAreas(areasRes.areas || []);
+    } catch (e) {
+      setErr(e.message || "Failed to load users");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    async function loadCompanies() {
-      try {
-        const data = await apiFetch("/companies");
-        setCompanies(data.companies || []);
-      } catch (e) {
-        setErr(e.message || "Failed to load companies");
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadCompanies();
+    load();
   }, []);
 
-  useEffect(() => {
-    async function loadUsers() {
-      if (!companyId) {
-        setRows([]);
-        return;
-      }
-      setErr("");
-      try {
-        const data = await apiFetch(`/users?companyId=${selectedCompany?.companyId || ""}`);
-        setRows(data.users || []);
-      } catch (e) {
-        setErr(e.message || "Failed to load users");
-      }
-    }
-    loadUsers();
-  }, [companyId, selectedCompany?.companyId]);
-
-  const filtered = useMemo(() => {
-    let next = rows;
-    if (roleFilter) next = next.filter((u) => u.role === roleFilter);
-    if (warehouseFilter) next = next.filter((u) => u.warehouseName === warehouseFilter);
-    if (regionFilter) next = next.filter((u) => u.regionName === regionFilter);
-    if (zoneFilter) next = next.filter((u) => u.zoneName === zoneFilter);
-    if (areaFilter) next = next.filter((u) => u.areaName === areaFilter);
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      next = next.filter((u) =>
-        [
-          u.fullName,
-          u.mobile,
-          u.role,
-          u.companyName,
-          u.companyId,
-          u.warehouseName,
-          u.regionName,
-          u.zoneName,
-          u.areaName,
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase()
-          .includes(q)
-      );
-    }
-    return next;
-  }, [rows, roleFilter, warehouseFilter, regionFilter, zoneFilter, areaFilter, search]);
-
-  const roleCounts = useMemo(() => {
-    const counts = roles.reduce((acc, r) => ({ ...acc, [r]: 0 }), {});
-    filtered.forEach((u) => {
-      counts[u.role] = (counts[u.role] || 0) + 1;
+  const filteredRows = useMemo(() => {
+    const value = search.trim().toLowerCase();
+    return rows.filter((row) => {
+      if (roleFilter && row.role !== roleFilter) return false;
+      if (!value) return true;
+      const hay = [
+        row.userId,
+        row.fullName,
+        row.role,
+        row.mobile,
+        row.mobileNumber,
+        row.email,
+        row.warehouseName,
+        row.regionName,
+        row.zoneName,
+        row.territoryName,
+        row.fieldName,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(value);
     });
-    return counts;
-  }, [filtered]);
-
-  const perPage = 50;
-  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
-  const pageRows = filtered.slice((page - 1) * perPage, page * perPage);
-
-  const territoryOptions = useMemo(() => {
-    const scoped = roleFilter ? filtered.filter((u) => u.role === roleFilter) : filtered;
-    const uniq = (key) => Array.from(new Set(scoped.map((u) => u[key]).filter(Boolean)));
-    return {
-      warehouses: uniq("warehouseName"),
-      regions: uniq("regionName"),
-      zones: uniq("zoneName"),
-      areas: uniq("areaName"),
-    };
-  }, [filtered, roleFilter]);
-
-  function resetTerritoryFilters() {
-    setWarehouseFilter("");
-    setRegionFilter("");
-    setZoneFilter("");
-    setAreaFilter("");
-  }
-
-  function startEdit(row) {
-    setEditId(row._id);
-    setEditForm({ ...row, password: "" });
-    setEditErr("");
-  }
+  }, [rows, search, roleFilter]);
 
   async function onDelete(id) {
     if (!confirm("Delete this user?")) return;
     try {
       await apiFetch(`/users/${id}`, { method: "DELETE" });
-      setRows((s) => s.filter((r) => r._id !== id));
+      await load();
     } catch (e) {
-      alert(e.message || "Delete failed");
+      alert(e.message || "Failed to delete user");
     }
   }
 
-  async function onSave() {
-    if (!editForm) return;
+  function openEdit(user) {
     setEditErr("");
-    const passwordError = validatePassword(editForm.password);
-    if (passwordError) {
-      setEditErr(passwordError);
-      return;
+    setEditShowPassword(false);
+    setEditUser({ ...user, password: "" });
+  }
+
+  function setEditField(key, value) {
+    setEditUser((prev) => ({ ...prev, [key]: value }));
+  }
+
+  async function onSaveEdit() {
+    if (!editUser?._id) return;
+    setEditErr("");
+
+    if (editUser.password) {
+      const passwordErr = validatePassword(editUser.password);
+      if (passwordErr) {
+        setEditErr(passwordErr);
+        return;
+      }
     }
+
     setEditSaving(true);
     try {
-      const payload = { ...editForm };
-      if (!payload.password) delete payload.password;
-      const data = await apiFetch(`/users/${editId}`, { method: "PUT", body: payload });
-      setRows((s) => s.map((r) => (r._id === editId ? data.user : r)));
-      setEditId(null);
-      setEditForm(null);
+      await apiFetch(`/users/${editUser._id}`, {
+        method: "PUT",
+        body: {
+          ...editUser,
+          mobile: editUser.mobileNumber || editUser.mobile,
+        },
+      });
+      setEditUser(null);
+      await load();
     } catch (e) {
-      setEditErr(e.message || "Update failed");
+      setEditErr(e.message || "Failed to update user");
     } finally {
       setEditSaving(false);
     }
   }
 
-  function exportCsv(filename) {
-    const headers = ["User ID", "Name", "Role", "Company", "Mobile", "Email"];
-    const lines = filtered.map((u) =>
-      [getDisplayId(u), u.fullName, u.role, u.companyName, u.mobile, u.email]
-        .map((v) => `"${String(v || "").replace(/"/g, '""')}"`)
-        .join(",")
-    );
-    const csv = [headers.join(","), ...lines].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function exportPdf() {
-    const html = `
-      <html>
-        <head><title>User List</title></head>
-        <body>
-          <h2>User List</h2>
-          <table border="1" cellpadding="6" cellspacing="0">
-            <thead>
-              <tr>
-                <th>User ID</th><th>Name</th><th>Role</th><th>Company</th><th>Mobile</th><th>Email</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${filtered
-                .map(
-                  (u) => `
-                  <tr>
-                    <td>${getDisplayId(u) || ""}</td>
-                    <td>${u.fullName || ""}</td>
-                    <td>${u.role || ""}</td>
-                    <td>${u.companyName || ""}</td>
-                    <td>${u.mobile || ""}</td>
-                    <td>${u.email || ""}</td>
-                  </tr>`
-                )
-                .join("")}
-            </tbody>
-          </table>
-        </body>
-      </html>
-    `;
-    const win = window.open("", "_blank");
-    if (!win) return;
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    win.print();
-  }
-
   return (
     <AdminShell title="User List" user={null}>
-      <div className="rounded-2xl bg-white border shadow-sm p-5">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="text-xl font-semibold text-zinc-900">Users</div>
-            <div className="text-sm text-zinc-500 mt-1">Select a company to view and filter users.</div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50"
-              onClick={() => exportPdf()}
-              disabled={!filtered.length}
-            >
-              Export PDF
-            </button>
-            <button
-              className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50"
-              onClick={() => exportCsv("users.xlsx")}
-              disabled={!filtered.length}
-            >
-              Export Excel
-            </button>
-          </div>
-        </div>
+      <div className="rounded-2xl border bg-white p-5 shadow-sm">
+        <div className="text-xl font-semibold text-zinc-900">Users</div>
+        <div className="mt-1 text-sm text-zinc-500">All users list with role-based details and edit support.</div>
 
         {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
 
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <Label>Select Company</Label>
-            <select
-              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-              value={companyId}
-              onChange={(e) => {
-                setCompanyId(e.target.value);
-                setPage(1);
-                setRoleFilter("");
-                resetTerritoryFilters();
-              }}
-            >
-              <option value="">Choose company...</option>
-              {companies.map((c) => (
-                <option key={c._id} value={c._id}>{c.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <Label>Search</Label>
-            <input
-              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-              placeholder="Search by name, role, company..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              disabled={!companyId}
-            />
-          </div>
-          <div>
-            <Label>Filter Role</Label>
-            <select
-              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-              value={roleFilter}
-              onChange={(e) => {
-                setRoleFilter(e.target.value);
-                resetTerritoryFilters();
-                setPage(1);
-              }}
-              disabled={!companyId}
-            >
-              <option value="">All roles</option>
-              {roles.map((r) => (
-                <option key={r} value={r}>{r}</option>
-              ))}
-            </select>
-          </div>
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search users..."
+            className="rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200"
+          />
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            className="rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200"
+          >
+            <option value="">All roles</option>
+            {AIM_USER_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+          <div className="rounded-xl border bg-zinc-50 px-3 py-2 text-sm text-zinc-600">Total users: <b>{filteredRows.length}</b></div>
         </div>
 
-        {selectedCompany ? (
-          <div className="mt-4 rounded-xl border bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
-            Showing users for <span className="font-medium text-zinc-900">{selectedCompany.name}</span>.
-          </div>
-        ) : null}
-
-        {!companyId ? (
-          <div className="mt-6 rounded-xl border border-dashed px-4 py-6 text-sm text-zinc-500 text-center">
-            Please select a company to view user lists.
-          </div>
-        ) : (
-          <>
-            <div className="mt-5 flex flex-wrap gap-2">
-              <button
-                className={`rounded-full border px-4 py-2 text-xs ${roleFilter === "" ? "bg-emerald-50 text-emerald-700" : "hover:bg-zinc-50"}`}
-                onClick={() => {
-                  setRoleFilter("");
-                  resetTerritoryFilters();
-                  setPage(1);
-                }}
-              >
-                All ({filtered.length})
-              </button>
-              {roles.map((r) => (
-                <button
-                  key={r}
-                  className={`rounded-full border px-4 py-2 text-xs ${roleFilter === r ? "bg-emerald-50 text-emerald-700" : "hover:bg-zinc-50"}`}
-                  onClick={() => {
-                    setRoleFilter(r);
-                    resetTerritoryFilters();
-                    setPage(1);
-                  }}
-                >
-                  {r} ({roleCounts[r] || 0})
-                </button>
-              ))}
-            </div>
-
-            <div className="mt-5 grid grid-cols-1 md:grid-cols-4 gap-3">
-              <div>
-                <Label>Warehouse</Label>
-                <select
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                  value={warehouseFilter}
-                  onChange={(e) => setWarehouseFilter(e.target.value)}
-                >
-                  <option value="">All warehouses</option>
-                  {territoryOptions.warehouses.map((w) => (
-                    <option key={w} value={w}>{w}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <Label>Region</Label>
-                <select
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                  value={regionFilter}
-                  onChange={(e) => setRegionFilter(e.target.value)}
-                >
-                  <option value="">All regions</option>
-                  {territoryOptions.regions.map((r) => (
-                    <option key={r} value={r}>{r}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <Label>Zone</Label>
-                <select
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                  value={zoneFilter}
-                  onChange={(e) => setZoneFilter(e.target.value)}
-                >
-                  <option value="">All zones</option>
-                  {territoryOptions.zones.map((z) => (
-                    <option key={z} value={z}>{z}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <Label>Area</Label>
-                <select
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                  value={areaFilter}
-                  onChange={(e) => setAreaFilter(e.target.value)}
-                >
-                  <option value="">All areas</option>
-                  {territoryOptions.areas.map((a) => (
-                    <option key={a} value={a}>{a}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="mt-5 overflow-auto rounded-xl border">
-              <table className="min-w-[900px] w-full text-sm">
-                <thead className="bg-zinc-50">
-                  <tr>
-                    <th className="text-left px-3 py-2 border-b">User ID</th>
-                    <th className="text-left px-3 py-2 border-b">Name</th>
-                    <th className="text-left px-3 py-2 border-b">Role</th>
-                    <th className="text-left px-3 py-2 border-b">Company</th>
-                    <th className="text-left px-3 py-2 border-b">Actions</th>
+        <div className="mt-5 overflow-auto rounded-xl border">
+          <table className="min-w-[1100px] w-full text-sm">
+            <thead className="bg-zinc-50">
+              <tr>
+                <th className="border-b px-3 py-2 text-left">User ID</th>
+                <th className="border-b px-3 py-2 text-left">Name</th>
+                <th className="border-b px-3 py-2 text-left">Role</th>
+                <th className="border-b px-3 py-2 text-left">Mobile</th>
+                <th className="border-b px-3 py-2 text-left">Warehouse</th>
+                <th className="border-b px-3 py-2 text-left">Region</th>
+                <th className="border-b px-3 py-2 text-left">Zone</th>
+                <th className="border-b px-3 py-2 text-left">Territory</th>
+                <th className="border-b px-3 py-2 text-left">Field</th>
+                <th className="border-b px-3 py-2 text-left">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={10} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
+              ) : filteredRows.length === 0 ? (
+                <tr><td colSpan={10} className="px-3 py-6 text-center text-zinc-500">No users found</td></tr>
+              ) : (
+                filteredRows.map((row) => (
+                  <tr key={row._id} className="hover:bg-zinc-50">
+                    <td className="border-b px-3 py-2">{row.userId || "-"}</td>
+                    <td className="border-b px-3 py-2">{row.fullName || "-"}</td>
+                    <td className="border-b px-3 py-2">{row.role || "-"}</td>
+                    <td className="border-b px-3 py-2">{row.mobileNumber || row.mobile || "-"}</td>
+                    <td className="border-b px-3 py-2">{row.warehouseName || "-"}</td>
+                    <td className="border-b px-3 py-2">{row.regionName || "-"}</td>
+                    <td className="border-b px-3 py-2">{row.zoneName || "-"}</td>
+                    <td className="border-b px-3 py-2">{row.territoryName || "-"}</td>
+                    <td className="border-b px-3 py-2">{row.fieldName || "-"}</td>
+                    <td className="border-b px-3 py-2">
+                      <div className="flex gap-2">
+                        <button onClick={() => openEdit(row)} className="rounded-lg border px-3 py-1.5 text-xs hover:bg-zinc-50">Edit</button>
+                        <button onClick={() => onDelete(row._id)} className="rounded-lg border px-3 py-1.5 text-xs text-red-600 hover:bg-zinc-50">Delete</button>
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {pageRows.length === 0 ? (
-                    <tr><td colSpan={5} className="px-3 py-6 text-center text-zinc-500">No users found</td></tr>
-                  ) : (
-                    pageRows.map((row) => (
-                      <tr key={row._id} className="hover:bg-zinc-50">
-                        <td className="px-3 py-2 border-b">{getDisplayId(row)}</td>
-                        <td className="px-3 py-2 border-b">{row.fullName}</td>
-                        <td className="px-3 py-2 border-b">{row.role}</td>
-                        <td className="px-3 py-2 border-b">{row.companyName || "-"}</td>
-                        <td className="px-3 py-2 border-b">
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => startEdit(row)}
-                              className="rounded-lg border px-3 py-1.5 text-xs hover:bg-zinc-50"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => onDelete(row._id)}
-                              className="rounded-lg border px-3 py-1.5 text-xs hover:bg-zinc-50 text-red-600"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="mt-4 flex items-center justify-between text-sm text-zinc-600">
-              <div>
-                Page {page} of {totalPages} (showing up to {perPage} users per page)
-              </div>
-              <div className="flex gap-2">
-                <button
-                  className="rounded-lg border px-3 py-1.5 text-xs hover:bg-zinc-50 disabled:opacity-60"
-                  disabled={page === 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  Previous
-                </button>
-                <button
-                  className="rounded-lg border px-3 py-1.5 text-xs hover:bg-zinc-50 disabled:opacity-60"
-                  disabled={page === totalPages}
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          </>
-        )}
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {editId ? (
-        <EditCard
-          form={editForm}
-          onChange={setEditForm}
-          onClose={() => setEditId(null)}
-          onSave={onSave}
+      {editUser ? (
+        <EditUserModal
+          user={editUser}
+          setField={setEditField}
+          onClose={() => setEditUser(null)}
+          onSave={onSaveEdit}
           saving={editSaving}
-          err={editErr}
+          error={editErr}
+          warehouses={warehouses}
+          regions={regions}
+          zones={zones}
+          areas={areas}
+          showPassword={editShowPassword}
+          setShowPassword={setEditShowPassword}
         />
       ) : null}
     </AdminShell>
   );
 }
 
-function EditCard({ form, onChange, onClose, onSave, saving, err }) {
-  if (!form) return null;
-  const activeFields = roleFields[form.role] || [];
+function EditUserModal({
+  user,
+  setField,
+  onClose,
+  onSave,
+  saving,
+  error,
+  warehouses,
+  regions,
+  zones,
+  areas,
+  showPassword,
+  setShowPassword,
+}) {
+  const roleNeeds = ROLE_EXTRA_FIELDS[user.role] || [];
+
+  const selectedWarehouse = warehouses.find((x) => x.warehouseId === user.warehouseId);
+  const selectedRegion = regions.find((x) => x.regionId === user.regionId);
+  const selectedZone = zones.find((x) => x.zoneId === user.zoneId);
+
+  const filteredRegions = regions.filter((r) => {
+    if (!selectedWarehouse) return true;
+    return !r.companyId || r.companyId === selectedWarehouse.companyId;
+  });
+  const filteredZones = zones.filter((z) => {
+    if (selectedWarehouse && z.warehouseId !== selectedWarehouse.warehouseId) return false;
+    if (selectedRegion && z.regionId !== selectedRegion.regionId) return false;
+    return true;
+  });
+  const filteredAreas = areas.filter((a) => {
+    if (selectedWarehouse && a.warehouseId !== selectedWarehouse.warehouseId) return false;
+    if (selectedRegion && a.regionId !== selectedRegion.regionId) return false;
+    if (selectedZone && a.zoneId !== selectedZone.zoneId) return false;
+    return true;
+  });
+
+  const visibleTextFields = BASE_EDIT_FIELDS.filter((f) => !!user[f] || ["fullName", "mobileNumber", "cnicNo", "email", "address"].includes(f));
+
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="absolute right-0 top-0 h-full w-full sm:w-[620px] bg-white shadow-xl flex flex-col">
-        <div className="shrink-0 border-b px-4 py-3 flex items-center justify-between">
+      <div className="absolute right-0 top-0 flex h-full w-full flex-col bg-white shadow-xl sm:w-[680px]">
+        <div className="flex items-center justify-between border-b px-4 py-3">
           <div className="text-lg font-semibold text-zinc-900">Edit User</div>
           <button onClick={onClose} className="rounded-xl border px-3 py-2 text-sm hover:bg-zinc-50">✕</button>
         </div>
+
         <div className="flex-1 overflow-y-auto p-4">
-          {err ? <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {activeFields.map((field) => (
-              <Field
+          {error ? <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <InputField label="User ID" value={user.userId || ""} readOnly />
+            <InputField label="Role" value={user.role || ""} readOnly />
+
+            {roleNeeds.includes("warehouse") ? (
+              <SelectField
+                label="Warehouse Name"
+                value={user.warehouseId || ""}
+                onChange={(warehouseId) => {
+                  const item = warehouses.find((w) => w.warehouseId === warehouseId);
+                  setField("warehouseId", item?.warehouseId || "");
+                  setField("warehouseName", item?.name || "");
+                  setField("regionId", "");
+                  setField("regionName", "");
+                  setField("zoneId", "");
+                  setField("zoneName", "");
+                  setField("territoryId", "");
+                  setField("territoryName", "");
+                  setField("fieldId", "");
+                  setField("fieldName", "");
+                }}
+                options={warehouses.map((w) => ({ value: w.warehouseId, label: w.name }))}
+              />
+            ) : null}
+
+            {roleNeeds.includes("region") ? (
+              <SelectField
+                label="Region Name"
+                value={user.regionId || ""}
+                onChange={(regionId) => {
+                  const item = regions.find((r) => r.regionId === regionId);
+                  setField("regionId", item?.regionId || "");
+                  setField("regionName", item?.name || "");
+                  setField("zoneId", "");
+                  setField("zoneName", "");
+                  setField("territoryId", "");
+                  setField("territoryName", "");
+                  setField("fieldId", "");
+                  setField("fieldName", "");
+                }}
+                options={filteredRegions.map((r) => ({ value: r.regionId, label: r.name }))}
+              />
+            ) : null}
+
+            {roleNeeds.includes("zone") ? (
+              <SelectField
+                label="Zone Name"
+                value={user.zoneId || ""}
+                onChange={(zoneId) => {
+                  const item = zones.find((z) => z.zoneId === zoneId);
+                  setField("zoneId", item?.zoneId || "");
+                  setField("zoneName", item?.name || "");
+                  setField("territoryId", "");
+                  setField("territoryName", "");
+                  setField("fieldId", "");
+                  setField("fieldName", "");
+                }}
+                options={filteredZones.map((z) => ({ value: z.zoneId, label: z.name }))}
+              />
+            ) : null}
+
+            {roleNeeds.includes("territory") ? (
+              <SelectField
+                label="Territory Name"
+                value={user.territoryId || ""}
+                onChange={(areaId) => {
+                  const item = areas.find((a) => a.areaId === areaId);
+                  setField("territoryId", item?.areaId || "");
+                  setField("territoryName", item?.name || "");
+                }}
+                options={filteredAreas.map((a) => ({ value: a.areaId, label: a.name }))}
+              />
+            ) : null}
+
+            {roleNeeds.includes("field") ? (
+              <SelectField
+                label="Field Name"
+                value={user.fieldId || ""}
+                onChange={(areaId) => {
+                  const item = areas.find((a) => a.areaId === areaId);
+                  setField("fieldId", item?.areaId || "");
+                  setField("fieldName", item?.name || "");
+                }}
+                options={filteredAreas.map((a) => ({ value: a.areaId, label: a.name }))}
+              />
+            ) : null}
+
+            {visibleTextFields.map((field) => (
+              <InputField
                 key={field}
-                label={fieldLabels[field] || field}
-                value={form[field] || ""}
-                onChange={(v) => onChange((s) => ({ ...s, [field]: v }))}
+                label={FIELD_LABELS[field] || field}
+                value={user[field] || ""}
+                onChange={(v) => setField(field, v)}
               />
             ))}
-            <Field
+
+            <PasswordField
               label="New Password (optional)"
-              value={form.password || ""}
-              onChange={(v) => onChange((s) => ({ ...s, password: v }))}
-              type="password"
-              helper="Leave blank to keep existing password."
+              value={user.password || ""}
+              onChange={(v) => setField("password", v)}
+              show={showPassword}
+              setShow={setShowPassword}
             />
           </div>
         </div>
-        <div className="shrink-0 border-t p-4 flex items-center gap-3">
-          <button
-            onClick={onSave}
-            disabled={saving}
-            className="rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-700 disabled:opacity-60"
-          >
-            {saving ? "Updating..." : "Update"}
+
+        <div className="flex items-center gap-3 border-t p-4">
+          <button onClick={onSave} disabled={saving} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60">
+            {saving ? "Updating..." : "Update User"}
           </button>
-          <button onClick={onClose} className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50">
-            Cancel
-          </button>
+          <button onClick={onClose} className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50">Cancel</button>
         </div>
       </div>
     </div>
   );
 }
 
-function getDisplayId(user) {
-  const key = roleIdFieldMap[user?.role];
-  if (key && user?.[key]) return user[key];
-  return user?.username || user?.mobile || user?._id || "";
-}
-
 function Label({ children }) {
   return <div className="text-sm font-medium text-zinc-800">{children}</div>;
 }
 
-function Field({ label, value, onChange, type = "text", helper }) {
+function InputField({ label, value, onChange, readOnly = false }) {
   return (
     <div>
       <Label>{label}</Label>
       <input
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        type={type}
+        readOnly={readOnly}
+        onChange={(e) => onChange?.(e.target.value)}
         className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200"
       />
-      {helper ? <div className="text-xs text-zinc-500 mt-1">{helper}</div> : null}
+    </div>
+  );
+}
+
+function SelectField({ label, value, onChange, options }) {
+  return (
+    <div>
+      <Label>{label}</Label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200"
+      >
+        <option value="">Choose...</option>
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function PasswordField({ label, value, onChange, show, setShow }) {
+  return (
+    <div>
+      <Label>{label}</Label>
+      <div className="relative">
+        <input
+          type={show ? "text" : "password"}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="mt-1 w-full rounded-xl border px-3 py-2 pr-16 outline-none focus:ring-2 focus:ring-emerald-200"
+        />
+        <button
+          type="button"
+          onClick={() => setShow((v) => !v)}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-500 hover:text-zinc-700"
+        >
+          {show ? "Hide" : "Show"}
+        </button>
+      </div>
     </div>
   );
 }

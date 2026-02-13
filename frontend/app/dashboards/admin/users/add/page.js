@@ -3,84 +3,136 @@
 import { useEffect, useMemo, useState } from "react";
 import AdminShell from "../../components/AdminShell";
 import { apiFetch } from "../../../../lib/api";
-
-const roles = [
-  "admin", "CEO", "Managing Director", "Warehouse Manager", "Account Officer", "HR Assistant", "Cashier", "KPO",
-  "National Sale Manager", "Regional Sale Manager", "Zone Sale Manager", "Territory Sale Manager", "Distributor",
-  "Field Sale Manager", "Order Booker", "Salesman", "Delivery Boy", "customer", "Brand Manager",
-];
-
-const roleFields = {
-  admin: [],
-  CEO: [],
-  "Managing Director": [],
-  "Warehouse Manager": ["warehouseName"],
-  "Account Officer": ["warehouseName"],
-  "HR Assistant": ["warehouseName"],
-  Cashier: ["warehouseName"],
-  KPO: ["warehouseName"],
-  "National Sale Manager": [],
-  "Regional Sale Manager": ["warehouseName", "regionName"],
-  "Zone Sale Manager": ["warehouseName", "regionName", "zoneName"],
-  "Territory Sale Manager": ["warehouseName", "regionName", "zoneName", "territoryName"],
-  Distributor: ["warehouseName", "regionName", "zoneName", "territoryName"],
-  "Field Sale Manager": ["warehouseName", "regionName", "zoneName", "territoryName", "fieldName"],
-  "Order Booker": ["warehouseName", "regionName", "zoneName", "territoryName", "fieldName"],
-  Salesman: ["warehouseName", "regionName", "zoneName", "territoryName", "fieldName"],
-  "Delivery Boy": ["warehouseName", "regionName", "zoneName", "territoryName", "fieldName"],
-  customer: ["businessType", "businessName", "warehouseName", "regionName", "zoneName", "territoryName", "fieldName"],
-  "Brand Manager": ["businessType", "businessName", "warehouseName", "regionName", "zoneName", "territoryName", "fieldName"],
-};
-
-const commonFields = ["fullName", "email", "mobileNumber", "cnicNo", "password", "address"];
-
-function validatePassword(value) {
-  if (!value || value.length < 8) return "Password must be at least 8 characters long.";
-  if (!/[0-9]/.test(value)) return "Password must include at least one number.";
-  if (!/[^A-Za-z0-9]/.test(value)) return "Password must include at least one symbol.";
-  return "";
-}
+import {
+  AIM_USER_ROLES,
+  COMMON_USER_FIELDS,
+  FIELD_LABELS,
+  ROLE_EXTRA_FIELDS,
+  validatePassword,
+} from "../roleConfig";
 
 export default function AddUserPage() {
-  const [rows, setRows] = useState([]);
+  const [users, setUsers] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [regions, setRegions] = useState([]);
   const [zones, setZones] = useState([]);
   const [areas, setAreas] = useState([]);
+
   const [role, setRole] = useState("");
+  const [form, setForm] = useState({ userId: "01" });
+  const [showPassword, setShowPassword] = useState(false);
+
+  const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ userId: "01" });
 
   useEffect(() => {
     (async () => {
-      const [usersRes, whRes, regionRes, zoneRes, areaRes] = await Promise.all([
-        apiFetch("/users"), apiFetch("/warehouses"), apiFetch("/regions"), apiFetch("/zones"), apiFetch("/areas"),
+      const [usersRes, warehousesRes, regionsRes, zonesRes, areasRes] = await Promise.all([
+        apiFetch("/users"),
+        apiFetch("/warehouses"),
+        apiFetch("/regions"),
+        apiFetch("/zones"),
+        apiFetch("/areas"),
       ]);
-      setRows(usersRes.users || []);
-      setWarehouses(whRes.warehouses || []);
-      setRegions(regionRes.regions || []);
-      setZones(zoneRes.zones || []);
-      setAreas(areaRes.areas || []);
-    })().catch((e) => setErr(e.message || "Failed to load form"));
+      setUsers(usersRes.users || []);
+      setWarehouses(warehousesRes.warehouses || []);
+      setRegions(regionsRes.regions || []);
+      setZones(zonesRes.zones || []);
+      setAreas(areasRes.areas || []);
+    })().catch((e) => setErr(e.message || "Failed to load data"));
   }, []);
 
-  const nextId = useMemo(() => String(rows.length + 1).padStart(2, "0"), [rows]);
-  useEffect(() => setForm((s) => ({ ...s, userId: nextId })), [nextId]);
+  const nextUserId = useMemo(() => String((users || []).length + 1).padStart(2, "0"), [users]);
+  useEffect(() => {
+    setForm((prev) => ({ ...prev, userId: nextUserId }));
+  }, [nextUserId]);
 
-  const selectedWarehouse = warehouses.find((x) => x.warehouseId === form.warehouseId);
-  const filteredRegions = regions.filter((x) => !form.warehouseId || x.companyId === selectedWarehouse?.companyId);
-  const filteredZones = zones.filter((x) => (!form.warehouseId || x.warehouseId === form.warehouseId) && (!form.regionId || x.regionId === form.regionId));
-  const filteredAreas = areas.filter((x) => (!form.warehouseId || x.warehouseId === form.warehouseId) && (!form.regionId || x.regionId === form.regionId) && (!form.zoneId || x.zoneId === form.zoneId));
+  const selectedWarehouse = warehouses.find((x) => x._id === form.warehouseDocId);
+  const selectedRegion = regions.find((x) => x._id === form.regionDocId);
+  const selectedZone = zones.find((x) => x._id === form.zoneDocId);
 
-  function setField(k, v) { setForm((s) => ({ ...s, [k]: v })); }
+  const filteredRegions = regions.filter((r) => {
+    if (!selectedWarehouse) return true;
+    return !r.companyId || r.companyId === selectedWarehouse.companyId;
+  });
+  const filteredZones = zones.filter((z) => {
+    if (selectedWarehouse && z.warehouseId !== selectedWarehouse.warehouseId) return false;
+    if (selectedRegion && z.regionId !== selectedRegion.regionId) return false;
+    return true;
+  });
+  const filteredAreas = areas.filter((a) => {
+    if (selectedWarehouse && a.warehouseId !== selectedWarehouse.warehouseId) return false;
+    if (selectedRegion && a.regionId !== selectedRegion.regionId) return false;
+    if (selectedZone && a.zoneId !== selectedZone.zoneId) return false;
+    return true;
+  });
+
+  function setField(key, value) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function resetLocationFrom(level) {
+    if (level === "warehouse") {
+      setForm((prev) => ({
+        ...prev,
+        regionDocId: "",
+        regionId: "",
+        regionName: "",
+        zoneDocId: "",
+        zoneId: "",
+        zoneName: "",
+        territoryDocId: "",
+        territoryId: "",
+        territoryName: "",
+        fieldDocId: "",
+        fieldId: "",
+        fieldName: "",
+      }));
+    }
+    if (level === "region") {
+      setForm((prev) => ({
+        ...prev,
+        zoneDocId: "",
+        zoneId: "",
+        zoneName: "",
+        territoryDocId: "",
+        territoryId: "",
+        territoryName: "",
+        fieldDocId: "",
+        fieldId: "",
+        fieldName: "",
+      }));
+    }
+    if (level === "zone") {
+      setForm((prev) => ({
+        ...prev,
+        territoryDocId: "",
+        territoryId: "",
+        territoryName: "",
+        fieldDocId: "",
+        fieldId: "",
+        fieldName: "",
+      }));
+    }
+  }
 
   async function onSubmit(e) {
     e.preventDefault();
-    setErr(""); setOk("");
-    const pErr = validatePassword(form.password);
-    if (pErr) return setErr(pErr);
+    setErr("");
+    setOk("");
+
+    if (!role) {
+      setErr("Please select a role.");
+      return;
+    }
+
+    const passError = validatePassword(form.password);
+    if (passError) {
+      setErr(passError);
+      return;
+    }
+
     setSaving(true);
     try {
       await apiFetch("/users", {
@@ -89,47 +141,149 @@ export default function AddUserPage() {
           ...form,
           role,
           mobile: form.mobileNumber,
+          userId: form.userId,
           fullName: form.fullName,
-          customerId: form.userId,
         },
       });
-      setOk(`✅ ${role} created with ID ${form.userId}`);
-      setRows((s) => [...s, { _id: Date.now() }]);
-      setForm({ userId: String(rows.length + 2).padStart(2, "0") });
+
+      setUsers((prev) => [...prev, { _id: Date.now().toString() }]);
+      setOk(`✅ ${role} user created successfully.`);
       setRole("");
+      setForm({ userId: String(users.length + 2).padStart(2, "0") });
+      setShowPassword(false);
     } catch (e2) {
       setErr(e2.message || "Failed to create user");
-    } finally { setSaving(false); }
+    } finally {
+      setSaving(false);
+    }
   }
 
-  const fields = [...(roleFields[role] || []), ...commonFields];
+  const roleNeeds = ROLE_EXTRA_FIELDS[role] || [];
 
   return (
     <AdminShell title="Add User" user={null}>
-      <div className="rounded-2xl bg-white border shadow-sm p-5">
-        <div className="text-xl font-semibold">Add AIM Hygienic User</div>
-        <div className="text-sm text-zinc-500 mt-1">Only configured roles are available. User ID is auto-generated.</div>
-        {err ? <div className="mt-3 text-sm text-red-600">{err}</div> : null}
-        {ok ? <div className="mt-3 text-sm text-emerald-600">{ok}</div> : null}
+      <div className="rounded-2xl border bg-white p-5 shadow-sm">
+        <div className="text-xl font-semibold text-zinc-900">Add AIM Hygienic User</div>
+        <div className="mt-1 text-sm text-zinc-500">Choose role first. Location dropdowns show names from backend records.</div>
 
-        <form className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4" onSubmit={onSubmit}>
-          <Select label="Role" value={role} onChange={(v) => setRole(v)} options={roles} required />
-          <Input label="Auto User ID" value={form.userId || ""} readOnly />
+        {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
+        {ok ? <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{ok}</div> : null}
 
-          {fields.includes("warehouseName") ? <WarehouseSelect warehouses={warehouses} form={form} setField={setField} /> : null}
-          {fields.includes("regionName") ? <RegionSelect rows={filteredRegions} form={form} setField={setField} /> : null}
-          {fields.includes("zoneName") ? <ZoneSelect rows={filteredZones} form={form} setField={setField} /> : null}
-          {fields.includes("territoryName") ? <AreaSelect label="Territory Name" rows={filteredAreas} form={form} setField={setField} field="territory" /> : null}
-          {fields.includes("fieldName") ? <AreaSelect label="Field Name" rows={filteredAreas} form={form} setField={setField} field="field" /> : null}
-          {fields.includes("businessType") ? <Input label="Business Type" value={form.businessType || ""} onChange={(v) => setField("businessType", v)} required /> : null}
-          {fields.includes("businessName") ? <Input label="Business Name" value={form.businessName || ""} onChange={(v) => setField("businessName", v)} required /> : null}
+        <form onSubmit={onSubmit} className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+          <SelectField label="Role" value={role} onChange={setRole} options={AIM_USER_ROLES.map((r) => ({ value: r, label: r }))} required />
+          <InputField label="Auto User ID" value={form.userId || ""} readOnly />
 
-          {commonFields.map((field) => (
-            <Input key={field} label={field.replace(/([A-Z])/g, " $1").replace(/^./, (x) => x.toUpperCase())} value={form[field] || ""} onChange={(v) => setField(field, v)} type={field === "password" ? "password" : "text"} required />
+          {roleNeeds.includes("warehouse") ? (
+            <SelectField
+              label="Warehouse Name"
+              value={form.warehouseDocId || ""}
+              onChange={(docId) => {
+                const item = warehouses.find((w) => w._id === docId);
+                setForm((prev) => ({
+                  ...prev,
+                  warehouseDocId: docId,
+                  warehouseId: item?.warehouseId || "",
+                  warehouseName: item?.name || "",
+                }));
+                resetLocationFrom("warehouse");
+              }}
+              options={warehouses.map((w) => ({ value: w._id, label: w.name }))}
+            />
+          ) : null}
+
+          {roleNeeds.includes("region") ? (
+            <SelectField
+              label="Region Name"
+              value={form.regionDocId || ""}
+              onChange={(docId) => {
+                const item = regions.find((r) => r._id === docId);
+                setForm((prev) => ({
+                  ...prev,
+                  regionDocId: docId,
+                  regionId: item?.regionId || "",
+                  regionName: item?.name || "",
+                }));
+                resetLocationFrom("region");
+              }}
+              options={filteredRegions.map((r) => ({ value: r._id, label: r.name }))}
+            />
+          ) : null}
+
+          {roleNeeds.includes("zone") ? (
+            <SelectField
+              label="Zone Name"
+              value={form.zoneDocId || ""}
+              onChange={(docId) => {
+                const item = zones.find((z) => z._id === docId);
+                setForm((prev) => ({
+                  ...prev,
+                  zoneDocId: docId,
+                  zoneId: item?.zoneId || "",
+                  zoneName: item?.name || "",
+                }));
+                resetLocationFrom("zone");
+              }}
+              options={filteredZones.map((z) => ({ value: z._id, label: z.name }))}
+            />
+          ) : null}
+
+          {roleNeeds.includes("territory") ? (
+            <SelectField
+              label="Territory Name"
+              value={form.territoryDocId || ""}
+              onChange={(docId) => {
+                const item = areas.find((a) => a._id === docId);
+                setField("territoryDocId", docId);
+                setField("territoryId", item?.areaId || "");
+                setField("territoryName", item?.name || "");
+              }}
+              options={filteredAreas.map((a) => ({ value: a._id, label: a.name }))}
+            />
+          ) : null}
+
+          {roleNeeds.includes("field") ? (
+            <SelectField
+              label="Field Name"
+              value={form.fieldDocId || ""}
+              onChange={(docId) => {
+                const item = areas.find((a) => a._id === docId);
+                setField("fieldDocId", docId);
+                setField("fieldId", item?.areaId || "");
+                setField("fieldName", item?.name || "");
+              }}
+              options={filteredAreas.map((a) => ({ value: a._id, label: a.name }))}
+            />
+          ) : null}
+
+          {roleNeeds.includes("businessType") ? <InputField label="Business Type" value={form.businessType || ""} onChange={(v) => setField("businessType", v)} required /> : null}
+          {roleNeeds.includes("businessName") ? <InputField label="Business Name" value={form.businessName || ""} onChange={(v) => setField("businessName", v)} required /> : null}
+
+          {COMMON_USER_FIELDS.filter((f) => f !== "password").map((field) => (
+            <InputField
+              key={field}
+              label={FIELD_LABELS[field] || field}
+              value={form[field] || ""}
+              onChange={(v) => setField(field, v)}
+              required
+            />
           ))}
 
+          <PasswordField
+            label="Password"
+            value={form.password || ""}
+            onChange={(v) => setField("password", v)}
+            show={showPassword}
+            setShow={setShowPassword}
+          />
+
           <div className="md:col-span-2">
-            <button disabled={!role || saving} className="rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm disabled:opacity-60">{saving ? "Saving..." : "Save User"}</button>
+            <button
+              type="submit"
+              disabled={saving || !role}
+              className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+            >
+              {saving ? "Saving..." : "Save User"}
+            </button>
           </div>
         </form>
       </div>
@@ -137,22 +291,64 @@ export default function AddUserPage() {
   );
 }
 
-function Input({ label, value, onChange, type = "text", required = false, readOnly = false }) {
-  return <div><div className="text-sm font-medium">{label}</div><input readOnly={readOnly} className="mt-1 w-full rounded-xl border px-3 py-2" type={type} value={value} onChange={(e) => onChange?.(e.target.value)} required={required} /></div>;
+function Label({ children }) {
+  return <div className="text-sm font-medium text-zinc-800">{children}</div>;
 }
-function Select({ label, value, onChange, options, required = false }) {
-  return <div><div className="text-sm font-medium">{label}</div><select className="mt-1 w-full rounded-xl border px-3 py-2" value={value} onChange={(e) => onChange(e.target.value)} required={required}><option value="">Choose...</option>{options.map((v) => <option key={v} value={v}>{v}</option>)}</select></div>;
+
+function InputField({ label, value, onChange, required = false, readOnly = false }) {
+  return (
+    <div>
+      <Label>{label}</Label>
+      <input
+        value={value}
+        readOnly={readOnly}
+        required={required}
+        onChange={(e) => onChange?.(e.target.value)}
+        className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200"
+      />
+    </div>
+  );
 }
-function WarehouseSelect({ warehouses, form, setField }) {
-  return <Select label="Warehouse Name" value={form.warehouseId || ""} onChange={(id) => { const x = warehouses.find((w) => w.warehouseId === id); setField("warehouseId", x?.warehouseId || ""); setField("warehouseName", x?.name || ""); }} options={warehouses.map((w) => w.warehouseId)} />;
+
+function SelectField({ label, value, onChange, options, required = false }) {
+  return (
+    <div>
+      <Label>{label}</Label>
+      <select
+        value={value}
+        required={required}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200"
+      >
+        <option value="">Choose...</option>
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
+    </div>
+  );
 }
-function RegionSelect({ rows, form, setField }) {
-  return <Select label="Region Name" value={form.regionId || ""} onChange={(id) => { const x = rows.find((w) => w.regionId === id); setField("regionId", x?.regionId || ""); setField("regionName", x?.name || ""); }} options={rows.map((w) => w.regionId)} />;
-}
-function ZoneSelect({ rows, form, setField }) {
-  return <Select label="Zone Name" value={form.zoneId || ""} onChange={(id) => { const x = rows.find((w) => w.zoneId === id); setField("zoneId", x?.zoneId || ""); setField("zoneName", x?.name || ""); }} options={rows.map((w) => w.zoneId)} />;
-}
-function AreaSelect({ label, rows, form, setField, field }) {
-  const valueKey = `${field}Id`;
-  return <Select label={label} value={form[valueKey] || ""} onChange={(id) => { const x = rows.find((w) => w.areaId === id); setField(valueKey, x?.areaId || ""); setField(`${field}Name`, x?.name || ""); }} options={rows.map((w) => w.areaId)} />;
+
+function PasswordField({ label, value, onChange, show, setShow }) {
+  return (
+    <div>
+      <Label>{label}</Label>
+      <div className="relative">
+        <input
+          type={show ? "text" : "password"}
+          value={value}
+          required
+          onChange={(e) => onChange(e.target.value)}
+          className="mt-1 w-full rounded-xl border px-3 py-2 pr-16 outline-none focus:ring-2 focus:ring-emerald-200"
+        />
+        <button
+          type="button"
+          onClick={() => setShow((v) => !v)}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-500 hover:text-zinc-700"
+        >
+          {show ? "Hide" : "Show"}
+        </button>
+      </div>
+    </div>
+  );
 }
