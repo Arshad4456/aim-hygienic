@@ -31,6 +31,19 @@ function buildIdentifierCandidates(rawIdentifier) {
   return Array.from(candidates).filter(Boolean);
 }
 
+function buildLoosePhoneRegex(rawIdentifier) {
+  const digits = String(rawIdentifier || "").replace(/\D/g, "");
+  if (!digits) return null;
+
+  let local = digits;
+  if (local.startsWith("92") && local.length > 2) local = local.slice(2);
+  if (local.startsWith("0") && local.length > 1) local = local.slice(1);
+
+  if (!local) return null;
+  const tail = local.slice(-10);
+  return new RegExp(`${tail}$`);
+}
+
 function isUserActive(status) {
   const normalized = String(status || "active").toLowerCase().trim();
   return !normalized || normalized === "active";
@@ -43,7 +56,7 @@ router.post("/login", async (req, res) => {
     if (!identifier || !password) return res.status(400).json({ ok: false, message: "Missing credentials" });
 
     const identifiers = buildIdentifierCandidates(identifier);
-    const user = await User.findOne({
+    let user = await User.findOne({
       $or: [
         { mobile: { $in: identifiers } },
         { mobileNumber: { $in: identifiers } },
@@ -52,6 +65,19 @@ router.post("/login", async (req, res) => {
         { phoneNumber: { $in: identifiers } },
       ],
     }).lean();
+
+    if (!user) {
+      const loosePhoneRegex = buildLoosePhoneRegex(identifier);
+      if (loosePhoneRegex) {
+        user = await User.findOne({
+          $or: [
+            { mobile: { $regex: loosePhoneRegex } },
+            { mobileNumber: { $regex: loosePhoneRegex } },
+            { phoneNumber: { $regex: loosePhoneRegex } },
+          ],
+        }).lean();
+      }
+    }
 
     if (!user) return res.status(401).json({ ok: false, message: "Invalid username/password" });
     if (!isUserActive(user.status)) return res.status(403).json({ ok: false, message: "User is deactive" });
