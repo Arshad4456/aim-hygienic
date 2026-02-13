@@ -127,6 +127,121 @@ export default function UserListPage() {
     }
   }
 
+  function downloadExcel() {
+    const headers = [
+      "User ID",
+      "Name",
+      "Role",
+      "Mobile",
+      "Email",
+      "Warehouse",
+      "Region",
+      "Zone",
+      "Territory",
+      "Field",
+    ];
+    const rowsForExport = filteredRows.map((row) => [
+      row.userId || "",
+      row.fullName || "",
+      row.role || "",
+      row.mobileNumber || row.mobile || "",
+      row.email || "",
+      row.warehouseName || "",
+      row.regionName || "",
+      row.zoneName || "",
+      row.territoryName || "",
+      row.fieldName || "",
+    ]);
+
+    const csv = [headers, ...rowsForExport]
+      .map((cols) => cols.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csv], { type: "application/vnd.ms-excel;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `users-${new Date().toISOString().slice(0, 10)}.xls`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  function buildSimplePdf(lines) {
+    const objects = [];
+    const offsets = [];
+    const addObject = (content) => {
+      objects.push(content);
+      return objects.length;
+    };
+
+    const escapePdfText = (value) => String(value).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+
+    const pageLines = lines.slice(0, 45);
+    const contentStream = ["BT", "/F1 10 Tf", "40 800 Td"];
+    pageLines.forEach((line, index) => {
+      if (index === 0) contentStream.push(`(${escapePdfText(line)}) Tj`);
+      else contentStream.push(`0 -16 Td (${escapePdfText(line)}) Tj`);
+    });
+    contentStream.push("ET");
+    const streamText = contentStream.join("\n");
+
+    const catalogId = addObject("<< /Type /Catalog /Pages 2 0 R >>");
+    const pagesId = addObject("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    const pageId = addObject("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>");
+    const fontId = addObject("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+    const contentId = addObject(`<< /Length ${streamText.length} >>\nstream\n${streamText}\nendstream`);
+
+    let pdf = "%PDF-1.4\n";
+    [catalogId, pagesId, pageId, fontId, contentId].forEach((id) => {
+      offsets[id] = pdf.length;
+      pdf += `${id} 0 obj\n${objects[id - 1]}\nendobj\n`;
+    });
+
+    const xrefOffset = pdf.length;
+    pdf += `xref\n0 ${objects.length + 1}\n`;
+    pdf += "0000000000 65535 f \n";
+    for (let i = 1; i <= objects.length; i += 1) {
+      pdf += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
+    }
+    pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+    return pdf;
+  }
+
+  function downloadPdf() {
+    const lines = [
+      `AIM Hygienic - User List (${new Date().toLocaleString()})`,
+      "",
+      "User ID | Name | Role | Mobile | Warehouse | Region | Zone | Territory | Field",
+      "--------------------------------------------------------------------------------",
+      ...filteredRows.map((row) =>
+        [
+          row.userId || "-",
+          row.fullName || "-",
+          row.role || "-",
+          row.mobileNumber || row.mobile || "-",
+          row.warehouseName || "-",
+          row.regionName || "-",
+          row.zoneName || "-",
+          row.territoryName || "-",
+          row.fieldName || "-",
+        ].join(" | ")
+      ),
+    ];
+
+    const pdfContent = buildSimplePdf(lines);
+    const blob = new Blob([pdfContent], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `users-${new Date().toISOString().slice(0, 10)}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <AdminShell title="User List" user={null}>
       <div className="rounded-2xl border bg-white p-5 shadow-sm">
@@ -151,6 +266,23 @@ export default function UserListPage() {
             {AIM_USER_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
           <div className="rounded-xl border bg-zinc-50 px-3 py-2 text-sm text-zinc-600">Total users: <b>{filteredRows.length}</b></div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={downloadPdf}
+            className="rounded-xl border px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+          >
+            Download PDF
+          </button>
+          <button
+            type="button"
+            onClick={downloadExcel}
+            className="rounded-xl border px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+          >
+            Download Excel Sheet
+          </button>
         </div>
 
         <div className="mt-5 overflow-auto rounded-xl border">
