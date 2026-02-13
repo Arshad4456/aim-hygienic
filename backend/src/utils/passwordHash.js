@@ -1,19 +1,18 @@
 const crypto = require("crypto");
 
-const SCRYPT_PARAMS = {
-  N: 16384,
-  r: 8,
-  p: 1,
-  keylen: 64,
-};
+let bcrypt = null;
+try {
+  bcrypt = require("bcryptjs");
+} catch (_) {
+  // bcryptjs not installed - bcrypt verification will be unavailable
+}
 
-function scryptAsync(password, salt) {
+const SCRYPT_PARAMS = { N: 16384, r: 8, p: 1, keylen: 64 };
+
+function scryptAsync(password, salt, keylen, params) {
   return new Promise((resolve, reject) => {
-    crypto.scrypt(password, salt, SCRYPT_PARAMS.keylen, SCRYPT_PARAMS, (error, key) => {
-      if (error) {
-        reject(error);
-        return;
-      }
+    crypto.scrypt(password, salt, keylen, params, (error, key) => {
+      if (error) return reject(error);
       resolve(key);
     });
   });
@@ -21,41 +20,40 @@ function scryptAsync(password, salt) {
 
 async function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString("hex");
-  const derived = await scryptAsync(password, salt);
+  const derived = await scryptAsync(password, salt, SCRYPT_PARAMS.keylen, SCRYPT_PARAMS);
   return `scrypt$${SCRYPT_PARAMS.N}$${SCRYPT_PARAMS.r}$${SCRYPT_PARAMS.p}$${salt}$${derived.toString("hex")}`;
 }
 
-async function verifyPassword(password, passwordHash) {
-  const raw = String(passwordHash || "");
-  const provided = String(password || "");
-  const parts = raw.split("$");
+async function verifyPassword(password, stored) {
+  const provided = String(password ?? "");
+  const raw = String(stored ?? "").trim();
+  if (!raw) return false;
 
-  if (parts[0] !== "scrypt" || parts.length !== 6) {
-    // Backward-compatible fallback for legacy/dev records.
-    return provided === raw || provided === raw.trim();
+  // 1) scrypt format
+  if (raw.startsWith("scrypt$")) {
+    const parts = raw.split("$");
+    if (parts.length !== 6) return false;
+
+    const [, n, r, p, salt, storedHex] = parts;
+    const storedBuf = Buffer.from(storedHex, "hex");
+    const derived = await scryptAsync(provided, salt, storedBuf.length, {
+      N: Number(n),
+      r: Number(r),
+      p: Number(p),
+    });
+
+    if (storedBuf.length !== derived.length) return false;
+    return crypto.timingSafeEqual(storedBuf, derived);
   }
 
-  const [, n, r, p, salt, storedHex] = parts;
-  const keylen = Buffer.from(storedHex, "hex").length;
-  const derived = await new Promise((resolve, reject) => {
-    crypto.scrypt(
-      provided,
-      salt,
-      keylen,
-      { N: Number(n), r: Number(r), p: Number(p) },
-      (error, key) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve(key);
-      },
-    );
-  });
+  // 2) bcrypt format
+  if (raw.startsWith("$2a$") || raw.startsWith("$2b$") || raw.startsWith("$2y$")) {
+    if (!bcrypt) return false;
+    return bcrypt.compare(provided, raw);
+  }
 
-  const stored = Buffer.from(storedHex, "hex");
-  if (stored.length !== derived.length) return false;
-  return crypto.timingSafeEqual(stored, derived);
+  // 3) legacy plain text
+  return provided === raw;
 }
 
 module.exports = { hashPassword, verifyPassword };
