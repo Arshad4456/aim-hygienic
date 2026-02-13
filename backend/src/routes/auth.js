@@ -35,6 +35,7 @@ router.post("/login", async (req, res) => {
   const user = await User.findOne({
     $or: [
       { mobile: { $in: identifiers } },
+      { mobileNumber: { $in: identifiers } },
       { username: { $in: identifiers.map((value) => value.toLowerCase()) } },
     ],
   });
@@ -42,7 +43,8 @@ router.post("/login", async (req, res) => {
   if (!user) return res.status(401).json({ ok: false, message: "Invalid username/password" });
   if (user.status !== "active") return res.status(403).json({ ok: false, message: "User is deactive" });
 
-  const ok = await verifyPassword(password, user.passwordHash);
+  const storedPassword = user.passwordHash || user.password;
+  const ok = await verifyPassword(password, storedPassword);
   if (!ok) return res.status(401).json({ ok: false, message: "Invalid username/password" });
 
   const token = signToken(user);
