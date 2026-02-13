@@ -60,6 +60,28 @@ export const adminDashboardSearchItems = [
   { title: "Change Password", href: "/dashboards/admin/settings/change-password" },
 ];
 
-export const salesDashboardSearchItems = [
-  { title: "Dashboard", href: "/dashboards/sales" },
+const commonUserLinks = [
+  { title: "Dashboard Home", href: "/dashboards" },
+  { title: "Messages", href: "/dashboards/admin/messages" },
 ];
+
+export const userDashboardSearchItems = {
+  ceo: [{ title: "CEO Dashboard", href: "/dashboards/ceo" }, ...commonUserLinks],
+  manageDirector: [{ title: "Managing Director Dashboard", href: "/dashboards/manageDirector" }, ...commonUserLinks],
+  warehouseManager: [{ title: "Warehouse Manager Dashboard", href: "/dashboards/warehouseManager" }, ...commonUserLinks],
+  accountOfficer: [{ title: "Account Officer Dashboard", href: "/dashboards/accountOfficer" }, ...commonUserLinks],
+  cashier: [{ title: "Cashier Dashboard", href: "/dashboards/cashier" }, ...commonUserLinks],
+  hrAssistant: [{ title: "HR Assistant Dashboard", href: "/dashboards/hrAssistant" }, ...commonUserLinks],
+  kpo: [{ title: "KPO Dashboard", href: "/dashboards/kpo" }, ...commonUserLinks],
+  brandManager: [{ title: "Brand Manager Dashboard", href: "/dashboards/brandManager" }, ...commonUserLinks],
+  nationalSM: [{ title: "National Sale Manager Dashboard", href: "/dashboards/nationalSM" }, ...commonUserLinks],
+  regionalSM: [{ title: "Regional Sale Manager Dashboard", href: "/dashboards/regionalSM" }, ...commonUserLinks],
+  zoneSM: [{ title: "Zone Sale Manager Dashboard", href: "/dashboards/zoneSM" }, ...commonUserLinks],
+  territorySM: [{ title: "Territory Sale Manager Dashboard", href: "/dashboards/territorySM" }, ...commonUserLinks],
+  distributor: [{ title: "Distributor Dashboard", href: "/dashboards/distributor" }, ...commonUserLinks],
+  fieldSM: [{ title: "Field Sale Manager Dashboard", href: "/dashboards/fieldSM" }, ...commonUserLinks],
+  orderBooker: [{ title: "Order Booker Dashboard", href: "/dashboards/orderBooker" }, ...commonUserLinks],
+  salesman: [{ title: "Salesman Dashboard", href: "/dashboards/salesman" }, ...commonUserLinks],
+  deliveryBoy: [{ title: "Delivery Boy Dashboard", href: "/dashboards/deliveryBoy" }, ...commonUserLinks],
+  customer: [{ title: "Customer Dashboard", href: "/dashboards/customer" }, ...commonUserLinks],
+};

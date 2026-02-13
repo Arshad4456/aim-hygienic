@@ -1,11 +1,13 @@
-import React from 'react'
+import UserDashboardShell from "../components/userDashboardShell";
+import { userDashboardSearchItems } from "../searchItems";
 
-const page = () => {
+export default function Page() {
   return (
-    <div>
-      This is Brand Manager Dashboard.
-    </div>
-  )
+    <UserDashboardShell
+      title="Brand Manager Dashboard"
+      subtitle="Use quick search to navigate all available items for your dashboard."
+      roleKey="Brand Manager"
+      links={userDashboardSearchItems.brandManager || []}
+    />
+  );
 }
-
-export default page

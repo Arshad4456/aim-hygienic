@@ -14,7 +14,7 @@ function buildUserPayload(body) {
   return {
     username: normalize(body.username).toLowerCase(),
     fullName: normalize(body.fullName),
-    mobile: normalize(body.mobile),
+    mobile: normalize(body.mobile || body.mobileNumber),
     role: normalize(body.role),
     status: normalize(body.status) || "active",
     email: normalize(body.email),
@@ -64,6 +64,13 @@ function buildUserPayload(body) {
     supplierWarehouseName1: normalize(body.supplierWarehouseName1),
     supplierWarehouseId2: normalize(body.supplierWarehouseId2),
     supplierWarehouseName2: normalize(body.supplierWarehouseName2),
+    userId: normalize(body.userId),
+    territoryId: normalize(body.territoryId),
+    territoryName: normalize(body.territoryName),
+    fieldId: normalize(body.fieldId),
+    fieldName: normalize(body.fieldName),
+    businessType: normalize(body.businessType),
+    businessName: normalize(body.businessName),
   };
 }
 
@@ -80,7 +87,7 @@ router.put("/me", requireAuth, async (req, res) => {
     {
       fullName: normalize(body.fullName),
       email: normalize(body.email),
-      mobile: normalize(body.mobile),
+      mobile: normalize(body.mobile || body.mobileNumber),
       address: normalize(body.address),
     },
     { new: true, runValidators: true }
@@ -105,7 +112,7 @@ router.put("/change-password", requireAuth, async (req, res) => {
 
 router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
   const body = req.body || {};
-  if (!body.fullName || !body.role || !body.mobile) {
+  if (!body.fullName || !body.role || !(body.mobile || body.mobileNumber)) {
     return res.status(400).json({ ok: false, message: "Missing required fields" });
   }
   const validation = validatePassword(body.password);

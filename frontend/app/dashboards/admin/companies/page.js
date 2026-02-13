@@ -27,15 +27,7 @@ export default function CompanyListPage() {
 
   useEffect(() => { load(); }, []);
 
-  async function onDelete(id) {
-    if (!confirm("Delete this company?")) return;
-    try {
-      await apiFetch(`/companies/${id}`, { method: "DELETE" });
-      await load();
-    } catch (e) {
-      alert(e.message || "Delete failed");
-    }
-  }
+
 
   return (
     <AdminShell title="Company List" user={null}>
@@ -43,14 +35,8 @@ export default function CompanyListPage() {
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-xl font-semibold text-zinc-900">Companies</div>
-            <div className="text-sm text-zinc-500 mt-1">Manage companies (edit/delete).</div>
+            <div className="text-sm text-zinc-500 mt-1">Single-company mode enabled: AIM Hygienic (Pvt) Limited.</div>
           </div>
-          <a
-            href="/dashboards/admin/companies/add"
-            className="rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-700"
-          >
-            + Add Company
-          </a>
         </div>
 
         {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
@@ -86,13 +72,7 @@ export default function CompanyListPage() {
                         >
                           Edit
                         </button>
-                        <button
-                          onClick={() => onDelete(c._id)}
-                          className="rounded-lg border px-3 py-1.5 text-xs hover:bg-zinc-50 text-red-600"
-                        >
-                          Delete
-                        </button>
-                      </div>
+                                              </div>
                     </td>
                   </tr>
                 ))

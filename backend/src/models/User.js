@@ -58,6 +58,13 @@ const UserSchema = new mongoose.Schema(
     supplierWarehouseName1: { type: String, trim: true },
     supplierWarehouseId2: { type: String, trim: true },
     supplierWarehouseName2: { type: String, trim: true },
+    userId: { type: String, trim: true },
+    territoryId: { type: String, trim: true },
+    territoryName: { type: String, trim: true },
+    fieldId: { type: String, trim: true },
+    fieldName: { type: String, trim: true },
+    businessType: { type: String, trim: true },
+    businessName: { type: String, trim: true },
   },
   { timestamps: true }
 );
