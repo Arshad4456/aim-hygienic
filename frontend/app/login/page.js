@@ -27,7 +27,7 @@ export default function LoginPage() {
     if (role === "accounts") return "/dashboards/accounts";
     if (role === "Sales Manager") return "/dashboards/sales";
     if (role === "warehouse") return "/dashboards/warehouse";
-    // return "/dashboards/admin";
+    return "/dashboards/admin";
   };
 
   async function onSubmit(e) {
@@ -39,7 +39,7 @@ export default function LoginPage() {
       const data = await apiFetch("/auth/login", {
         method: "POST",
         credentials: "include",
-        body: { mobile, password },
+        body: { mobile: mobile.trim(), password: password.trim() },
       });
 
       // Save token + role (fast production approach)
