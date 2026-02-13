@@ -14,16 +14,26 @@ function buildIdentifierCandidates(rawIdentifier) {
 
   if (digits) {
     candidates.add(digits);
-    if (digits.startsWith("92") && digits.length > 10) {
-      candidates.add(digits.slice(2));
-      candidates.add(`0${digits.slice(2)}`);
+
+    if (digits.startsWith("92") && digits.length > 2) {
+      const localWithoutCountry = digits.slice(2);
+      candidates.add(localWithoutCountry);
+      if (!localWithoutCountry.startsWith("0")) {
+        candidates.add(`0${localWithoutCountry}`);
+      }
     }
-    if (digits.startsWith("0") && digits.length > 10) {
+
+    if (digits.startsWith("0") && digits.length > 1) {
       candidates.add(digits.slice(1));
     }
   }
 
   return Array.from(candidates).filter(Boolean);
+}
+
+function isUserActive(status) {
+  const normalized = String(status || "active").toLowerCase().trim();
+  return !normalized || normalized === "active";
 }
 
 router.post("/login", async (req, res) => {
@@ -41,7 +51,7 @@ router.post("/login", async (req, res) => {
   });
 
   if (!user) return res.status(401).json({ ok: false, message: "Invalid username/password" });
-  if (user.status !== "active") return res.status(403).json({ ok: false, message: "User is deactive" });
+  if (!isUserActive(user.status)) return res.status(403).json({ ok: false, message: "User is deactive" });
 
   const storedPassword = user.passwordHash || user.password;
   const ok = await verifyPassword(password, storedPassword);
