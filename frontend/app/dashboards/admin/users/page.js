@@ -127,37 +127,80 @@ export default function UserListPage() {
     }
   }
 
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;");
+  }
+
+  function buildExportRows() {
+    return filteredRows.map((row) => ({
+      userId: row.userId || "",
+      fullName: row.fullName || "",
+      role: row.role || "",
+      mobile: row.mobileNumber || row.mobile || "",
+      email: row.email || "",
+      warehouse: row.warehouseName || "",
+      region: row.regionName || "",
+      zone: row.zoneName || "",
+      territory: row.territoryName || "",
+      field: row.fieldName || "",
+    }));
+  }
+
   function downloadExcel() {
-    const headers = [
-      "User ID",
-      "Name",
-      "Role",
-      "Mobile",
-      "Email",
-      "Warehouse",
-      "Region",
-      "Zone",
-      "Territory",
-      "Field",
-    ];
-    const rowsForExport = filteredRows.map((row) => [
-      row.userId || "",
-      row.fullName || "",
-      row.role || "",
-      row.mobileNumber || row.mobile || "",
-      row.email || "",
-      row.warehouseName || "",
-      row.regionName || "",
-      row.zoneName || "",
-      row.territoryName || "",
-      row.fieldName || "",
-    ]);
+    const rowsForExport = buildExportRows();
+    const generatedAt = new Date().toLocaleString();
+    const tableRows = rowsForExport
+      .map(
+        (row) => `
+<tr>
+  <td>${escapeHtml(row.userId)}</td>
+  <td>${escapeHtml(row.fullName)}</td>
+  <td>${escapeHtml(row.role)}</td>
+  <td>${escapeHtml(row.mobile)}</td>
+  <td>${escapeHtml(row.email)}</td>
+  <td>${escapeHtml(row.warehouse)}</td>
+  <td>${escapeHtml(row.region)}</td>
+  <td>${escapeHtml(row.zone)}</td>
+  <td>${escapeHtml(row.territory)}</td>
+  <td>${escapeHtml(row.field)}</td>
+</tr>`
+      )
+      .join("");
 
-    const csv = [headers, ...rowsForExport]
-      .map((cols) => cols.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(","))
-      .join("\n");
+    const excelHtml = `
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+<head>
+<meta charset="UTF-8" />
+<style>
+  body { font-family: Arial, sans-serif; }
+  h2 { margin: 0 0 8px 0; }
+  .meta { margin: 0 0 12px 0; color: #444; font-size: 12px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #c8c8c8; padding: 6px 8px; font-size: 12px; text-align: left; }
+  th { background: #16a34a; color: #ffffff; font-weight: 700; }
+  tr:nth-child(even) td { background: #f8fafc; }
+</style>
+</head>
+<body>
+  <h2>AIM Hygienic - User List</h2>
+  <div class="meta">Generated: ${escapeHtml(generatedAt)} | Total Users: ${rowsForExport.length}</div>
+  <table>
+    <thead>
+      <tr>
+        <th>User ID</th><th>Name</th><th>Role</th><th>Mobile</th><th>Email</th>
+        <th>Warehouse</th><th>Region</th><th>Zone</th><th>Territory</th><th>Field</th>
+      </tr>
+    </thead>
+    <tbody>${tableRows}</tbody>
+  </table>
+</body>
+</html>`;
 
-    const blob = new Blob([csv], { type: "application/vnd.ms-excel;charset=utf-8;" });
+    const blob = new Blob([excelHtml], { type: "application/vnd.ms-excel;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -168,69 +211,130 @@ export default function UserListPage() {
     URL.revokeObjectURL(url);
   }
 
-  function buildSimplePdf(lines) {
-    const objects = [];
-    const offsets = [];
-    const addObject = (content) => {
-      objects.push(content);
-      return objects.length;
-    };
-
-    const escapePdfText = (value) => String(value).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
-
-    const pageLines = lines.slice(0, 45);
-    const contentStream = ["BT", "/F1 10 Tf", "40 800 Td"];
-    pageLines.forEach((line, index) => {
-      if (index === 0) contentStream.push(`(${escapePdfText(line)}) Tj`);
-      else contentStream.push(`0 -16 Td (${escapePdfText(line)}) Tj`);
+  function wrapByChars(value, maxChars) {
+    const text = String(value || "-");
+    const words = text.split(/\s+/);
+    const lines = [];
+    let current = "";
+    words.forEach((w) => {
+      if (!current) {
+        current = w;
+        return;
+      }
+      if (`${current} ${w}`.length <= maxChars) current = `${current} ${w}`;
+      else {
+        lines.push(current);
+        current = w;
+      }
     });
-    contentStream.push("ET");
-    const streamText = contentStream.join("\n");
+    if (current) lines.push(current);
+    return lines.length ? lines : ["-"];
+  }
 
-    const catalogId = addObject("<< /Type /Catalog /Pages 2 0 R >>");
-    const pagesId = addObject("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
-    const pageId = addObject("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>");
-    const fontId = addObject("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
-    const contentId = addObject(`<< /Length ${streamText.length} >>\nstream\n${streamText}\nendstream`);
+  function buildTablePdf(rowsForExport) {
+    const pageWidth = 842;
+    const pageHeight = 595;
+    const margin = 20;
+    const rowPadding = 3;
+    const fontSize = 8;
+
+    const columns = [
+      { key: "userId", label: "User ID", width: 56, chars: 10 },
+      { key: "fullName", label: "Name", width: 95, chars: 18 },
+      { key: "role", label: "Role", width: 95, chars: 18 },
+      { key: "mobile", label: "Mobile", width: 75, chars: 14 },
+      { key: "email", label: "Email", width: 120, chars: 24 },
+      { key: "warehouse", label: "Warehouse", width: 90, chars: 16 },
+      { key: "region", label: "Region", width: 75, chars: 14 },
+      { key: "zone", label: "Zone", width: 70, chars: 12 },
+      { key: "territory", label: "Territory", width: 80, chars: 14 },
+      { key: "field", label: "Field", width: 66, chars: 12 },
+    ];
+
+    let y = pageHeight - margin;
+    let content = "";
+
+    const esc = (v) => String(v).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+
+    function drawText(x, yy, text, size = fontSize) {
+      content += `BT /F1 ${size} Tf ${x} ${yy} Td (${esc(text)}) Tj ET
+`;
+    }
+
+    function drawLine(x1, y1, x2, y2) {
+      content += `${x1} ${y1} m ${x2} ${y2} l S
+`;
+    }
+
+    function drawHeader() {
+      drawText(margin, y, `AIM Hygienic - User List (${new Date().toLocaleString()})`, 10);
+      y -= 16;
+      let x = margin;
+      const top = y + 6;
+      const bottom = y - 12;
+      drawLine(margin, top, pageWidth - margin, top);
+      drawLine(margin, bottom, pageWidth - margin, bottom);
+      columns.forEach((col) => {
+        drawText(x + 2, y - 8, col.label, 8);
+        drawLine(x, top, x, bottom);
+        x += col.width;
+      });
+      drawLine(pageWidth - margin, top, pageWidth - margin, bottom);
+      y -= 18;
+    }
+
+    drawHeader();
+
+    rowsForExport.forEach((row) => {
+      const lineGroups = columns.map((col) => wrapByChars(row[col.key], col.chars));
+      const maxLines = Math.max(...lineGroups.map((g) => g.length));
+      const rowHeight = maxLines * 10 + rowPadding * 2;
+
+      if (y - rowHeight < margin) return;
+
+      let x = margin;
+      const top = y + 6;
+      const bottom = y - rowHeight + 4;
+      drawLine(margin, top, pageWidth - margin, top);
+      drawLine(margin, bottom, pageWidth - margin, bottom);
+
+      columns.forEach((col, idx) => {
+        drawLine(x, top, x, bottom);
+        lineGroups[idx].forEach((line, li) => drawText(x + 2, y - 8 - li * 10, line, 8));
+        x += col.width;
+      });
+      drawLine(pageWidth - margin, top, pageWidth - margin, bottom);
+
+      y -= rowHeight;
+    });
+
+    const stream = content;
+    const objs = [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+      `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    ];
 
     let pdf = "%PDF-1.4\n";
-    [catalogId, pagesId, pageId, fontId, contentId].forEach((id) => {
-      offsets[id] = pdf.length;
-      pdf += `${id} 0 obj\n${objects[id - 1]}\nendobj\n`;
+    const offsets = [0];
+    objs.forEach((obj, idx) => {
+      offsets.push(pdf.length);
+      pdf += `${idx + 1} 0 obj\n${obj}\nendobj\n`;
     });
-
-    const xrefOffset = pdf.length;
-    pdf += `xref\n0 ${objects.length + 1}\n`;
-    pdf += "0000000000 65535 f \n";
-    for (let i = 1; i <= objects.length; i += 1) {
+    const xref = pdf.length;
+    pdf += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
+    for (let i = 1; i <= objs.length; i += 1) {
       pdf += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
     }
-    pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+    pdf += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
     return pdf;
   }
 
   function downloadPdf() {
-    const lines = [
-      `AIM Hygienic - User List (${new Date().toLocaleString()})`,
-      "",
-      "User ID | Name | Role | Mobile | Warehouse | Region | Zone | Territory | Field",
-      "--------------------------------------------------------------------------------",
-      ...filteredRows.map((row) =>
-        [
-          row.userId || "-",
-          row.fullName || "-",
-          row.role || "-",
-          row.mobileNumber || row.mobile || "-",
-          row.warehouseName || "-",
-          row.regionName || "-",
-          row.zoneName || "-",
-          row.territoryName || "-",
-          row.fieldName || "-",
-        ].join(" | ")
-      ),
-    ];
-
-    const pdfContent = buildSimplePdf(lines);
+    const rowsForExport = buildExportRows();
+    const pdfContent = buildTablePdf(rowsForExport);
     const blob = new Blob([pdfContent], { type: "application/pdf" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
