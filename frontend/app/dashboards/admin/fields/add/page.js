@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import AdminShell from "../../../components/AdminShell";
-import { apiFetch } from "../../../../../lib/api";
-import { createFieldCompat } from "../../../../../lib/fieldApi";
+import AdminShell from "../../components/AdminShell";
+import { apiFetch } from "../../../../lib/api";
+import { createFieldCompat } from "../../../../lib/fieldApi";
 
 export default function AddFieldPage() {
   const [warehouses, setWarehouses] = useState([]);
