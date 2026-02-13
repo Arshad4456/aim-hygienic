@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import AdminShell from "../../../components/AdminShell";
-import { apiFetch } from "../../../../../lib/api";
+import AdminShell from "../../components/AdminShell";
+import { apiFetch } from "../../../../lib/api";
 
 export default function AddFieldPage(){
   const [warehouses,setWarehouses]=useState([]); const [regions,setRegions]=useState([]); const [zones,setZones]=useState([]); const [territories,setTerritories]=useState([]);
