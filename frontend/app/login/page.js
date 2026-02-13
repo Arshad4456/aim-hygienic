@@ -22,12 +22,28 @@ export default function LoginPage() {
   }, [router]);
 
   const roleRedirect = (role) => {
-    if (role === "admin") return "/dashboards/admin";
-    if (role === "hr") return "/dashboards/hr";
-    if (role === "accounts") return "/dashboards/accounts";
-    if (role === "Sales Manager") return "/dashboards/sales";
-    if (role === "warehouse") return "/dashboards/warehouse";
-    return "/dashboards/admin";
+    const map = {
+      admin: "/dashboards/admin",
+      CEO: "/dashboards/ceo",
+      "Managing Director": "/dashboards/manageDirector",
+      "Warehouse Manager": "/dashboards/warehouseManager",
+      "Account Officer": "/dashboards/accountOfficer",
+      "HR Assistant": "/dashboards/hrAssistant",
+      Cashier: "/dashboards/cashier",
+      KPO: "/dashboards/kpo",
+      "Brand Manager": "/dashboards/brandManager",
+      "National Sale Manager": "/dashboards/nationalSM",
+      "Regional Sale Manager": "/dashboards/regionalSM",
+      "Zone Sale Manager": "/dashboards/zoneSM",
+      "Territory Sale Manager": "/dashboards/territorySM",
+      Distributor: "/dashboards/distributor",
+      "Field Sale Manager": "/dashboards/fieldSM",
+      "Order Booker": "/dashboards/orderBooker",
+      Salesman: "/dashboards/salesman",
+      "Delivery Boy": "/dashboards/deliveryBoy",
+      customer: "/dashboards/customer",
+    };
+    return map[role] || "/dashboards/admin";
   };
 
   async function onSubmit(e) {

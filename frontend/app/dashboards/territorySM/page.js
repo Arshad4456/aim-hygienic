@@ -1,11 +1,13 @@
-import React from 'react'
+import UserDashboardShell from "../components/UserDashboardShell";
+import { userDashboardSearchItems } from "../searchItems";
 
-const page = () => {
+export default function Page() {
   return (
-    <div>
-      This is Territory Sale Manager Dashboard.
-    </div>
-  )
+    <UserDashboardShell
+      title="Territory Sale Manager Dashboard"
+      subtitle="Use quick search to navigate all available items for your dashboard."
+      roleKey="Territory Sale Manager"
+      links={userDashboardSearchItems.territorySM || []}
+    />
+  );
 }
-
-export default page

@@ -4,569 +4,155 @@ import { useEffect, useMemo, useState } from "react";
 import AdminShell from "../../components/AdminShell";
 import { apiFetch } from "../../../../lib/api";
 
-const roleOptions = [
-  "Sales Manager",
-  "Warehouse Manager",
-  "Accountant",
-  "Distributor",
-  "Driver",
-  "Delivery Boy",
-  "Sales Man",
-  "Order Booker",
-  "Customer",
-  "Supplier",
+const roles = [
+  "admin", "CEO", "Managing Director", "Warehouse Manager", "Account Officer", "HR Assistant", "Cashier", "KPO",
+  "National Sale Manager", "Regional Sale Manager", "Zone Sale Manager", "Territory Sale Manager", "Distributor",
+  "Field Sale Manager", "Order Booker", "Salesman", "Delivery Boy", "customer", "Brand Manager",
 ];
 
 const roleFields = {
-  "Sales Manager": [
-    "managerId",
-    "managerName",
-    "companyId",
-    "companyName",
-    "companyBranchId",
-    "branchNameOrNumber",
-    "cnicNo",
-    "mobileNumber",
-    "phoneNumber",
-    "password",
-    "email",
-    "address",
-  ],
-  "Warehouse Manager": [
-    "warehouseManagerId",
-    "warehouseManagerName",
-    "companyId",
-    "companyName",
-    "branchId",
-    "branchNameOrNumber",
-    "warehouseId",
-    "warehouseName",
-    "cnicNo",
-    "mobileNumber",
-    "phoneNumber",
-    "password",
-    "email",
-    "address",
-  ],
-  Accountant: [
-    "accountantId",
-    "accountantName",
-    "companyId",
-    "companyName",
-    "branchId",
-    "branchNameOrNumber",
-    "warehouseId",
-    "regionId",
-    "regionName",
-    "cnicNo",
-    "mobileNumber",
-    "phoneNumber",
-    "password",
-    "email",
-    "address",
-  ],
-  Distributor: [
-    "distributorId",
-    "distributorName",
-    "companyId",
-    "companyName",
-    "branchId",
-    "branchNameOrNumber",
-    "warehouseId",
-    "warehouseName",
-    "regionId",
-    "regionName",
-    "zoneId",
-    "zoneName",
-    "cnicNo",
-    "mobileNumber",
-    "phoneNumber",
-    "password",
-    "email",
-    "address",
-  ],
-  Driver: [
-    "driverId",
-    "driverName",
-    "companyId",
-    "companyName",
-    "branchId",
-    "branchNameOrNumber",
-    "warehouseId",
-    "warehouseName",
-    "regionId",
-    "regionName",
-    "zoneId",
-    "zoneName",
-    "areaId",
-    "areaName",
-    "cnicNo",
-    "mobileNumber",
-    "phoneNumber",
-    "password",
-    "email",
-    "address",
-    "gpsLatitude",
-    "gpsLongitude",
-  ],
-  "Delivery Boy": [
-    "deliveryBoyId",
-    "deliveryBoyName",
-    "companyId",
-    "companyName",
-    "branchId",
-    "branchNameOrNumber",
-    "warehouseId",
-    "warehouseName",
-    "regionId",
-    "regionName",
-    "zoneId",
-    "zoneName",
-    "areaId",
-    "areaName",
-    "cnicNo",
-    "mobileNumber",
-    "phoneNumber",
-    "password",
-    "email",
-    "address",
-    "gpsLatitude",
-    "gpsLongitude",
-  ],
-  "Sales Man": [
-    "salesmanId",
-    "salesmanName",
-    "companyId",
-    "companyName",
-    "branchId",
-    "branchNameOrNumber",
-    "warehouseId",
-    "warehouseName",
-    "regionId",
-    "regionName",
-    "zoneId",
-    "zoneName",
-    "areaId",
-    "areaName",
-    "cnicNo",
-    "mobileNumber",
-    "phoneNumber",
-    "password",
-    "email",
-    "address",
-    "gpsLatitude",
-    "gpsLongitude",
-  ],
-  "Order Booker": [
-    "orderBookerId",
-    "orderBookerName",
-    "companyId",
-    "companyName",
-    "branchId",
-    "branchNameOrNumber",
-    "warehouseId",
-    "warehouseName",
-    "regionId",
-    "regionName",
-    "zoneId",
-    "zoneName",
-    "areaId",
-    "areaName",
-    "cnicNo",
-    "mobileNumber",
-    "phoneNumber",
-    "password",
-    "email",
-    "address",
-  ],
-  Customer: [
-    "customerId",
-    "customerName",
-    "companyId",
-    "companyName",
-    "branchId",
-    "branchNameOrNumber",
-    "warehouseId",
-    "warehouseName",
-    "regionId",
-    "regionName",
-    "zoneId",
-    "zoneName",
-    "areaId",
-    "areaName",
-    "shopId",
-    "shopName",
-    "cnicNo",
-    "mobileNumber",
-    "phoneNumber",
-    "password",
-    "email",
-    "shopAddress",
-  ],
-  Supplier: [
-    "supplierId",
-    "supplierName",
-    "companyId",
-    "companyName",
-    "supplierWarehouseId1",
-    "supplierWarehouseName1",
-    "supplierWarehouseId2",
-    "supplierWarehouseName2",
-    "cnicNo",
-    "mobileNumber",
-    "password",
-    "address",
-  ],
+  admin: [],
+  CEO: [],
+  "Managing Director": [],
+  "Warehouse Manager": ["warehouseName"],
+  "Account Officer": ["warehouseName"],
+  "HR Assistant": ["warehouseName"],
+  Cashier: ["warehouseName"],
+  KPO: ["warehouseName"],
+  "National Sale Manager": [],
+  "Regional Sale Manager": ["warehouseName", "regionName"],
+  "Zone Sale Manager": ["warehouseName", "regionName", "zoneName"],
+  "Territory Sale Manager": ["warehouseName", "regionName", "zoneName", "territoryName"],
+  Distributor: ["warehouseName", "regionName", "zoneName", "territoryName"],
+  "Field Sale Manager": ["warehouseName", "regionName", "zoneName", "territoryName", "fieldName"],
+  "Order Booker": ["warehouseName", "regionName", "zoneName", "territoryName", "fieldName"],
+  Salesman: ["warehouseName", "regionName", "zoneName", "territoryName", "fieldName"],
+  "Delivery Boy": ["warehouseName", "regionName", "zoneName", "territoryName", "fieldName"],
+  customer: ["businessType", "businessName", "warehouseName", "regionName", "zoneName", "territoryName", "fieldName"],
+  "Brand Manager": ["businessType", "businessName", "warehouseName", "regionName", "zoneName", "territoryName", "fieldName"],
 };
 
-const roleNameFieldMap = {
-  "Sales Manager": "managerName",
-  "Warehouse Manager": "warehouseManagerName",
-  Accountant: "accountantName",
-  Distributor: "distributorName",
-  Driver: "driverName",
-  "Delivery Boy": "deliveryBoyName",
-  "Sales Man": "salesmanName",
-  "Order Booker": "orderBookerName",
-  Customer: "customerName",
-  Supplier: "supplierName",
-};
-
-const labelMap = {
-  managerId: "Manager ID",
-  managerName: "Manager Name",
-  companyId: "Company ID",
-  companyName: "Company Name",
-  companyBranchId: "Company Branch ID",
-  branchId: "Branch ID",
-  branchNameOrNumber: "Branch Name/Number",
-  warehouseId: "Warehouse ID",
-  warehouseName: "Warehouse Name",
-  warehouseManagerId: "Warehouse Manager ID",
-  warehouseManagerName: "Warehouse Manager Name",
-  accountantId: "Accountant ID",
-  accountantName: "Accountant Name",
-  distributorId: "Distributor ID",
-  distributorName: "Distributor Name",
-  driverId: "Driver ID",
-  driverName: "Driver Name",
-  deliveryBoyId: "Delivery Boy ID",
-  deliveryBoyName: "Delivery Boy Name",
-  salesmanId: "Salesman ID",
-  salesmanName: "Salesman Name",
-  orderBookerId: "Order Booker ID",
-  orderBookerName: "Order Booker Name",
-  customerId: "Customer ID",
-  customerName: "Customer Name",
-  supplierId: "Supplier ID",
-  supplierName: "Supplier Name",
-  supplierWarehouseId1: "Warehouse 1 ID",
-  supplierWarehouseName1: "Warehouse 1 Name",
-  supplierWarehouseId2: "Warehouse 2 ID",
-  supplierWarehouseName2: "Warehouse 2 Name",
-  regionId: "Region ID",
-  regionName: "Region Name",
-  zoneId: "Zone ID",
-  zoneName: "Zone Name",
-  areaId: "Area ID",
-  areaName: "Area Name",
-  shopId: "Shop ID",
-  shopName: "Shop Name",
-  cnicNo: "CNIC No",
-  mobileNumber: "Mobile Number",
-  phoneNumber: "Phone Number",
-  password: "Password",
-  email: "Email",
-  address: "Address",
-  shopAddress: "Shop Address",
-  gpsLatitude: "GPS Latitude",
-  gpsLongitude: "GPS Longitude",
-};
+const commonFields = ["fullName", "email", "mobileNumber", "cnicNo", "password", "address"];
 
 function validatePassword(value) {
   if (!value || value.length < 8) return "Password must be at least 8 characters long.";
-  if (!/[A-Z]/.test(value)) return "Password must include at least one capital letter.";
   if (!/[0-9]/.test(value)) return "Password must include at least one number.";
   if (!/[^A-Za-z0-9]/.test(value)) return "Password must include at least one symbol.";
   return "";
 }
 
 export default function AddUserPage() {
-  const [companies, setCompanies] = useState([]);
+  const [rows, setRows] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [regions, setRegions] = useState([]);
   const [zones, setZones] = useState([]);
   const [areas, setAreas] = useState([]);
-  const [companyId, setCompanyId] = useState("");
   const [role, setRole] = useState("");
-  const [form, setForm] = useState({ fullName: "", mobile: "", role: "" });
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ userId: "01" });
 
   useEffect(() => {
-    async function loadCompanies() {
-      setErr("");
-      try {
-        const [companiesRes, warehousesRes, regionsRes, zonesRes, areasRes] = await Promise.all([
-          apiFetch("/companies"),
-          apiFetch("/warehouses"),
-          apiFetch("/regions"),
-          apiFetch("/zones"),
-          apiFetch("/areas"),
-        ]);
-        setCompanies(companiesRes.companies || []);
-        setWarehouses(warehousesRes.warehouses || []);
-        setRegions(regionsRes.regions || []);
-        setZones(zonesRes.zones || []);
-        setAreas(areasRes.areas || []);
-      } catch (e) {
-        setErr(e.message || "Failed to load companies");
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadCompanies();
+    (async () => {
+      const [usersRes, whRes, regionRes, zoneRes, areaRes] = await Promise.all([
+        apiFetch("/users"), apiFetch("/warehouses"), apiFetch("/regions"), apiFetch("/zones"), apiFetch("/areas"),
+      ]);
+      setRows(usersRes.users || []);
+      setWarehouses(whRes.warehouses || []);
+      setRegions(regionRes.regions || []);
+      setZones(zoneRes.zones || []);
+      setAreas(areaRes.areas || []);
+    })().catch((e) => setErr(e.message || "Failed to load form"));
   }, []);
 
-  const activeFields = useMemo(() => roleFields[role] || [], [role]);
-  const selectedCompany = companies.find((c) => c._id === companyId);
-  const displayFields = activeFields.filter(
-    (field) =>
-      ![
-        "companyId",
-        "companyName",
-        "warehouseId",
-        "warehouseName",
-        "regionId",
-        "regionName",
-        "zoneId",
-        "zoneName",
-        "areaId",
-        "areaName",
-      ].includes(field)
-  );
+  const nextId = useMemo(() => String(rows.length + 1).padStart(2, "0"), [rows]);
+  useEffect(() => setForm((s) => ({ ...s, userId: nextId })), [nextId]);
 
-  function setField(key, value) {
-    setForm((s) => ({ ...s, [key]: value }));
-  }
+  const selectedWarehouse = warehouses.find((x) => x.warehouseId === form.warehouseId);
+  const filteredRegions = regions.filter((x) => !form.warehouseId || x.companyId === selectedWarehouse?.companyId);
+  const filteredZones = zones.filter((x) => (!form.warehouseId || x.warehouseId === form.warehouseId) && (!form.regionId || x.regionId === form.regionId));
+  const filteredAreas = areas.filter((x) => (!form.warehouseId || x.warehouseId === form.warehouseId) && (!form.regionId || x.regionId === form.regionId) && (!form.zoneId || x.zoneId === form.zoneId));
+
+  function setField(k, v) { setForm((s) => ({ ...s, [k]: v })); }
 
   async function onSubmit(e) {
     e.preventDefault();
-    setErr("");
-    setOk("");
-    const passwordError = validatePassword(form.password);
-    if (passwordError) {
-      setErr(passwordError);
-      return;
-    }
-
+    setErr(""); setOk("");
+    const pErr = validatePassword(form.password);
+    if (pErr) return setErr(pErr);
     setSaving(true);
     try {
-      const roleNameField = roleNameFieldMap[role];
-      const fullName = form.fullName || (roleNameField ? form[roleNameField] : "");
-      const mobile = form.mobile || form.mobileNumber || "";
       await apiFetch("/users", {
         method: "POST",
         body: {
           ...form,
           role,
-          companyId: selectedCompany?.companyId || "",
-          companyName: selectedCompany?.name || "",
-          fullName,
-          mobile,
+          mobile: form.mobileNumber,
+          fullName: form.fullName,
+          customerId: form.userId,
         },
       });
-      setOk(`✅ ${role} saved successfully.`);
-      setForm({ fullName: "", mobile: "", role: "" });
+      setOk(`✅ ${role} created with ID ${form.userId}`);
+      setRows((s) => [...s, { _id: Date.now() }]);
+      setForm({ userId: String(rows.length + 2).padStart(2, "0") });
       setRole("");
     } catch (e2) {
       setErr(e2.message || "Failed to create user");
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   }
+
+  const fields = [...(roleFields[role] || []), ...commonFields];
 
   return (
     <AdminShell title="Add User" user={null}>
       <div className="rounded-2xl bg-white border shadow-sm p-5">
-        <div className="text-xl font-semibold text-zinc-900">Add User</div>
-        <div className="text-sm text-zinc-500 mt-1">Select a company and role to create a user.</div>
+        <div className="text-xl font-semibold">Add AIM Hygienic User</div>
+        <div className="text-sm text-zinc-500 mt-1">Only configured roles are available. User ID is auto-generated.</div>
+        {err ? <div className="mt-3 text-sm text-red-600">{err}</div> : null}
+        {ok ? <div className="mt-3 text-sm text-emerald-600">{ok}</div> : null}
 
-        {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
-        {ok ? <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{ok}</div> : null}
+        <form className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4" onSubmit={onSubmit}>
+          <Select label="Role" value={role} onChange={(v) => setRole(v)} options={roles} required />
+          <Input label="Auto User ID" value={form.userId || ""} readOnly />
 
-        {loading ? (
-          <div className="mt-6 text-sm text-zinc-500">Loading companies...</div>
-        ) : (
-          <>
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label>Select Company</Label>
-                <select
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                  value={companyId}
-                  onChange={(e) => {
-                    setCompanyId(e.target.value);
-                    setRole("");
-                    setForm({ fullName: "", mobile: "", role: "" });
-                  }}
-                >
-                  <option value="">Choose company...</option>
-                  {companies.map((c) => (
-                    <option key={c._id} value={c._id}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <Label>Select Role</Label>
-                <select
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                  value={role}
-                  onChange={(e) => {
-                    setRole(e.target.value);
-                    setForm((s) => ({ ...s, role: e.target.value }));
-                  }}
-                  disabled={!companyId}
-                >
-                  <option value="">Choose role...</option>
-                  {roleOptions.map((r) => (
-                    <option key={r} value={r}>{r}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
+          {fields.includes("warehouseName") ? <WarehouseSelect warehouses={warehouses} form={form} setField={setField} /> : null}
+          {fields.includes("regionName") ? <RegionSelect rows={filteredRegions} form={form} setField={setField} /> : null}
+          {fields.includes("zoneName") ? <ZoneSelect rows={filteredZones} form={form} setField={setField} /> : null}
+          {fields.includes("territoryName") ? <AreaSelect label="Territory Name" rows={filteredAreas} form={form} setField={setField} field="territory" /> : null}
+          {fields.includes("fieldName") ? <AreaSelect label="Field Name" rows={filteredAreas} form={form} setField={setField} field="field" /> : null}
+          {fields.includes("businessType") ? <Input label="Business Type" value={form.businessType || ""} onChange={(v) => setField("businessType", v)} required /> : null}
+          {fields.includes("businessName") ? <Input label="Business Name" value={form.businessName || ""} onChange={(v) => setField("businessName", v)} required /> : null}
 
-            {selectedCompany ? (
-              <div className="mt-4 rounded-xl border bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
-                Selected company: <span className="font-medium text-zinc-900">{selectedCompany.name}</span> ({selectedCompany.companyId})
-              </div>
-            ) : null}
+          {commonFields.map((field) => (
+            <Input key={field} label={field.replace(/([A-Z])/g, " $1").replace(/^./, (x) => x.toUpperCase())} value={form[field] || ""} onChange={(v) => setField(field, v)} type={field === "password" ? "password" : "text"} required />
+          ))}
 
-            {role ? (
-              <form onSubmit={onSubmit} className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-                {activeFields.includes("warehouseName") ? (
-                  <div>
-                    <Label>Warehouse Name</Label>
-                    <select
-                      className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                      value={form.warehouseId || ""}
-                      onChange={(e) => {
-                        const wh = warehouses.find((w) => w._id === e.target.value);
-                        setField("warehouseId", wh?.warehouseId || "");
-                        setField("warehouseName", wh?.name || "");
-                      }}
-                    >
-                      <option value="">Choose warehouse...</option>
-                      {warehouses.map((w) => (
-                        <option key={w._id} value={w._id}>{w.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                ) : null}
-                {activeFields.includes("regionName") ? (
-                  <div>
-                    <Label>Region Name</Label>
-                    <select
-                      className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                      value={form.regionId || ""}
-                      onChange={(e) => {
-                        const region = regions.find((r) => r._id === e.target.value);
-                        setField("regionId", region?.regionId || "");
-                        setField("regionName", region?.name || "");
-                      }}
-                    >
-                      <option value="">Choose region...</option>
-                      {regions.map((r) => (
-                        <option key={r._id} value={r._id}>{r.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                ) : null}
-                {activeFields.includes("zoneName") ? (
-                  <div>
-                    <Label>Zone Name</Label>
-                    <select
-                      className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                      value={form.zoneId || ""}
-                      onChange={(e) => {
-                        const zone = zones.find((z) => z._id === e.target.value);
-                        setField("zoneId", zone?.zoneId || "");
-                        setField("zoneName", zone?.name || "");
-                      }}
-                    >
-                      <option value="">Choose zone...</option>
-                      {zones.map((z) => (
-                        <option key={z._id} value={z._id}>{z.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                ) : null}
-                {activeFields.includes("areaName") ? (
-                  <div>
-                    <Label>Area Name</Label>
-                    <select
-                      className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                      value={form.areaId || ""}
-                      onChange={(e) => {
-                        const area = areas.find((a) => a._id === e.target.value);
-                        setField("areaId", area?.areaId || "");
-                        setField("areaName", area?.name || "");
-                      }}
-                    >
-                      <option value="">Choose area...</option>
-                      {areas.map((a) => (
-                        <option key={a._id} value={a._id}>{a.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                ) : null}
-                {displayFields.map((field) => (
-                  <Field
-                    key={field}
-                    label={labelMap[field] || field}
-                    value={form[field] || ""}
-                    onChange={(v) => setField(field, v)}
-                    type={field === "password" ? "password" : "text"}
-                  />
-                ))}
-                <div className="md:col-span-2 flex items-center gap-3 mt-2">
-                  <button
-                    disabled={saving}
-                    className="rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-700 disabled:opacity-60"
-                  >
-                    {saving ? "Saving..." : `Save ${role}`}
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <div className="mt-6 rounded-xl border border-dashed px-4 py-6 text-sm text-zinc-500 text-center">
-                Please select a role to view the form fields.
-              </div>
-            )}
-          </>
-        )}
+          <div className="md:col-span-2">
+            <button disabled={!role || saving} className="rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm disabled:opacity-60">{saving ? "Saving..." : "Save User"}</button>
+          </div>
+        </form>
       </div>
     </AdminShell>
   );
 }
 
-function Label({ children }) {
-  return <div className="text-sm font-medium text-zinc-800">{children}</div>;
+function Input({ label, value, onChange, type = "text", required = false, readOnly = false }) {
+  return <div><div className="text-sm font-medium">{label}</div><input readOnly={readOnly} className="mt-1 w-full rounded-xl border px-3 py-2" type={type} value={value} onChange={(e) => onChange?.(e.target.value)} required={required} /></div>;
 }
-
-function Field({ label, value, onChange, type = "text", required = false }) {
-  return (
-    <div>
-      <Label>{label}</Label>
-      <input
-        type={type}
-        required={required}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200"
-      />
-    </div>
-  );
+function Select({ label, value, onChange, options, required = false }) {
+  return <div><div className="text-sm font-medium">{label}</div><select className="mt-1 w-full rounded-xl border px-3 py-2" value={value} onChange={(e) => onChange(e.target.value)} required={required}><option value="">Choose...</option>{options.map((v) => <option key={v} value={v}>{v}</option>)}</select></div>;
+}
+function WarehouseSelect({ warehouses, form, setField }) {
+  return <Select label="Warehouse Name" value={form.warehouseId || ""} onChange={(id) => { const x = warehouses.find((w) => w.warehouseId === id); setField("warehouseId", x?.warehouseId || ""); setField("warehouseName", x?.name || ""); }} options={warehouses.map((w) => w.warehouseId)} />;
+}
+function RegionSelect({ rows, form, setField }) {
+  return <Select label="Region Name" value={form.regionId || ""} onChange={(id) => { const x = rows.find((w) => w.regionId === id); setField("regionId", x?.regionId || ""); setField("regionName", x?.name || ""); }} options={rows.map((w) => w.regionId)} />;
+}
+function ZoneSelect({ rows, form, setField }) {
+  return <Select label="Zone Name" value={form.zoneId || ""} onChange={(id) => { const x = rows.find((w) => w.zoneId === id); setField("zoneId", x?.zoneId || ""); setField("zoneName", x?.name || ""); }} options={rows.map((w) => w.zoneId)} />;
+}
+function AreaSelect({ label, rows, form, setField, field }) {
+  const valueKey = `${field}Id`;
+  return <Select label={label} value={form[valueKey] || ""} onChange={(id) => { const x = rows.find((w) => w.areaId === id); setField(valueKey, x?.areaId || ""); setField(`${field}Name`, x?.name || ""); }} options={rows.map((w) => w.areaId)} />;
 }
