@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import AdminShell from "../components/AdminShell";
 import { apiFetch } from "../../../lib/api";
 
+
 export default function FieldListPage(){
   const [rows,setRows]=useState([]); const [loading,setLoading]=useState(true); const [edit,setEdit]=useState(null);
   const load=async()=>{setLoading(true); const d=await apiFetch('/fields'); setRows(d.fields||[]); setLoading(false);};
