@@ -13,6 +13,7 @@ export default function UserListPage() {
   const [regions, setRegions] = useState([]);
   const [zones, setZones] = useState([]);
   const [areas, setAreas] = useState([]);
+  const [fields, setFields] = useState([]);
 
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
@@ -29,18 +30,20 @@ export default function UserListPage() {
     setErr("");
     setLoading(true);
     try {
-      const [usersRes, warehousesRes, regionsRes, zonesRes, areasRes] = await Promise.all([
+      const [usersRes, warehousesRes, regionsRes, zonesRes, areasRes, fieldsRes] = await Promise.all([
         apiFetch("/users"),
         apiFetch("/warehouses"),
         apiFetch("/regions"),
         apiFetch("/zones"),
         apiFetch("/areas"),
+        apiFetch("/fields"),
       ]);
       setRows(usersRes.users || []);
       setWarehouses(warehousesRes.warehouses || []);
       setRegions(regionsRes.regions || []);
       setZones(zonesRes.zones || []);
       setAreas(areasRes.areas || []);
+      setFields(fieldsRes.fields || []);
     } catch (e) {
       setErr(e.message || "Failed to load users");
     } finally {
@@ -448,6 +451,7 @@ export default function UserListPage() {
           regions={regions}
           zones={zones}
           areas={areas}
+          fields={fields}
           showPassword={editShowPassword}
           setShowPassword={setEditShowPassword}
         />
@@ -467,6 +471,7 @@ function EditUserModal({
   regions,
   zones,
   areas,
+  fields,
   showPassword,
   setShowPassword,
 }) {
@@ -491,6 +496,14 @@ function EditUserModal({
     if (selectedZone && a.zoneId !== selectedZone.zoneId) return false;
     return true;
   });
+  const filteredFields = fields.filter((f) => {
+    if (selectedWarehouse && f.warehouseId !== selectedWarehouse.warehouseId) return false;
+    if (selectedRegion && f.regionId !== selectedRegion.regionId) return false;
+    if (selectedZone && f.zoneId !== selectedZone.zoneId) return false;
+    if (user.territoryId && f.territoryId !== user.territoryId) return false;
+    return true;
+  });
+
 
   const visibleTextFields = BASE_EDIT_FIELDS.filter((f) => !!user[f] || ["fullName", "mobileNumber", "cnicNo", "email", "address"].includes(f));
 
@@ -576,7 +589,7 @@ function EditUserModal({
                   setField("territoryId", item?.areaId || "");
                   setField("territoryName", item?.name || "");
                 }}
-                options={filteredAreas.map((a) => ({ value: a.areaId, label: a.name }))}
+                options={filteredFields.map((a) => ({ value: a.fieldId, label: a.name }))}
               />
             ) : null}
 
@@ -585,11 +598,11 @@ function EditUserModal({
                 label="Field Name"
                 value={user.fieldId || ""}
                 onChange={(areaId) => {
-                  const item = areas.find((a) => a.areaId === areaId);
-                  setField("fieldId", item?.areaId || "");
+                  const item = fields.find((a) => a.fieldId === areaId);
+                  setField("fieldId", item?.fieldId || "");
                   setField("fieldName", item?.name || "");
                 }}
-                options={filteredAreas.map((a) => ({ value: a.areaId, label: a.name }))}
+                options={filteredFields.map((a) => ({ value: a.fieldId, label: a.name }))}
               />
             ) : null}
 

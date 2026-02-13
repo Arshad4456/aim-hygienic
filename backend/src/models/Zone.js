@@ -8,6 +8,7 @@ const ZoneSchema = new mongoose.Schema(
     warehouseName: { type: String, trim: true },
     regionId: { type: String, trim: true },
     regionName: { type: String, trim: true },
+    status: { type: String, enum: ["active", "inactive"], default: "active" },
     gpsLatitude: { type: String, trim: true },
     gpsLongitude: { type: String, trim: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
