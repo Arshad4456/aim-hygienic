@@ -27,6 +27,7 @@ export default function AddUserPage() {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
+  const [fieldsWarning, setFieldsWarning] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -37,13 +38,19 @@ export default function AddUserPage() {
         apiFetch("/zones"),
         apiFetch("/areas"),
       ]);
-      const fieldsRes = await listFieldsCompat();
       setUsers(usersRes.users || []);
       setWarehouses(warehousesRes.warehouses || []);
       setRegions(regionsRes.regions || []);
       setZones(zonesRes.zones || []);
       setAreas(areasRes.areas || []);
-      setFields(fieldsRes.fields || []);
+      try {
+        const fieldsRes = await listFieldsCompat();
+        setFields(fieldsRes.fields || []);
+        setFieldsWarning("");
+      } catch (fieldErr) {
+        setFields([]);
+        setFieldsWarning(fieldErr.message || "Fields API unavailable");
+      }
     })().catch((e) => setErr(e.message || "Failed to load data"));
   }, []);
 
@@ -181,6 +188,7 @@ export default function AddUserPage() {
 
         {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
         {ok ? <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{ok}</div> : null}
+        {fieldsWarning ? <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">{fieldsWarning} (Add User still works; Field dropdown will remain empty until backend /api/fields is deployed.)</div> : null}
 
         <form onSubmit={onSubmit} className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
           <SelectField label="Role" value={role} onChange={setRole} options={AIM_USER_ROLES.map((r) => ({ value: r, label: r }))} required />
@@ -255,17 +263,20 @@ export default function AddUserPage() {
           ) : null}
 
           {roleNeeds.includes("field") ? (
-            <SelectField
-              label="Field Name"
-              value={form.fieldDocId || ""}
-              onChange={(docId) => {
-                const item = fields.find((a) => a._id === docId);
-                setField("fieldDocId", docId);
-                setField("fieldId", item?.fieldId || "");
-                setField("fieldName", item?.name || "");
-              }}
-              options={filteredFields.map((a) => ({ value: a._id, label: a.name }))}
-            />
+            <div>
+              <SelectField
+                label="Field Name"
+                value={form.fieldDocId || ""}
+                onChange={(docId) => {
+                  const item = fields.find((a) => a._id === docId);
+                  setField("fieldDocId", docId);
+                  setField("fieldId", item?.fieldId || "");
+                  setField("fieldName", item?.name || "");
+                }}
+                options={filteredFields.map((a) => ({ value: a._id, label: a.name }))}
+              />
+              {fieldsWarning ? <div className="mt-1 text-xs text-amber-700">Fields endpoint unavailable. You can still create users without field mapping.</div> : null}
+            </div>
           ) : null}
 
           {roleNeeds.includes("businessType") ? <InputField label="Business Type" value={form.businessType || ""} onChange={(v) => setField("businessType", v)} required /> : null}
