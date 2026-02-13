@@ -7,9 +7,14 @@ const router = express.Router();
 router.post("/", async (req, res) => {
   try {
     const body = req.body || {};
+    const existing = await Company.findOne().lean();
+    if (existing) {
+      return res.status(409).json({ ok: false, message: "Only one company is allowed." });
+    }
+    const companyName = String(body.name || "").trim() || "AIM Hygienic (Pvt) Limited";
     const doc = await Company.create({
       companyId: String(body.companyId || "").trim(),
-      name: String(body.name || "").trim(),
+      name: companyName,
 
       phone1: String(body.phone1 || "").trim(),
       phone2: String(body.phone2 || "").trim(),
@@ -54,11 +59,12 @@ router.get("/:id", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const body = req.body || {};
+    const companyName = String(body.name || "").trim() || "AIM Hygienic (Pvt) Limited";
     const updated = await Company.findByIdAndUpdate(
       req.params.id,
       {
         companyId: String(body.companyId || "").trim(),
-        name: String(body.name || "").trim(),
+        name: companyName,
 
         phone1: String(body.phone1 || "").trim(),
         phone2: String(body.phone2 || "").trim(),
@@ -79,14 +85,8 @@ router.put("/:id", async (req, res) => {
 });
 
 // DELETE
-router.delete("/:id", async (req, res) => {
-  try {
-    const deleted = await Company.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ ok: false, message: "Not found" });
-    return res.json({ ok: true });
-  } catch (e) {
-    return res.status(400).json({ ok: false, message: "Invalid id" });
-  }
+router.delete("/:id", async (_req, res) => {
+  return res.status(403).json({ ok: false, message: "Company deletion is disabled." });
 });
 
 module.exports = router;

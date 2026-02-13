@@ -106,7 +106,7 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
 
       <div className="flex-1 h-screen flex flex-col overflow-hidden">
         <div className="shrink-0 border-b bg-white">
-          <div className="px-4 md:px-6 py-3 flex items-center justify-between gap-3">
+          <div className="px-4 md:px-6 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <button
                 type="button"
@@ -131,8 +131,8 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="relative hidden md:block w-[360px]" ref={searchRef}>
+            <div className="flex w-full md:w-auto items-center gap-3">
+              <div className="relative w-full max-w-[420px]" ref={searchRef}>
                 <input
                   type="text"
                   value={searchTerm}
@@ -142,7 +142,7 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
                   }}
                   onFocus={() => setShowSearchDropdown(true)}
                   placeholder="Search this dashboard..."
-                  className="w-full rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                  className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200"
                 />
 
                 {showSearchDropdown ? (

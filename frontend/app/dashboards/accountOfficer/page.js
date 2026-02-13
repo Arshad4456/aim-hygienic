@@ -1,11 +1,13 @@
-import React from 'react'
+import UserDashboardShell from "../components/UserDashboardShell";
+import { userDashboardSearchItems } from "../searchItems";
 
-const page = () => {
+export default function Page() {
   return (
-    <div>
-      This is Account Officer Dashboard.
-    </div>
-  )
+    <UserDashboardShell
+      title="Account Officer Dashboard"
+      subtitle="Use quick search to navigate all available items for your dashboard."
+      roleKey="Account Officer"
+      links={userDashboardSearchItems.accountOfficer || []}
+    />
+  );
 }
-
-export default page
