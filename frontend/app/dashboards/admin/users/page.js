@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import AdminShell from "../components/AdminShell";
 import { apiFetch } from "../../../lib/api";
+import { listFieldsCompat } from "../../../lib/fieldApi";
 import { AIM_USER_ROLES, FIELD_LABELS, ROLE_EXTRA_FIELDS, validatePassword } from "./roleConfig";
 
 const BASE_EDIT_FIELDS = ["fullName", "email", "mobileNumber", "cnicNo", "address", "businessType", "businessName"];
@@ -30,14 +31,14 @@ export default function UserListPage() {
     setErr("");
     setLoading(true);
     try {
-      const [usersRes, warehousesRes, regionsRes, zonesRes, areasRes, fieldsRes] = await Promise.all([
+      const [usersRes, warehousesRes, regionsRes, zonesRes, areasRes] = await Promise.all([
         apiFetch("/users"),
         apiFetch("/warehouses"),
         apiFetch("/regions"),
         apiFetch("/zones"),
         apiFetch("/areas"),
-        apiFetch("/fields"),
       ]);
+      const fieldsRes = await listFieldsCompat();
       setRows(usersRes.users || []);
       setWarehouses(warehousesRes.warehouses || []);
       setRegions(regionsRes.regions || []);

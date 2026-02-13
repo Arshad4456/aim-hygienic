@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import AdminShell from "../../components/AdminShell";
 import { apiFetch } from "../../../../lib/api";
+import { listFieldsCompat } from "../../../../lib/fieldApi";
 import {
   AIM_USER_ROLES,
   COMMON_USER_FIELDS,
@@ -29,14 +30,14 @@ export default function AddUserPage() {
 
   useEffect(() => {
     (async () => {
-      const [usersRes, warehousesRes, regionsRes, zonesRes, areasRes, fieldsRes] = await Promise.all([
+      const [usersRes, warehousesRes, regionsRes, zonesRes, areasRes] = await Promise.all([
         apiFetch("/users"),
         apiFetch("/warehouses"),
         apiFetch("/regions"),
         apiFetch("/zones"),
         apiFetch("/areas"),
-        apiFetch("/fields"),
       ]);
+      const fieldsRes = await listFieldsCompat();
       setUsers(usersRes.users || []);
       setWarehouses(warehousesRes.warehouses || []);
       setRegions(regionsRes.regions || []);
