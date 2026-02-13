@@ -16,16 +16,15 @@ router.post("/", requireAuth, async (req, res) => {
       regionName: String(body.regionName || "").trim(),
       zoneId: String(body.zoneId || "").trim(),
       zoneName: String(body.zoneName || "").trim(),
-      gpsLatitude: String(body.gpsLatitude || "").trim(),
-      gpsLongitude: String(body.gpsLongitude || "").trim(),
+      status: String(body.status || "active").trim(),
       createdBy: req.user?.uid,
     });
     return res.status(201).json({ ok: true, area: doc });
   } catch (e) {
     if (e?.code === 11000) {
-      return res.status(409).json({ ok: false, message: "Area ID already exists" });
+      return res.status(409).json({ ok: false, message: "Territory ID already exists" });
     }
-    return res.status(500).json({ ok: false, message: "Failed to create area" });
+    return res.status(500).json({ ok: false, message: "Failed to create territory" });
   }
 });
 
@@ -38,7 +37,7 @@ router.get("/", requireAuth, async (req, res) => {
     const items = await Area.find(query).sort({ createdAt: -1 }).lean();
     return res.json({ ok: true, areas: items });
   } catch (e) {
-    return res.status(500).json({ ok: false, message: "Failed to load areas" });
+    return res.status(500).json({ ok: false, message: "Failed to load territories" });
   }
 });
 
@@ -66,8 +65,7 @@ router.put("/:id", requireAuth, async (req, res) => {
         regionName: String(body.regionName || "").trim(),
         zoneId: String(body.zoneId || "").trim(),
         zoneName: String(body.zoneName || "").trim(),
-        gpsLatitude: String(body.gpsLatitude || "").trim(),
-        gpsLongitude: String(body.gpsLongitude || "").trim(),
+        status: String(body.status || "active").trim(),
       },
       { new: true, runValidators: true }
     );
@@ -75,9 +73,9 @@ router.put("/:id", requireAuth, async (req, res) => {
     return res.json({ ok: true, area: updated });
   } catch (e) {
     if (e?.code === 11000) {
-      return res.status(409).json({ ok: false, message: "Area ID already exists" });
+      return res.status(409).json({ ok: false, message: "Territory ID already exists" });
     }
-    return res.status(500).json({ ok: false, message: "Failed to update area" });
+    return res.status(500).json({ ok: false, message: "Failed to update territory" });
   }
 });
 

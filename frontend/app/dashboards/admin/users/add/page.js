@@ -17,6 +17,7 @@ export default function AddUserPage() {
   const [regions, setRegions] = useState([]);
   const [zones, setZones] = useState([]);
   const [areas, setAreas] = useState([]);
+  const [fields, setFields] = useState([]);
 
   const [role, setRole] = useState("");
   const [form, setForm] = useState({ userId: "01" });
@@ -28,18 +29,20 @@ export default function AddUserPage() {
 
   useEffect(() => {
     (async () => {
-      const [usersRes, warehousesRes, regionsRes, zonesRes, areasRes] = await Promise.all([
+      const [usersRes, warehousesRes, regionsRes, zonesRes, areasRes, fieldsRes] = await Promise.all([
         apiFetch("/users"),
         apiFetch("/warehouses"),
         apiFetch("/regions"),
         apiFetch("/zones"),
         apiFetch("/areas"),
+        apiFetch("/fields"),
       ]);
       setUsers(usersRes.users || []);
       setWarehouses(warehousesRes.warehouses || []);
       setRegions(regionsRes.regions || []);
       setZones(zonesRes.zones || []);
       setAreas(areasRes.areas || []);
+      setFields(fieldsRes.fields || []);
     })().catch((e) => setErr(e.message || "Failed to load data"));
   }, []);
 
@@ -65,6 +68,15 @@ export default function AddUserPage() {
     if (selectedWarehouse && a.warehouseId !== selectedWarehouse.warehouseId) return false;
     if (selectedRegion && a.regionId !== selectedRegion.regionId) return false;
     if (selectedZone && a.zoneId !== selectedZone.zoneId) return false;
+    return true;
+  });
+
+
+  const filteredFields = fields.filter((f) => {
+    if (selectedWarehouse && f.warehouseId !== selectedWarehouse.warehouseId) return false;
+    if (selectedRegion && f.regionId !== selectedRegion.regionId) return false;
+    if (selectedZone && f.zoneId !== selectedZone.zoneId) return false;
+    if (form.territoryId && f.territoryId !== form.territoryId) return false;
     return true;
   });
 
@@ -232,12 +244,12 @@ export default function AddUserPage() {
               label="Territory Name"
               value={form.territoryDocId || ""}
               onChange={(docId) => {
-                const item = areas.find((a) => a._id === docId);
+                const item = fields.find((a) => a._id === docId);
                 setField("territoryDocId", docId);
                 setField("territoryId", item?.areaId || "");
                 setField("territoryName", item?.name || "");
               }}
-              options={filteredAreas.map((a) => ({ value: a._id, label: a.name }))}
+              options={filteredFields.map((a) => ({ value: a._id, label: a.name }))}
             />
           ) : null}
 
@@ -246,12 +258,12 @@ export default function AddUserPage() {
               label="Field Name"
               value={form.fieldDocId || ""}
               onChange={(docId) => {
-                const item = areas.find((a) => a._id === docId);
+                const item = fields.find((a) => a._id === docId);
                 setField("fieldDocId", docId);
-                setField("fieldId", item?.areaId || "");
+                setField("fieldId", item?.fieldId || "");
                 setField("fieldName", item?.name || "");
               }}
-              options={filteredAreas.map((a) => ({ value: a._id, label: a.name }))}
+              options={filteredFields.map((a) => ({ value: a._id, label: a.name }))}
             />
           ) : null}
 

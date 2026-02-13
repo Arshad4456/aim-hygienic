@@ -12,8 +12,9 @@ router.post("/", requireAuth, async (req, res) => {
       name: String(body.name || "").trim(),
       companyId: String(body.companyId || "").trim(),
       companyName: String(body.companyName || "").trim(),
-      gpsLatitude: String(body.gpsLatitude || "").trim(),
-      gpsLongitude: String(body.gpsLongitude || "").trim(),
+      warehouseId: String(body.warehouseId || "").trim(),
+      warehouseName: String(body.warehouseName || "").trim(),
+      status: String(body.status || "active").trim(),
       createdBy: req.user?.uid,
     });
     return res.status(201).json({ ok: true, region: doc });
@@ -29,6 +30,7 @@ router.get("/", requireAuth, async (req, res) => {
   try {
     const query = {};
     if (req.query.companyId) query.companyId = String(req.query.companyId);
+    if (req.query.warehouseId) query.warehouseId = String(req.query.warehouseId);
     const items = await Region.find(query).sort({ createdAt: -1 }).lean();
     return res.json({ ok: true, regions: items });
   } catch (e) {
@@ -56,8 +58,9 @@ router.put("/:id", requireAuth, async (req, res) => {
         name: String(body.name || "").trim(),
         companyId: String(body.companyId || "").trim(),
         companyName: String(body.companyName || "").trim(),
-        gpsLatitude: String(body.gpsLatitude || "").trim(),
-        gpsLongitude: String(body.gpsLongitude || "").trim(),
+        warehouseId: String(body.warehouseId || "").trim(),
+        warehouseName: String(body.warehouseName || "").trim(),
+        status: String(body.status || "active").trim(),
       },
       { new: true, runValidators: true }
     );

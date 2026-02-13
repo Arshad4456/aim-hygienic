@@ -4,6 +4,8 @@ const WarehouseSchema = new mongoose.Schema(
   {
     warehouseId: { type: String, required: true, trim: true, unique: true },
     name: { type: String, required: true, trim: true },
+    mobileNumber: { type: String, trim: true },
+    phoneNumber: { type: String, trim: true },
     phone: { type: String, trim: true },
     address: { type: String, trim: true },
     city: { type: String, trim: true },

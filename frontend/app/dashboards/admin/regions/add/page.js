@@ -5,123 +5,25 @@ import AdminShell from "../../components/AdminShell";
 import { apiFetch } from "../../../../lib/api";
 
 export default function AddRegionPage() {
-  const [companies, setCompanies] = useState([]);
-  const [companyId, setCompanyId] = useState("");
-  const [form, setForm] = useState({
-    regionId: "",
-    name: "",
-    gpsLatitude: "",
-    gpsLongitude: "",
-  });
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [warehouses, setWarehouses] = useState([]);
+  const [form, setForm] = useState({ regionId: "", name: "", warehouseDocId: "", status: "active" });
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
 
-  useEffect(() => {
-    async function loadCompanies() {
-      try {
-        const data = await apiFetch("/companies");
-        setCompanies(data.companies || []);
-      } catch (e) {
-        setErr(e.message || "Failed to load companies");
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadCompanies();
-  }, []);
+  useEffect(() => { apiFetch('/warehouses').then(d=>setWarehouses(d.warehouses||[])).catch(e=>setErr(e.message)); }, []);
+  function setField(k,v){setForm(s=>({...s,[k]:v}));}
 
-  function setField(key, value) {
-    setForm((s) => ({ ...s, [key]: value }));
-  }
-
-  async function onSubmit(e) {
-    e.preventDefault();
-    setErr("");
-    setOk("");
-    setSaving(true);
+  async function onSubmit(e){
+    e.preventDefault(); setErr(""); setOk("");
     try {
-      const company = companies.find((c) => c._id === companyId);
-      await apiFetch("/regions", {
-        method: "POST",
-        body: {
-          ...form,
-          companyId: company?.companyId || "",
-          companyName: company?.name || "",
-        },
-      });
-      setOk("✅ Region saved successfully.");
-      setForm({ regionId: "", name: "", gpsLatitude: "", gpsLongitude: "" });
-    } catch (e2) {
-      setErr(e2.message || "Failed to save region");
-    } finally {
-      setSaving(false);
-    }
+      const w = warehouses.find(x=>x._id===form.warehouseDocId);
+      await apiFetch('/regions',{method:'POST',body:{regionId:form.regionId,name:form.name,warehouseId:w?.warehouseId||"",warehouseName:w?.name||"",companyId:w?.companyId||"",companyName:w?.companyName||"",status:form.status}});
+      setOk('✅ Region saved successfully.');
+      setForm({ regionId: "", name: "", warehouseDocId: "", status: "active" });
+    } catch(e2){setErr(e2.message||'Failed to save region');}
   }
 
-  return (
-    <AdminShell title="Add Region" user={null}>
-      <div className="rounded-2xl bg-white border shadow-sm p-5">
-        <div className="text-xl font-semibold text-zinc-900">Add Region</div>
-        <div className="text-sm text-zinc-500 mt-1">Create a region under a company.</div>
-
-        {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
-        {ok ? <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{ok}</div> : null}
-
-        {loading ? (
-          <div className="mt-5 text-sm text-zinc-500">Loading companies...</div>
-        ) : (
-          <form onSubmit={onSubmit} className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2">
-              <Label>Select Company</Label>
-              <select
-                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                value={companyId}
-                onChange={(e) => setCompanyId(e.target.value)}
-                required
-              >
-                <option value="">Choose company...</option>
-                {companies.map((c) => (
-                  <option key={c._id} value={c._id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-            <Field label="Region ID" value={form.regionId} onChange={(v) => setField("regionId", v)} required />
-            <Field label="Region Name" value={form.name} onChange={(v) => setField("name", v)} required />
-            <Field label="GPS Latitude" value={form.gpsLatitude} onChange={(v) => setField("gpsLatitude", v)} />
-            <Field label="GPS Longitude" value={form.gpsLongitude} onChange={(v) => setField("gpsLongitude", v)} />
-
-            <div className="md:col-span-2 flex items-center gap-3 mt-2">
-              <button
-                disabled={saving}
-                className="rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-700 disabled:opacity-60"
-              >
-                {saving ? "Saving..." : "Save Region"}
-              </button>
-            </div>
-          </form>
-        )}
-      </div>
-    </AdminShell>
-  );
+  return <AdminShell title="Add Region" user={null}><div className="rounded-2xl bg-white border shadow-sm p-5"><div className="text-xl font-semibold">Add Region</div><div className="text-sm text-zinc-500 mt-1">Each region connects to the selected warehouse.</div>{err?<div className="mt-3 text-sm text-red-600">{err}</div>:null}{ok?<div className="mt-3 text-sm text-emerald-600">{ok}</div>:null}<form onSubmit={onSubmit} className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4"><Field label="Region ID" value={form.regionId} onChange={(v)=>setField('regionId',v)} required/><Field label="Region Name" value={form.name} onChange={(v)=>setField('name',v)} required/><div><Label>Warehouse Name</Label><select required value={form.warehouseDocId} onChange={(e)=>setField('warehouseDocId',e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2"><option value="">Choose warehouse...</option>{warehouses.map((w)=><option key={w._id} value={w._id}>{w.name}</option>)}</select></div><div><Label>Status</Label><select value={form.status} onChange={(e)=>setField('status',e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2"><option value="active">Active</option><option value="inactive">Inactive</option></select></div><div className="md:col-span-2"><button className="rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm">Save Region</button></div></form></div></AdminShell>;
 }
-
-function Label({ children }) {
-  return <div className="text-sm font-medium text-zinc-800">{children}</div>;
-}
-
-function Field({ label, value, onChange, type = "text", required = false }) {
-  return (
-    <div>
-      <Label>{label}</Label>
-      <input
-        type={type}
-        required={required}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200"
-      />
-    </div>
-  );
-}
+function Label({children}){return <div className="text-sm font-medium text-zinc-800">{children}</div>}
+function Field({label,value,onChange,required=false}){return <div><Label>{label}</Label><input required={required} value={value} onChange={(e)=>onChange(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2"/></div>}
