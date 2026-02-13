@@ -39,7 +39,7 @@ export default function LoginPage() {
       const data = await apiFetch("/auth/login", {
         method: "POST",
         credentials: "include",
-        body: { mobile: mobile.trim(), password: password.trim() },
+        body: { mobile: mobile.trim(), password },
       });
 
       // Save token + role (fast production approach)
@@ -97,7 +97,7 @@ export default function LoginPage() {
                 className="mt-1 w-full rounded-xl border px-3 py-2 pr-11 outline-none focus:ring-2 focus:ring-emerald-200"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter Your Password"
+                placeholder="Admin@12345"
                 type={showPassword ? "text" : "password"}
                 autoComplete="current-password"
               />
