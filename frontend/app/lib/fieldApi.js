@@ -7,10 +7,17 @@ function formatFields404(error) {
   return error;
 }
 
-export async function listFieldsCompat() {
+export async function listFieldsCompat(params = {}) {
   try {
-    const data = await apiFetch("/fields");
-    return { fields: data.fields || [], legacy: false };
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && String(value).trim() !== "") {
+        query.set(key, String(value));
+      }
+    });
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    const data = await apiFetch(`/fields${suffix}`);
+    return { fields: data.fields || [], pagination: data.pagination, legacy: false };
   } catch (error) {
     throw formatFields404(error);
   }

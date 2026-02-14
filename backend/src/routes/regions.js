@@ -4,6 +4,13 @@ const { requireAuth } = require("../utils/auth");
 
 const router = express.Router();
 
+function getPagination(query) {
+  const hasPaging = query.page || query.limit;
+  const page = Math.max(1, Number(query.page) || 1);
+  const limit = Math.min(200, Math.max(1, Number(query.limit) || 50));
+  return { hasPaging, page, limit, skip: (page - 1) * limit };
+}
+
 router.post("/", requireAuth, async (req, res) => {
   try {
     const body = req.body || {};
@@ -31,8 +38,34 @@ router.get("/", requireAuth, async (req, res) => {
     const query = {};
     if (req.query.companyId) query.companyId = String(req.query.companyId);
     if (req.query.warehouseId) query.warehouseId = String(req.query.warehouseId);
-    const items = await Region.find(query).sort({ createdAt: -1 }).lean();
-    return res.json({ ok: true, regions: items });
+
+    const search = String(req.query.search || "").trim();
+    if (search) {
+      const rx = new RegExp(search, "i");
+      query.$or = [{ regionId: rx }, { name: rx }, { warehouseName: rx }];
+    }
+
+    const paging = getPagination(req.query);
+    if (!paging.hasPaging) {
+      const items = await Region.find(query).sort({ createdAt: -1 }).lean();
+      return res.json({ ok: true, regions: items });
+    }
+
+    const [items, total] = await Promise.all([
+      Region.find(query).sort({ createdAt: -1 }).skip(paging.skip).limit(paging.limit).lean(),
+      Region.countDocuments(query),
+    ]);
+
+    return res.json({
+      ok: true,
+      regions: items,
+      pagination: {
+        page: paging.page,
+        limit: paging.limit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / paging.limit)),
+      },
+    });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to load regions" });
   }
