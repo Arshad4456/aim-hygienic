@@ -5,16 +5,55 @@ import AdminShell from "../../components/AdminShell";
 import { apiFetch } from "../../../../lib/api";
 
 const categoryOptions = [
-  {
-    label: "Diaper",
-    value: "Diaper",
-    subCategories: ["Mamia Crown", "Mamia Premium Jumbo", "Mamia Extra", "Royal Baby", "Adult Mamia"],
-  },
+  { label: "Diaper", value: "Diaper", subCategories: ["Mamia Crown", "Mamia Premium Jumbo", "Mamia Extra", "Royal Baby", "Adult Mamia"] },
   { label: "Pades", value: "Pades", subCategories: ["Mamia Pades"] },
   { label: "Dishwash", value: "Dishwash", subCategories: ["Mamia Dishwash"] },
   { label: "Soap", value: "Soap", subCategories: ["Mamia Soap"] },
   { label: "Washing Powder", value: "Washing Powder", subCategories: ["Turkey Gold"] },
   { label: "Wipes", value: "Wipes", subCategories: ["Mamia", "Royal", "Crown", "Optima"] },
+];
+
+const fieldDefs = [
+  { key: "code", label: "Code" },
+  { key: "productId", label: "Product ID" },
+  { key: "name", label: "Product Name" },
+  { key: "alternativeName", label: "Alternative Name" },
+  { key: "barcode", label: "Bar Code" },
+  { key: "bulkBarcode", label: "Bulk Bar Code" },
+  { key: "size", label: "Size" },
+  { key: "unit", label: "Unit" },
+  { key: "cartonSize", label: "Carton Size", type: "number" },
+  { key: "packSize", label: "Pack Size", type: "number" },
+  { key: "retailPrice", label: "Retail Price", type: "number" },
+  { key: "wholesalePrice", label: "Wholesale Price", type: "number" },
+  { key: "tradePrice", label: "Trade Price", type: "number" },
+  { key: "taxablePrice", label: "Taxable Price", type: "number" },
+  { key: "costPrice", label: "Cost Price", type: "number" },
+  { key: "discountPer", label: "Discount %", type: "number" },
+  { key: "unitScheme", label: "Unit Scheme", type: "number" },
+  { key: "taxPer", label: "Tax %", type: "number" },
+  { key: "fedPer", label: "FED %", type: "number" },
+  { key: "weight", label: "Weight", type: "number" },
+  { key: "weightUnitName", label: "Weight Unit Name" },
+  { key: "taxTypeName", label: "Tax Type Name" },
+  { key: "activationType", label: "Activation Type" },
+  { key: "sku", label: "SKU" },
+  { key: "description", label: "Description", type: "textarea", full: true },
+];
+
+const boolDefs = [
+  { key: "isTaxFromCustomer", label: "Is Tax From Customer" },
+  { key: "isTaxAppliedOnBonus", label: "Is Tax Applied On Bonus" },
+  { key: "isTaxAppliedAfterDiscountAndScheme", label: "Is Tax Applied After Discount & Scheme" },
+  { key: "isDiscountAppliedAfterScheme", label: "Is Discount Applied After Scheme" },
+];
+
+const templateHeaders = [
+  "Code", "Bar Code", "BulkBarCode", "Product Name", "Size", "Alternative Name", "Carton Size", "Pack Size",
+  "Retail Price", "Wholesale Price", "Trade Price", "Taxable Price", "Cost Price", "Discount Per", "Unit Scheme",
+  "is Tax From Customer", "Is Tax Applied On Bonus", "Is Tax Applied After Discount And Scheme",
+  "Is Discount Applied After Scheme", "Weight", "Weight Unit Name", "Sub Category Name", "Tax Per", "FED Per",
+  "Company Name", "Category Name", "Tax Type Name", "Activation Type",
 ];
 
 const columnMap = {
@@ -37,7 +76,6 @@ const columnMap = {
   istaxappliedonbonus: "isTaxAppliedOnBonus",
   istaxappliedafterdiscountandscheme: "isTaxAppliedAfterDiscountAndScheme",
   isdiscountappliedafterscheme: "isDiscountAppliedAfterScheme",
-  reorderlevel: "minStockLevel",
   weight: "weight",
   weightunitname: "weightUnitName",
   subcategoryname: "subCategory",
@@ -49,49 +87,66 @@ const columnMap = {
   activationtype: "activationType",
 };
 
-function normalizeHeader(header) {
-  return String(header || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
-}
+const emptyForm = {
+  code: "",
+  productId: "",
+  name: "",
+  alternativeName: "",
+  companyId: "",
+  companyName: "",
+  category: "",
+  subCategory: "",
+  size: "",
+  unit: "",
+  weight: "",
+  weightUnitName: "",
+  cartonSize: "",
+  packSize: "",
+  retailPrice: "",
+  wholesalePrice: "",
+  tradePrice: "",
+  taxablePrice: "",
+  customerPrice: "",
+  costPrice: "",
+  discountPer: "",
+  unitScheme: "",
+  isTaxFromCustomer: false,
+  isTaxAppliedOnBonus: false,
+  isTaxAppliedAfterDiscountAndScheme: false,
+  isDiscountAppliedAfterScheme: false,
+  taxPer: "",
+  fedPer: "",
+  taxTypeName: "",
+  activationType: "Active",
+  barcode: "",
+  bulkBarcode: "",
+  sku: "",
+  description: "",
+};
 
-function splitRow(line, delimiter) {
-  if (!line) return [];
-  return line.split(delimiter).map((part) => part.trim());
+function normalizeHeader(header) {
+  return String(header || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 function parseBulkText(input) {
-  const lines = String(input || "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  if (lines.length < 2) {
-    return { rows: [], errors: ["Please paste header + at least one data row."] };
-  }
+  const lines = String(input || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length < 2) return { rows: [], errors: ["Please paste header + at least one row."] };
 
   const delimiter = lines[0].includes("\t") ? "\t" : ",";
-  const headers = splitRow(lines[0], delimiter);
-  const mappedKeys = headers.map((h) => columnMap[normalizeHeader(h)] || null);
-
+  const headers = lines[0].split(delimiter).map((h) => h.trim());
+  const mapped = headers.map((h) => columnMap[normalizeHeader(h)] || null);
   const rows = [];
   const errors = [];
 
   for (let i = 1; i < lines.length; i += 1) {
-    const values = splitRow(lines[i], delimiter);
+    const values = lines[i].split(delimiter).map((v) => v.trim());
     const row = {};
-
-    mappedKeys.forEach((key, idx) => {
-      if (!key) return;
-      row[key] = values[idx] ?? "";
+    mapped.forEach((key, idx) => {
+      if (key) row[key] = values[idx] || "";
     });
 
     row.productId = String(row.code || "").trim();
-    row.initialPrice = row.retailPrice;
     row.customerPrice = row.wholesalePrice;
-    row.salePrice = row.tradePrice;
-    row.sellingPrice = row.tradePrice;
-    row.unit = row.weightUnitName;
 
     if (!row.productId || !row.name) {
       errors.push(`Row ${i + 1}: missing Code or Product Name`);
@@ -104,26 +159,23 @@ function parseBulkText(input) {
   return { rows, errors };
 }
 
+function downloadTemplate() {
+  const csv = `${templateHeaders.join(",")}\n`;
+  const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "products-import-template.csv";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export default function AddProductPage() {
   const [companies, setCompanies] = useState([]);
   const [companyId, setCompanyId] = useState("");
-  const [form, setForm] = useState({
-    productId: "",
-    name: "",
-    category: "",
-    subCategory: "",
-    size: "",
-    unit: "",
-    initialPrice: "",
-    customerPrice: "",
-    salePrice: "",
-    costPrice: "",
-    sellingPrice: "",
-    minStockLevel: "",
-    barcode: "",
-    sku: "",
-    description: "",
-  });
+  const [form, setForm] = useState(emptyForm);
   const [bulkInput, setBulkInput] = useState("");
   const [bulkErrors, setBulkErrors] = useState([]);
   const [bulkSummary, setBulkSummary] = useState(null);
@@ -167,28 +219,15 @@ export default function AddProductPage() {
         method: "POST",
         body: {
           ...form,
-          companyId: selectedCompany?.companyId || "",
-          companyName: selectedCompany?.name || "",
+          code: form.code || form.productId,
+          productId: form.productId || form.code,
+          companyId: selectedCompany?.companyId || form.companyId,
+          companyName: selectedCompany?.name || form.companyName,
+          customerPrice: form.wholesalePrice,
         },
       });
       setOk("✅ Product saved successfully.");
-      setForm({
-        productId: "",
-        name: "",
-        category: "",
-        subCategory: "",
-        size: "",
-        unit: "",
-        initialPrice: "",
-        customerPrice: "",
-        salePrice: "",
-        costPrice: "",
-        sellingPrice: "",
-        minStockLevel: "",
-        barcode: "",
-        sku: "",
-        description: "",
-      });
+      setForm(emptyForm);
     } catch (e2) {
       setErr(e2.message || "Failed to save product");
     } finally {
@@ -202,20 +241,14 @@ export default function AddProductPage() {
     setBulkSummary(null);
     const parsed = parseBulkText(bulkInput);
     setBulkErrors(parsed.errors || []);
-
     if (!parsed.rows.length) return;
 
     setBulkSaving(true);
     try {
-      const data = await apiFetch("/products/bulk-upsert", {
-        method: "POST",
-        body: { rows: parsed.rows },
-      });
+      const data = await apiFetch("/products/bulk-upsert", { method: "POST", body: { rows: parsed.rows } });
       setBulkSummary(data.summary || null);
       setOk("✅ Bulk import completed.");
-      if (!data.summary?.skipped) {
-        setBulkInput("");
-      }
+      if (!data.summary?.skipped) setBulkInput("");
     } catch (e) {
       setErr(e.message || "Bulk import failed");
     } finally {
@@ -227,43 +260,32 @@ export default function AddProductPage() {
     <AdminShell title="Add Product" user={null}>
       <div className="space-y-5">
         <div className="rounded-2xl bg-white border shadow-sm p-5">
-          <div className="text-xl font-semibold text-zinc-900">Bulk Import from Excel Copy/Paste</div>
-          <div className="text-sm text-zinc-500 mt-1">
-            Paste tab-separated data copied from Excel (must include the same headers as your sheet).
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-xl font-semibold text-zinc-900">Bulk Import from Excel/Google Sheets</div>
+              <div className="text-sm text-zinc-500 mt-1">Paste tabular data or download the compatible CSV template.</div>
+            </div>
+            <button type="button" onClick={downloadTemplate} className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-zinc-50">
+              Download Excel/Sheets Template
+            </button>
           </div>
 
           {bulkErrors.length ? (
             <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              <div className="font-medium">Some rows were skipped before upload:</div>
-              <ul className="list-disc pl-5 mt-1">
-                {bulkErrors.slice(0, 10).map((rowError) => (
-                  <li key={rowError}>{rowError}</li>
-                ))}
-              </ul>
+              <div className="font-medium">Rows skipped before upload:</div>
+              <ul className="list-disc pl-5 mt-1">{bulkErrors.slice(0, 10).map((it) => <li key={it}>{it}</li>)}</ul>
             </div>
           ) : null}
 
           {bulkSummary ? (
             <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-              Imported: {bulkSummary.processed} / {bulkSummary.received} rows · Inserted: {bulkSummary.inserted} · Updated: {bulkSummary.updated} · Skipped: {bulkSummary.skipped}
+              Imported: {bulkSummary.processed}/{bulkSummary.received} · Inserted: {bulkSummary.inserted} · Updated: {bulkSummary.updated} · Skipped: {bulkSummary.skipped}
             </div>
           ) : null}
 
-          <textarea
-            value={bulkInput}
-            onChange={(e) => setBulkInput(e.target.value)}
-            rows={10}
-            placeholder="Paste Excel table here..."
-            className="mt-4 w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200"
-          />
-
+          <textarea value={bulkInput} onChange={(e) => setBulkInput(e.target.value)} rows={10} placeholder="Paste Excel table here..." className="mt-4 w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200" />
           <div className="mt-3">
-            <button
-              type="button"
-              onClick={handleBulkImport}
-              disabled={bulkSaving}
-              className="rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-700 disabled:opacity-60"
-            >
+            <button type="button" onClick={handleBulkImport} disabled={bulkSaving} className="rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-700 disabled:opacity-60">
               {bulkSaving ? "Importing..." : "Import Pasted Data"}
             </button>
           </div>
@@ -271,88 +293,39 @@ export default function AddProductPage() {
 
         <div className="rounded-2xl bg-white border shadow-sm p-5">
           <div className="text-xl font-semibold text-zinc-900">Add Product Manually</div>
-          <div className="text-sm text-zinc-500 mt-1">Create a single product and assign it to a company.</div>
+          <div className="text-sm text-zinc-500 mt-1">All updated product fields are available below.</div>
 
           {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
           {ok ? <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{ok}</div> : null}
 
-          {loading ? (
-            <div className="mt-5 text-sm text-zinc-500">Loading companies...</div>
-          ) : (
+          {loading ? <div className="mt-5 text-sm text-zinc-500">Loading companies...</div> : (
             <form onSubmit={onSubmit} className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
                 <Label>Select Company</Label>
-                <select
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                  value={companyId}
-                  onChange={(e) => setCompanyId(e.target.value)}
-                  required
-                >
+                <select className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
                   <option value="">Choose company...</option>
-                  {companies.map((c) => (
-                    <option key={c._id} value={c._id}>{c.name}</option>
-                  ))}
+                  {companies.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
                 </select>
               </div>
 
-              <Field label="Product ID" value={form.productId} onChange={(v) => setField("productId", v)} required />
-              <Field label="Product Name" value={form.name} onChange={(v) => setField("name", v)} required />
+              <Field label="Category" value={form.category} onChange={(v) => setField("category", v)} as="select" options={["", ...categoryOptions.map((c) => c.value)]} />
+              <Field label="Sub-Category" value={form.subCategory} onChange={(v) => setField("subCategory", v)} as="select" options={["", ...subCategories]} />
 
-              <div>
-                <Label>Category</Label>
-                <select
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                  value={form.category}
-                  onChange={(e) => setField("category", e.target.value)}
-                  required
-                >
-                  <option value="">Select category...</option>
-                  {categoryOptions.map((c) => (
-                    <option key={c.value} value={c.value}>{c.label}</option>
-                  ))}
-                </select>
-              </div>
+              {fieldDefs.map((f) => (
+                <Field key={f.key} label={f.label} value={form[f.key]} onChange={(v) => setField(f.key, v)} type={f.type || "text"} full={f.full} required={f.key === "productId" || f.key === "name"} />
+              ))}
 
-              <div>
-                <Label>Sub-Category</Label>
-                <select
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                  value={form.subCategory}
-                  onChange={(e) => setField("subCategory", e.target.value)}
-                >
-                  <option value="">Select sub-category...</option>
-                  {subCategories.map((sub) => (
-                    <option key={sub} value={sub}>{sub}</option>
-                  ))}
-                </select>
-              </div>
-
-              <Field label="Size" value={form.size} onChange={(v) => setField("size", v)} placeholder="Small, Medium, Large, 2XL" />
-              <Field label="Unit" value={form.unit} onChange={(v) => setField("unit", v)} placeholder="pcs, box, kg" />
-              <Field label="Initial Price" value={form.initialPrice} onChange={(v) => setField("initialPrice", v)} type="number" />
-              <Field label="Customer Price" value={form.customerPrice} onChange={(v) => setField("customerPrice", v)} type="number" />
-              <Field label="Sale Price" value={form.salePrice} onChange={(v) => setField("salePrice", v)} type="number" />
-              <Field label="Cost Price" value={form.costPrice} onChange={(v) => setField("costPrice", v)} type="number" />
-              <Field label="Selling Price" value={form.sellingPrice} onChange={(v) => setField("sellingPrice", v)} type="number" />
-              <Field label="Minimum Stock Level" value={form.minStockLevel} onChange={(v) => setField("minStockLevel", v)} type="number" />
-              <Field label="Barcode" value={form.barcode} onChange={(v) => setField("barcode", v)} />
-              <Field label="SKU" value={form.sku} onChange={(v) => setField("sku", v)} />
-
-              <div className="md:col-span-2">
-                <Label>Description</Label>
-                <textarea
-                  className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200"
-                  rows={3}
-                  value={form.description}
-                  onChange={(e) => setField("description", e.target.value)}
-                />
+              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 rounded-xl border p-3">
+                {boolDefs.map((b) => (
+                  <label key={b.key} className="flex items-center gap-2 text-sm text-zinc-700">
+                    <input type="checkbox" checked={Boolean(form[b.key])} onChange={(e) => setField(b.key, e.target.checked)} />
+                    {b.label}
+                  </label>
+                ))}
               </div>
 
               <div className="md:col-span-2 flex items-center gap-3 mt-2">
-                <button
-                  disabled={saving}
-                  className="rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-700 disabled:opacity-60"
-                >
+                <button disabled={saving} className="rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-700 disabled:opacity-60">
                   {saving ? "Saving..." : "Save Product"}
                 </button>
               </div>
@@ -368,18 +341,19 @@ function Label({ children }) {
   return <div className="text-sm font-medium text-zinc-800">{children}</div>;
 }
 
-function Field({ label, value, onChange, type = "text", required = false, placeholder }) {
+function Field({ label, value, onChange, type = "text", full = false, required = false, as, options = [] }) {
   return (
-    <div>
+    <div className={full ? "md:col-span-2" : ""}>
       <Label>{label}</Label>
-      <input
-        type={type}
-        required={required}
-        value={value}
-        placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200"
-      />
+      {as === "select" ? (
+        <select value={value || ""} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200">
+          {options.map((opt) => <option key={opt || "blank"} value={opt}>{opt || "Select..."}</option>)}
+        </select>
+      ) : type === "textarea" ? (
+        <textarea value={value || ""} required={required} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200" rows={3} />
+      ) : (
+        <input type={type} required={required} value={value || ""} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200" />
+      )}
     </div>
   );
 }
