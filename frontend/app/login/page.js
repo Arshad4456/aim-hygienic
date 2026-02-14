@@ -67,7 +67,12 @@ export default function LoginPage() {
       document.cookie = `aim_token=${data.token}; path=/; Secure; SameSite=Lax`;
       document.cookie = `aim_role=${data.user?.role || ""}; path=/; Secure; SameSite=Lax`;
 
-      router.push(roleRedirect(data.user?.role));
+      const destination = roleRedirect(data.user?.role);
+      if (typeof window !== "undefined") {
+        window.open(destination, "_blank", "noopener,noreferrer");
+      } else {
+        router.push(destination);
+      }
     } catch (err) {
       setError(err.message || "Failed to login");
     } finally {
@@ -127,7 +132,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <button target="_blank"
+          <button
             disabled={loading}
             className="w-full rounded-xl bg-emerald-600 text-white py-2.5 font-medium hover:bg-emerald-700 disabled:opacity-60"
           >
