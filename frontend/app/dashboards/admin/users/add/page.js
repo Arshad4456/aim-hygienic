@@ -54,7 +54,14 @@ export default function AddUserPage() {
     })().catch((e) => setErr(e.message || "Failed to load data"));
   }, []);
 
-  const nextUserId = useMemo(() => String((users || []).length + 1).padStart(2, "0"), [users]);
+  const nextUserId = useMemo(() => {
+    const maxUserId = (users || []).reduce((max, user) => {
+      const parsed = Number.parseInt(String(user?.userId || ""), 10);
+      if (Number.isNaN(parsed)) return max;
+      return Math.max(max, parsed);
+    }, 0);
+    return String(maxUserId + 1).padStart(2, "0");
+  }, [users]);
   useEffect(() => {
     setForm((prev) => ({ ...prev, userId: nextUserId }));
   }, [nextUserId]);
@@ -166,10 +173,10 @@ export default function AddUserPage() {
         },
       });
 
-      setUsers((prev) => [...prev, { _id: Date.now().toString() }]);
+      setUsers((prev) => [...prev, { _id: Date.now().toString(), userId: form.userId }]);
       setOk(`✅ ${role} user created successfully.`);
       setRole("");
-      setForm({ userId: String(users.length + 2).padStart(2, "0") });
+      setForm({ userId: "" });
       setShowPassword(false);
     } catch (e2) {
       setErr(e2.message || "Failed to create user");

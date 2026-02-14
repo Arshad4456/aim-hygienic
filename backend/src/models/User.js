@@ -69,4 +69,14 @@ const UserSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+UserSchema.index(
+  { userId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      userId: { $exists: true, $type: "string", $ne: "" },
+    },
+  }
+);
+
 module.exports = mongoose.model("User", UserSchema);
