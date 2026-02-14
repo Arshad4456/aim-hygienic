@@ -78,6 +78,24 @@ const boolFields = [
   ["isDiscountAppliedAfterScheme", "Is Discount Applied After Scheme"],
 ];
 
+function compareValues(a, b, sortDir) {
+  const left = a ?? "";
+  const right = b ?? "";
+
+  const leftNum = Number(left);
+  const rightNum = Number(right);
+  const bothNumbers = Number.isFinite(leftNum) && Number.isFinite(rightNum) && String(left).trim() !== "" && String(right).trim() !== "";
+
+  let result = 0;
+  if (bothNumbers) {
+    result = leftNum - rightNum;
+  } else {
+    result = String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: "base" });
+  }
+
+  return sortDir === "asc" ? result : -result;
+}
+
 export default function ProductListPage() {
   const [companies, setCompanies] = useState([]);
   const [companyId, setCompanyId] = useState("");
@@ -87,6 +105,8 @@ export default function ProductListPage() {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [subCategoryFilter, setSubCategoryFilter] = useState("");
+  const [sortKey, setSortKey] = useState("");
+  const [sortDir, setSortDir] = useState("asc");
   const [page, setPage] = useState(1);
   const [editId, setEditId] = useState(null);
   const [editForm, setEditForm] = useState(null);
@@ -127,6 +147,11 @@ export default function ProductListPage() {
     return next;
   }, [rows, companyId, companies, categoryFilter, subCategoryFilter, search]);
 
+  const sortedRows = useMemo(() => {
+    if (!sortKey) return filtered;
+    return [...filtered].sort((a, b) => compareValues(a?.[sortKey], b?.[sortKey], sortDir));
+  }, [filtered, sortKey, sortDir]);
+
   const categoryCounts = useMemo(() => {
     const counts = categories.reduce((acc, c) => ({ ...acc, [c]: 0 }), {});
     filtered.forEach((p) => {
@@ -141,12 +166,27 @@ export default function ProductListPage() {
   }, [filtered, categoryFilter]);
 
   const perPage = 50;
-  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
-  const pageRows = filtered.slice((page - 1) * perPage, page * perPage);
+  const totalPages = Math.max(1, Math.ceil(sortedRows.length / perPage));
+  const pageRows = sortedRows.slice((page - 1) * perPage, page * perPage);
 
   function startEdit(row) {
     setEditId(row._id);
     setEditForm({ ...row });
+  }
+
+  function handleSort(key) {
+    setPage(1);
+    if (sortKey !== key) {
+      setSortKey(key);
+      setSortDir("asc");
+      return;
+    }
+    setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+  }
+
+  function sortIndicator(key) {
+    if (sortKey !== key) return "↕";
+    return sortDir === "asc" ? "↑" : "↓";
   }
 
   async function onDelete(id) {
@@ -176,7 +216,7 @@ export default function ProductListPage() {
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-xl font-semibold text-zinc-900">Products</div>
-            <div className="text-sm text-zinc-500 mt-1">All updated fields are visible in the list and edit form.</div>
+            <div className="text-sm text-zinc-500 mt-1">Sort by Product ID or Product Name by clicking table headers.</div>
           </div>
           <Link href="/dashboards/admin/products/add" className="rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-700">
             + Add Product
@@ -196,14 +236,34 @@ export default function ProductListPage() {
         </div>
 
         <div className="mt-3 grid grid-cols-2 md:grid-cols-6 gap-2">
-          {categories.map((c) => <div key={c} className="rounded-xl border p-3"><div className="text-xs text-zinc-500">{c}</div><div className="text-lg font-semibold">{categoryCounts[c] || 0}</div></div>)}
+          <div className="rounded-xl border p-3 bg-zinc-50">
+            <div className="text-xs text-zinc-500">All Products</div>
+            <div className="text-lg font-semibold">{filtered.length}</div>
+          </div>
+          {categories.map((c) => (
+            <div key={c} className="rounded-xl border p-3">
+              <div className="text-xs text-zinc-500">{c}</div>
+              <div className="text-lg font-semibold">{categoryCounts[c] || 0}</div>
+            </div>
+          ))}
         </div>
 
         <div className="mt-4 overflow-auto border rounded-xl">
           <table className="min-w-[2600px] w-full text-sm">
             <thead className="bg-zinc-50 text-zinc-700">
               <tr>
-                {tableColumns.map(([key, label]) => <th key={key} className="text-left px-3 py-2 border-b">{label}</th>)}
+                {tableColumns.map(([key, label]) => (
+                  <th key={key} className="text-left px-3 py-2 border-b whitespace-nowrap">
+                    {(key === "productId" || key === "name") ? (
+                      <button type="button" onClick={() => handleSort(key)} className="inline-flex items-center gap-1 font-semibold hover:text-emerald-700">
+                        {label}
+                        <span className="text-xs">{sortIndicator(key)}</span>
+                      </button>
+                    ) : (
+                      label
+                    )}
+                  </th>
+                ))}
                 <th className="text-left px-3 py-2 border-b">Actions</th>
               </tr>
             </thead>
