@@ -18,6 +18,11 @@ export default function UserListPage() {
 
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
+  const [warehouseFilter, setWarehouseFilter] = useState("");
+  const [regionFilter, setRegionFilter] = useState("");
+  const [zoneFilter, setZoneFilter] = useState("");
+  const [territoryFilter, setTerritoryFilter] = useState("");
+  const [fieldFilter, setFieldFilter] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -63,10 +68,71 @@ export default function UserListPage() {
     load();
   }, []);
 
+  const selectedWarehouseFilter = useMemo(
+    () => warehouses.find((w) => w.warehouseId === warehouseFilter),
+    [warehouses, warehouseFilter]
+  );
+  const selectedRegionFilter = useMemo(
+    () => regions.find((r) => r.regionId === regionFilter),
+    [regions, regionFilter]
+  );
+  const selectedZoneFilter = useMemo(
+    () => zones.find((z) => z.zoneId === zoneFilter),
+    [zones, zoneFilter]
+  );
+  const selectedTerritoryFilter = useMemo(
+    () => areas.find((a) => a.areaId === territoryFilter),
+    [areas, territoryFilter]
+  );
+
+  const filterRegions = useMemo(() => {
+    if (!selectedWarehouseFilter) return regions;
+    return regions.filter((r) => !r.companyId || r.companyId === selectedWarehouseFilter.companyId);
+  }, [regions, selectedWarehouseFilter]);
+
+  const filterZones = useMemo(() => {
+    return zones.filter((z) => {
+      if (selectedWarehouseFilter && z.warehouseId !== selectedWarehouseFilter.warehouseId) return false;
+      if (selectedRegionFilter && z.regionId !== selectedRegionFilter.regionId) return false;
+      return true;
+    });
+  }, [zones, selectedWarehouseFilter, selectedRegionFilter]);
+
+  const filterTerritories = useMemo(() => {
+    return areas.filter((a) => {
+      if (selectedWarehouseFilter && a.warehouseId !== selectedWarehouseFilter.warehouseId) return false;
+      if (selectedRegionFilter && a.regionId !== selectedRegionFilter.regionId) return false;
+      if (selectedZoneFilter && a.zoneId !== selectedZoneFilter.zoneId) return false;
+      return true;
+    });
+  }, [areas, selectedWarehouseFilter, selectedRegionFilter, selectedZoneFilter]);
+
+  const filterFields = useMemo(() => {
+    return fields.filter((f) => {
+      if (selectedWarehouseFilter && f.warehouseId !== selectedWarehouseFilter.warehouseId) return false;
+      if (selectedRegionFilter && f.regionId !== selectedRegionFilter.regionId) return false;
+      if (selectedZoneFilter && f.zoneId !== selectedZoneFilter.zoneId) return false;
+      if (selectedTerritoryFilter && f.territoryId !== selectedTerritoryFilter.areaId) return false;
+      return true;
+    });
+  }, [fields, selectedWarehouseFilter, selectedRegionFilter, selectedZoneFilter, selectedTerritoryFilter]);
+
+  function matchLocation(rowValueId, rowValueName, selectedId, selectedName) {
+    if (!selectedId) return true;
+    if (rowValueId && rowValueId === selectedId) return true;
+    if (rowValueName && selectedName && rowValueName === selectedName) return true;
+    return false;
+  }
+
   const filteredRows = useMemo(() => {
     const value = search.trim().toLowerCase();
     return rows.filter((row) => {
       if (roleFilter && row.role !== roleFilter) return false;
+      if (!matchLocation(row.warehouseId, row.warehouseName, warehouseFilter, selectedWarehouseFilter?.name)) return false;
+      if (!matchLocation(row.regionId, row.regionName, regionFilter, selectedRegionFilter?.name)) return false;
+      if (!matchLocation(row.zoneId, row.zoneName, zoneFilter, selectedZoneFilter?.name)) return false;
+      if (!matchLocation(row.territoryId, row.territoryName, territoryFilter, selectedTerritoryFilter?.name)) return false;
+      if (!matchLocation(row.fieldId, row.fieldName, fieldFilter, filterFields.find((f) => f.fieldId === fieldFilter)?.name)) return false;
       if (!value) return true;
       const hay = [
         row.userId,
@@ -86,7 +152,21 @@ export default function UserListPage() {
         .toLowerCase();
       return hay.includes(value);
     });
-  }, [rows, search, roleFilter]);
+  }, [
+    rows,
+    search,
+    roleFilter,
+    warehouseFilter,
+    regionFilter,
+    zoneFilter,
+    territoryFilter,
+    fieldFilter,
+    selectedWarehouseFilter,
+    selectedRegionFilter,
+    selectedZoneFilter,
+    selectedTerritoryFilter,
+    filterFields,
+  ]);
 
   async function onDelete(id) {
     if (!confirm("Delete this user?")) return;
@@ -138,14 +218,6 @@ export default function UserListPage() {
     }
   }
 
-  function escapeHtml(value) {
-    return String(value)
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;");
-  }
-
   function buildExportRows() {
     return filteredRows.map((row) => ({
       userId: row.userId || "",
@@ -161,61 +233,34 @@ export default function UserListPage() {
     }));
   }
 
+  function toCsvValue(value) {
+    const text = String(value ?? "");
+    if (!text.includes('"') && !text.includes(",") && !text.includes("\n")) return text;
+    return `"${text.replaceAll('"', '""')}"`;
+  }
+
   function downloadExcel() {
     const rowsForExport = buildExportRows();
-    const generatedAt = new Date().toLocaleString();
-    const tableRows = rowsForExport
-      .map(
-        (row) => `
-<tr>
-  <td>${escapeHtml(row.userId)}</td>
-  <td>${escapeHtml(row.fullName)}</td>
-  <td>${escapeHtml(row.role)}</td>
-  <td>${escapeHtml(row.mobile)}</td>
-  <td>${escapeHtml(row.email)}</td>
-  <td>${escapeHtml(row.warehouse)}</td>
-  <td>${escapeHtml(row.region)}</td>
-  <td>${escapeHtml(row.zone)}</td>
-  <td>${escapeHtml(row.territory)}</td>
-  <td>${escapeHtml(row.field)}</td>
-</tr>`
-      )
-      .join("");
+    const headers = ["User ID", "Name", "Role", "Mobile", "Email", "Warehouse", "Region", "Zone", "Territory", "Field"];
+    const csvRows = rowsForExport.map((row) => [
+      row.userId,
+      row.fullName,
+      row.role,
+      row.mobile,
+      row.email,
+      row.warehouse,
+      row.region,
+      row.zone,
+      row.territory,
+      row.field,
+    ]);
+    const csvContent = [headers, ...csvRows].map((line) => line.map(toCsvValue).join(",")).join("\r\n");
 
-    const excelHtml = `
-<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
-<head>
-<meta charset="UTF-8" />
-<style>
-  body { font-family: Arial, sans-serif; }
-  h2 { margin: 0 0 8px 0; }
-  .meta { margin: 0 0 12px 0; color: #444; font-size: 12px; }
-  table { border-collapse: collapse; width: 100%; }
-  th, td { border: 1px solid #c8c8c8; padding: 6px 8px; font-size: 12px; text-align: left; }
-  th { background: #16a34a; color: #ffffff; font-weight: 700; }
-  tr:nth-child(even) td { background: #f8fafc; }
-</style>
-</head>
-<body>
-  <h2>AIM Hygienic - User List</h2>
-  <div class="meta">Generated: ${escapeHtml(generatedAt)} | Total Users: ${rowsForExport.length}</div>
-  <table>
-    <thead>
-      <tr>
-        <th>User ID</th><th>Name</th><th>Role</th><th>Mobile</th><th>Email</th>
-        <th>Warehouse</th><th>Region</th><th>Zone</th><th>Territory</th><th>Field</th>
-      </tr>
-    </thead>
-    <tbody>${tableRows}</tbody>
-  </table>
-</body>
-</html>`;
-
-    const blob = new Blob([excelHtml], { type: "application/vnd.ms-excel;charset=utf-8;" });
+    const blob = new Blob([`\uFEFF${csvContent}`], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `users-${new Date().toISOString().slice(0, 10)}.xls`;
+    link.download = `users-${new Date().toISOString().slice(0, 10)}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -263,17 +308,18 @@ export default function UserListPage() {
     ];
 
     let y = pageHeight - margin;
-    let content = "";
+    let pageContent = "";
+    const pageStreams = [];
 
     const esc = (v) => String(v).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
 
     function drawText(x, yy, text, size = fontSize) {
-      content += `BT /F1 ${size} Tf ${x} ${yy} Td (${esc(text)}) Tj ET
+      pageContent += `BT /F1 ${size} Tf ${x} ${yy} Td (${esc(text)}) Tj ET
 `;
     }
 
     function drawLine(x1, y1, x2, y2) {
-      content += `${x1} ${y1} m ${x2} ${y2} l S
+      pageContent += `${x1} ${y1} m ${x2} ${y2} l S
 `;
     }
 
@@ -294,14 +340,21 @@ export default function UserListPage() {
       y -= 18;
     }
 
-    drawHeader();
+    function startPage() {
+      if (pageContent) pageStreams.push(pageContent);
+      pageContent = "";
+      y = pageHeight - margin;
+      drawHeader();
+    }
+
+    startPage();
 
     rowsForExport.forEach((row) => {
       const lineGroups = columns.map((col) => wrapByChars(row[col.key], col.chars));
       const maxLines = Math.max(...lineGroups.map((g) => g.length));
       const rowHeight = maxLines * 10 + rowPadding * 2;
 
-      if (y - rowHeight < margin) return;
+      if (y - rowHeight < margin) startPage();
 
       let x = margin;
       const top = y + 6;
@@ -319,27 +372,48 @@ export default function UserListPage() {
       y -= rowHeight;
     });
 
-    const stream = content;
-    const objs = [
-      "<< /Type /Catalog /Pages 2 0 R >>",
-      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
-      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-      `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
-    ];
+    if (pageContent) pageStreams.push(pageContent);
+
+    const objs = [];
+    const catalogObjId = 1;
+    const pagesObjId = 2;
+    const fontObjId = 3;
+
+    const pageObjIds = [];
+    const streamObjIds = [];
+    let nextObjId = 4;
+    pageStreams.forEach(() => {
+      pageObjIds.push(nextObjId);
+      nextObjId += 1;
+      streamObjIds.push(nextObjId);
+      nextObjId += 1;
+    });
+
+    objs[catalogObjId] = `<< /Type /Catalog /Pages ${pagesObjId} 0 R >>`;
+    objs[pagesObjId] = `<< /Type /Pages /Kids [${pageObjIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pageObjIds.length} >>`;
+    objs[fontObjId] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
+
+    pageStreams.forEach((stream, index) => {
+      objs[pageObjIds[index]] = `<< /Type /Page /Parent ${pagesObjId} 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontObjId} 0 R >> >> /Contents ${streamObjIds[index]} 0 R >>`;
+      objs[streamObjIds[index]] = `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`;
+    });
 
     let pdf = "%PDF-1.4\n";
-    const offsets = [0];
-    objs.forEach((obj, idx) => {
-      offsets.push(pdf.length);
-      pdf += `${idx + 1} 0 obj\n${obj}\nendobj\n`;
-    });
-    const xref = pdf.length;
-    pdf += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
-    for (let i = 1; i <= objs.length; i += 1) {
-      pdf += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
+    const offsets = new Array(objs.length).fill(0);
+    for (let idx = 1; idx < objs.length; idx += 1) {
+      const obj = objs[idx];
+      if (!obj) continue;
+      offsets[idx] = pdf.length;
+      pdf += `${idx} 0 obj\n${obj}\nendobj\n`;
     }
-    pdf += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+    const xref = pdf.length;
+    pdf += `xref\n0 ${objs.length}\n0000000000 65535 f \n`;
+    for (let i = 1; i < objs.length; i += 1) {
+      const offset = offsets[i] || 0;
+      const marker = objs[i] ? "n" : "f";
+      pdf += `${String(offset).padStart(10, "0")} 00000 ${marker} \n`;
+    }
+    pdf += `trailer\n<< /Size ${objs.length} /Root ${catalogObjId} 0 R >>\nstartxref\n${xref}\n%%EOF`;
     return pdf;
   }
 
@@ -366,7 +440,7 @@ export default function UserListPage() {
         {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
         {fieldsWarning ? <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">{fieldsWarning} (User list is loaded without Field master mapping.)</div> : null}
 
-        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3 lg:grid-cols-4">
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -380,6 +454,64 @@ export default function UserListPage() {
           >
             <option value="">All roles</option>
             {AIM_USER_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+          <select
+            value={warehouseFilter}
+            onChange={(e) => {
+              setWarehouseFilter(e.target.value);
+              setRegionFilter("");
+              setZoneFilter("");
+              setTerritoryFilter("");
+              setFieldFilter("");
+            }}
+            className="rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200"
+          >
+            <option value="">All warehouses</option>
+            {warehouses.map((w) => <option key={w.warehouseId} value={w.warehouseId}>{w.name}</option>)}
+          </select>
+          <select
+            value={regionFilter}
+            onChange={(e) => {
+              setRegionFilter(e.target.value);
+              setZoneFilter("");
+              setTerritoryFilter("");
+              setFieldFilter("");
+            }}
+            className="rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200"
+          >
+            <option value="">All regions</option>
+            {filterRegions.map((r) => <option key={r.regionId} value={r.regionId}>{r.name}</option>)}
+          </select>
+          <select
+            value={zoneFilter}
+            onChange={(e) => {
+              setZoneFilter(e.target.value);
+              setTerritoryFilter("");
+              setFieldFilter("");
+            }}
+            className="rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200"
+          >
+            <option value="">All zones</option>
+            {filterZones.map((z) => <option key={z.zoneId} value={z.zoneId}>{z.name}</option>)}
+          </select>
+          <select
+            value={territoryFilter}
+            onChange={(e) => {
+              setTerritoryFilter(e.target.value);
+              setFieldFilter("");
+            }}
+            className="rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200"
+          >
+            <option value="">All territories</option>
+            {filterTerritories.map((a) => <option key={a.areaId} value={a.areaId}>{a.name}</option>)}
+          </select>
+          <select
+            value={fieldFilter}
+            onChange={(e) => setFieldFilter(e.target.value)}
+            className="rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200"
+          >
+            <option value="">All fields</option>
+            {filterFields.map((f) => <option key={f.fieldId} value={f.fieldId}>{f.name}</option>)}
           </select>
           <div className="rounded-xl border bg-zinc-50 px-3 py-2 text-sm text-zinc-600">Total users: <b>{filteredRows.length}</b></div>
         </div>
@@ -397,7 +529,7 @@ export default function UserListPage() {
             onClick={downloadExcel}
             className="rounded-xl border px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
           >
-            Download Excel Sheet
+            Download Excel (CSV)
           </button>
         </div>
 
@@ -505,6 +637,7 @@ function EditUserModal({
     if (selectedZone && a.zoneId !== selectedZone.zoneId) return false;
     return true;
   });
+  const filteredTerritories = filteredAreas;
   const filteredFields = fields.filter((f) => {
     if (selectedWarehouse && f.warehouseId !== selectedWarehouse.warehouseId) return false;
     if (selectedRegion && f.regionId !== selectedRegion.regionId) return false;
@@ -597,8 +730,10 @@ function EditUserModal({
                   const item = areas.find((a) => a.areaId === areaId);
                   setField("territoryId", item?.areaId || "");
                   setField("territoryName", item?.name || "");
+                  setField("fieldId", "");
+                  setField("fieldName", "");
                 }}
-                options={filteredFields.map((a) => ({ value: a.fieldId, label: a.name }))}
+                options={filteredTerritories.map((a) => ({ value: a.areaId, label: a.name }))}
               />
             ) : null}
 
