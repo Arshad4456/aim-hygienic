@@ -127,7 +127,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <button target="_blank"
+          <button
             disabled={loading}
             className="w-full rounded-xl bg-emerald-600 text-white py-2.5 font-medium hover:bg-emerald-700 disabled:opacity-60"
           >
