@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import AdminShell from "../components/AdminShell";
 import { apiFetch } from "../../../lib/api";
 
-const categories = ["Diaper", "Pades", "Dishwash", "Soap", "Washing Powder", "Wipes"];
+const categories = ["Wipes", "Xtra Eco", "ADULT", "Optima", "Mamia Crown Eco", "Mamia Crown Jumbo", "Mamia Dishwash", "Mamia Soap", "Mamia Pads", "Razor", "Xtra", "BABY DIAPER", "Royal Baby", "Royal Baby Wipes", "Comfery Adult"];
 
 const tableColumns = [
   ["code", "Code"],

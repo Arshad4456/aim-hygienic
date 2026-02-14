@@ -5,12 +5,21 @@ import AdminShell from "../../components/AdminShell";
 import { apiFetch } from "../../../../lib/api";
 
 const categoryOptions = [
-  { label: "Diaper", value: "Diaper", subCategories: ["Mamia Crown", "Mamia Premium Jumbo", "Mamia Extra", "Royal Baby", "Adult Mamia"] },
-  { label: "Pades", value: "Pades", subCategories: ["Mamia Pades"] },
-  { label: "Dishwash", value: "Dishwash", subCategories: ["Mamia Dishwash"] },
-  { label: "Soap", value: "Soap", subCategories: ["Mamia Soap"] },
-  { label: "Washing Powder", value: "Washing Powder", subCategories: ["Turkey Gold"] },
-  { label: "Wipes", value: "Wipes", subCategories: ["Mamia", "Royal", "Crown", "Optima"] },
+  { label: "Wipes", value: "Wipes", subCategories: ["Royal Baby Wipes", "Mamia Wipes 42-sheets", "Mamia Crown Wipes", "Mamia Wipes Gentle", "Wipes Premium"] },
+  { label: "Xtra Eco", value: "Xtra Eco", subCategories: ["Xtra Eco"] },
+  { label: "ADULT", value: "ADULT", subCategories: ["Adult"] },
+  { label: "Optima", value: "Optima", subCategories: ["Optima Soap", "Optima Wipes"] },
+  { label: "Mamia Crown Eco", value: "Mamia Crown Eco", subCategories: ["Mamia Crown Eco"] },
+  { label: "Mamia Crown Jumbo", value: "Mamia Crown Jumbo", subCategories: ["Mamia Crown Jumbo"] },
+  { label: "Mamia Dishwash", value: "Mamia Dishwash", subCategories: ["Mamia Dishwash Lemon", "Mamia Dishwash"] },
+  { label: "Mamia Soap", value: "Mamia Soap", subCategories: ["Mamia Soap"] },
+  { label: "Mamia Pads", value: "Mamia Pads", subCategories: ["Value Pack", "Single Pack", "Travel Pack"] },
+  { label: "Razor", value: "Razor", subCategories: ["Razor"] },
+  { label: "Xtra", value: "Xtra", subCategories: ["Xtra Jumbo"] },
+  { label: "BABY DIAPER", value: "BABY DIAPER", subCategories: ["Jumbo Pack", "Twin Pack", "Small Pack"] },
+  { label: "Royal Baby", value: "Royal Baby", subCategories: ["Royal Baby Jumbo", "Royal Baby Eco"] },
+  { label: "Royal Baby Wipes", value: "Royal Baby Wipes", subCategories: ["Royal Baby Wipes"] },
+  { label: "Comfery Adult", value: "Comfery Adult", subCategories: ["Comfery Adult"] },
 ];
 
 const fieldDefs = [
