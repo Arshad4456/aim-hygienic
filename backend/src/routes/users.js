@@ -248,6 +248,12 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
   const existingMobile = await User.findOne({ mobile: normalize(body.mobile || body.mobileNumber) });
   if (existingMobile) return res.status(409).json({ ok: false, message: "Mobile already exists" });
 
+  const normalizedUserId = normalize(body.userId);
+  if (normalizedUserId) {
+    const existingUserId = await User.findOne({ userId: normalizedUserId });
+    if (existingUserId) return res.status(409).json({ ok: false, message: "User ID already exists" });
+  }
+
   const { payload } = buildRoleAwarePayload(body);
   payload.username = payload.username || payload.mobile;
   payload.passwordHash = await hashPassword(body.password);
@@ -276,6 +282,12 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
   if (!existing) return res.status(404).json({ ok: false, message: "User not found" });
 
   const { payload, unset } = buildRoleAwarePayload(body, existing.role);
+
+  if (payload.userId) {
+    const duplicateUserId = await User.findOne({ userId: payload.userId, _id: { $ne: existing._id } }).lean();
+    if (duplicateUserId) return res.status(409).json({ ok: false, message: "User ID already exists" });
+  }
+
   if (body.password) {
     const validation = validatePassword(body.password);
     if (!validation.ok) return res.status(400).json({ ok: false, message: validation.message });
