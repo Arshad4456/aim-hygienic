@@ -86,6 +86,7 @@ export default function AddUserPage() {
     return true;
   });
 
+  const filteredTerritories = filteredAreas;
 
   const filteredFields = fields.filter((f) => {
     if (selectedWarehouse && f.warehouseId !== selectedWarehouse.warehouseId) return false;
@@ -137,6 +138,14 @@ export default function AddUserPage() {
         territoryDocId: "",
         territoryId: "",
         territoryName: "",
+        fieldDocId: "",
+        fieldId: "",
+        fieldName: "",
+      }));
+    }
+    if (level === "territory") {
+      setForm((prev) => ({
+        ...prev,
         fieldDocId: "",
         fieldId: "",
         fieldName: "",
@@ -216,6 +225,7 @@ export default function AddUserPage() {
                 resetLocationFrom("warehouse");
               }}
               options={warehouses.map((w) => ({ value: w._id, label: w.name }))}
+              required
             />
           ) : null}
 
@@ -234,6 +244,7 @@ export default function AddUserPage() {
                 resetLocationFrom("region");
               }}
               options={filteredRegions.map((r) => ({ value: r._id, label: r.name }))}
+              required
             />
           ) : null}
 
@@ -252,6 +263,7 @@ export default function AddUserPage() {
                 resetLocationFrom("zone");
               }}
               options={filteredZones.map((z) => ({ value: z._id, label: z.name }))}
+              required
             />
           ) : null}
 
@@ -260,12 +272,14 @@ export default function AddUserPage() {
               label="Territory Name"
               value={form.territoryDocId || ""}
               onChange={(docId) => {
-                const item = fields.find((a) => a._id === docId);
+                const item = filteredTerritories.find((a) => a._id === docId);
                 setField("territoryDocId", docId);
                 setField("territoryId", item?.areaId || "");
                 setField("territoryName", item?.name || "");
+                resetLocationFrom("territory");
               }}
-              options={filteredFields.map((a) => ({ value: a._id, label: a.name }))}
+              options={filteredTerritories.map((a) => ({ value: a._id, label: a.name }))}
+              required
             />
           ) : null}
 
@@ -281,6 +295,7 @@ export default function AddUserPage() {
                   setField("fieldName", item?.name || "");
                 }}
                 options={filteredFields.map((a) => ({ value: a._id, label: a.name }))}
+                required
               />
               {fieldsWarning ? <div className="mt-1 text-xs text-amber-700">Fields endpoint unavailable. You can still create users without field mapping.</div> : null}
             </div>
