@@ -23,6 +23,7 @@ export default function UserListPage() {
   const [zoneFilter, setZoneFilter] = useState("");
   const [territoryFilter, setTerritoryFilter] = useState("");
   const [fieldFilter, setFieldFilter] = useState("");
+  const [sortConfig, setSortConfig] = useState({ key: "userId", direction: "asc" });
 
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -168,6 +169,42 @@ export default function UserListPage() {
     filterFields,
   ]);
 
+  const sortedRows = useMemo(() => {
+    const rowsCopy = [...filteredRows];
+    if (sortConfig.key === "userId") {
+      rowsCopy.sort((a, b) => {
+        const aNum = Number.parseInt(String(a.userId || ""), 10);
+        const bNum = Number.parseInt(String(b.userId || ""), 10);
+        const aSafe = Number.isNaN(aNum) ? Number.MAX_SAFE_INTEGER : aNum;
+        const bSafe = Number.isNaN(bNum) ? Number.MAX_SAFE_INTEGER : bNum;
+        if (aSafe === bSafe) return String(a.userId || "").localeCompare(String(b.userId || ""));
+        return sortConfig.direction === "asc" ? aSafe - bSafe : bSafe - aSafe;
+      });
+      return rowsCopy;
+    }
+
+    if (sortConfig.key === "fullName") {
+      rowsCopy.sort((a, b) => {
+        const aName = String(a.fullName || "");
+        const bName = String(b.fullName || "");
+        const compare = aName.localeCompare(bName, undefined, { sensitivity: "base" });
+        return sortConfig.direction === "asc" ? compare : -compare;
+      });
+      return rowsCopy;
+    }
+
+    return rowsCopy;
+  }, [filteredRows, sortConfig]);
+
+  function onSort(columnKey) {
+    setSortConfig((prev) => {
+      if (prev.key === columnKey) {
+        return { key: columnKey, direction: prev.direction === "asc" ? "desc" : "asc" };
+      }
+      return { key: columnKey, direction: "asc" };
+    });
+  }
+
   async function onDelete(id) {
     if (!confirm("Delete this user?")) return;
     try {
@@ -219,7 +256,7 @@ export default function UserListPage() {
   }
 
   function buildExportRows() {
-    return filteredRows.map((row) => ({
+    return sortedRows.map((row) => ({
       userId: row.userId || "",
       fullName: row.fullName || "",
       role: row.role || "",
@@ -435,7 +472,7 @@ export default function UserListPage() {
     <AdminShell title="User List" user={null}>
       <div className="rounded-2xl border bg-white p-5 shadow-sm">
         <div className="text-xl font-semibold text-zinc-900">Users</div>
-        <div className="mt-1 text-sm text-zinc-500">All users list with role-based details and edit support.</div>
+        <div className="mt-1 text-sm text-zinc-500">All users list with role-based details and edit support. Click User ID or Name to sort.</div>
 
         {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
         {fieldsWarning ? <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">{fieldsWarning} (User list is loaded without Field master mapping.)</div> : null}
@@ -513,7 +550,7 @@ export default function UserListPage() {
             <option value="">All fields</option>
             {filterFields.map((f) => <option key={f.fieldId} value={f.fieldId}>{f.name}</option>)}
           </select>
-          <div className="rounded-xl border bg-zinc-50 px-3 py-2 text-sm text-zinc-600">Total users: <b>{filteredRows.length}</b></div>
+          <div className="rounded-xl border bg-zinc-50 px-3 py-2 text-sm text-zinc-600">Total users: <b>{sortedRows.length}</b></div>
         </div>
 
         <div className="mt-3 flex flex-wrap gap-2">
@@ -537,8 +574,18 @@ export default function UserListPage() {
           <table className="min-w-[1100px] w-full text-sm">
             <thead className="bg-zinc-50">
               <tr>
-                <th className="border-b px-3 py-2 text-left">User ID</th>
-                <th className="border-b px-3 py-2 text-left">Name</th>
+                <th className="border-b px-3 py-2 text-left">
+                  <button type="button" onClick={() => onSort("userId")} className="inline-flex items-center gap-1 font-medium hover:text-emerald-700">
+                    User ID
+                    {sortConfig.key === "userId" ? (sortConfig.direction === "asc" ? "▲" : "▼") : ""}
+                  </button>
+                </th>
+                <th className="border-b px-3 py-2 text-left">
+                  <button type="button" onClick={() => onSort("fullName")} className="inline-flex items-center gap-1 font-medium hover:text-emerald-700">
+                    Name
+                    {sortConfig.key === "fullName" ? (sortConfig.direction === "asc" ? "▲" : "▼") : ""}
+                  </button>
+                </th>
                 <th className="border-b px-3 py-2 text-left">Role</th>
                 <th className="border-b px-3 py-2 text-left">Mobile</th>
                 <th className="border-b px-3 py-2 text-left">Warehouse</th>
@@ -552,10 +599,10 @@ export default function UserListPage() {
             <tbody>
               {loading ? (
                 <tr><td colSpan={10} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
-              ) : filteredRows.length === 0 ? (
+              ) : sortedRows.length === 0 ? (
                 <tr><td colSpan={10} className="px-3 py-6 text-center text-zinc-500">No users found</td></tr>
               ) : (
-                filteredRows.map((row) => (
+                sortedRows.map((row) => (
                   <tr key={row._id} className="hover:bg-zinc-50">
                     <td className="border-b px-3 py-2">{row.userId || "-"}</td>
                     <td className="border-b px-3 py-2">{row.fullName || "-"}</td>
