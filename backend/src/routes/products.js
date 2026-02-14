@@ -9,35 +9,116 @@ function toNumber(value) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function toBool(value) {
+  if (typeof value === "boolean") return value;
+  const normalized = String(value || "").trim().toLowerCase();
+  return ["checked", "true", "yes", "1"].includes(normalized);
+}
+
+function normalizePayload(body = {}) {
+  return {
+    code: String(body.code || "").trim(),
+    productId: String(body.productId || body.code || "").trim(),
+    name: String(body.name || "").trim(),
+    alternativeName: String(body.alternativeName || "").trim(),
+    companyId: String(body.companyId || "").trim(),
+    companyName: String(body.companyName || "").trim(),
+    category: String(body.category || "").trim(),
+    subCategory: String(body.subCategory || "").trim(),
+    size: String(body.size || "").trim(),
+    unit: String(body.unit || "").trim(),
+    weight: toNumber(body.weight),
+    weightUnitName: String(body.weightUnitName || "").trim(),
+    cartonSize: toNumber(body.cartonSize),
+    packSize: toNumber(body.packSize),
+    initialPrice: toNumber(body.initialPrice),
+    retailPrice: toNumber(body.retailPrice),
+    wholesalePrice: toNumber(body.wholesalePrice),
+    tradePrice: toNumber(body.tradePrice),
+    taxablePrice: toNumber(body.taxablePrice),
+    customerPrice: toNumber(body.customerPrice),
+    salePrice: toNumber(body.salePrice),
+    costPrice: toNumber(body.costPrice),
+    sellingPrice: toNumber(body.sellingPrice),
+    discountPer: toNumber(body.discountPer),
+    unitScheme: toNumber(body.unitScheme),
+    isTaxFromCustomer: toBool(body.isTaxFromCustomer),
+    isTaxAppliedOnBonus: toBool(body.isTaxAppliedOnBonus),
+    isTaxAppliedAfterDiscountAndScheme: toBool(body.isTaxAppliedAfterDiscountAndScheme),
+    isDiscountAppliedAfterScheme: toBool(body.isDiscountAppliedAfterScheme),
+    taxPer: toNumber(body.taxPer),
+    fedPer: toNumber(body.fedPer),
+    taxTypeName: String(body.taxTypeName || "").trim(),
+    activationType: String(body.activationType || "").trim(),
+    minStockLevel: toNumber(body.minStockLevel),
+    barcode: String(body.barcode || "").trim(),
+    bulkBarcode: String(body.bulkBarcode || "").trim(),
+    sku: String(body.sku || "").trim(),
+    description: String(body.description || "").trim(),
+  };
+}
+
 router.post("/", requireAuth, async (req, res) => {
   try {
-    const body = req.body || {};
-    const doc = await Product.create({
-      productId: String(body.productId || "").trim(),
-      name: String(body.name || "").trim(),
-      companyId: String(body.companyId || "").trim(),
-      companyName: String(body.companyName || "").trim(),
-      category: String(body.category || "").trim(),
-      subCategory: String(body.subCategory || "").trim(),
-      size: String(body.size || "").trim(),
-      unit: String(body.unit || "").trim(),
-      initialPrice: toNumber(body.initialPrice),
-      customerPrice: toNumber(body.customerPrice),
-      salePrice: toNumber(body.salePrice),
-      costPrice: toNumber(body.costPrice),
-      sellingPrice: toNumber(body.sellingPrice),
-      minStockLevel: toNumber(body.minStockLevel),
-      barcode: String(body.barcode || "").trim(),
-      sku: String(body.sku || "").trim(),
-      description: String(body.description || "").trim(),
-      createdBy: req.user?.uid,
-    });
+    const body = normalizePayload(req.body || {});
+    const doc = await Product.create({ ...body, createdBy: req.user?.uid });
     return res.status(201).json({ ok: true, product: doc });
   } catch (e) {
     if (e?.code === 11000) {
       return res.status(409).json({ ok: false, message: "Product ID already exists" });
     }
     return res.status(500).json({ ok: false, message: "Failed to create product" });
+  }
+});
+
+router.post("/bulk-upsert", requireAuth, async (req, res) => {
+  try {
+    const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+    if (!rows.length) {
+      return res.status(400).json({ ok: false, message: "No rows provided" });
+    }
+
+    const operations = [];
+    const skipped = [];
+    rows.forEach((row, idx) => {
+      const normalized = normalizePayload(row || {});
+      if (!normalized.productId || !normalized.name) {
+        skipped.push({
+          row: idx + 1,
+          reason: "Missing Product ID or Product Name",
+        });
+        return;
+      }
+      operations.push({
+        updateOne: {
+          filter: { productId: normalized.productId },
+          update: {
+            $set: normalized,
+            $setOnInsert: { createdBy: req.user?.uid },
+          },
+          upsert: true,
+        },
+      });
+    });
+
+    if (!operations.length) {
+      return res.status(400).json({ ok: false, message: "No valid rows found", skipped });
+    }
+
+    const result = await Product.bulkWrite(operations, { ordered: false });
+    return res.json({
+      ok: true,
+      summary: {
+        received: rows.length,
+        processed: operations.length,
+        inserted: result.upsertedCount || 0,
+        updated: result.modifiedCount || 0,
+        skipped: skipped.length,
+      },
+      skipped,
+    });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to import products" });
   }
 });
 
@@ -75,28 +156,10 @@ router.get("/:id", requireAuth, async (req, res) => {
 
 router.put("/:id", requireAuth, async (req, res) => {
   try {
-    const body = req.body || {};
+    const body = normalizePayload(req.body || {});
     const updated = await Product.findByIdAndUpdate(
       req.params.id,
-      {
-        productId: String(body.productId || "").trim(),
-        name: String(body.name || "").trim(),
-        companyId: String(body.companyId || "").trim(),
-        companyName: String(body.companyName || "").trim(),
-      category: String(body.category || "").trim(),
-      subCategory: String(body.subCategory || "").trim(),
-      size: String(body.size || "").trim(),
-      unit: String(body.unit || "").trim(),
-      initialPrice: toNumber(body.initialPrice),
-      customerPrice: toNumber(body.customerPrice),
-      salePrice: toNumber(body.salePrice),
-      costPrice: toNumber(body.costPrice),
-      sellingPrice: toNumber(body.sellingPrice),
-      minStockLevel: toNumber(body.minStockLevel),
-      barcode: String(body.barcode || "").trim(),
-        sku: String(body.sku || "").trim(),
-        description: String(body.description || "").trim(),
-      },
+      body,
       { new: true, runValidators: true }
     );
     if (!updated) return res.status(404).json({ ok: false, message: "Not found" });
