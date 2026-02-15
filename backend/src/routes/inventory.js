@@ -17,6 +17,22 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(num) ? num : fallback;
 }
 
+
+function parseCartonSizeLabel(value) {
+  const label = toTrimmedString(value).toLowerCase().replace(/\s+/g, "");
+  const match = label.match(/^(\d+)x(\d+)$/);
+  if (!match) return null;
+  const cartonCount = toNumber(match[1], 0);
+  const totalPacks = toNumber(match[2], 0);
+  if (cartonCount <= 0 || totalPacks <= 0) return null;
+  return {
+    cartonCount,
+    totalPacks,
+    packsPerCarton: totalPacks / cartonCount,
+    cartonSize: `${cartonCount}x${totalPacks}`,
+  };
+}
+
 function movementTypeForTransaction(transactionType) {
   const map = {
     PURCHASING_STOCK: "PURCHASE_IN",
@@ -98,18 +114,31 @@ router.post("/transactions", requireAuth, async (req, res) => {
     }
 
     const normalizedItems = incomingItems.map((item) => {
-      const cartonSize = Math.max(1, toNumber(item.cartonSize || item.packSize, 1));
-      const cartons = Math.max(0, toNumber(item.cartons, 0));
+      const parsedSize = parseCartonSizeLabel(item.cartonSize);
+      const cartons = Math.max(0, toNumber(item.cartons, parsedSize?.cartonCount || 0));
       const packs = Math.max(0, toNumber(item.packs, 0));
-      const totalPacks = cartons * cartonSize + packs;
+      const packsPerCarton = Math.max(0, toNumber(item.packsPerCarton, parsedSize?.packsPerCarton || 0));
+      const totalPacks = Math.max(
+        0,
+        toNumber(item.totalPacks, parsedSize?.totalPacks || cartons * packsPerCarton + packs)
+      );
+      const onePackPrice = Math.max(0, toNumber(item.onePackPrice, 0));
+      const oneCartonPrice = Math.max(0, toNumber(item.oneCartonPrice, 0));
+      const totalPrice = Math.max(0, toNumber(item.totalPrice, 0));
+      const unitPrice = totalPacks > 0 ? toNumber(item.unitPrice, totalPrice / totalPacks) : 0;
       return {
         productId: toTrimmedString(item.productId),
         productName: toTrimmedString(item.productName),
-        cartonSize,
+        cartonSize: parsedSize?.cartonSize || toTrimmedString(item.cartonSize),
+        cartonCount: parsedSize?.cartonCount || cartons,
+        packsPerCarton,
         cartons,
         packs,
         totalPacks,
-        unitPrice: toNumber(item.unitPrice, 0),
+        onePackPrice,
+        oneCartonPrice,
+        totalPrice,
+        unitPrice,
         expiryDate: item.expiryDate ? new Date(item.expiryDate) : undefined,
         notes: toTrimmedString(item.notes),
       };
@@ -120,7 +149,7 @@ router.post("/transactions", requireAuth, async (req, res) => {
       return res.status(400).json({ ok: false, message: "Each item needs product and quantity" });
     }
 
-    const subtotal = normalizedItems.reduce((sum, item) => sum + item.totalPacks * item.unitPrice, 0);
+    const subtotal = normalizedItems.reduce((sum, item) => sum + (item.totalPrice || item.totalPacks * item.unitPrice), 0);
     const adjustment = toNumber(body.adjustment, 0);
     const grandTotal = subtotal + adjustment;
 
