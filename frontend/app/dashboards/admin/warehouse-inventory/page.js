@@ -295,6 +295,17 @@ export default function WarehouseInventoryModulePage() {
     win.print();
   }
 
+  async function deleteRecord(id) {
+    if (!confirm("Delete this record?")) return;
+    try {
+      await apiFetch(`/inventory/transactions/${id}`, { method: "DELETE" });
+      setTransactions((prev) => prev.filter((row) => row._id !== id));
+      setOk("✅ Record deleted.");
+    } catch (e) {
+      setErr(e.message || "Failed to delete record");
+    }
+  }
+
   const currentCard = cards.find((c) => c.key === selectedCard);
   const cardTx = transactions.filter((t) => t.transactionType === selectedCard);
 
@@ -431,10 +442,10 @@ export default function WarehouseInventoryModulePage() {
           <h3 className="text-lg font-semibold">{currentCard?.title} Ledger</h3>
           <div className="overflow-x-auto mt-3">
             <table className="min-w-full text-sm">
-              <thead><tr className="border-b"><th className="p-2 text-left">Code</th><th className="p-2 text-left">Date & Time</th><th className="p-2 text-left">Grand Total</th><th className="p-2 text-left">Action</th></tr></thead>
+              <thead><tr className="border-b"><th className="p-2 text-left">Code</th><th className="p-2 text-left">Date & Time</th><th className="p-2 text-left">Grand Total</th><th className="p-2 text-left">Actions</th></tr></thead>
               <tbody>
                 {cardTx.map((t) => (
-                  <tr key={t._id} className="border-b"><td className="p-2">{t.transactionCode}</td><td className="p-2">{new Date(t.transactionAt).toLocaleString()}</td><td className="p-2">{Number(t.grandTotal || 0).toFixed(2)}</td><td className="p-2"><button onClick={() => printInvoice(t)} className="rounded border px-2 py-1">Invoice/Receipt</button></td></tr>
+                  <tr key={t._id} className="border-b"><td className="p-2">{t.transactionCode}</td><td className="p-2">{new Date(t.transactionAt).toLocaleString()}</td><td className="p-2">{Number(t.grandTotal || 0).toFixed(2)}</td><td className="p-2"><div className="flex gap-2"><button onClick={() => printInvoice(t)} className="rounded border px-2 py-1">Invoice/Receipt</button><button onClick={() => deleteRecord(t._id)} className="rounded border border-red-300 text-red-700 px-2 py-1">Delete</button></div></td></tr>
                 ))}
               </tbody>
             </table>
