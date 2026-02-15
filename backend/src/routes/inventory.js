@@ -139,6 +139,7 @@ router.post("/transactions", requireAuth, async (req, res) => {
         oneCartonPrice,
         totalPrice,
         unitPrice,
+        manufactureDate: item.manufactureDate ? new Date(item.manufactureDate) : undefined,
         expiryDate: item.expiryDate ? new Date(item.expiryDate) : undefined,
         notes: toTrimmedString(item.notes),
       };
@@ -293,6 +294,32 @@ router.delete("/transactions/clear", requireAuth, requireRole("admin"), async (r
     return res.json({ ok: true, message: "Warehouse inventory module data cleared" });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to clear transaction data" });
+  }
+});
+
+router.get("/near-expiry-products", requireAuth, async (req, res) => {
+  try {
+    const now = new Date();
+    const threeMonthsLater = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+    const rows = await WarehouseTransaction.aggregate([
+      { $match: { transactionType: "PURCHASING_STOCK" } },
+      { $unwind: "$items" },
+      { $match: { "items.expiryDate": { $gte: now, $lte: threeMonthsLater } } },
+      {
+        $project: {
+          productName: "$items.productName",
+          quantity: "$items.totalPacks",
+          warehouseName: "$warehouseName",
+          manufactureDate: "$items.manufactureDate",
+          expiryDate: "$items.expiryDate",
+          transactionCode: 1,
+        },
+      },
+      { $sort: { expiryDate: 1 } },
+    ]);
+    return res.json({ ok: true, products: rows });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to load near expiry products" });
   }
 });
 
