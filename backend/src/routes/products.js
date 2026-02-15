@@ -47,6 +47,7 @@ function normalizePayload(body = {}) {
     fedPer: toNumber(body.fedPer),
     taxTypeName: String(body.taxTypeName || "").trim(),
     activationType: String(body.activationType || "").trim(),
+    minStockLevel: toNumber(body.minStockLevel),
     barcode: String(body.barcode || "").trim(),
     bulkBarcode: String(body.bulkBarcode || "").trim(),
     sku: String(body.sku || "").trim(),

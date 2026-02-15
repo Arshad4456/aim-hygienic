@@ -14,6 +14,7 @@ const WarehouseTransactionItemSchema = new mongoose.Schema(
     oneCartonPrice: { type: Number, default: 0 },
     totalPrice: { type: Number, default: 0 },
     unitPrice: { type: Number, default: 0 },
+    manufactureDate: { type: Date },
     expiryDate: { type: Date },
     notes: { type: String, trim: true },
   },
