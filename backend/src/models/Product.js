@@ -32,7 +32,7 @@ const ProductSchema = new mongoose.Schema(
     fedPer: { type: Number, default: 0 },
     taxTypeName: { type: String, trim: true },
     activationType: { type: String, trim: true },
-    // minStockLevel: { type: Number, default: 0 },
+    minStockLevel: { type: Number, default: 0 },
     barcode: { type: String, trim: true },
     bulkBarcode: { type: String, trim: true },
     sku: { type: String, trim: true },
