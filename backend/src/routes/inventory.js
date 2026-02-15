@@ -273,6 +273,18 @@ router.put("/transactions/:id/return-payment", requireAuth, async (req, res) => 
   }
 });
 
+router.delete("/transactions/:id", requireAuth, async (req, res) => {
+  try {
+    const deleted = await WarehouseTransaction.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ ok: false, message: "Transaction not found" });
+
+    await InventoryMovement.deleteMany({ referenceId: deleted.transactionCode });
+    return res.json({ ok: true, deletedId: req.params.id });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to delete transaction" });
+  }
+});
+
 router.delete("/transactions/clear", requireAuth, requireRole("admin"), async (req, res) => {
   try {
     await WarehouseTransaction.deleteMany({});
