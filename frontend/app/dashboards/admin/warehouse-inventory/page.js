@@ -28,6 +28,15 @@ function parseCartonSize(value) {
   return { cartonCount, totalPacks, packsPerCarton: cartonCount > 0 ? totalPacks / cartonCount : 0 };
 }
 
+function uniqueBy(items, keyFn) {
+  const map = new Map();
+  items.forEach((item) => {
+    const key = keyFn(item);
+    if (key && !map.has(key)) map.set(key, item);
+  });
+  return [...map.values()];
+}
+
 export default function WarehouseInventoryModulePage() {
   const [selectedCard, setSelectedCard] = useState(cards[0].key);
   const [saleMode, setSaleMode] = useState("brand");
@@ -35,6 +44,8 @@ export default function WarehouseInventoryModulePage() {
   const [warehouses, setWarehouses] = useState([]);
   const [fields, setFields] = useState([]);
   const [users, setUsers] = useState([]);
+  const [regions, setRegions] = useState([]);
+  const [zones, setZones] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [analytics, setAnalytics] = useState({ daily: [], weekly: [], monthly: [], expiryAlerts: [], returnPayments: [] });
   const [loading, setLoading] = useState(true);
@@ -47,7 +58,12 @@ export default function WarehouseInventoryModulePage() {
     toWarehouseId: "",
     businessType: "",
     businessUserId: "",
+    businessName: "",
+    regionId: "",
+    zoneId: "",
     territoryName: "",
+    distributorUserId: "",
+    subDistributorName: "",
     fieldId: "",
     adjustment: "0",
     items: [{ ...blankItem }],
@@ -55,11 +71,13 @@ export default function WarehouseInventoryModulePage() {
 
   async function loadAll() {
     try {
-      const [productsRes, warehousesRes, fieldsRes, usersRes, txRes, analyticsRes] = await Promise.all([
+      const [productsRes, warehousesRes, fieldsRes, usersRes, regionsRes, zonesRes, txRes, analyticsRes] = await Promise.all([
         apiFetch("/products"),
         apiFetch("/warehouses"),
         apiFetch("/fields"),
         apiFetch("/users"),
+        apiFetch("/regions"),
+        apiFetch("/zones"),
         apiFetch("/inventory/transactions"),
         apiFetch("/inventory/analytics"),
       ]);
@@ -67,6 +85,8 @@ export default function WarehouseInventoryModulePage() {
       setWarehouses(warehousesRes.warehouses || []);
       setFields(fieldsRes.fields || []);
       setUsers(usersRes.users || []);
+      setRegions(regionsRes.regions || []);
+      setZones(zonesRes.zones || []);
       setTransactions(txRes.transactions || []);
       setAnalytics(analyticsRes.analytics || { daily: [], weekly: [], monthly: [], expiryAlerts: [], returnPayments: [] });
     } catch (e) {
@@ -81,15 +101,36 @@ export default function WarehouseInventoryModulePage() {
   }, []);
 
   const businessTypes = useMemo(() => [...new Set(users.map((u) => String(u.businessType || "").trim()).filter(Boolean))], [users]);
-
-  const businessRole = saleMode === "brand" ? "Brand Manager" : saleMode === "distributor" ? "Distributor" : "customer";
+  const brandManagers = useMemo(() => users.filter((u) => u.role === "Brand Manager"), [users]);
+  const distributors = useMemo(() => users.filter((u) => u.role === "Distributor"), [users]);
 
   const businessUsers = useMemo(
-    () => users.filter((u) => u.role === businessRole && (!form.businessType || u.businessType === form.businessType)),
-    [users, businessRole, form.businessType]
+    () => brandManagers.filter((u) => (!form.businessType || u.businessType === form.businessType)),
+    [brandManagers, form.businessType]
+  );
+  const selectedBusinessUser = useMemo(() => businessUsers.find((u) => u._id === form.businessUserId) || null, [businessUsers, form.businessUserId]);
+
+  const selectedRegion = useMemo(() => regions.find((r) => r._id === form.regionId) || null, [regions, form.regionId]);
+  const selectedZone = useMemo(() => zones.find((z) => z._id === form.zoneId) || null, [zones, form.zoneId]);
+
+  const zonesForRegion = useMemo(
+    () => zones.filter((z) => !form.regionId || z.regionId === selectedRegion?.regionId),
+    [zones, form.regionId, selectedRegion]
   );
 
-  const selectedBusinessUser = useMemo(() => businessUsers.find((u) => u._id === form.businessUserId) || null, [businessUsers, form.businessUserId]);
+  const territoriesForZone = useMemo(() => {
+    const territoryUsers = users.filter((u) => {
+      if (!u.territoryName) return false;
+      if (!selectedZone) return false;
+      return u.zoneId === selectedZone.zoneId || u.zoneName === selectedZone.name;
+    });
+    return uniqueBy(territoryUsers, (u) => u.territoryName).map((u) => u.territoryName);
+  }, [users, selectedZone]);
+
+  const distributorsForTerritory = useMemo(
+    () => distributors.filter((u) => !form.territoryName || u.territoryName === form.territoryName),
+    [distributors, form.territoryName]
+  );
 
   const territoryFields = useMemo(
     () => fields.filter((f) => (f.territoryName || "") === (form.territoryName || "")),
@@ -112,14 +153,13 @@ export default function WarehouseInventoryModulePage() {
     setForm((p) => ({ ...p, items: p.items.filter((_, idx) => idx !== i) }));
   }
 
+  function resetSaleRouting() {
+    setForm((p) => ({ ...p, businessType: "", businessUserId: "", businessName: "", regionId: "", zoneId: "", territoryName: "", distributorUserId: "", subDistributorName: "", fieldId: "" }));
+  }
+
   function onChangeBusinessUser(userId) {
     const user = businessUsers.find((u) => u._id === userId) || null;
-    setForm((p) => ({
-      ...p,
-      businessUserId: userId,
-      territoryName: user?.territoryName || "",
-      fieldId: "",
-    }));
+    setForm((p) => ({ ...p, businessUserId: userId, territoryName: user?.territoryName || "", fieldId: "" }));
   }
 
   const normalizedItems = useMemo(
@@ -128,6 +168,7 @@ export default function WarehouseInventoryModulePage() {
         .map((item) => {
           const product = products.find((p) => p._id === item.productId);
           const parsed = parseCartonSize(item.cartonSize);
+          const isDamageStock = selectedCard === "DAMAGE_STOCK";
           return {
             productId: product?.productId || "",
             productName: product?.name || "",
@@ -139,17 +180,14 @@ export default function WarehouseInventoryModulePage() {
             oneCartonPrice: Number(item.oneCartonPrice || 0),
             totalPrice: Number(item.totalPrice || 0),
             unitPrice: parsed.totalPacks > 0 ? Number(item.totalPrice || 0) / parsed.totalPacks : 0,
-            expiryDate: item.expiryDate || undefined,
+            expiryDate: isDamageStock ? item.expiryDate || undefined : undefined,
           };
         })
         .filter((i) => i.productId),
-    [form.items, products]
+    [form.items, products, selectedCard]
   );
 
-  const totalPreview = useMemo(
-    () => normalizedItems.reduce((s, i) => s + Number(i.totalPrice || 0), 0) + Number(form.adjustment || 0),
-    [normalizedItems, form.adjustment]
-  );
+  const totalPreview = useMemo(() => normalizedItems.reduce((s, i) => s + Number(i.totalPrice || 0), 0) + Number(form.adjustment || 0), [normalizedItems, form.adjustment]);
 
   async function submit(e) {
     e.preventDefault();
@@ -160,6 +198,7 @@ export default function WarehouseInventoryModulePage() {
       const fromWarehouse = warehouses.find((w) => w._id === form.warehouseId);
       const toWarehouse = warehouses.find((w) => w._id === form.toWarehouseId);
       const selectedField = territoryFields.find((f) => f._id === form.fieldId);
+      const selectedDistributor = distributors.find((u) => u._id === form.distributorUserId) || null;
 
       const body = {
         transactionType: selectedCard,
@@ -174,18 +213,39 @@ export default function WarehouseInventoryModulePage() {
         body.toEntityName = toWarehouse?.name || "";
       } else if (selectedCard === "SALE_STOCK") {
         body.fromEntityName = fromWarehouse?.name || "";
-        body.toEntityName = selectedBusinessUser?.businessName || selectedBusinessUser?.fullName || "";
-        body.distributorName = saleMode === "distributor" ? body.toEntityName : "";
-        body.subDistributorName = saleMode === "subDistributor" ? body.toEntityName : "";
-        body.brandName = saleMode === "brand" ? body.toEntityName : "";
-        body.territory = form.territoryName;
+        if (saleMode === "brand") {
+          body.toEntityName = selectedBusinessUser?.businessName || selectedBusinessUser?.fullName || "";
+          body.brandName = body.toEntityName;
+          body.territory = form.territoryName;
+        }
+        if (saleMode === "distributor") {
+          body.regionId = selectedRegion?.regionId || "";
+          body.regionName = selectedRegion?.name || "";
+          body.zoneId = selectedZone?.zoneId || "";
+          body.zoneName = selectedZone?.name || "";
+          body.territory = form.territoryName;
+          body.distributorId = selectedDistributor?.userId || "";
+          body.distributorName = selectedDistributor?.businessName || selectedDistributor?.fullName || "";
+          body.toEntityName = body.distributorName;
+        }
+        if (saleMode === "subDistributor") {
+          body.regionId = selectedRegion?.regionId || "";
+          body.regionName = selectedRegion?.name || "";
+          body.zoneId = selectedZone?.zoneId || "";
+          body.zoneName = selectedZone?.name || "";
+          body.territory = form.territoryName;
+          body.distributorName = form.subDistributorName;
+          body.subDistributorName = form.subDistributorName;
+          body.toEntityName = form.subDistributorName;
+          body.note = `Business Type: ${form.businessType || "-"}, Business Name: ${form.businessName || "-"}`;
+        }
         body.fieldId = selectedField?.fieldId || "";
         body.fieldName = selectedField?.name || "";
       }
 
       await apiFetch("/inventory/transactions", { method: "POST", body });
       setOk("✅ Saved. Stock and analytics updated.");
-      setForm((p) => ({ ...p, adjustment: "0", items: [{ ...blankItem }], fromEntityName: "", toWarehouseId: "", businessType: "", businessUserId: "", territoryName: "", fieldId: "" }));
+      setForm((p) => ({ ...p, adjustment: "0", items: [{ ...blankItem }], fromEntityName: "", toWarehouseId: "", businessType: "", businessUserId: "", businessName: "", regionId: "", zoneId: "", territoryName: "", distributorUserId: "", subDistributorName: "", fieldId: "" }));
       await loadAll();
     } catch (e2) {
       setErr(e2.message || "Failed to save");
@@ -195,9 +255,7 @@ export default function WarehouseInventoryModulePage() {
   }
 
   function printInvoice(txn) {
-    const html = `<html><body style="font-family:Arial;padding:20px;"><h1>AIM-HYGIENICS (PVT) LIMITED</h1><h3>${txn.transactionCode}</h3><div>${txn.transactionType} | ${new Date(txn.transactionAt).toLocaleString()}</div><table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;margin-top:10px;width:100%"><tr><th>Product</th><th>Carton Size</th><th>1 Pack Price</th><th>1 Carton Price</th><th>Total Price</th></tr>${(txn.items || [])
-      .map((i) => `<tr><td>${i.productName}</td><td>${i.cartonSize || "-"}</td><td>${i.onePackPrice || 0}</td><td>${i.oneCartonPrice || 0}</td><td>${i.totalPrice || 0}</td></tr>`)
-      .join("")}</table><h3>Grand Total: ${txn.grandTotal || 0}</h3></body></html>`;
+    const html = `<html><body style="font-family:Arial;padding:20px;"><h1>AIM-HYGIENICS (PVT) LIMITED</h1><h3>${txn.transactionCode}</h3><div>${txn.transactionType} | ${new Date(txn.transactionAt).toLocaleString()}</div><table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;margin-top:10px;width:100%"><tr><th>Product</th><th>Carton Size</th><th>1 Pack Price</th><th>1 Carton Price</th><th>Total Price</th>${selectedCard === "DAMAGE_STOCK" ? "<th>Expiry Date</th>" : ""}</tr>${(txn.items || []).map((i) => `<tr><td>${i.productName}</td><td>${i.cartonSize || "-"}</td><td>${i.onePackPrice || 0}</td><td>${i.oneCartonPrice || 0}</td><td>${i.totalPrice || 0}</td>${selectedCard === "DAMAGE_STOCK" ? `<td>${i.expiryDate ? new Date(i.expiryDate).toLocaleDateString() : "-"}</td>` : ""}</tr>`).join("")}</table><h3>Grand Total: ${txn.grandTotal || 0}</h3></body></html>`;
     const win = window.open("", "_blank");
     if (!win) return;
     win.document.write(html);
@@ -234,12 +292,7 @@ export default function WarehouseInventoryModulePage() {
             {selectedCard === "PURCHASING_STOCK" ? (
               <>
                 <Input label="From" value={form.fromEntityName} onChange={(v) => setField("fromEntityName", v)} />
-                <Select
-                  label="To (Warehouse)"
-                  value={form.toWarehouseId}
-                  onChange={(v) => setField("toWarehouseId", v)}
-                  options={warehouses.map((w) => ({ value: w._id, label: `${w.name} (${w.warehouseId})` }))}
-                />
+                <Select label="To (Warehouse)" value={form.toWarehouseId} onChange={(v) => setField("toWarehouseId", v)} options={warehouses.map((w) => ({ value: w._id, label: `${w.name} (${w.warehouseId})` }))} />
                 <Input label="Adjustment" type="number" value={form.adjustment} onChange={(v) => setField("adjustment", v)} />
               </>
             ) : null}
@@ -255,7 +308,7 @@ export default function WarehouseInventoryModulePage() {
                         type="button"
                         onClick={() => {
                           setSaleMode(mode.key);
-                          setForm((p) => ({ ...p, businessType: "", businessUserId: "", territoryName: "", fieldId: "" }));
+                          resetSaleRouting();
                         }}
                         className={`rounded-lg border px-3 py-1.5 text-xs ${saleMode === mode.key ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "hover:bg-zinc-50"}`}
                       >
@@ -264,39 +317,52 @@ export default function WarehouseInventoryModulePage() {
                     ))}
                   </div>
                 </div>
-                <Select
-                  label="From (Warehouse)"
-                  value={form.warehouseId}
-                  onChange={(v) => setField("warehouseId", v)}
-                  options={warehouses.map((w) => ({ value: w._id, label: `${w.name} (${w.warehouseId})` }))}
-                />
-                <div className="md:col-span-2 text-sm font-semibold mt-1">To</div>
-                <Select label="Business Type" value={form.businessType} onChange={(v) => setField("businessType", v)} options={businessTypes.map((x) => ({ value: x, label: x }))} />
-                <Select
-                  label="Business Name"
-                  value={form.businessUserId}
-                  onChange={onChangeBusinessUser}
-                  options={businessUsers.map((u) => ({ value: u._id, label: u.businessName || u.fullName || u.username }))}
-                />
-                <Input label="Territory" value={form.territoryName} onChange={(v) => setField("territoryName", v)} readOnly />
-                <Select
-                  label="Field Name"
-                  value={form.fieldId}
-                  onChange={(v) => setField("fieldId", v)}
-                  options={territoryFields.map((f) => ({ value: f._id, label: `${f.name} (${f.fieldId})` }))}
-                />
-                <Input label="Adjustment" type="number" value={form.adjustment} onChange={(v) => setField("adjustment", v)} />
+
+                {saleMode === "brand" ? (
+                  <>
+                    <Select label="From (Warehouse)" value={form.warehouseId} onChange={(v) => setField("warehouseId", v)} options={warehouses.map((w) => ({ value: w._id, label: `${w.name} (${w.warehouseId})` }))} />
+                    <div className="md:col-span-2 text-sm font-semibold mt-1">To</div>
+                    <Select label="Business Type" value={form.businessType} onChange={(v) => setField("businessType", v)} options={businessTypes.map((x) => ({ value: x, label: x }))} />
+                    <Select label="Business Name" value={form.businessUserId} onChange={onChangeBusinessUser} options={businessUsers.map((u) => ({ value: u._id, label: u.businessName || u.fullName || u.username }))} />
+                    <Input label="Territory" value={form.territoryName} onChange={(v) => setField("territoryName", v)} readOnly />
+                    <Select label="Field Name" value={form.fieldId} onChange={(v) => setField("fieldId", v)} options={territoryFields.map((f) => ({ value: f._id, label: `${f.name} (${f.fieldId})` }))} />
+                    <Input label="Adjustment" type="number" value={form.adjustment} onChange={(v) => setField("adjustment", v)} />
+                  </>
+                ) : null}
+
+                {saleMode === "distributor" ? (
+                  <>
+                    <Select label="From (Warehouse)" value={form.warehouseId} onChange={(v) => setField("warehouseId", v)} options={warehouses.map((w) => ({ value: w._id, label: `${w.name} (${w.warehouseId})` }))} />
+                    <div className="md:col-span-2 text-sm font-semibold mt-1">To</div>
+                    <Select label="Region" value={form.regionId} onChange={(v) => setForm((p) => ({ ...p, regionId: v, zoneId: "", territoryName: "", distributorUserId: "", fieldId: "" }))} options={regions.map((r) => ({ value: r._id, label: r.name }))} />
+                    <Select label="Zone" value={form.zoneId} onChange={(v) => setForm((p) => ({ ...p, zoneId: v, territoryName: "", distributorUserId: "", fieldId: "" }))} options={zonesForRegion.map((z) => ({ value: z._id, label: z.name }))} />
+                    <Select label="Territory" value={form.territoryName} onChange={(v) => setForm((p) => ({ ...p, territoryName: v, distributorUserId: "", fieldId: "" }))} options={territoriesForZone.map((t) => ({ value: t, label: t }))} />
+                    <Select label="Distributor Name" value={form.distributorUserId} onChange={(v) => setField("distributorUserId", v)} options={distributorsForTerritory.map((u) => ({ value: u._id, label: u.businessName || u.fullName || u.username }))} />
+                    <Input label="Adjustment" type="number" value={form.adjustment} onChange={(v) => setField("adjustment", v)} />
+                  </>
+                ) : null}
+
+                {saleMode === "subDistributor" ? (
+                  <>
+                    <Select label="From (Warehouse)" value={form.warehouseId} onChange={(v) => setField("warehouseId", v)} options={warehouses.map((w) => ({ value: w._id, label: `${w.name} (${w.warehouseId})` }))} />
+                    <div className="md:col-span-2 text-sm font-semibold mt-1">To</div>
+                    <Select label="Region" value={form.regionId} onChange={(v) => setForm((p) => ({ ...p, regionId: v, zoneId: "", territoryName: "", fieldId: "" }))} options={regions.map((r) => ({ value: r._id, label: r.name }))} />
+                    <Select label="Zone" value={form.zoneId} onChange={(v) => setForm((p) => ({ ...p, zoneId: v, territoryName: "", fieldId: "" }))} options={zonesForRegion.map((z) => ({ value: z._id, label: z.name }))} />
+                    <Select label="Territory" value={form.territoryName} onChange={(v) => setForm((p) => ({ ...p, territoryName: v, fieldId: "" }))} options={territoriesForZone.map((t) => ({ value: t, label: t }))} />
+                    <Input label="Sub-Distributor Name" value={form.subDistributorName} onChange={(v) => setField("subDistributorName", v)} />
+                    <Input label="Business Type" value={form.businessType} onChange={(v) => setField("businessType", v)} />
+                    <Input label="Business Name" value={form.businessName} onChange={(v) => setField("businessName", v)} />
+                    <Input label="Adjustment" type="number" value={form.adjustment} onChange={(v) => setField("adjustment", v)} />
+                  </>
+                ) : null}
+
+                <Select label="Field Name" value={form.fieldId} onChange={(v) => setField("fieldId", v)} options={territoryFields.map((f) => ({ value: f._id, label: `${f.name} (${f.fieldId})` }))} />
               </>
             ) : null}
 
             {!["PURCHASING_STOCK", "SALE_STOCK"].includes(selectedCard) ? (
               <>
-                <Select
-                  label="Warehouse"
-                  value={form.warehouseId}
-                  onChange={(v) => setField("warehouseId", v)}
-                  options={warehouses.map((w) => ({ value: w._id, label: `${w.name} (${w.warehouseId})` }))}
-                />
+                <Select label="Warehouse" value={form.warehouseId} onChange={(v) => setField("warehouseId", v)} options={warehouses.map((w) => ({ value: w._id, label: `${w.name} (${w.warehouseId})` }))} />
                 <Input label="Adjustment" type="number" value={form.adjustment} onChange={(v) => setField("adjustment", v)} />
               </>
             ) : null}
@@ -310,61 +376,31 @@ export default function WarehouseInventoryModulePage() {
                   <Input label="1 Pack Price" type="number" value={item.onePackPrice} onChange={(v) => setItem(i, "onePackPrice", v)} />
                   <Input label="1 Carton Price" type="number" value={item.oneCartonPrice} onChange={(v) => setItem(i, "oneCartonPrice", v)} />
                   <Input label="Total Price" type="number" value={item.totalPrice} onChange={(v) => setItem(i, "totalPrice", v)} />
-                  <Input label="Expiry Date" type="date" value={item.expiryDate} onChange={(v) => setItem(i, "expiryDate", v)} />
-                  <button type="button" onClick={() => removeItem(i)} disabled={form.items.length === 1} className="mt-6 rounded-lg border px-2 py-2 text-sm">
-                    Remove
-                  </button>
+                  {selectedCard === "DAMAGE_STOCK" ? <Input label="Expiry Date" type="date" value={item.expiryDate} onChange={(v) => setItem(i, "expiryDate", v)} /> : <div />}
+                  <button type="button" onClick={() => removeItem(i)} disabled={form.items.length === 1} className="mt-6 rounded-lg border px-2 py-2 text-sm">Remove</button>
                 </div>
               ))}
-              <button type="button" className="rounded-lg border px-3 py-1.5 text-sm" onClick={addItem}>
-                + Add product line
-              </button>
+              <button type="button" className="rounded-lg border px-3 py-1.5 text-sm" onClick={addItem}>+ Add product line</button>
             </div>
 
-            <div className="md:col-span-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm">
-              Grand Total Preview: <span className="font-semibold">{totalPreview.toFixed(2)}</span>
-            </div>
-            <div className="md:col-span-2">
-              <button disabled={saving || loading} className="rounded-lg bg-zinc-900 px-4 py-2 text-sm text-white">
-                {saving ? "Saving..." : "Save"}
-              </button>
-            </div>
+            <div className="md:col-span-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm">Grand Total Preview: <span className="font-semibold">{totalPreview.toFixed(2)}</span></div>
+            <div className="md:col-span-2"><button disabled={saving || loading} className="rounded-lg bg-zinc-900 px-4 py-2 text-sm text-white">{saving ? "Saving..." : "Save"}</button></div>
           </form>
         </section>
 
         <section className="rounded-2xl border bg-white p-5 shadow-sm">
           <h3 className="text-lg font-semibold">Daily / Weekly / Monthly Analysis</h3>
-          <div className="grid md:grid-cols-3 gap-3 mt-3">
-            <Stat title="Daily" rows={analytics.daily} />
-            <Stat title="Weekly" rows={analytics.weekly} />
-            <Stat title="Monthly" rows={analytics.monthly} />
-          </div>
+          <div className="grid md:grid-cols-3 gap-3 mt-3"><Stat title="Daily" rows={analytics.daily} /><Stat title="Weekly" rows={analytics.weekly} /><Stat title="Monthly" rows={analytics.monthly} /></div>
         </section>
 
         <section className="rounded-2xl border bg-white p-5 shadow-sm">
           <h3 className="text-lg font-semibold">{currentCard?.title} Ledger</h3>
           <div className="overflow-x-auto mt-3">
             <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="p-2 text-left">Code</th>
-                  <th className="p-2 text-left">Date & Time</th>
-                  <th className="p-2 text-left">Grand Total</th>
-                  <th className="p-2 text-left">Action</th>
-                </tr>
-              </thead>
+              <thead><tr className="border-b"><th className="p-2 text-left">Code</th><th className="p-2 text-left">Date & Time</th><th className="p-2 text-left">Grand Total</th><th className="p-2 text-left">Action</th></tr></thead>
               <tbody>
                 {cardTx.map((t) => (
-                  <tr key={t._id} className="border-b">
-                    <td className="p-2">{t.transactionCode}</td>
-                    <td className="p-2">{new Date(t.transactionAt).toLocaleString()}</td>
-                    <td className="p-2">{Number(t.grandTotal || 0).toFixed(2)}</td>
-                    <td className="p-2">
-                      <button onClick={() => printInvoice(t)} className="rounded border px-2 py-1">
-                        Invoice/Receipt
-                      </button>
-                    </td>
-                  </tr>
+                  <tr key={t._id} className="border-b"><td className="p-2">{t.transactionCode}</td><td className="p-2">{new Date(t.transactionAt).toLocaleString()}</td><td className="p-2">{Number(t.grandTotal || 0).toFixed(2)}</td><td className="p-2"><button onClick={() => printInvoice(t)} className="rounded border px-2 py-1">Invoice/Receipt</button></td></tr>
                 ))}
               </tbody>
             </table>
@@ -392,9 +428,7 @@ function Select({ label, value, onChange, options }) {
       <select className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" value={value} onChange={(e) => onChange(e.target.value)}>
         <option value="">Select...</option>
         {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
+          <option key={o.value} value={o.value}>{o.label}</option>
         ))}
       </select>
     </label>
