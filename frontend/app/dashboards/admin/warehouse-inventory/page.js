@@ -65,6 +65,7 @@ export default function WarehouseInventoryModulePage() {
     distributorUserId: "",
     subDistributorName: "",
     fieldId: "",
+    address: "",
     adjustment: "0",
     items: [{ ...blankItem }],
   });
@@ -154,7 +155,7 @@ export default function WarehouseInventoryModulePage() {
   }
 
   function resetSaleRouting() {
-    setForm((p) => ({ ...p, businessType: "", businessUserId: "", businessName: "", regionId: "", zoneId: "", territoryName: "", distributorUserId: "", subDistributorName: "", fieldId: "" }));
+    setForm((p) => ({ ...p, businessType: "", businessUserId: "", businessName: "", regionId: "", zoneId: "", territoryName: "", distributorUserId: "", subDistributorName: "", fieldId: "", address: "" }));
   }
 
   function onChangeBusinessUser(userId) {
@@ -189,6 +190,29 @@ export default function WarehouseInventoryModulePage() {
 
   const totalPreview = useMemo(() => normalizedItems.reduce((s, i) => s + Number(i.totalPrice || 0), 0) + Number(form.adjustment || 0), [normalizedItems, form.adjustment]);
 
+  function validateSaleFields() {
+    if (selectedCard !== "SALE_STOCK") return null;
+    if (!form.warehouseId) return "From (Warehouse) is required.";
+    if (!normalizedItems.length) return "At least one product detail is required.";
+
+    if (saleMode === "brand") {
+      if (!form.businessType || !form.businessUserId || !form.territoryName || !form.fieldId || !form.address) {
+        return "Please fill all Sale to Brand fields (Business Type, Business Name, Territory, Field Name, Address).";
+      }
+    }
+    if (saleMode === "distributor") {
+      if (!form.regionId || !form.zoneId || !form.territoryName || !form.distributorUserId || !form.address) {
+        return "Please fill all Sale to Distributor fields (Region, Zone, Territory, Distributor Name, Address).";
+      }
+    }
+    if (saleMode === "subDistributor") {
+      if (!form.regionId || !form.zoneId || !form.territoryName || !form.subDistributorName || !form.businessType || !form.businessName || !form.address) {
+        return "Please fill all Sale to Sub-Distributor fields (Region, Zone, Territory, Sub-Distributor Name, Business Type, Business Name, Address).";
+      }
+    }
+    return null;
+  }
+
   async function submit(e) {
     e.preventDefault();
     setErr("");
@@ -199,6 +223,11 @@ export default function WarehouseInventoryModulePage() {
       const toWarehouse = warehouses.find((w) => w._id === form.toWarehouseId);
       const selectedField = territoryFields.find((f) => f._id === form.fieldId);
       const selectedDistributor = distributors.find((u) => u._id === form.distributorUserId) || null;
+
+      const saleValidationError = validateSaleFields();
+      if (saleValidationError) {
+        throw new Error(saleValidationError);
+      }
 
       const body = {
         transactionType: selectedCard,
@@ -217,6 +246,7 @@ export default function WarehouseInventoryModulePage() {
           body.toEntityName = selectedBusinessUser?.businessName || selectedBusinessUser?.fullName || "";
           body.brandName = body.toEntityName;
           body.territory = form.territoryName;
+          body.note = `Address: ${form.address}`;
         }
         if (saleMode === "distributor") {
           body.regionId = selectedRegion?.regionId || "";
@@ -224,6 +254,7 @@ export default function WarehouseInventoryModulePage() {
           body.zoneId = selectedZone?.zoneId || "";
           body.zoneName = selectedZone?.name || "";
           body.territory = form.territoryName;
+          body.note = `Address: ${form.address}`;
           body.distributorId = selectedDistributor?.userId || "";
           body.distributorName = selectedDistributor?.businessName || selectedDistributor?.fullName || "";
           body.toEntityName = body.distributorName;
@@ -234,10 +265,11 @@ export default function WarehouseInventoryModulePage() {
           body.zoneId = selectedZone?.zoneId || "";
           body.zoneName = selectedZone?.name || "";
           body.territory = form.territoryName;
+          body.note = `Address: ${form.address}`;
           body.distributorName = form.subDistributorName;
           body.subDistributorName = form.subDistributorName;
           body.toEntityName = form.subDistributorName;
-          body.note = `Business Type: ${form.businessType || "-"}, Business Name: ${form.businessName || "-"}`;
+          body.note = `Business Type: ${form.businessType || "-"}, Business Name: ${form.businessName || "-"}, Address: ${form.address || "-"}`;
         }
         body.fieldId = selectedField?.fieldId || "";
         body.fieldName = selectedField?.name || "";
@@ -245,7 +277,7 @@ export default function WarehouseInventoryModulePage() {
 
       await apiFetch("/inventory/transactions", { method: "POST", body });
       setOk("✅ Saved. Stock and analytics updated.");
-      setForm((p) => ({ ...p, adjustment: "0", items: [{ ...blankItem }], fromEntityName: "", toWarehouseId: "", businessType: "", businessUserId: "", businessName: "", regionId: "", zoneId: "", territoryName: "", distributorUserId: "", subDistributorName: "", fieldId: "" }));
+      setForm((p) => ({ ...p, adjustment: "0", items: [{ ...blankItem }], fromEntityName: "", toWarehouseId: "", businessType: "", businessUserId: "", businessName: "", regionId: "", zoneId: "", territoryName: "", distributorUserId: "", subDistributorName: "", fieldId: "", address: "" }));
       await loadAll();
     } catch (e2) {
       setErr(e2.message || "Failed to save");
@@ -326,6 +358,7 @@ export default function WarehouseInventoryModulePage() {
                     <Select label="Business Name" value={form.businessUserId} onChange={onChangeBusinessUser} options={businessUsers.map((u) => ({ value: u._id, label: u.businessName || u.fullName || u.username }))} />
                     <Input label="Territory" value={form.territoryName} onChange={(v) => setField("territoryName", v)} readOnly />
                     <Select label="Field Name" value={form.fieldId} onChange={(v) => setField("fieldId", v)} options={territoryFields.map((f) => ({ value: f._id, label: `${f.name} (${f.fieldId})` }))} />
+                    <Input label="Address" value={form.address} onChange={(v) => setField("address", v)} />
                     <Input label="Adjustment" type="number" value={form.adjustment} onChange={(v) => setField("adjustment", v)} />
                   </>
                 ) : null}
@@ -338,6 +371,7 @@ export default function WarehouseInventoryModulePage() {
                     <Select label="Zone" value={form.zoneId} onChange={(v) => setForm((p) => ({ ...p, zoneId: v, territoryName: "", distributorUserId: "", fieldId: "" }))} options={zonesForRegion.map((z) => ({ value: z._id, label: z.name }))} />
                     <Select label="Territory" value={form.territoryName} onChange={(v) => setForm((p) => ({ ...p, territoryName: v, distributorUserId: "", fieldId: "" }))} options={territoriesForZone.map((t) => ({ value: t, label: t }))} />
                     <Select label="Distributor Name" value={form.distributorUserId} onChange={(v) => setField("distributorUserId", v)} options={distributorsForTerritory.map((u) => ({ value: u._id, label: u.businessName || u.fullName || u.username }))} />
+                    <Input label="Address" value={form.address} onChange={(v) => setField("address", v)} />
                     <Input label="Adjustment" type="number" value={form.adjustment} onChange={(v) => setField("adjustment", v)} />
                   </>
                 ) : null}
@@ -352,11 +386,11 @@ export default function WarehouseInventoryModulePage() {
                     <Input label="Sub-Distributor Name" value={form.subDistributorName} onChange={(v) => setField("subDistributorName", v)} />
                     <Input label="Business Type" value={form.businessType} onChange={(v) => setField("businessType", v)} />
                     <Input label="Business Name" value={form.businessName} onChange={(v) => setField("businessName", v)} />
+                    <Input label="Address" value={form.address} onChange={(v) => setField("address", v)} />
                     <Input label="Adjustment" type="number" value={form.adjustment} onChange={(v) => setField("adjustment", v)} />
                   </>
                 ) : null}
 
-                <Select label="Field Name" value={form.fieldId} onChange={(v) => setField("fieldId", v)} options={territoryFields.map((f) => ({ value: f._id, label: `${f.name} (${f.fieldId})` }))} />
               </>
             ) : null}
 
