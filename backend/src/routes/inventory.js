@@ -2,9 +2,340 @@ const express = require("express");
 const InventoryMovement = require("../models/InventoryMovement");
 const StockTransfer = require("../models/StockTransfer");
 const Product = require("../models/Product");
+const WarehouseTransaction = require("../models/WarehouseTransaction");
+const Message = require("../models/Message");
 const { requireAuth, requireRole } = require("../utils/auth");
 
 const router = express.Router();
+
+function toTrimmedString(value) {
+  return String(value || "").trim();
+}
+
+function toNumber(value, fallback = 0) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
+}
+
+function movementTypeForTransaction(transactionType) {
+  const map = {
+    PURCHASING_STOCK: "PURCHASE_IN",
+    SALE_STOCK: "SALE_OUT",
+    DAMAGE_STOCK: "ADJUSTMENT",
+    RETURN_STOCK: "RETURN_IN",
+    RETURN_TO_SD: "SALE_OUT",
+    STOCK_IN: "TRANSFER_IN",
+    STOCK_OUT: "TRANSFER_OUT",
+    PURCHASING_OUT: "SALE_OUT",
+    MOVEMENT: "ADJUSTMENT",
+  };
+  return map[transactionType] || "ADJUSTMENT";
+}
+
+function quantitySignForTransaction(transactionType) {
+  const outTypes = ["SALE_STOCK", "DAMAGE_STOCK", "RETURN_TO_SD", "STOCK_OUT", "PURCHASING_OUT"];
+  return outTypes.includes(transactionType) ? -1 : 1;
+}
+
+async function createLowStockMessageIfRequired(transaction, productBalances, userId) {
+  const lowBalances = productBalances.filter((row) => row.quantity <= (row.minStockLevel || 0));
+  if (!lowBalances.length) return;
+
+  const lines = lowBalances
+    .map(
+      (row) => `${row.productName || row.productId}: ${row.quantity} packs (min ${row.minStockLevel || 0})`
+    )
+    .join("; ");
+
+  await Message.create({
+    subject: `Low Stock Alert (${transaction.transactionCode})`,
+    body: `Low stock detected after transaction ${transaction.transactionCode}: ${lines}`,
+    messageType: "alert",
+    createdBy: userId,
+  });
+}
+
+async function calculateProductBalanceMap(warehouseId, productIds) {
+  const match = {
+    productId: { $in: productIds },
+  };
+  if (warehouseId) match.warehouseId = warehouseId;
+
+  const balances = await InventoryMovement.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: "$productId",
+        productName: { $first: "$productName" },
+        quantity: { $sum: "$quantity" },
+      },
+    },
+  ]);
+
+  const productDocs = await Product.find({ productId: { $in: productIds } })
+    .select("productId name minStockLevel")
+    .lean();
+  const balanceByProductId = new Map(balances.map((row) => [row._id, row]));
+
+  return productDocs.map((product) => ({
+    productId: product.productId,
+    productName: product.name,
+    minStockLevel: toNumber(product.minStockLevel, 0),
+    quantity: toNumber(balanceByProductId.get(product.productId)?.quantity, 0),
+  }));
+}
+
+router.post("/transactions", requireAuth, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const transactionType = toTrimmedString(body.transactionType);
+    const scopeWarehouseId = toTrimmedString(body.warehouseId);
+    const scopeWarehouseName = toTrimmedString(body.warehouseName);
+
+    const incomingItems = Array.isArray(body.items) ? body.items : [];
+    if (!incomingItems.length) {
+      return res.status(400).json({ ok: false, message: "At least one item is required" });
+    }
+
+    const normalizedItems = incomingItems.map((item) => {
+      const cartonSize = Math.max(1, toNumber(item.cartonSize || item.packSize, 1));
+      const cartons = Math.max(0, toNumber(item.cartons, 0));
+      const packs = Math.max(0, toNumber(item.packs, 0));
+      const totalPacks = cartons * cartonSize + packs;
+      return {
+        productId: toTrimmedString(item.productId),
+        productName: toTrimmedString(item.productName),
+        cartonSize,
+        cartons,
+        packs,
+        totalPacks,
+        unitPrice: toNumber(item.unitPrice, 0),
+        expiryDate: item.expiryDate ? new Date(item.expiryDate) : undefined,
+        notes: toTrimmedString(item.notes),
+      };
+    });
+
+    const invalidItem = normalizedItems.find((item) => !item.productId || item.totalPacks <= 0);
+    if (invalidItem) {
+      return res.status(400).json({ ok: false, message: "Each item needs product and quantity" });
+    }
+
+    const subtotal = normalizedItems.reduce((sum, item) => sum + item.totalPacks * item.unitPrice, 0);
+    const adjustment = toNumber(body.adjustment, 0);
+    const grandTotal = subtotal + adjustment;
+
+    const now = new Date();
+    const transactionCode = `TXN-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(
+      now.getDate()
+    ).padStart(2, "0")}-${Date.now().toString().slice(-6)}`;
+
+    const paymentDueDate =
+      transactionType === "RETURN_STOCK"
+        ? new Date(now.getTime() + 45 * 24 * 60 * 60 * 1000)
+        : body.paymentDueDate
+          ? new Date(body.paymentDueDate)
+          : undefined;
+
+    const transaction = await WarehouseTransaction.create({
+      transactionCode,
+      transactionType,
+      transactionAt: body.transactionAt ? new Date(body.transactionAt) : now,
+      fromEntityType: toTrimmedString(body.fromEntityType),
+      fromEntityName: toTrimmedString(body.fromEntityName),
+      toEntityType: toTrimmedString(body.toEntityType),
+      toEntityName: toTrimmedString(body.toEntityName),
+      warehouseId: scopeWarehouseId,
+      warehouseName: scopeWarehouseName,
+      regionId: toTrimmedString(body.regionId),
+      regionName: toTrimmedString(body.regionName),
+      zoneId: toTrimmedString(body.zoneId),
+      zoneName: toTrimmedString(body.zoneName),
+      territory: toTrimmedString(body.territory),
+      fieldId: toTrimmedString(body.fieldId),
+      fieldName: toTrimmedString(body.fieldName),
+      brandId: toTrimmedString(body.brandId),
+      brandName: toTrimmedString(body.brandName),
+      distributorId: toTrimmedString(body.distributorId),
+      distributorName: toTrimmedString(body.distributorName),
+      subDistributorId: toTrimmedString(body.subDistributorId),
+      subDistributorName: toTrimmedString(body.subDistributorName),
+      note: toTrimmedString(body.note),
+      paymentDueDate,
+      returnPaymentStatus: transactionType === "RETURN_STOCK" ? "PENDING" : "NOT_APPLICABLE",
+      subtotal,
+      adjustment,
+      grandTotal,
+      items: normalizedItems,
+      createdBy: req.user?.uid,
+    });
+
+    const movementType = movementTypeForTransaction(transactionType);
+    const quantitySign = quantitySignForTransaction(transactionType);
+
+    await Promise.all(
+      normalizedItems.map((item) =>
+        InventoryMovement.create({
+          productId: item.productId,
+          productName: item.productName,
+          warehouseId: scopeWarehouseId,
+          warehouseName: scopeWarehouseName,
+          regionId: toTrimmedString(body.regionId),
+          regionName: toTrimmedString(body.regionName),
+          zoneId: toTrimmedString(body.zoneId),
+          zoneName: toTrimmedString(body.zoneName),
+          areaId: toTrimmedString(body.areaId),
+          areaName: toTrimmedString(body.areaName),
+          movementScope: toTrimmedString(body.movementScope || "warehouse"),
+          quantity: quantitySign * item.totalPacks,
+          movementType,
+          referenceId: transaction.transactionCode,
+          createdBy: req.user?.uid,
+        })
+      )
+    );
+
+    const productBalances = await calculateProductBalanceMap(
+      scopeWarehouseId,
+      normalizedItems.map((item) => item.productId)
+    );
+    await createLowStockMessageIfRequired(transaction, productBalances, req.user?.uid);
+
+    return res.status(201).json({ ok: true, transaction, productBalances });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to create transaction" });
+  }
+});
+
+router.get("/transactions", requireAuth, async (req, res) => {
+  try {
+    const query = {};
+    if (req.query.transactionType) query.transactionType = toTrimmedString(req.query.transactionType);
+    if (req.query.warehouseId) query.warehouseId = toTrimmedString(req.query.warehouseId);
+    if (req.query.distributorId) query.distributorId = toTrimmedString(req.query.distributorId);
+    const transactions = await WarehouseTransaction.find(query).sort({ transactionAt: -1 }).lean();
+
+    const withStatus = transactions.map((txn) => {
+      if (txn.returnPaymentStatus !== "PENDING" || !txn.paymentDueDate) return txn;
+      const overdue = new Date(txn.paymentDueDate) < new Date();
+      return { ...txn, returnPaymentStatus: overdue ? "OVERDUE" : txn.returnPaymentStatus };
+    });
+
+    return res.json({ ok: true, transactions: withStatus });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to load transactions" });
+  }
+});
+
+router.put("/transactions/:id/return-payment", requireAuth, async (req, res) => {
+  try {
+    const status = toTrimmedString(req.body?.status || "PAID");
+    if (!["PENDING", "PAID", "OVERDUE"].includes(status)) {
+      return res.status(400).json({ ok: false, message: "Invalid status" });
+    }
+    const transaction = await WarehouseTransaction.findByIdAndUpdate(
+      req.params.id,
+      { returnPaymentStatus: status },
+      { new: true }
+    );
+    if (!transaction) return res.status(404).json({ ok: false, message: "Transaction not found" });
+    return res.json({ ok: true, transaction });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to update payment status" });
+  }
+});
+
+router.delete("/transactions/clear", requireAuth, requireRole("admin"), async (req, res) => {
+  try {
+    await WarehouseTransaction.deleteMany({});
+    await InventoryMovement.deleteMany({});
+    await StockTransfer.deleteMany({});
+    return res.json({ ok: true, message: "Warehouse inventory module data cleared" });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to clear transaction data" });
+  }
+});
+
+router.get("/analytics", requireAuth, async (req, res) => {
+  try {
+    const now = new Date();
+    const dailyStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const weeklyStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+    const monthlyStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    async function totalsSince(date) {
+      const rows = await WarehouseTransaction.aggregate([
+        { $match: { transactionAt: { $gte: date } } },
+        {
+          $group: {
+            _id: "$transactionType",
+            amount: { $sum: "$grandTotal" },
+            transactions: { $sum: 1 },
+            packs: {
+              $sum: {
+                $reduce: {
+                  input: "$items",
+                  initialValue: 0,
+                  in: { $add: ["$$value", { $ifNull: ["$$this.totalPacks", 0] }] },
+                },
+              },
+            },
+          },
+        },
+      ]);
+      return rows;
+    }
+
+    const [daily, weekly, monthly] = await Promise.all([
+      totalsSince(dailyStart),
+      totalsSince(weeklyStart),
+      totalsSince(monthlyStart),
+    ]);
+
+    const expiryAlertRows = await WarehouseTransaction.aggregate([
+      { $unwind: "$items" },
+      {
+        $match: {
+          "items.expiryDate": {
+            $lte: new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000),
+            $gte: now,
+          },
+        },
+      },
+      {
+        $project: {
+          transactionCode: 1,
+          transactionAt: 1,
+          transactionType: 1,
+          productId: "$items.productId",
+          productName: "$items.productName",
+          expiryDate: "$items.expiryDate",
+          totalPacks: "$items.totalPacks",
+        },
+      },
+      { $sort: { expiryDate: 1 } },
+    ]);
+
+    const returnPayments = await WarehouseTransaction.find({
+      transactionType: "RETURN_STOCK",
+      returnPaymentStatus: { $in: ["PENDING", "OVERDUE"] },
+    })
+      .sort({ paymentDueDate: 1 })
+      .lean();
+
+    return res.json({
+      ok: true,
+      analytics: {
+        daily,
+        weekly,
+        monthly,
+        expiryAlerts: expiryAlertRows,
+        returnPayments,
+      },
+    });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to load analytics" });
+  }
+});
 
 router.post("/movements", requireAuth, async (req, res) => {
   try {
@@ -186,7 +517,6 @@ router.get("/low-stock", requireAuth, async (req, res) => {
       },
     ]);
     const products = await Product.find().select("productId name minStockLevel").lean();
-    const map = new Map(summary.map((s) => [`${s._id.productId}:${s._id.warehouseId}`, s]));
     const lowStock = products
       .flatMap((p) => {
         const matches = summary.filter((s) => s._id.productId === p.productId);
