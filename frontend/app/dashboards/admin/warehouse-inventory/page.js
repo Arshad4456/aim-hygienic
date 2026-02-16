@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import AdminShell from "../components/AdminShell";
 import { apiFetch } from "../../../lib/api";
 
@@ -92,6 +92,7 @@ export default function WarehouseInventoryModulePage() {
   const [nearExpiry, setNearExpiry] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const submitLockRef = useRef(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
   const [form, setForm] = useState({
@@ -116,35 +117,37 @@ export default function WarehouseInventoryModulePage() {
   });
 
   async function loadAll() {
-    try {
-      const [productsRes, warehousesRes, usersRes, regionsRes, zonesRes, txRes, transfersRes, summaryRes, lowStockRes, nearRes] =
-        await Promise.all([
-          apiFetch("/products"),
-          apiFetch("/warehouses"),
-          apiFetch("/users"),
-          apiFetch("/regions"),
-          apiFetch("/zones"),
-          apiFetch("/inventory/transactions"),
-          apiFetch("/inventory/transfers"),
-          apiFetch("/inventory/summary"),
-          apiFetch("/inventory/low-stock"),
-          apiFetch("/inventory/near-expiry-products"),
-        ]);
-      setProducts(productsRes.products || []);
-      setWarehouses(warehousesRes.warehouses || []);
-      setUsers(usersRes.users || []);
-      setRegions(regionsRes.regions || []);
-      setZones(zonesRes.zones || []);
-      setTransactions(txRes.transactions || []);
-      setTransfers(transfersRes.transfers || []);
-      setSummary(summaryRes.summary || []);
-      setLowStock(lowStockRes.lowStock || []);
-      setNearExpiry(nearRes.products || []);
-    } catch (e) {
-      setErr(e.message || "Failed to load");
-    } finally {
-      setLoading(false);
+    const result = await Promise.allSettled([
+      apiFetch("/products"),
+      apiFetch("/warehouses"),
+      apiFetch("/users"),
+      apiFetch("/regions"),
+      apiFetch("/zones"),
+      apiFetch("/inventory/transactions"),
+      apiFetch("/inventory/transfers"),
+      apiFetch("/inventory/summary"),
+      apiFetch("/inventory/low-stock"),
+      apiFetch("/inventory/near-expiry-products"),
+    ]);
+
+    const [productsRes, warehousesRes, usersRes, regionsRes, zonesRes, txRes, transfersRes, summaryRes, lowStockRes, nearRes] =
+      result.map((entry) => (entry.status === "fulfilled" ? entry.value : null));
+
+    if (productsRes) setProducts(productsRes.products || []);
+    if (warehousesRes) setWarehouses(warehousesRes.warehouses || []);
+    if (usersRes) setUsers(usersRes.users || []);
+    if (regionsRes) setRegions(regionsRes.regions || []);
+    if (zonesRes) setZones(zonesRes.zones || []);
+    if (txRes) setTransactions(txRes.transactions || []);
+    if (transfersRes) setTransfers(transfersRes.transfers || []);
+    if (summaryRes) setSummary(summaryRes.summary || []);
+    if (lowStockRes) setLowStock(lowStockRes.lowStock || []);
+    if (nearRes) setNearExpiry(nearRes.products || []);
+
+    if (result.every((entry) => entry.status === "rejected")) {
+      setErr("Failed to load module data");
     }
+    setLoading(false);
   }
 
   useEffect(() => {
@@ -246,6 +249,8 @@ export default function WarehouseInventoryModulePage() {
 
   async function submit(e) {
     e.preventDefault();
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
     setErr("");
     setOk("");
     setSaving(true);
@@ -300,22 +305,45 @@ export default function WarehouseInventoryModulePage() {
         }
       }
 
-      await apiFetch("/inventory/transactions", { method: "POST", body });
+      const created = await apiFetch("/inventory/transactions", { method: "POST", body });
       setOk("✅ Saved.");
+      if (created?.transaction) {
+        setTransactions((prev) => [created.transaction, ...prev]);
+      }
       setForm((s) => ({ ...s, adjustment: "0", items: [{ ...emptyLine }], extraDiscPer: "0", advTaxPer: "0", whTaxPer: "0", expense: "0" }));
-      await loadAll();
+      loadAll();
     } catch (e2) {
       setErr(e2.message || "Failed to save");
     } finally {
       setSaving(false);
+      submitLockRef.current = false;
     }
   }
 
   function printInvoice(txn) {
+    const logo = `
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="width:54px;height:54px;border-radius:10px;background:linear-gradient(135deg,#065f46,#10b981);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;">AH</div>
+        <div>
+          <div style="font-weight:700;font-size:16px;">AIM-HYGIENICS</div>
+          <div style="font-size:11px;color:#555;">PVT LIMITED</div>
+        </div>
+      </div>`;
+
+    const rows = (txn.items || []).map((i, idx) => {
+      const parts = Object.fromEntries(String(i.notes || "").split(",").map((seg) => seg.split(":")));
+      return `<tr><td>${idx + 1}</td><td>${i.productName || "-"}</td><td>${i.totalPacks || 0}</td><td>${i.onePackPrice || 0}</td><td>${parts.gross || 0}</td><td>${parts.to || 0}</td><td>${parts.disc || 0}</td><td>${parts.extra || 0}</td><td>${parts.bons || 0}</td><td>${parts.v4gst || 0}</td><td>${parts.gst || 0}</td><td>${parts.net || i.totalPrice || 0}</td></tr>`;
+    });
+    const lineTotal = (txn.items || []).reduce((sum, i) => {
+      const parts = Object.fromEntries(String(i.notes || "").split(",").map((seg) => seg.split(":")));
+      return sum + toNum(parts.net || i.totalPrice);
+    }, 0);
+    const finalGrandTotal = toNum(txn.grandTotal || lineTotal);
+
     const html = `
       <html>
       <body style="font-family: Arial; padding: 16px;">
-        <h2 style="text-align:center;margin:0;">AIM-HYGIENICS (PVT) LIMITED</h2>
+        <div style="display:flex;justify-content:space-between;align-items:center;">${logo}<div style="text-align:right;"><div style="font-size:13px;font-weight:700;">Sales Tax Invoice</div></div></div>
         <div style="margin-top:8px; display:flex; justify-content:space-between; font-size:12px;">
           <div>Date: ${new Date(txn.transactionAt).toLocaleDateString()}</div>
           <div>Invoice #: ${txn.transactionCode}</div>
@@ -325,10 +353,7 @@ export default function WarehouseInventoryModulePage() {
         <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; width:100%; margin-top:10px; font-size:12px;">
           <thead><tr><th>#</th><th>Product Name</th><th>Qty</th><th>Rate</th><th>Gross</th><th>TO</th><th>Disc</th><th>Extra</th><th>Bons</th><th>V4GST</th><th>GST</th><th>Net Amt</th></tr></thead>
           <tbody>
-          ${(txn.items || []).map((i, idx) => {
-            const parts = Object.fromEntries(String(i.notes || "").split(",").map((seg) => seg.split(":")));
-            return `<tr><td>${idx + 1}</td><td>${i.productName || "-"}</td><td>${i.totalPacks || 0}</td><td>${i.onePackPrice || 0}</td><td>${parts.gross || 0}</td><td>${parts.to || 0}</td><td>${parts.disc || 0}</td><td>${parts.extra || 0}</td><td>${parts.bons || 0}</td><td>${parts.v4gst || 0}</td><td>${parts.gst || 0}</td><td>${parts.net || i.totalPrice || 0}</td></tr>`;
-          }).join("")}
+          ${rows.join("")}
           </tbody>
         </table>
         <div style="margin-top:12px; font-size:12px; display:flex; justify-content:space-between;">
@@ -338,8 +363,9 @@ export default function WarehouseInventoryModulePage() {
             <div>W.H Tax: ${txn.whTaxPer || 0}%</div>
             <div>Expense: ${txn.expense || 0}</div>
           </div>
-          <div><strong>Total: ${Number(txn.grandTotal || 0).toFixed(2)}</strong></div>
+          <div><strong>Total: ${finalGrandTotal.toFixed(2)}</strong></div>
         </div>
+        <div style="margin-top:16px;text-align:center;font-size:13px;font-weight:600;">Thank you for bussiness with us</div>
       </body></html>`;
     const win = window.open("", "_blank");
     if (!win) return;
@@ -659,10 +685,10 @@ function Select({ label, value, onChange, options }) {
   return <label className="text-sm"><span className="text-zinc-600">{label}</span><select className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" value={value} onChange={(e) => onChange(e.target.value)}><option value="">Select...</option>{options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>;
 }
 
-function InputBare({ value, onChange = () => {}, type = "text", readOnly = false }) {
-  return <input className="w-full border rounded px-2 py-1" type={type} value={value} readOnly={readOnly} onChange={(e) => onChange(e.target.value)} />;
+function InputBare({ value, onChange = () => {}, type = "text", readOnly = false, className = "" }) {
+  return <input className={`w-full min-w-[82px] border rounded px-2 py-1 ${className}`} type={type} value={value} readOnly={readOnly} onChange={(e) => onChange(e.target.value)} />;
 }
 
-function SelectBare({ value, onChange, options }) {
-  return <select className="w-full border rounded px-2 py-1" value={value} onChange={(e) => onChange(e.target.value)}><option value="">Select</option>{options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>;
+function SelectBare({ value, onChange, options, className = "" }) {
+  return <select className={`w-full min-w-[220px] border rounded px-2 py-1 ${className}`} value={value} onChange={(e) => onChange(e.target.value)}><option value="">Select</option>{options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>;
 }
