@@ -551,11 +551,30 @@ export default function WarehouseInventoryModulePage() {
   }
 
   function printTransferReceipt(transfer) {
+    const logo = `
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="width:54px;height:54px;border-radius:10px;background:linear-gradient(135deg,#065f46,#10b981);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;">AH</div>
+        <div>
+          <div style="font-weight:700;font-size:16px;">AIM-HYGIENICS</div>
+          <div style="font-size:11px;color:#555;">PVT LIMITED</div>
+        </div>
+      </div>`;
+
+    const totalAmount = Number(transfer.totalAmount || transfer.amount || 0);
+    const expense = Number(transfer.expense || 0);
+    const grandTotal = totalAmount + expense;
+
     const html = `
       <html>
       <body style="font-family: Arial; padding: 16px;">
-        <h2 style="margin: 0 0 8px 0;">Warehouse Transfer</h2>
-        <div style="font-size:12px;margin-bottom:10px;">Receipt #: ${transfer._id}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">${logo}<div style="text-align:right;"><div style="font-size:13px;font-weight:700;">Warehouse Transfer</div></div></div>
+        <div style="margin-top:8px; display:flex; justify-content:space-between; font-size:12px;">
+          <div>Date: ${transfer.createdAt ? new Date(transfer.createdAt).toLocaleDateString() : "-"}</div>
+          <div>Receipt #: ${transfer._id}</div>
+        </div>
+        <div style="margin-top:8px;font-size:12px;">From: ${transfer.fromWarehouseName || "-"}</div>
+        <div style="font-size:12px;">To: ${transfer.toWarehouseName || "-"}</div>
+        <div style="font-size:12px;">Company: AIM-HYGIENICS PVT LIMITED</div>
         <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;font-size:12px;">
           <thead>
             <tr>
@@ -578,6 +597,14 @@ export default function WarehouseInventoryModulePage() {
             </tr>
           </tbody>
         </table>
+        <div style="margin-top:12px; font-size:12px; display:flex; justify-content:flex-end;">
+          <div style="min-width:260px;">
+            <div style="display:flex; justify-content:space-between;"><span>Total Amount:</span><strong>${totalAmount.toFixed(2)}</strong></div>
+            <div style="display:flex; justify-content:space-between;"><span>Expense:</span><span>${expense.toFixed(2)}</span></div>
+            <div style="display:flex; justify-content:space-between; margin-top:4px; border-top:1px solid #ccc; padding-top:4px;"><span><strong>Grand Total:</strong></span><strong>${grandTotal.toFixed(2)}</strong></div>
+          </div>
+        </div>
+        <div style="margin-top:16px;text-align:center;font-size:13px;font-weight:600;">Thank you for bussiness with us</div>
       </body>
       </html>
     `;
