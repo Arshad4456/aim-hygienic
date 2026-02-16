@@ -76,10 +76,16 @@ function requireAuth(req, res, next) {
   }
 }
 
+function normalizeRole(role) {
+  return String(role || "").trim().toLowerCase();
+}
+
 function requireRole(...roles) {
   return (req, res, next) => {
     if (!req.user?.role) return res.status(401).json({ ok: false, message: "No user role" });
-    if (!roles.includes(req.user.role)) return res.status(403).json({ ok: false, message: "Forbidden" });
+    const allowedRoles = roles.map((r) => normalizeRole(r));
+    const userRole = normalizeRole(req.user.role);
+    if (!allowedRoles.includes(userRole)) return res.status(403).json({ ok: false, message: "Forbidden" });
     next();
   };
 }

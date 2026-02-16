@@ -17,6 +17,10 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(num) ? num : fallback;
 }
 
+function isAdminRole(role) {
+  return String(role || "").trim().toLowerCase() === "admin";
+}
+
 function buildTransactionCode() {
   const now = new Date();
   const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
@@ -191,7 +195,7 @@ router.post("/transactions", requireAuth, async (req, res) => {
 
     const now = new Date();
     const transactionCode = buildTransactionCode();
-    const isReturnStockRequest = transactionType === "RETURN_STOCK" && req.user?.role !== "admin";
+    const isReturnStockRequest = transactionType === "RETURN_STOCK" && !isAdminRole(req.user?.role);
 
     const paymentDueDate =
       transactionType === "RETURN_STOCK"
@@ -293,7 +297,7 @@ router.get("/transactions", requireAuth, async (req, res) => {
     if (req.query.warehouseId) query.warehouseId = toTrimmedString(req.query.warehouseId);
     if (req.query.distributorId) query.distributorId = toTrimmedString(req.query.distributorId);
     if (req.query.requestStatus) query.requestStatus = toTrimmedString(req.query.requestStatus).toUpperCase();
-    if (req.user?.role !== "admin") {
+    if (!isAdminRole(req.user?.role)) {
       query.createdBy = req.user?.uid;
     }
     const transactions = await WarehouseTransaction.find(query).sort({ transactionAt: -1 }).lean();
