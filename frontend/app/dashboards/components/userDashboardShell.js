@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-export default function UserDashboardShell({ title, subtitle, roleKey, links = [] }) {
+export default function UserDashboardShell({ title, subtitle, roleKey, links = [], showAccountCards = false }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const router = useRouter();
@@ -77,20 +77,22 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
             <div className="text-base font-semibold text-zinc-900">{roleKey}</div>
           </div>
 
-          <div className="mt-4 rounded-2xl border bg-white p-4">
-            <div className="text-sm font-semibold text-zinc-900">Account</div>
-            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
-              <Link href="/dashboards/admin/settings" className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-medium text-zinc-900 hover:border-emerald-300 hover:bg-white">
-                Account Settings
-              </Link>
-              <Link href="/dashboards/admin/settings/change-password" className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-medium text-zinc-900 hover:border-emerald-300 hover:bg-white">
-                Change Password
-              </Link>
-              <button type="button" onClick={logout} className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-left text-sm font-medium text-red-700 hover:bg-red-100">
-                Logout
-              </button>
+          {showAccountCards ? (
+            <div className="mt-4 rounded-2xl border bg-white p-4">
+              <div className="text-sm font-semibold text-zinc-900">Account</div>
+              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                <Link href="/dashboards/admin/settings" className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-medium text-zinc-900 hover:border-emerald-300 hover:bg-white">
+                  Account Settings
+                </Link>
+                <Link href="/dashboards/admin/settings/change-password" className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-medium text-zinc-900 hover:border-emerald-300 hover:bg-white">
+                  Change Password
+                </Link>
+                <button type="button" onClick={logout} className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-left text-sm font-medium text-red-700 hover:bg-red-100">
+                  Logout
+                </button>
+              </div>
             </div>
-          </div>
+          ) : null}
 
           <div className="mt-4 rounded-2xl border bg-white p-4">
             <div className="text-sm font-semibold text-zinc-900">Sidebar / Module Navigation</div>
