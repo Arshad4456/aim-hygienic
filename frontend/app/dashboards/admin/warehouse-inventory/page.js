@@ -13,7 +13,10 @@ const cards = [
   { key: "W2W_TRANSFER", title: "e.6 Warehouse to Warehouse Transfer" },
   { key: "STOCK_SUMMARY", title: "e.7 Stock Summary" },
   { key: "LOW_STOCK", title: "e.8 Low Stock Alert" },
+  { key: "INVENTORY_LEDGER", title: "e.9 Inventory Ledger" },
 ];
+
+const transferStatuses = ["pending", "approved", "transit-in", "completed"];
 
 const saleModes = [
   { key: "brand", label: "Sale to Brand" },
@@ -120,13 +123,18 @@ export default function WarehouseInventoryModulePage() {
   const [fields, setFields] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [transfers, setTransfers] = useState([]);
+  const [movements, setMovements] = useState([]);
   const [summary, setSummary] = useState([]);
   const [lowStock, setLowStock] = useState([]);
   const [nearExpiry, setNearExpiry] = useState([]);
   const [summaryWarehouseFilter, setSummaryWarehouseFilter] = useState("");
   const [lowStockWarehouseFilter, setLowStockWarehouseFilter] = useState("");
+  const [ledgerWarehouseFilter, setLedgerWarehouseFilter] = useState("");
+  const [ledgerMovementTypeFilter, setLedgerMovementTypeFilter] = useState("");
+  const [ledgerSearch, setLedgerSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [transferSaving, setTransferSaving] = useState(false);
   const submitLockRef = useRef(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
@@ -149,6 +157,18 @@ export default function WarehouseInventoryModulePage() {
     expense: "0",
     items: [{ ...emptyLine }],
   });
+  const [transferForm, setTransferForm] = useState({
+    productId: "",
+    fromWarehouseId: "",
+    toWarehouseId: "",
+    quantity: "",
+    status: "pending",
+    note: "",
+    driverId: "",
+    driverName: "",
+    vehicleId: "",
+    vehicleName: "",
+  });
 
   async function loadAll() {
     const result = await Promise.allSettled([
@@ -160,12 +180,13 @@ export default function WarehouseInventoryModulePage() {
       apiFetch("/fields?limit=500"),
       apiFetch("/inventory/transactions"),
       apiFetch("/inventory/transfers"),
+      apiFetch("/inventory/movements"),
       apiFetch("/inventory/summary"),
       apiFetch("/inventory/low-stock"),
       apiFetch("/inventory/near-expiry-products"),
     ]);
 
-    const [productsRes, warehousesRes, usersRes, regionsRes, zonesRes, fieldsRes, txRes, transfersRes, summaryRes, lowStockRes, nearRes] =
+    const [productsRes, warehousesRes, usersRes, regionsRes, zonesRes, fieldsRes, txRes, transfersRes, movementsRes, summaryRes, lowStockRes, nearRes] =
       result.map((entry) => (entry.status === "fulfilled" ? entry.value : null));
 
     if (productsRes) setProducts(productsRes.products || []);
@@ -176,6 +197,7 @@ export default function WarehouseInventoryModulePage() {
     if (fieldsRes) setFields(fieldsRes.fields || []);
     if (txRes) setTransactions(uniqById(txRes.transactions || []));
     if (transfersRes) setTransfers(transfersRes.transfers || []);
+    if (movementsRes) setMovements(movementsRes.movements || []);
     if (summaryRes) setSummary(summaryRes.summary || []);
     if (lowStockRes) setLowStock(lowStockRes.lowStock || []);
     if (nearRes) setNearExpiry(nearRes.products || []);
@@ -236,7 +258,7 @@ export default function WarehouseInventoryModulePage() {
   );
 
   const cardTx = useMemo(() => {
-    if (["W2W_TRANSFER", "STOCK_SUMMARY", "LOW_STOCK"].includes(selectedCard)) return [];
+    if (["W2W_TRANSFER", "STOCK_SUMMARY", "LOW_STOCK", "INVENTORY_LEDGER"].includes(selectedCard)) return [];
     const byType = transactions.filter((t) => t.transactionType === selectedCard);
     if (selectedCard === "RETURN_STOCK") {
       if (returnStockLedgerFilter === "all") return byType;
@@ -278,6 +300,19 @@ export default function WarehouseInventoryModulePage() {
     return lowStock.filter((row) => row.warehouseId === lowStockWarehouseFilter);
   }, [lowStock, lowStockWarehouseFilter]);
 
+  const filteredMovements = useMemo(() => {
+    return movements.filter((row) => {
+      if (ledgerWarehouseFilter && row.warehouseId !== ledgerWarehouseFilter) return false;
+      if (ledgerMovementTypeFilter && row.movementType !== ledgerMovementTypeFilter) return false;
+      if (ledgerSearch) {
+        const q = ledgerSearch.toLowerCase();
+        const text = `${row.productName || ""} ${row.referenceId || ""} ${row.warehouseName || ""}`.toLowerCase();
+        if (!text.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [movements, ledgerWarehouseFilter, ledgerMovementTypeFilter, ledgerSearch]);
+
   const lineRows = useMemo(
     () =>
       form.items.map((line, idx) => {
@@ -298,6 +333,9 @@ export default function WarehouseInventoryModulePage() {
 
   function setField(key, value) {
     setForm((s) => ({ ...s, [key]: value }));
+  }
+  function setTransferField(key, value) {
+    setTransferForm((s) => ({ ...s, [key]: value }));
   }
   function setItem(i, key, value) {
     setForm((s) => ({ ...s, items: s.items.map((it, idx) => (idx === i ? { ...it, [key]: value } : it)) }));
@@ -438,6 +476,54 @@ export default function WarehouseInventoryModulePage() {
     }
   }
 
+  async function submitTransfer(e) {
+    e.preventDefault();
+    setErr("");
+    setOk("");
+    setTransferSaving(true);
+    try {
+      const product = products.find((p) => p._id === transferForm.productId);
+      const fromWarehouse = warehouses.find((w) => w._id === transferForm.fromWarehouseId);
+      const toWarehouse = warehouses.find((w) => w._id === transferForm.toWarehouseId);
+      await apiFetch("/inventory/transfers", {
+        method: "POST",
+        body: {
+          productId: product?.productId || "",
+          productName: product?.name || "",
+          fromWarehouseId: fromWarehouse?.warehouseId || "",
+          fromWarehouseName: fromWarehouse?.name || "",
+          toWarehouseId: toWarehouse?.warehouseId || "",
+          toWarehouseName: toWarehouse?.name || "",
+          quantity: Number(transferForm.quantity || 0),
+          status: transferForm.status,
+          note: transferForm.note,
+          driverId: transferForm.driverId,
+          driverName: transferForm.driverName,
+          vehicleId: transferForm.vehicleId,
+          vehicleName: transferForm.vehicleName,
+        },
+      });
+      setTransferForm({
+        productId: "",
+        fromWarehouseId: "",
+        toWarehouseId: "",
+        quantity: "",
+        status: "pending",
+        note: "",
+        driverId: "",
+        driverName: "",
+        vehicleId: "",
+        vehicleName: "",
+      });
+      setOk("✅ Transfer created.");
+      await loadAll();
+    } catch (e2) {
+      setErr(e2.message || "Failed to create transfer");
+    } finally {
+      setTransferSaving(false);
+    }
+  }
+
   function printInvoice(txn) {
     const logo = `
       <div style="display:flex;align-items:center;gap:10px;">
@@ -540,7 +626,8 @@ export default function WarehouseInventoryModulePage() {
                 onClick={() => setSelectedCard(c.key)}
                 className={`rounded-lg border p-2 text-left text-sm ${selectedCard === c.key ? "bg-emerald-50 border-emerald-300" : "hover:bg-zinc-50"}`}
               >
-                {c.title}
+                <span>{c.title}</span>
+                {c.key === "LOW_STOCK" && lowStock.length > 0 ? <span className="ml-2 inline-block rounded bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">Alert</span> : null}
               </button>
             ))}
           </div>
@@ -833,7 +920,45 @@ export default function WarehouseInventoryModulePage() {
           </section>
         ) : null}
 
-        {selectedCard === "W2W_TRANSFER" ? <section className="rounded-2xl border bg-white p-5 shadow-sm"><h3 className="text-lg font-semibold">Warehouse to Warehouse Transfer</h3><TransferTable rows={transfers} /></section> : null}
+        {selectedCard === "W2W_TRANSFER" ? (
+          <section className="rounded-2xl border bg-white p-5 shadow-sm space-y-4">
+            <h3 className="text-lg font-semibold">Warehouse to Warehouse Transfer</h3>
+            <form onSubmit={submitTransfer} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <Select
+                label="Product"
+                value={transferForm.productId}
+                onChange={(v) => setTransferField("productId", v)}
+                options={products.map((p) => ({ value: p._id, label: p.name }))}
+              />
+              <Input label="Quantity" type="number" value={transferForm.quantity} onChange={(v) => setTransferField("quantity", v)} />
+              <Select
+                label="From Warehouse"
+                value={transferForm.fromWarehouseId}
+                onChange={(v) => setTransferField("fromWarehouseId", v)}
+                options={warehouses.map((w) => ({ value: w._id, label: w.name }))}
+              />
+              <Select
+                label="To Warehouse"
+                value={transferForm.toWarehouseId}
+                onChange={(v) => setTransferField("toWarehouseId", v)}
+                options={warehouses.map((w) => ({ value: w._id, label: w.name }))}
+              />
+              <Select
+                label="Status"
+                value={transferForm.status}
+                onChange={(v) => setTransferField("status", v)}
+                options={transferStatuses.map((s) => ({ value: s, label: s }))}
+              />
+              <Input label="Note" value={transferForm.note} onChange={(v) => setTransferField("note", v)} />
+              <Input label="Driver ID" value={transferForm.driverId} onChange={(v) => setTransferField("driverId", v)} />
+              <Input label="Driver Name" value={transferForm.driverName} onChange={(v) => setTransferField("driverName", v)} />
+              <Input label="Vehicle ID" value={transferForm.vehicleId} onChange={(v) => setTransferField("vehicleId", v)} />
+              <Input label="Vehicle Name" value={transferForm.vehicleName} onChange={(v) => setTransferField("vehicleName", v)} />
+              <div className="md:col-span-2"><button disabled={transferSaving} className="rounded bg-zinc-900 text-white px-4 py-2">{transferSaving ? "Saving..." : "Create Transfer"}</button></div>
+            </form>
+            <TransferTable rows={transfers} />
+          </section>
+        ) : null}
         {selectedCard === "STOCK_SUMMARY" ? (
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
             <h3 className="text-lg font-semibold">Stock Summary</h3>
@@ -860,6 +985,28 @@ export default function WarehouseInventoryModulePage() {
               />
             </div>
             <LowStockTable rows={filteredLowStock} />
+          </section>
+        ) : null}
+
+        {selectedCard === "INVENTORY_LEDGER" ? (
+          <section className="rounded-2xl border bg-white p-5 shadow-sm">
+            <h3 className="text-lg font-semibold">Inventory Ledger</h3>
+            <div className="mt-2 grid md:grid-cols-3 gap-3">
+              <Select
+                label="Warehouse Filter"
+                value={ledgerWarehouseFilter}
+                onChange={setLedgerWarehouseFilter}
+                options={warehouses.map((w) => ({ value: w.warehouseId, label: w.name }))}
+              />
+              <Select
+                label="Movement Type"
+                value={ledgerMovementTypeFilter}
+                onChange={setLedgerMovementTypeFilter}
+                options={["PURCHASE_IN", "TRANSFER_IN", "TRANSFER_OUT", "SALE_OUT", "RETURN_IN", "ADJUSTMENT"].map((x) => ({ value: x, label: x }))}
+              />
+              <Input label="Search" value={ledgerSearch} onChange={setLedgerSearch} />
+            </div>
+            <InventoryMovementTable rows={filteredMovements} />
           </section>
         ) : null}
 
@@ -937,6 +1084,10 @@ function LedgerTable({ type, rows, onDelete, onInvoice }) {
 
 function TransferTable({ rows }) {
   return <div className="overflow-x-auto mt-2"><table className="min-w-full text-sm"><thead><tr className="border-b"><th className="p-2 text-left">Product</th><th className="p-2 text-left">From</th><th className="p-2 text-left">To</th><th className="p-2 text-left">Qty</th><th className="p-2 text-left">Status</th></tr></thead><tbody>{rows.map((r)=><tr key={r._id} className="border-b"><td className="p-2">{r.productName}</td><td className="p-2">{r.fromWarehouseName}</td><td className="p-2">{r.toWarehouseName}</td><td className="p-2">{r.quantity}</td><td className="p-2">{r.status}</td></tr>)}</tbody></table></div>;
+}
+
+function InventoryMovementTable({ rows }) {
+  return <div className="overflow-x-auto mt-3"><table className="min-w-full text-sm"><thead><tr className="border-b"><th className="p-2 text-left">Date</th><th className="p-2 text-left">Product</th><th className="p-2 text-left">Warehouse</th><th className="p-2 text-left">Quantity</th><th className="p-2 text-left">Type</th><th className="p-2 text-left">Reference</th></tr></thead><tbody>{rows.map((r)=><tr key={r._id} className="border-b"><td className="p-2">{new Date(r.createdAt).toLocaleString()}</td><td className="p-2">{r.productName}</td><td className="p-2">{r.warehouseName}</td><td className="p-2">{r.quantity}</td><td className="p-2">{r.movementType}</td><td className="p-2">{r.referenceId || "-"}</td></tr>)}</tbody></table></div>;
 }
 
 function SummaryTable({ rows, products, onUpdateMin }) {

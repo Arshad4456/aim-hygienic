@@ -113,14 +113,6 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
         children: [
           { title: "Module Overview", href: "/dashboards/admin/warehouse-inventory" },
           { title: "Warehouse Master", href: "/dashboards/admin/inventory/warehouses" },
-          { title: "Inventory Ledger", href: "/dashboards/admin/inventory/ledger" },
-          { title: "Stock Transfers", href: "/dashboards/admin/inventory/transfers" },
-          { title: "Stock Summary", href: "/dashboards/admin/inventory/summary" },
-          {
-            title: "Low Stock Alerts",
-            href: "/dashboards/admin/inventory/low-stock",
-            badge: hasLowStock ? "!" : null,
-          },
         ],
       },
 
