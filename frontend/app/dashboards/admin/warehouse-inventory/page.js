@@ -77,6 +77,16 @@ function computeLine(line, product) {
   };
 }
 
+function uniqById(rows = []) {
+  const seen = new Set();
+  return rows.filter((row) => {
+    const id = row?._id || row?.transactionCode || JSON.stringify(row);
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
 export default function WarehouseInventoryModulePage() {
   const [selectedCard, setSelectedCard] = useState(cards[0].key);
   const [saleMode, setSaleMode] = useState("brand");
@@ -138,7 +148,7 @@ export default function WarehouseInventoryModulePage() {
     if (usersRes) setUsers(usersRes.users || []);
     if (regionsRes) setRegions(regionsRes.regions || []);
     if (zonesRes) setZones(zonesRes.zones || []);
-    if (txRes) setTransactions(txRes.transactions || []);
+    if (txRes) setTransactions(uniqById(txRes.transactions || []));
     if (transfersRes) setTransfers(transfersRes.transfers || []);
     if (summaryRes) setSummary(summaryRes.summary || []);
     if (lowStockRes) setLowStock(lowStockRes.lowStock || []);
@@ -146,6 +156,8 @@ export default function WarehouseInventoryModulePage() {
 
     if (result.every((entry) => entry.status === "rejected")) {
       setErr("Failed to load module data");
+    } else {
+      setErr("");
     }
     setLoading(false);
   }
@@ -305,13 +317,10 @@ export default function WarehouseInventoryModulePage() {
         }
       }
 
-      const created = await apiFetch("/inventory/transactions", { method: "POST", body });
+      await apiFetch("/inventory/transactions", { method: "POST", body });
       setOk("✅ Saved.");
-      if (created?.transaction) {
-        setTransactions((prev) => [created.transaction, ...prev]);
-      }
       setForm((s) => ({ ...s, adjustment: "0", items: [{ ...emptyLine }], extraDiscPer: "0", advTaxPer: "0", whTaxPer: "0", expense: "0" }));
-      loadAll();
+      await loadAll();
     } catch (e2) {
       setErr(e2.message || "Failed to save");
     } finally {
@@ -363,7 +372,7 @@ export default function WarehouseInventoryModulePage() {
             <div>W.H Tax: ${txn.whTaxPer || 0}%</div>
             <div>Expense: ${txn.expense || 0}</div>
           </div>
-          <div><strong>Total: ${finalGrandTotal.toFixed(2)}</strong></div>
+          <div><strong>Grand Total: ${finalGrandTotal.toFixed(2)}</strong></div>
         </div>
         <div style="margin-top:16px;text-align:center;font-size:13px;font-weight:600;">Thank you for bussiness with us</div>
       </body></html>`;
