@@ -238,6 +238,15 @@ export default function WarehouseInventoryModulePage() {
     }
   }
 
+  function printInvoice(txn) {
+    const html = `<html><body style="font-family:Arial;padding:20px;"><h1>AIM-HYGIENICS (PVT) LIMITED</h1><h3>${txn.transactionCode}</h3><div>${txn.transactionType} | ${new Date(txn.transactionAt).toLocaleString()}</div><div>From: ${txn.fromEntityName || "-"}</div><div>To: ${txn.toEntityName || "-"}</div><table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;margin-top:10px;width:100%"><tr><th>Product</th><th>Carton Size</th><th>1 Pack Price</th><th>1 Carton Price</th><th>Total Price</th><th>Manufacture Date</th><th>Expiry Date</th></tr>${(txn.items || []).map((i) => `<tr><td>${i.productName || "-"}</td><td>${i.cartonSize || "-"}</td><td>${i.onePackPrice || 0}</td><td>${i.oneCartonPrice || 0}</td><td>${i.totalPrice || 0}</td><td>${i.manufactureDate ? new Date(i.manufactureDate).toLocaleDateString() : "-"}</td><td>${i.expiryDate ? new Date(i.expiryDate).toLocaleDateString() : "-"}</td></tr>`).join("")}</table><h3>Grand Total: ${txn.grandTotal || 0}</h3></body></html>`;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    win.print();
+  }
+
   async function deleteRecord(id) {
     if (!confirm("Delete this record?")) return;
     await apiFetch(`/inventory/transactions/${id}`, { method: "DELETE" });
@@ -347,7 +356,7 @@ export default function WarehouseInventoryModulePage() {
         {["PURCHASING_STOCK", "SALE_STOCK", "DAMAGE_STOCK", "RETURN_STOCK", "RETURN_TO_SD"].includes(selectedCard) ? (
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
             <h3 className="text-lg font-semibold">{cards.find((c) => c.key === selectedCard)?.title} Ledger</h3>
-            <LedgerTable type={selectedCard} rows={cardTx} onDelete={deleteRecord} />
+            <LedgerTable type={selectedCard} rows={cardTx} onDelete={deleteRecord} onInvoice={printInvoice} />
           </section>
         ) : null}
       </div>
@@ -355,7 +364,7 @@ export default function WarehouseInventoryModulePage() {
   );
 }
 
-function LedgerTable({ type, rows, onDelete }) {
+function LedgerTable({ type, rows, onDelete, onInvoice }) {
   const purchase = type === "PURCHASING_STOCK";
   const sale = type === "SALE_STOCK";
   return (
@@ -378,7 +387,7 @@ function LedgerTable({ type, rows, onDelete }) {
               {sale ? <><td className="p-2">{r.fromEntityName || "-"}</td><td className="p-2">{r.distributorName || "-"}</td><td className="p-2">{r.brandName || r.toEntityName || "-"}</td></> : null}
               <td className="p-2">{new Date(r.transactionAt).toLocaleString()}</td>
               <td className="p-2">{Number(r.grandTotal || 0).toFixed(2)}</td>
-              <td className="p-2"><button className="rounded border border-red-300 text-red-700 px-2 py-1" onClick={() => onDelete(r._id)}>Delete</button></td>
+              <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" onClick={() => onInvoice(r)}>Invoice/Receipt</button><button className="rounded border border-red-300 text-red-700 px-2 py-1" onClick={() => onDelete(r._id)}>Delete</button></div></td>
             </tr>
           ))}
         </tbody>
