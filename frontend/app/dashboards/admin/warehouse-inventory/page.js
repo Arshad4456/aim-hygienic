@@ -274,10 +274,12 @@ export default function WarehouseInventoryModulePage() {
       const region = regions.find((r) => r._id === form.regionId);
       const zone = zones.find((z) => z._id === form.zoneId);
 
+      const movementWarehouse = selectedCard === "PURCHASING_STOCK" ? toWarehouse : fromWarehouse;
+
       const body = {
         transactionType: selectedCard,
-        warehouseId: fromWarehouse?.warehouseId || "",
-        warehouseName: fromWarehouse?.name || "",
+        warehouseId: movementWarehouse?.warehouseId || "",
+        warehouseName: movementWarehouse?.name || "",
         adjustment: Number(form.adjustment || 0),
         items: normalizedItems,
         subtotal: totalAmount,
