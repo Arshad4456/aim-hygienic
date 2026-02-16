@@ -766,75 +766,71 @@ export default function WarehouseInventoryModulePage() {
                     ))}
                   </div>
 
-                  <div className="text-sm font-semibold">From</div>
-                  <div className="text-sm font-semibold">To</div>
+                  <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="text-sm font-semibold">From</div>
+                    <div className="text-sm font-semibold">To</div>
 
-                  <Select
-                    label="From (Warehouse)"
-                    value={form.warehouseId}
-                    onChange={(v) => setField("warehouseId", v)}
-                    options={warehouses.map((w) => ({ value: w._id, label: w.name }))}
-                  />
-                  {saleMode === "brand" ? (
-                    <Select
-                      label="Business Type"
-                      value={form.businessType}
-                      onChange={(v) => setField("businessType", v)}
-                      options={businessTypes.map((x) => ({ value: x, label: x }))}
-                    />
-                  ) : (
-                    <Select
-                      label="Region"
-                      value={form.regionId}
-                      onChange={(v) => setField("regionId", v)}
-                      options={regions.map((r) => ({ value: r._id, label: r.name }))}
-                    />
-                  )}
+                    <div>
+                      <Select
+                        label="From (Warehouse)"
+                        value={form.warehouseId}
+                        onChange={(v) => setField("warehouseId", v)}
+                        options={warehouses.map((w) => ({ value: w._id, label: w.name }))}
+                      />
+                    </div>
 
-                  <div />
-                  {saleMode === "brand" ? (
-                    <Input label="Bussiness Name" value={form.businessName} onChange={(v) => setField("businessName", v)} />
-                  ) : (
-                    <Select
-                      label="Zone"
-                      value={form.zoneId}
-                      onChange={(v) => setField("zoneId", v)}
-                      options={zonesForRegion.map((z) => ({ value: z._id, label: z.name }))}
-                    />
-                  )}
+                    <div className="grid grid-cols-1 gap-3">
+                      {saleMode === "brand" ? (
+                        <>
+                          <Select
+                            label="Business Type"
+                            value={form.businessType}
+                            onChange={(v) => setField("businessType", v)}
+                            options={businessTypes.map((x) => ({ value: x, label: x }))}
+                          />
+                          <Input label="Bussiness Name" value={form.businessName} onChange={(v) => setField("businessName", v)} />
+                        </>
+                      ) : (
+                        <>
+                          <Select
+                            label="Region"
+                            value={form.regionId}
+                            onChange={(v) => setField("regionId", v)}
+                            options={regions.map((r) => ({ value: r._id, label: r.name }))}
+                          />
+                          <Select
+                            label="Zone"
+                            value={form.zoneId}
+                            onChange={(v) => setField("zoneId", v)}
+                            options={zonesForRegion.map((z) => ({ value: z._id, label: z.name }))}
+                          />
+                          <Select
+                            label="Territory"
+                            value={form.territoryName}
+                            onChange={(v) => setField("territoryName", v)}
+                            options={territoriesForZone.map((t) => ({ value: t, label: t }))}
+                          />
+                          {saleMode === "distributor" ? (
+                            <Select
+                              label="Distributor Name"
+                              value={form.distributorUserId}
+                              onChange={(v) => setField("distributorUserId", v)}
+                              options={distributorsForTerritory.map((u) => ({ value: u._id, label: u.businessName || u.fullName }))}
+                            />
+                          ) : null}
+                          {saleMode === "subDistributor" ? (
+                            <>
+                              <Input label="Sub-Distributor Name" value={form.subDistributorName} onChange={(v) => setField("subDistributorName", v)} />
+                              <Input label="Business Type" value={form.businessType} onChange={(v) => setField("businessType", v)} />
+                              <Input label="Business Name" value={form.businessName} onChange={(v) => setField("businessName", v)} />
+                            </>
+                          ) : null}
+                        </>
+                      )}
 
-                  <div />
-                  {saleMode !== "brand" ? (
-                    <Select
-                      label="Territory"
-                      value={form.territoryName}
-                      onChange={(v) => setField("territoryName", v)}
-                      options={territoriesForZone.map((t) => ({ value: t, label: t }))}
-                    />
-                  ) : null}
-
-                  <div />
-                  {saleMode === "distributor" ? (
-                    <Select
-                      label="Distributor Name"
-                      value={form.distributorUserId}
-                      onChange={(v) => setField("distributorUserId", v)}
-                      options={distributorsForTerritory.map((u) => ({ value: u._id, label: u.businessName || u.fullName }))}
-                    />
-                  ) : null}
-
-                  <div />
-                  {saleMode === "subDistributor" ? (
-                    <>
-                      <Input label="Sub-Distributor Name" value={form.subDistributorName} onChange={(v) => setField("subDistributorName", v)} />
-                      <Input label="Business Type" value={form.businessType} onChange={(v) => setField("businessType", v)} />
-                      <div />
-                      <Input label="Business Name" value={form.businessName} onChange={(v) => setField("businessName", v)} />
-                    </>
-                  ) : null}
-
-                  <div />
-                  <Input label="Address" value={form.address} onChange={(v) => setField("address", v)} />
+                      <Input label="Address" value={form.address} onChange={(v) => setField("address", v)} />
+                    </div>
+                  </div>
                 </>
               ) : null}
 
