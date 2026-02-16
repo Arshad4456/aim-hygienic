@@ -8,6 +8,7 @@ export default function Page() {
       subtitle="Use quick search to navigate all available items for your dashboard."
       roleKey="Brand Manager"
       links={userDashboardSearchItems.brandManager || []}
+      showAccountCards
     />
   );
 }
