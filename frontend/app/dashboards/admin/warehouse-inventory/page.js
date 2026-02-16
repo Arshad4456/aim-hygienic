@@ -349,7 +349,15 @@ export default function WarehouseInventoryModulePage() {
       const parts = Object.fromEntries(String(i.notes || "").split(",").map((seg) => seg.split(":")));
       return sum + toNum(parts.net || i.totalPrice);
     }, 0);
-    const finalGrandTotal = toNum(txn.grandTotal || lineTotal);
+    const totalAmount = lineTotal;
+    const extraDiscPer = toNum(txn.extraDiscPer);
+    const advTaxPer = toNum(txn.advTaxPer);
+    const whTaxPer = toNum(txn.whTaxPer);
+    const expense = toNum(txn.expense);
+    const extraDiscAmt = (totalAmount * extraDiscPer) / 100;
+    const advTaxAmt = (totalAmount * advTaxPer) / 100;
+    const whTaxAmt = (totalAmount * whTaxPer) / 100;
+    const calculatedGrandTotal = totalAmount - extraDiscAmt + advTaxAmt + whTaxAmt + expense;
 
     const html = `
       <html>
@@ -359,7 +367,8 @@ export default function WarehouseInventoryModulePage() {
           <div>Date: ${new Date(txn.transactionAt).toLocaleDateString()}</div>
           <div>Invoice #: ${txn.transactionCode}</div>
         </div>
-        <div style="margin-top:8px;font-size:12px;">Bill To: ${txn.toEntityName || txn.distributorName || "-"}</div>
+        <div style="margin-top:8px;font-size:12px;">Invoice From: ${txn.fromEntityName || txn.warehouseName || "-"}</div>
+        <div style="font-size:12px;">Bill To: ${txn.toEntityName || txn.distributorName || "-"}</div>
         <div style="font-size:12px;">Address: ${txn.note || "-"}</div>
         <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; width:100%; margin-top:10px; font-size:12px;">
           <thead><tr><th>#</th><th>Product Name</th><th>Qty</th><th>Rate</th><th>Gross</th><th>TO</th><th>Disc</th><th>Extra</th><th>Bons</th><th>V4GST</th><th>GST</th><th>Net Amt</th></tr></thead>
@@ -367,14 +376,15 @@ export default function WarehouseInventoryModulePage() {
           ${rows.join("")}
           </tbody>
         </table>
-        <div style="margin-top:12px; font-size:12px; display:flex; justify-content:space-between;">
-          <div>
-            <div>Extra Disc: ${txn.extraDiscPer || 0}%</div>
-            <div>Adv Tax: ${txn.advTaxPer || 0}%</div>
-            <div>W.H Tax: ${txn.whTaxPer || 0}%</div>
-            <div>Expense: ${txn.expense || 0}</div>
+        <div style="margin-top:12px; font-size:12px; display:flex; justify-content:flex-end;">
+          <div style="min-width:280px;">
+            <div style="display:flex; justify-content:space-between;"><span>Total Amount:</span><strong>${totalAmount.toFixed(2)}</strong></div>
+            <div style="display:flex; justify-content:space-between;"><span>Extra Disc (${extraDiscPer}%):</span><span>- ${extraDiscAmt.toFixed(2)}</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>Adv Tax (${advTaxPer}%):</span><span>+ ${advTaxAmt.toFixed(2)}</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>W.H Tax (${whTaxPer}%):</span><span>+ ${whTaxAmt.toFixed(2)}</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>Expense:</span><span>+ ${expense.toFixed(2)}</span></div>
+            <div style="display:flex; justify-content:space-between; margin-top:4px; border-top:1px solid #ccc; padding-top:4px;"><span><strong>Grand Total:</strong></span><strong>${calculatedGrandTotal.toFixed(2)}</strong></div>
           </div>
-          <div><strong>Grand Total: ${finalGrandTotal.toFixed(2)}</strong></div>
         </div>
         <div style="margin-top:16px;text-align:center;font-size:13px;font-weight:600;">Thank you for bussiness with us</div>
       </body></html>`;
