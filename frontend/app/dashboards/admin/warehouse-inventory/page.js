@@ -28,6 +28,12 @@ const saleLedgerFilters = [
   { key: "subDistributor", label: "To Sub-Distributor" },
 ];
 
+const returnStockLedgerFilters = [
+  { key: "all", label: "All Return Stock" },
+  { key: "brand", label: "From Brand" },
+  { key: "distributor", label: "From Distributor" },
+];
+
 const returnStockModes = [
   { key: "brand", label: "From Brand" },
   { key: "distributor", label: "From Distributor" },
@@ -43,6 +49,7 @@ const emptyLine = {
   gstPer: "0",
   manufactureDate: "",
   expiryDate: "",
+  returnDate: "",
 };
 
 function toNum(v) {
@@ -104,6 +111,7 @@ export default function WarehouseInventoryModulePage() {
   const [saleMode, setSaleMode] = useState("brand");
   const [saleLedgerFilter, setSaleLedgerFilter] = useState("all");
   const [returnStockMode, setReturnStockMode] = useState("brand");
+  const [returnStockLedgerFilter, setReturnStockLedgerFilter] = useState("all");
   const [products, setProducts] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [users, setUsers] = useState([]);
@@ -115,6 +123,8 @@ export default function WarehouseInventoryModulePage() {
   const [summary, setSummary] = useState([]);
   const [lowStock, setLowStock] = useState([]);
   const [nearExpiry, setNearExpiry] = useState([]);
+  const [summaryWarehouseFilter, setSummaryWarehouseFilter] = useState("");
+  const [lowStockWarehouseFilter, setLowStockWarehouseFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const submitLockRef = useRef(false);
@@ -229,11 +239,12 @@ export default function WarehouseInventoryModulePage() {
     if (["W2W_TRANSFER", "STOCK_SUMMARY", "LOW_STOCK"].includes(selectedCard)) return [];
     const byType = transactions.filter((t) => t.transactionType === selectedCard);
     if (selectedCard === "RETURN_STOCK") {
-      const returnSourceType = returnStockMode === "brand" ? "BRAND" : "DISTRIBUTOR";
+      if (returnStockLedgerFilter === "all") return byType;
+      const returnSourceType = returnStockLedgerFilter === "brand" ? "BRAND" : "DISTRIBUTOR";
       return byType.filter((t) => {
         const storedType = String(t.fromEntityType || "").trim().toUpperCase();
         if (storedType) return storedType === returnSourceType;
-        return returnStockMode === "brand" ? !t.distributorName : Boolean(t.distributorName);
+        return returnStockLedgerFilter === "brand" ? !t.distributorName : Boolean(t.distributorName);
       });
     }
 
@@ -255,7 +266,17 @@ export default function WarehouseInventoryModulePage() {
       if (saleLedgerFilter === "distributor") return Boolean(t.distributorName) && !t.subDistributorName;
       return !t.distributorName && !t.subDistributorName;
     });
-  }, [transactions, selectedCard, saleLedgerFilter, returnStockMode]);
+  }, [transactions, selectedCard, saleLedgerFilter, returnStockLedgerFilter]);
+
+  const filteredSummary = useMemo(() => {
+    if (!summaryWarehouseFilter) return summary;
+    return summary.filter((row) => row._id?.warehouseId === summaryWarehouseFilter || row.warehouseId === summaryWarehouseFilter);
+  }, [summary, summaryWarehouseFilter]);
+
+  const filteredLowStock = useMemo(() => {
+    if (!lowStockWarehouseFilter) return lowStock;
+    return lowStock.filter((row) => row.warehouseId === lowStockWarehouseFilter);
+  }, [lowStock, lowStockWarehouseFilter]);
 
   const lineRows = useMemo(
     () =>
@@ -309,6 +330,7 @@ export default function WarehouseInventoryModulePage() {
           expiryDate: ["PURCHASING_STOCK", "DAMAGE_STOCK"].includes(selectedCard)
             ? r.line.expiryDate || undefined
             : undefined,
+          returnDate: selectedCard === "RETURN_STOCK" ? r.line.returnDate || undefined : undefined,
           notes: `gross:${r.calc.gross},to:${r.calc.toValue},disc:${r.calc.discValue},extra:${r.calc.extraValue},bons:${r.calc.bonsValue},v4gst:${r.calc.v4gst},gst:${r.calc.gstAmount},net:${r.calc.netAmt}`,
         })),
     [lineRows, selectedCard],
@@ -734,7 +756,8 @@ export default function WarehouseInventoryModulePage() {
                         <th className="p-2">GST</th>
                         <th className="p-2">Net Amt</th>
                         {["PURCHASING_STOCK", "DAMAGE_STOCK"].includes(selectedCard) ? <th className="p-2">MFG Date</th> : null}
-                        {["PURCHASING_STOCK", "DAMAGE_STOCK"].includes(selectedCard) ? <th className="p-2">EXP Date</th> : null}
+                        {["PURCHASING_STOCK", "DAMAGE_STOCK", "RETURN_STOCK"].includes(selectedCard) ? <th className="p-2">EXP Date</th> : null}
+                        {selectedCard === "RETURN_STOCK" ? <th className="p-2">Return Date</th> : null}
                         <th className="p-2">-</th>
                       </tr>
                     </thead>
@@ -757,8 +780,11 @@ export default function WarehouseInventoryModulePage() {
                           {["PURCHASING_STOCK", "DAMAGE_STOCK"].includes(selectedCard) ? (
                             <td className="p-1"><InputBare type="date" value={line.manufactureDate} onChange={(v) => setItem(idx, "manufactureDate", v)} /></td>
                           ) : null}
-                          {["PURCHASING_STOCK", "DAMAGE_STOCK"].includes(selectedCard) ? (
+                          {["PURCHASING_STOCK", "DAMAGE_STOCK", "RETURN_STOCK"].includes(selectedCard) ? (
                             <td className="p-1"><InputBare type="date" value={line.expiryDate} onChange={(v) => setItem(idx, "expiryDate", v)} /></td>
+                          ) : null}
+                          {selectedCard === "RETURN_STOCK" ? (
+                            <td className="p-1"><InputBare type="date" value={line.returnDate || ""} onChange={(v) => setItem(idx, "returnDate", v)} /></td>
                           ) : null}
                           <td className="p-1"><button type="button" className="rounded border px-2 py-1" onClick={() => removeItem(idx)}>X</button></td>
                         </tr>
@@ -808,8 +834,34 @@ export default function WarehouseInventoryModulePage() {
         ) : null}
 
         {selectedCard === "W2W_TRANSFER" ? <section className="rounded-2xl border bg-white p-5 shadow-sm"><h3 className="text-lg font-semibold">Warehouse to Warehouse Transfer</h3><TransferTable rows={transfers} /></section> : null}
-        {selectedCard === "STOCK_SUMMARY" ? <section className="rounded-2xl border bg-white p-5 shadow-sm"><h3 className="text-lg font-semibold">Stock Summary</h3><SummaryTable rows={summary} products={products} onUpdateMin={updateMinStock} /></section> : null}
-        {selectedCard === "LOW_STOCK" ? <section className="rounded-2xl border bg-white p-5 shadow-sm"><h3 className="text-lg font-semibold">Low Stock Alert</h3><LowStockTable rows={lowStock} /></section> : null}
+        {selectedCard === "STOCK_SUMMARY" ? (
+          <section className="rounded-2xl border bg-white p-5 shadow-sm">
+            <h3 className="text-lg font-semibold">Stock Summary</h3>
+            <div className="mt-2 max-w-sm">
+              <Select
+                label="Warehouse Filter"
+                value={summaryWarehouseFilter}
+                onChange={setSummaryWarehouseFilter}
+                options={warehouses.map((w) => ({ value: w.warehouseId, label: w.name }))}
+              />
+            </div>
+            <SummaryTable rows={filteredSummary} products={products} onUpdateMin={updateMinStock} />
+          </section>
+        ) : null}
+        {selectedCard === "LOW_STOCK" ? (
+          <section className="rounded-2xl border bg-white p-5 shadow-sm">
+            <h3 className="text-lg font-semibold">Low Stock Alert</h3>
+            <div className="mt-2 max-w-sm">
+              <Select
+                label="Warehouse Filter"
+                value={lowStockWarehouseFilter}
+                onChange={setLowStockWarehouseFilter}
+                options={warehouses.map((w) => ({ value: w.warehouseId, label: w.name }))}
+              />
+            </div>
+            <LowStockTable rows={filteredLowStock} />
+          </section>
+        ) : null}
 
         {["PURCHASING_STOCK", "SALE_STOCK", "DAMAGE_STOCK", "RETURN_STOCK", "RETURN_TO_SD"].includes(selectedCard) ? (
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
@@ -828,7 +880,21 @@ export default function WarehouseInventoryModulePage() {
                 ))}
               </div>
             ) : null}
-            <LedgerTable type={selectedCard} rows={cardTx} onDelete={deleteRecord} onInvoice={printInvoice} returnStockMode={returnStockMode} />
+            {selectedCard === "RETURN_STOCK" ? (
+              <div className="mt-2 flex gap-2">
+                {returnStockLedgerFilters.map((f) => (
+                  <button
+                    key={f.key}
+                    type="button"
+                    onClick={() => setReturnStockLedgerFilter(f.key)}
+                    className={`rounded border px-2 py-1 text-xs ${returnStockLedgerFilter === f.key ? "bg-emerald-50 border-emerald-300" : ""}`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <LedgerTable type={selectedCard} rows={cardTx} onDelete={deleteRecord} onInvoice={printInvoice} />
           </section>
         ) : null}
       </div>
@@ -836,7 +902,7 @@ export default function WarehouseInventoryModulePage() {
   );
 }
 
-function LedgerTable({ type, rows, onDelete, onInvoice, returnStockMode }) {
+function LedgerTable({ type, rows, onDelete, onInvoice }) {
   const purchase = type === "PURCHASING_STOCK";
   const sale = type === "SALE_STOCK";
   const returnStock = type === "RETURN_STOCK";
@@ -858,7 +924,7 @@ function LedgerTable({ type, rows, onDelete, onInvoice, returnStockMode }) {
               <td className="p-2">{r.transactionCode}</td>
               {purchase ? <><td className="p-2">{r.fromEntityName || "-"}</td><td className="p-2">{r.toEntityName || "-"}</td></> : null}
               {sale ? <><td className="p-2">{r.fromEntityName || "-"}</td><td className="p-2">{r.distributorName || "-"}</td><td className="p-2">{r.brandName || r.toEntityName || "-"}</td></> : null}
-              {returnStock ? <><td className="p-2">{r.fromEntityName || "-"}</td><td className="p-2">{returnStockMode === "distributor" ? (r.distributorName || r.fromEntityName || "-") : "-"}</td><td className="p-2">{returnStockMode === "brand" ? (r.brandName || r.fromEntityName || "-") : "-"}</td></> : null}
+              {returnStock ? <><td className="p-2">{r.fromEntityName || "-"}</td><td className="p-2">{String(r.fromEntityType || "").toUpperCase() === "DISTRIBUTOR" ? (r.distributorName || r.fromEntityName || "-") : "-"}</td><td className="p-2">{String(r.fromEntityType || "").toUpperCase() === "BRAND" ? (r.brandName || r.fromEntityName || "-") : "-"}</td></> : null}
               <td className="p-2">{new Date(r.transactionAt).toLocaleString()}</td>
               <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" onClick={() => onInvoice(r)}>Invoice/Receipt</button><button className="rounded border border-red-300 text-red-700 px-2 py-1" onClick={() => onDelete(r._id)}>Delete</button></div></td>
             </tr>
