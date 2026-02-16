@@ -21,23 +21,60 @@ const saleModes = [
   { key: "subDistributor", label: "Sale to Sub-Distributor" },
 ];
 
-const blankItem = {
+const emptyLine = {
   productId: "",
-  cartonSize: "",
-  onePackPrice: "",
-  oneCartonPrice: "",
-  totalPrice: "",
+  qty: "",
+  toValue: "0",
+  discValue: "0",
+  extraValue: "0",
+  bonsValue: "0",
+  gstPer: "0",
   manufactureDate: "",
   expiryDate: "",
-  quantity: "",
 };
 
-function parseCartonSize(value) {
-  const m = String(value || "").trim().toLowerCase().replace(/\s+/g, "").match(/^(\d+)x(\d+)$/);
-  if (!m) return { cartonCount: 0, totalPacks: 0, packsPerCarton: 0 };
-  const cartonCount = Number(m[1]);
-  const totalPacks = Number(m[2]);
-  return { cartonCount, totalPacks, packsPerCarton: cartonCount > 0 ? totalPacks / cartonCount : 0 };
+function toNum(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function getSizeMultiplier(product) {
+  if (!product) return 1;
+  const raw = String(product.size || "");
+  const nums = raw.match(/\d+(?:\.\d+)?/g)?.map(Number) || [];
+  if (nums.length) return nums.reduce((acc, n) => acc * n, 1);
+  if (toNum(product.packSize) > 0) return toNum(product.packSize);
+  return 1;
+}
+
+function computeLine(line, product) {
+  const sizeMultiplier = getSizeMultiplier(product);
+  const qty = toNum(line.qty);
+  const rate = toNum(product?.wholesalePrice || 0);
+  const gross = sizeMultiplier * qty * rate;
+  const toValue = toNum(line.toValue);
+  const discValue = line.discValue === "" ? toNum(product?.discountPer || 0) : toNum(line.discValue);
+  const extraValue = toNum(line.extraValue);
+  const bonsValue = toNum(line.bonsValue);
+  const v4gst = gross - toValue - discValue - extraValue - bonsValue;
+  const gstPer = toNum(line.gstPer);
+  const gstAmount = (v4gst * gstPer) / 100;
+  const netAmt = v4gst + gstAmount;
+  return {
+    sizeText: product?.size || "-",
+    sizeMultiplier,
+    qty,
+    rate,
+    gross,
+    toValue,
+    discValue,
+    extraValue,
+    bonsValue,
+    v4gst,
+    gstPer,
+    gstAmount,
+    netAmt,
+  };
 }
 
 export default function WarehouseInventoryModulePage() {
@@ -57,7 +94,6 @@ export default function WarehouseInventoryModulePage() {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
-
   const [form, setForm] = useState({
     warehouseId: "",
     fromEntityName: "",
@@ -72,23 +108,28 @@ export default function WarehouseInventoryModulePage() {
     subDistributorName: "",
     address: "",
     adjustment: "0",
-    items: [{ ...blankItem }],
+    extraDiscPer: "0",
+    advTaxPer: "0",
+    whTaxPer: "0",
+    expense: "0",
+    items: [{ ...emptyLine }],
   });
 
   async function loadAll() {
     try {
-      const [productsRes, warehousesRes, usersRes, regionsRes, zonesRes, txRes, transfersRes, summaryRes, lowStockRes, nearRes] = await Promise.all([
-        apiFetch("/products"),
-        apiFetch("/warehouses"),
-        apiFetch("/users"),
-        apiFetch("/regions"),
-        apiFetch("/zones"),
-        apiFetch("/inventory/transactions"),
-        apiFetch("/inventory/transfers"),
-        apiFetch("/inventory/summary"),
-        apiFetch("/inventory/low-stock"),
-        apiFetch("/inventory/near-expiry-products"),
-      ]);
+      const [productsRes, warehousesRes, usersRes, regionsRes, zonesRes, txRes, transfersRes, summaryRes, lowStockRes, nearRes] =
+        await Promise.all([
+          apiFetch("/products"),
+          apiFetch("/warehouses"),
+          apiFetch("/users"),
+          apiFetch("/regions"),
+          apiFetch("/zones"),
+          apiFetch("/inventory/transactions"),
+          apiFetch("/inventory/transfers"),
+          apiFetch("/inventory/summary"),
+          apiFetch("/inventory/low-stock"),
+          apiFetch("/inventory/near-expiry-products"),
+        ]);
       setProducts(productsRes.products || []);
       setWarehouses(warehousesRes.warehouses || []);
       setUsers(usersRes.users || []);
@@ -112,65 +153,96 @@ export default function WarehouseInventoryModulePage() {
 
   const brandManagers = useMemo(() => users.filter((u) => u.role === "Brand Manager"), [users]);
   const distributors = useMemo(() => users.filter((u) => u.role === "Distributor"), [users]);
-  const businessTypes = useMemo(() => [...new Set(users.map((u) => u.businessType).filter(Boolean))], [users]);
+  const businessTypes = useMemo(
+    () => [...new Set(users.map((u) => String(u.businessType || "").trim()).filter(Boolean))],
+    [users],
+  );
   const zonesForRegion = useMemo(() => {
     const region = regions.find((r) => r._id === form.regionId);
-    if (!region) return [];
-    return zones.filter((z) => z.regionId === region.regionId);
+    return region ? zones.filter((z) => z.regionId === region.regionId) : [];
   }, [regions, zones, form.regionId]);
   const territoriesForZone = useMemo(() => {
     const zone = zones.find((z) => z._id === form.zoneId);
     if (!zone) return [];
-    return [...new Set(users.filter((u) => u.zoneId === zone.zoneId || u.zoneName === zone.name).map((u) => u.territoryName).filter(Boolean))];
+    return [
+      ...new Set(
+        users
+          .filter((u) => u.zoneId === zone.zoneId || u.zoneName === zone.name)
+          .map((u) => u.territoryName)
+          .filter(Boolean),
+      ),
+    ];
   }, [zones, users, form.zoneId]);
-  const distributorsForTerritory = useMemo(() => distributors.filter((d) => !form.territoryName || d.territoryName === form.territoryName), [distributors, form.territoryName]);
-  const brandBusinessUsers = useMemo(() => brandManagers.filter((u) => !form.businessType || u.businessType === form.businessType), [brandManagers, form.businessType]);
+  const distributorsForTerritory = useMemo(
+    () => distributors.filter((d) => !form.territoryName || d.territoryName === form.territoryName),
+    [distributors, form.territoryName],
+  );
+  const brandBusinessUsers = useMemo(
+    () => brandManagers.filter((u) => !form.businessType || u.businessType === form.businessType),
+    [brandManagers, form.businessType],
+  );
 
   const cardTx = useMemo(() => {
-    if (selectedCard === "W2W_TRANSFER" || selectedCard === "STOCK_SUMMARY" || selectedCard === "LOW_STOCK") return [];
+    if (["W2W_TRANSFER", "STOCK_SUMMARY", "LOW_STOCK"].includes(selectedCard)) return [];
     return transactions.filter((t) => t.transactionType === selectedCard);
   }, [transactions, selectedCard]);
 
-  function setField(key, value) { setForm((s) => ({ ...s, [key]: value })); }
-  function setItem(i, key, value) { setForm((s) => ({ ...s, items: s.items.map((it, idx) => (idx === i ? { ...it, [key]: value } : it)) })); }
-  function addItem() { setForm((s) => ({ ...s, items: [...s.items, { ...blankItem }] })); }
-  function removeItem(i) { setForm((s) => ({ ...s, items: s.items.filter((_, idx) => idx !== i) })); }
+  const lineRows = useMemo(
+    () =>
+      form.items.map((line, idx) => {
+        const product = products.find((p) => p._id === line.productId);
+        return { idx, line, product, calc: computeLine(line, product) };
+      }),
+    [form.items, products],
+  );
 
-  const normalizedItems = useMemo(() => form.items.map((item) => {
-    const product = products.find((p) => p._id === item.productId);
-    if (selectedCard === "DAMAGE_STOCK") {
-      const qty = Number(item.quantity || 0);
-      return {
-        productId: product?.productId || "",
-        productName: product?.name || "",
-        cartonSize: `1x${qty}`,
-        cartons: 1,
-        totalPacks: qty,
-        packsPerCarton: qty,
-        onePackPrice: 0,
-        oneCartonPrice: 0,
-        totalPrice: 0,
-        unitPrice: 0,
-        manufactureDate: item.manufactureDate || undefined,
-        expiryDate: item.expiryDate || undefined,
-      };
-    }
-    const parsed = parseCartonSize(item.cartonSize);
-    return {
-      productId: product?.productId || "",
-      productName: product?.name || "",
-      cartonSize: item.cartonSize,
-      cartons: parsed.cartonCount,
-      totalPacks: parsed.totalPacks,
-      packsPerCarton: parsed.packsPerCarton,
-      onePackPrice: Number(item.onePackPrice || 0),
-      oneCartonPrice: Number(item.oneCartonPrice || 0),
-      totalPrice: Number(item.totalPrice || 0),
-      unitPrice: parsed.totalPacks > 0 ? Number(item.totalPrice || 0) / parsed.totalPacks : 0,
-      manufactureDate: selectedCard === "PURCHASING_STOCK" ? item.manufactureDate || undefined : undefined,
-      expiryDate: ["PURCHASING_STOCK", "DAMAGE_STOCK"].includes(selectedCard) ? item.expiryDate || undefined : undefined,
-    };
-  }).filter((x) => x.productId), [form.items, products, selectedCard]);
+  const totalAmount = useMemo(() => lineRows.reduce((sum, r) => sum + r.calc.netAmt, 0), [lineRows]);
+  const extraDiscAmt = useMemo(() => (totalAmount * toNum(form.extraDiscPer)) / 100, [totalAmount, form.extraDiscPer]);
+  const advTaxAmt = useMemo(() => (totalAmount * toNum(form.advTaxPer)) / 100, [totalAmount, form.advTaxPer]);
+  const whTaxAmt = useMemo(() => (totalAmount * toNum(form.whTaxPer)) / 100, [totalAmount, form.whTaxPer]);
+  const grandTotal = useMemo(
+    () => totalAmount - extraDiscAmt + advTaxAmt + whTaxAmt - toNum(form.expense),
+    [totalAmount, extraDiscAmt, advTaxAmt, whTaxAmt, form.expense],
+  );
+
+  function setField(key, value) {
+    setForm((s) => ({ ...s, [key]: value }));
+  }
+  function setItem(i, key, value) {
+    setForm((s) => ({ ...s, items: s.items.map((it, idx) => (idx === i ? { ...it, [key]: value } : it)) }));
+  }
+  function addItem() {
+    setForm((s) => ({ ...s, items: [...s.items, { ...emptyLine }] }));
+  }
+  function removeItem(i) {
+    setForm((s) => ({ ...s, items: s.items.filter((_, idx) => idx !== i) }));
+  }
+
+  const normalizedItems = useMemo(
+    () =>
+      lineRows
+        .filter((r) => r.product)
+        .map((r) => ({
+          productId: r.product.productId,
+          productName: r.product.name,
+          cartonSize: `1x${r.calc.qty || 0}`,
+          cartons: 1,
+          totalPacks: r.calc.qty || 0,
+          packsPerCarton: r.calc.qty || 0,
+          onePackPrice: r.calc.rate,
+          oneCartonPrice: r.calc.rate * r.calc.sizeMultiplier,
+          totalPrice: r.calc.netAmt,
+          unitPrice: r.calc.rate,
+          manufactureDate: ["PURCHASING_STOCK", "DAMAGE_STOCK"].includes(selectedCard)
+            ? r.line.manufactureDate || undefined
+            : undefined,
+          expiryDate: ["PURCHASING_STOCK", "DAMAGE_STOCK"].includes(selectedCard)
+            ? r.line.expiryDate || undefined
+            : undefined,
+          notes: `gross:${r.calc.gross},to:${r.calc.toValue},disc:${r.calc.discValue},extra:${r.calc.extraValue},bons:${r.calc.bonsValue},v4gst:${r.calc.v4gst},gst:${r.calc.gstAmount},net:${r.calc.netAmt}`,
+        })),
+    [lineRows, selectedCard],
+  );
 
   async function submit(e) {
     e.preventDefault();
@@ -191,18 +263,20 @@ export default function WarehouseInventoryModulePage() {
         warehouseName: fromWarehouse?.name || "",
         adjustment: Number(form.adjustment || 0),
         items: normalizedItems,
+        subtotal: totalAmount,
+        grandTotal,
       };
 
       if (selectedCard === "PURCHASING_STOCK") {
         body.fromEntityName = form.fromEntityName;
         body.toEntityName = toWarehouse?.name || "";
       }
+
       if (selectedCard === "SALE_STOCK") {
         body.fromEntityName = fromWarehouse?.name || "";
         if (saleMode === "brand") {
           body.toEntityName = selectedBrand?.businessName || selectedBrand?.fullName || "";
-          body.distributorName = "";
-          body.note = `Address: ${form.address}`;
+          body.note = `Address:${form.address}`;
         }
         if (saleMode === "distributor") {
           body.regionId = region?.regionId || "";
@@ -212,7 +286,7 @@ export default function WarehouseInventoryModulePage() {
           body.territory = form.territoryName;
           body.distributorName = selectedDist?.businessName || selectedDist?.fullName || "";
           body.toEntityName = body.distributorName;
-          body.note = `Address: ${form.address}`;
+          body.note = `Address:${form.address}`;
         }
         if (saleMode === "subDistributor") {
           body.regionId = region?.regionId || "";
@@ -221,15 +295,14 @@ export default function WarehouseInventoryModulePage() {
           body.zoneName = zone?.name || "";
           body.territory = form.territoryName;
           body.subDistributorName = form.subDistributorName;
-          body.distributorName = form.subDistributorName;
           body.toEntityName = form.subDistributorName;
-          body.note = `Business Type: ${form.businessType || "-"}, Business Name: ${form.businessName || "-"}, Address: ${form.address || "-"}`;
+          body.note = `Business Type:${form.businessType}, Business Name:${form.businessName}, Address:${form.address}`;
         }
       }
 
       await apiFetch("/inventory/transactions", { method: "POST", body });
       setOk("✅ Saved.");
-      setForm((s) => ({ ...s, adjustment: "0", items: [{ ...blankItem }] }));
+      setForm((s) => ({ ...s, adjustment: "0", items: [{ ...emptyLine }], extraDiscPer: "0", advTaxPer: "0", whTaxPer: "0", expense: "0" }));
       await loadAll();
     } catch (e2) {
       setErr(e2.message || "Failed to save");
@@ -239,7 +312,35 @@ export default function WarehouseInventoryModulePage() {
   }
 
   function printInvoice(txn) {
-    const html = `<html><body style="font-family:Arial;padding:20px;"><h1>AIM-HYGIENICS (PVT) LIMITED</h1><h3>${txn.transactionCode}</h3><div>${txn.transactionType} | ${new Date(txn.transactionAt).toLocaleString()}</div><div>From: ${txn.fromEntityName || "-"}</div><div>To: ${txn.toEntityName || "-"}</div><table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;margin-top:10px;width:100%"><tr><th>Product</th><th>Carton Size</th><th>1 Pack Price</th><th>1 Carton Price</th><th>Total Price</th><th>Manufacture Date</th><th>Expiry Date</th></tr>${(txn.items || []).map((i) => `<tr><td>${i.productName || "-"}</td><td>${i.cartonSize || "-"}</td><td>${i.onePackPrice || 0}</td><td>${i.oneCartonPrice || 0}</td><td>${i.totalPrice || 0}</td><td>${i.manufactureDate ? new Date(i.manufactureDate).toLocaleDateString() : "-"}</td><td>${i.expiryDate ? new Date(i.expiryDate).toLocaleDateString() : "-"}</td></tr>`).join("")}</table><h3>Grand Total: ${txn.grandTotal || 0}</h3></body></html>`;
+    const html = `
+      <html>
+      <body style="font-family: Arial; padding: 16px;">
+        <h2 style="text-align:center;margin:0;">AIM-HYGIENICS (PVT) LIMITED</h2>
+        <div style="margin-top:8px; display:flex; justify-content:space-between; font-size:12px;">
+          <div>Date: ${new Date(txn.transactionAt).toLocaleDateString()}</div>
+          <div>Invoice #: ${txn.transactionCode}</div>
+        </div>
+        <div style="margin-top:8px;font-size:12px;">Bill To: ${txn.toEntityName || txn.distributorName || "-"}</div>
+        <div style="font-size:12px;">Address: ${txn.note || "-"}</div>
+        <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; width:100%; margin-top:10px; font-size:12px;">
+          <thead><tr><th>#</th><th>Product Name</th><th>Qty</th><th>Rate</th><th>Gross</th><th>TO</th><th>Disc</th><th>Extra</th><th>Bons</th><th>V4GST</th><th>GST</th><th>Net Amt</th></tr></thead>
+          <tbody>
+          ${(txn.items || []).map((i, idx) => {
+            const parts = Object.fromEntries(String(i.notes || "").split(",").map((seg) => seg.split(":")));
+            return `<tr><td>${idx + 1}</td><td>${i.productName || "-"}</td><td>${i.totalPacks || 0}</td><td>${i.onePackPrice || 0}</td><td>${parts.gross || 0}</td><td>${parts.to || 0}</td><td>${parts.disc || 0}</td><td>${parts.extra || 0}</td><td>${parts.bons || 0}</td><td>${parts.v4gst || 0}</td><td>${parts.gst || 0}</td><td>${parts.net || i.totalPrice || 0}</td></tr>`;
+          }).join("")}
+          </tbody>
+        </table>
+        <div style="margin-top:12px; font-size:12px; display:flex; justify-content:space-between;">
+          <div>
+            <div>Extra Disc: ${txn.extraDiscPer || 0}%</div>
+            <div>Adv Tax: ${txn.advTaxPer || 0}%</div>
+            <div>W.H Tax: ${txn.whTaxPer || 0}%</div>
+            <div>Expense: ${txn.expense || 0}</div>
+          </div>
+          <div><strong>Total: ${Number(txn.grandTotal || 0).toFixed(2)}</strong></div>
+        </div>
+      </body></html>`;
     const win = window.open("", "_blank");
     if (!win) return;
     win.document.write(html);
@@ -250,13 +351,16 @@ export default function WarehouseInventoryModulePage() {
   async function deleteRecord(id) {
     if (!confirm("Delete this record?")) return;
     await apiFetch(`/inventory/transactions/${id}`, { method: "DELETE" });
-    setTransactions((prev) => prev.filter((row) => row._id !== id));
+    setTransactions((prev) => prev.filter((r) => r._id !== id));
   }
 
   async function updateMinStock(productDbId, value) {
     const product = products.find((p) => p._id === productDbId);
     if (!product) return;
-    await apiFetch(`/products/${productDbId}`, { method: "PUT", body: { ...product, minStockLevel: Number(value || 0) } });
+    await apiFetch(`/products/${productDbId}`, {
+      method: "PUT",
+      body: { ...product, minStockLevel: Number(value || 0) },
+    });
     await loadAll();
   }
 
@@ -268,74 +372,203 @@ export default function WarehouseInventoryModulePage() {
           {err ? <div className="mt-2 text-sm text-red-600">{err}</div> : null}
           {ok ? <div className="mt-2 text-sm text-emerald-600">{ok}</div> : null}
           <div className="grid md:grid-cols-4 gap-2 mt-3">
-            {cards.map((c) => <button key={c.key} type="button" onClick={() => setSelectedCard(c.key)} className={`rounded-lg border p-2 text-left text-sm ${selectedCard === c.key ? "bg-emerald-50 border-emerald-300" : "hover:bg-zinc-50"}`}>{c.title}</button>)}
+            {cards.map((c) => (
+              <button
+                key={c.key}
+                type="button"
+                onClick={() => setSelectedCard(c.key)}
+                className={`rounded-lg border p-2 text-left text-sm ${selectedCard === c.key ? "bg-emerald-50 border-emerald-300" : "hover:bg-zinc-50"}`}
+              >
+                {c.title}
+              </button>
+            ))}
           </div>
         </section>
 
         {["PURCHASING_STOCK", "SALE_STOCK", "DAMAGE_STOCK", "RETURN_STOCK", "RETURN_TO_SD"].includes(selectedCard) ? (
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
-            <form className="grid grid-cols-1 md:grid-cols-2 gap-3" onSubmit={submit}>
-              {selectedCard === "PURCHASING_STOCK" ? <>
-                <Input label="From" value={form.fromEntityName} onChange={(v) => setField("fromEntityName", v)} />
-                <Select label="To (Warehouse)" value={form.toWarehouseId} onChange={(v) => setField("toWarehouseId", v)} options={warehouses.map((w) => ({ value: w._id, label: w.name }))} />
-              </> : null}
+            <form onSubmit={submit} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {selectedCard === "PURCHASING_STOCK" ? (
+                <>
+                  <Input label="From" value={form.fromEntityName} onChange={(v) => setField("fromEntityName", v)} />
+                  <Select
+                    label="To (Warehouse)"
+                    value={form.toWarehouseId}
+                    onChange={(v) => setField("toWarehouseId", v)}
+                    options={warehouses.map((w) => ({ value: w._id, label: w.name }))}
+                  />
+                </>
+              ) : null}
 
-              {selectedCard === "SALE_STOCK" ? <>
-                <div className="md:col-span-2 flex gap-2">{saleModes.map((m) => <button key={m.key} type="button" onClick={() => setSaleMode(m.key)} className={`rounded border px-2 py-1 text-xs ${saleMode===m.key?"bg-emerald-50 border-emerald-300":""}`}>{m.label}</button>)}</div>
-                <Select label="From (Warehouse)" value={form.warehouseId} onChange={(v) => setField("warehouseId", v)} options={warehouses.map((w) => ({ value: w._id, label: w.name }))} />
-                {saleMode === "brand" ? <>
-                  <Select label="Business Type" value={form.businessType} onChange={(v) => setField("businessType", v)} options={businessTypes.map((x) => ({ value: x, label: x }))} />
-                  <Select label="Business Name" value={form.businessUserId} onChange={(v) => setField("businessUserId", v)} options={brandBusinessUsers.map((u) => ({ value: u._id, label: u.businessName || u.fullName }))} />
-                  <Input label="Address" value={form.address} onChange={(v) => setField("address", v)} />
-                </> : null}
-                {saleMode !== "brand" ? <>
-                  <Select label="Region" value={form.regionId} onChange={(v) => setField("regionId", v)} options={regions.map((r) => ({ value: r._id, label: r.name }))} />
-                  <Select label="Zone" value={form.zoneId} onChange={(v) => setField("zoneId", v)} options={zonesForRegion.map((z) => ({ value: z._id, label: z.name }))} />
-                  <Select label="Territory" value={form.territoryName} onChange={(v) => setField("territoryName", v)} options={territoriesForZone.map((t) => ({ value: t, label: t }))} />
-                  {saleMode === "distributor" ? <Select label="Distributor Name" value={form.distributorUserId} onChange={(v) => setField("distributorUserId", v)} options={distributorsForTerritory.map((u) => ({ value: u._id, label: u.businessName || u.fullName }))} /> : null}
-                  {saleMode === "subDistributor" ? <>
-                    <Input label="Sub-Distributor Name" value={form.subDistributorName} onChange={(v) => setField("subDistributorName", v)} />
-                    <Input label="Business Type" value={form.businessType} onChange={(v) => setField("businessType", v)} />
-                    <Input label="Business Name" value={form.businessName} onChange={(v) => setField("businessName", v)} />
-                  </> : null}
-                  <Input label="Address" value={form.address} onChange={(v) => setField("address", v)} />
-                </> : null}
-              </> : null}
+              {selectedCard === "SALE_STOCK" ? (
+                <>
+                  <div className="md:col-span-2 flex gap-2">
+                    {saleModes.map((m) => (
+                      <button
+                        key={m.key}
+                        type="button"
+                        onClick={() => setSaleMode(m.key)}
+                        className={`rounded border px-2 py-1 text-xs ${saleMode === m.key ? "bg-emerald-50 border-emerald-300" : ""}`}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                  <Select
+                    label="From (Warehouse)"
+                    value={form.warehouseId}
+                    onChange={(v) => setField("warehouseId", v)}
+                    options={warehouses.map((w) => ({ value: w._id, label: w.name }))}
+                  />
+                  {saleMode === "brand" ? (
+                    <>
+                      <Select
+                        label="Business Type"
+                        value={form.businessType}
+                        onChange={(v) => setField("businessType", v)}
+                        options={businessTypes.map((x) => ({ value: x, label: x }))}
+                      />
+                      <Select
+                        label="Business Name"
+                        value={form.businessUserId}
+                        onChange={(v) => setField("businessUserId", v)}
+                        options={brandBusinessUsers.map((u) => ({ value: u._id, label: u.businessName || u.fullName }))}
+                      />
+                      <Input label="Address" value={form.address} onChange={(v) => setField("address", v)} />
+                    </>
+                  ) : null}
+                  {saleMode !== "brand" ? (
+                    <>
+                      <Select
+                        label="Region"
+                        value={form.regionId}
+                        onChange={(v) => setField("regionId", v)}
+                        options={regions.map((r) => ({ value: r._id, label: r.name }))}
+                      />
+                      <Select
+                        label="Zone"
+                        value={form.zoneId}
+                        onChange={(v) => setField("zoneId", v)}
+                        options={zonesForRegion.map((z) => ({ value: z._id, label: z.name }))}
+                      />
+                      <Select
+                        label="Territory"
+                        value={form.territoryName}
+                        onChange={(v) => setField("territoryName", v)}
+                        options={territoriesForZone.map((t) => ({ value: t, label: t }))}
+                      />
+                      {saleMode === "distributor" ? (
+                        <Select
+                          label="Distributor Name"
+                          value={form.distributorUserId}
+                          onChange={(v) => setField("distributorUserId", v)}
+                          options={distributorsForTerritory.map((u) => ({ value: u._id, label: u.businessName || u.fullName }))}
+                        />
+                      ) : null}
+                      {saleMode === "subDistributor" ? (
+                        <>
+                          <Input label="Sub-Distributor Name" value={form.subDistributorName} onChange={(v) => setField("subDistributorName", v)} />
+                          <Input label="Business Type" value={form.businessType} onChange={(v) => setField("businessType", v)} />
+                          <Input label="Business Name" value={form.businessName} onChange={(v) => setField("businessName", v)} />
+                        </>
+                      ) : null}
+                      <Input label="Address" value={form.address} onChange={(v) => setField("address", v)} />
+                    </>
+                  ) : null}
+                </>
+              ) : null}
 
-              {selectedCard === "DAMAGE_STOCK" ? <Select label="Warehouse" value={form.warehouseId} onChange={(v) => setField("warehouseId", v)} options={warehouses.map((w) => ({ value: w._id, label: w.name }))} /> : null}
-              {["RETURN_STOCK", "RETURN_TO_SD"].includes(selectedCard) ? <Select label="Warehouse" value={form.warehouseId} onChange={(v) => setField("warehouseId", v)} options={warehouses.map((w) => ({ value: w._id, label: w.name }))} /> : null}
+              {selectedCard === "DAMAGE_STOCK" ? (
+                <Select
+                  label="Warehouse"
+                  value={form.warehouseId}
+                  onChange={(v) => setField("warehouseId", v)}
+                  options={warehouses.map((w) => ({ value: w._id, label: w.name }))}
+                />
+              ) : null}
+
+              {["RETURN_STOCK", "RETURN_TO_SD"].includes(selectedCard) ? (
+                <Select
+                  label="Warehouse"
+                  value={form.warehouseId}
+                  onChange={(v) => setField("warehouseId", v)}
+                  options={warehouses.map((w) => ({ value: w._id, label: w.name }))}
+                />
+              ) : null}
 
               <Input label="Adjustment" type="number" value={form.adjustment} onChange={(v) => setField("adjustment", v)} />
 
               <div className="md:col-span-2">
                 <div className="font-semibold text-sm mb-2">Product Detail</div>
-                {form.items.map((item, i) => {
-                  const product = products.find((p) => p._id === item.productId);
-                  return (
-                    <div key={i} className="grid md:grid-cols-7 gap-2 border rounded-lg p-2 mb-2">
-                      <Select label="Product Name" value={item.productId} onChange={(v) => setItem(i, "productId", v)} options={products.map((p) => ({ value: p._id, label: p.name }))} />
-                      {selectedCard === "DAMAGE_STOCK" ? <>
-                        <Input label="Size" value={product?.size || ""} onChange={() => {}} readOnly />
-                        <Input label="Quantity" type="number" value={item.quantity} onChange={(v) => setItem(i, "quantity", v)} />
-                        <Input label="Manufacture Date" type="date" value={item.manufactureDate} onChange={(v) => setItem(i, "manufactureDate", v)} />
-                        <Input label="Expiry Date" type="date" value={item.expiryDate} onChange={(v) => setItem(i, "expiryDate", v)} />
-                        <div />
-                      </> : <>
-                        <Input label="Carton Size" value={item.cartonSize} onChange={(v) => setItem(i, "cartonSize", v)} />
-                        <Input label="1 Pack Price" type="number" value={item.onePackPrice} onChange={(v) => setItem(i, "onePackPrice", v)} />
-                        <Input label="1 Carton Price" type="number" value={item.oneCartonPrice} onChange={(v) => setItem(i, "oneCartonPrice", v)} />
-                        <Input label="Total Price" type="number" value={item.totalPrice} onChange={(v) => setItem(i, "totalPrice", v)} />
-                        {selectedCard === "PURCHASING_STOCK" ? <Input label="Manufacture Date" type="date" value={item.manufactureDate} onChange={(v) => setItem(i, "manufactureDate", v)} /> : <div />}
-                        {["PURCHASING_STOCK", "DAMAGE_STOCK"].includes(selectedCard) ? <Input label="Expiry Date" type="date" value={item.expiryDate} onChange={(v) => setItem(i, "expiryDate", v)} /> : <div />}
-                      </>}
-                      <button type="button" className="rounded border px-2 py-1 mt-6" onClick={() => removeItem(i)}>Remove</button>
-                    </div>
-                  );
-                })}
-                <button type="button" className="rounded border px-2 py-1" onClick={addItem}>+ Add product</button>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-xs border">
+                    <thead>
+                      <tr className="border-b bg-zinc-50">
+                        <th className="p-2">S.No</th>
+                        <th className="p-2">Product Name</th>
+                        <th className="p-2">Size</th>
+                        <th className="p-2">Qty</th>
+                        <th className="p-2">Rate</th>
+                        <th className="p-2">Gross</th>
+                        <th className="p-2">TO</th>
+                        <th className="p-2">Disc</th>
+                        <th className="p-2">Extra</th>
+                        <th className="p-2">Bons</th>
+                        <th className="p-2">V4GST</th>
+                        <th className="p-2">GST</th>
+                        <th className="p-2">Net Amt</th>
+                        {["PURCHASING_STOCK", "DAMAGE_STOCK"].includes(selectedCard) ? <th className="p-2">MFG Date</th> : null}
+                        {["PURCHASING_STOCK", "DAMAGE_STOCK"].includes(selectedCard) ? <th className="p-2">EXP Date</th> : null}
+                        <th className="p-2">-</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lineRows.map(({ idx, line, product, calc }) => (
+                        <tr key={idx} className="border-b">
+                          <td className="p-1 text-center">{idx + 1}</td>
+                          <td className="p-1 min-w-[180px]"><SelectBare value={line.productId} onChange={(v) => setItem(idx, "productId", v)} options={products.map((p) => ({ value: p._id, label: p.name }))} /></td>
+                          <td className="p-1 min-w-[140px]"><InputBare value={calc.sizeText} readOnly /></td>
+                          <td className="p-1"><InputBare type="number" value={line.qty} onChange={(v) => setItem(idx, "qty", v)} /></td>
+                          <td className="p-1"><InputBare type="number" value={calc.rate} readOnly /></td>
+                          <td className="p-1"><InputBare type="number" value={calc.gross.toFixed(2)} readOnly /></td>
+                          <td className="p-1"><InputBare type="number" value={line.toValue} onChange={(v) => setItem(idx, "toValue", v)} /></td>
+                          <td className="p-1"><InputBare type="number" value={line.discValue || String(product?.discountPer || 0)} onChange={(v) => setItem(idx, "discValue", v)} /></td>
+                          <td className="p-1"><InputBare type="number" value={line.extraValue} onChange={(v) => setItem(idx, "extraValue", v)} /></td>
+                          <td className="p-1"><InputBare type="number" value={line.bonsValue} onChange={(v) => setItem(idx, "bonsValue", v)} /></td>
+                          <td className="p-1"><InputBare type="number" value={calc.v4gst.toFixed(2)} readOnly /></td>
+                          <td className="p-1"><InputBare type="number" value={line.gstPer} onChange={(v) => setItem(idx, "gstPer", v)} /></td>
+                          <td className="p-1"><InputBare type="number" value={calc.netAmt.toFixed(2)} readOnly /></td>
+                          {["PURCHASING_STOCK", "DAMAGE_STOCK"].includes(selectedCard) ? (
+                            <td className="p-1"><InputBare type="date" value={line.manufactureDate} onChange={(v) => setItem(idx, "manufactureDate", v)} /></td>
+                          ) : null}
+                          {["PURCHASING_STOCK", "DAMAGE_STOCK"].includes(selectedCard) ? (
+                            <td className="p-1"><InputBare type="date" value={line.expiryDate} onChange={(v) => setItem(idx, "expiryDate", v)} /></td>
+                          ) : null}
+                          <td className="p-1"><button type="button" className="rounded border px-2 py-1" onClick={() => removeItem(idx)}>X</button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <button type="button" className="mt-2 rounded border px-3 py-1 text-sm" onClick={addItem}>+ Add product</button>
+
+                <div className="grid md:grid-cols-2 gap-4 mt-4 text-sm">
+                  <div className="rounded border p-3 space-y-2">
+                    <div>Total amount: <strong>{totalAmount.toFixed(2)}</strong></div>
+                    <div className="grid grid-cols-3 gap-2 items-center"><span>Extra Disc (%)</span><InputBare type="number" value={form.extraDiscPer} onChange={(v) => setField("extraDiscPer", v)} /><span>{extraDiscAmt.toFixed(2)}</span></div>
+                    <div className="grid grid-cols-3 gap-2 items-center"><span>Adv Tax (%)</span><InputBare type="number" value={form.advTaxPer} onChange={(v) => setField("advTaxPer", v)} /><span>{advTaxAmt.toFixed(2)}</span></div>
+                    <div className="grid grid-cols-3 gap-2 items-center"><span>W.H Tax (%)</span><InputBare type="number" value={form.whTaxPer} onChange={(v) => setField("whTaxPer", v)} /><span>{whTaxAmt.toFixed(2)}</span></div>
+                    <div className="grid grid-cols-3 gap-2 items-center"><span>Expense</span><InputBare type="number" value={form.expense} onChange={(v) => setField("expense", v)} /><span>{toNum(form.expense).toFixed(2)}</span></div>
+                  </div>
+                  <div className="rounded border p-3 text-right">
+                    <div className="text-lg font-semibold">Grand Total: {grandTotal.toFixed(2)}</div>
+                  </div>
+                </div>
               </div>
 
-              <div className="md:col-span-2"><button disabled={saving || loading} className="rounded bg-zinc-900 text-white px-4 py-2">Save</button></div>
+              <div className="md:col-span-2">
+                <button disabled={saving || loading} className="rounded bg-zinc-900 text-white px-4 py-2">{saving ? "Saving..." : "Save"}</button>
+              </div>
             </form>
           </section>
         ) : null}
@@ -344,7 +577,16 @@ export default function WarehouseInventoryModulePage() {
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
             <h3 className="text-lg font-semibold">Near to expire products</h3>
             <div className="overflow-x-auto mt-2">
-              <table className="min-w-full text-sm"><thead><tr className="border-b"><th className="p-2 text-left">Product Name</th><th className="p-2 text-left">Quantity</th><th className="p-2 text-left">Warehouse</th><th className="p-2 text-left">Manufacture date</th><th className="p-2 text-left">Expiry date</th></tr></thead><tbody>{nearExpiry.map((r, idx)=><tr key={idx} className="border-b"><td className="p-2">{r.productName}</td><td className="p-2">{r.quantity}</td><td className="p-2">{r.warehouseName}</td><td className="p-2">{r.manufactureDate?new Date(r.manufactureDate).toLocaleDateString():"-"}</td><td className="p-2">{r.expiryDate?new Date(r.expiryDate).toLocaleDateString():"-"}</td></tr>)}</tbody></table>
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b"><th className="p-2 text-left">Product Name</th><th className="p-2 text-left">Quantity</th><th className="p-2 text-left">Warehouse</th><th className="p-2 text-left">Manufactur date</th><th className="p-2 text-left">expiry date</th></tr>
+                </thead>
+                <tbody>
+                  {nearExpiry.map((r, idx) => (
+                    <tr key={idx} className="border-b"><td className="p-2">{r.productName}</td><td className="p-2">{r.quantity}</td><td className="p-2">{r.warehouseName}</td><td className="p-2">{r.manufactureDate ? new Date(r.manufactureDate).toLocaleDateString() : "-"}</td><td className="p-2">{r.expiryDate ? new Date(r.expiryDate).toLocaleDateString() : "-"}</td></tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </section>
         ) : null}
@@ -415,4 +657,12 @@ function Input({ label, value, onChange, type = "text", readOnly = false }) {
 
 function Select({ label, value, onChange, options }) {
   return <label className="text-sm"><span className="text-zinc-600">{label}</span><select className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" value={value} onChange={(e) => onChange(e.target.value)}><option value="">Select...</option>{options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>;
+}
+
+function InputBare({ value, onChange = () => {}, type = "text", readOnly = false }) {
+  return <input className="w-full border rounded px-2 py-1" type={type} value={value} readOnly={readOnly} onChange={(e) => onChange(e.target.value)} />;
+}
+
+function SelectBare({ value, onChange, options }) {
+  return <select className="w-full border rounded px-2 py-1" value={value} onChange={(e) => onChange(e.target.value)}><option value="">Select</option>{options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>;
 }
