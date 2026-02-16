@@ -21,6 +21,13 @@ const saleModes = [
   { key: "subDistributor", label: "Sale to Sub-Distributor" },
 ];
 
+const saleLedgerFilters = [
+  { key: "all", label: "All" },
+  { key: "brand", label: "To Brand" },
+  { key: "distributor", label: "To Distributor" },
+  { key: "subDistributor", label: "To Sub-Distributor" },
+];
+
 const returnStockModes = [
   { key: "brand", label: "From Brand" },
   { key: "distributor", label: "From Distributor" },
@@ -95,6 +102,7 @@ function uniqById(rows = []) {
 export default function WarehouseInventoryModulePage() {
   const [selectedCard, setSelectedCard] = useState(cards[0].key);
   const [saleMode, setSaleMode] = useState("brand");
+  const [saleLedgerFilter, setSaleLedgerFilter] = useState("all");
   const [returnStockMode, setReturnStockMode] = useState("brand");
   const [products, setProducts] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
@@ -231,21 +239,23 @@ export default function WarehouseInventoryModulePage() {
 
     if (selectedCard !== "SALE_STOCK") return byType;
 
+    if (saleLedgerFilter === "all") return byType;
+
     const saleTargetType = {
       brand: "BRAND",
       distributor: "DISTRIBUTOR",
       subDistributor: "SUB_DISTRIBUTOR",
-    }[saleMode];
+    }[saleLedgerFilter];
 
     return byType.filter((t) => {
       const storedType = String(t.toEntityType || "").trim().toUpperCase();
       if (storedType) return storedType === saleTargetType;
 
-      if (saleMode === "subDistributor") return Boolean(t.subDistributorName);
-      if (saleMode === "distributor") return Boolean(t.distributorName) && !t.subDistributorName;
+      if (saleLedgerFilter === "subDistributor") return Boolean(t.subDistributorName);
+      if (saleLedgerFilter === "distributor") return Boolean(t.distributorName) && !t.subDistributorName;
       return !t.distributorName && !t.subDistributorName;
     });
-  }, [transactions, selectedCard, saleMode, returnStockMode]);
+  }, [transactions, selectedCard, saleLedgerFilter, returnStockMode]);
 
   const lineRows = useMemo(
     () =>
@@ -804,6 +814,20 @@ export default function WarehouseInventoryModulePage() {
         {["PURCHASING_STOCK", "SALE_STOCK", "DAMAGE_STOCK", "RETURN_STOCK", "RETURN_TO_SD"].includes(selectedCard) ? (
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
             <h3 className="text-lg font-semibold">{cards.find((c) => c.key === selectedCard)?.title} Ledger</h3>
+            {selectedCard === "SALE_STOCK" ? (
+              <div className="mt-2 flex gap-2">
+                {saleLedgerFilters.map((f) => (
+                  <button
+                    key={f.key}
+                    type="button"
+                    onClick={() => setSaleLedgerFilter(f.key)}
+                    className={`rounded border px-2 py-1 text-xs ${saleLedgerFilter === f.key ? "bg-emerald-50 border-emerald-300" : ""}`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <LedgerTable type={selectedCard} rows={cardTx} onDelete={deleteRecord} onInvoice={printInvoice} returnStockMode={returnStockMode} />
           </section>
         ) : null}
