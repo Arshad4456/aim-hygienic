@@ -1,12 +1,26 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 export default function UserDashboardShell({ title, subtitle, roleKey, links = [] }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const router = useRouter();
+
+
+
+  function logout() {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("aim_token");
+      localStorage.removeItem("aim_role");
+      localStorage.removeItem("aim_user");
+      document.cookie = "aim_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+      document.cookie = "aim_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    }
+    router.push("/login");
+  }
 
   const filtered = useMemo(() => {
     const value = query.trim().toLowerCase();
@@ -61,6 +75,37 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
           <div className="mt-5 rounded-2xl border bg-zinc-50/70 p-4">
             <div className="text-sm text-zinc-600">Signed in role</div>
             <div className="text-base font-semibold text-zinc-900">{roleKey}</div>
+          </div>
+
+          <div className="mt-4 rounded-2xl border bg-white p-4">
+            <div className="text-sm font-semibold text-zinc-900">Account</div>
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+              <Link href="/dashboards/admin/settings" className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-medium text-zinc-900 hover:border-emerald-300 hover:bg-white">
+                Account Settings
+              </Link>
+              <Link href="/dashboards/admin/settings/change-password" className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-medium text-zinc-900 hover:border-emerald-300 hover:bg-white">
+                Change Password
+              </Link>
+              <button type="button" onClick={logout} className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-left text-sm font-medium text-red-700 hover:bg-red-100">
+                Logout
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-2xl border bg-white p-4">
+            <div className="text-sm font-semibold text-zinc-900">Sidebar / Module Navigation</div>
+            <div className="mt-1 text-xs text-zinc-500">Open modules directly from here.</div>
+            <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+              {links.map((item) => (
+                <Link
+                  key={`nav-${item.href}`}
+                  href={item.href}
+                  className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 hover:border-emerald-300 hover:bg-white"
+                >
+                  {item.title}
+                </Link>
+              ))}
+            </div>
           </div>
         </div>
       </div>
