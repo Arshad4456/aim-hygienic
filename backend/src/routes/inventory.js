@@ -17,6 +17,15 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(num) ? num : fallback;
 }
 
+function buildTransactionCode() {
+  const now = new Date();
+  const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+  const suffix = `${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 1000)
+    .toString()
+    .padStart(3, "0")}`;
+  return `TXN-${ymd}-${suffix}`;
+}
+
 
 function parseCartonSizeLabel(value) {
   const label = toTrimmedString(value).toLowerCase().replace(/\s+/g, "");
@@ -150,14 +159,16 @@ router.post("/transactions", requireAuth, async (req, res) => {
       return res.status(400).json({ ok: false, message: "Each item needs product and quantity" });
     }
 
+    if (!scopeWarehouseId) {
+      return res.status(400).json({ ok: false, message: "Warehouse is required" });
+    }
+
     const subtotal = normalizedItems.reduce((sum, item) => sum + (item.totalPrice || item.totalPacks * item.unitPrice), 0);
     const adjustment = toNumber(body.adjustment, 0);
     const grandTotal = subtotal + adjustment;
 
     const now = new Date();
-    const transactionCode = `TXN-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(
-      now.getDate()
-    ).padStart(2, "0")}-${Date.now().toString().slice(-6)}`;
+    const transactionCode = buildTransactionCode();
 
     const paymentDueDate =
       transactionType === "RETURN_STOCK"
@@ -166,69 +177,82 @@ router.post("/transactions", requireAuth, async (req, res) => {
           ? new Date(body.paymentDueDate)
           : undefined;
 
-    const transaction = await WarehouseTransaction.create({
-      transactionCode,
-      transactionType,
-      transactionAt: body.transactionAt ? new Date(body.transactionAt) : now,
-      fromEntityType: toTrimmedString(body.fromEntityType),
-      fromEntityName: toTrimmedString(body.fromEntityName),
-      toEntityType: toTrimmedString(body.toEntityType),
-      toEntityName: toTrimmedString(body.toEntityName),
-      warehouseId: scopeWarehouseId,
-      warehouseName: scopeWarehouseName,
-      regionId: toTrimmedString(body.regionId),
-      regionName: toTrimmedString(body.regionName),
-      zoneId: toTrimmedString(body.zoneId),
-      zoneName: toTrimmedString(body.zoneName),
-      territory: toTrimmedString(body.territory),
-      fieldId: toTrimmedString(body.fieldId),
-      fieldName: toTrimmedString(body.fieldName),
-      brandId: toTrimmedString(body.brandId),
-      brandName: toTrimmedString(body.brandName),
-      distributorId: toTrimmedString(body.distributorId),
-      distributorName: toTrimmedString(body.distributorName),
-      subDistributorId: toTrimmedString(body.subDistributorId),
-      subDistributorName: toTrimmedString(body.subDistributorName),
-      note: toTrimmedString(body.note),
-      paymentDueDate,
-      returnPaymentStatus: transactionType === "RETURN_STOCK" ? "PENDING" : "NOT_APPLICABLE",
-      subtotal,
-      adjustment,
-      grandTotal,
-      items: normalizedItems,
-      createdBy: req.user?.uid,
-    });
-
+    let transaction;
     const movementType = movementTypeForTransaction(transactionType);
     const quantitySign = quantitySignForTransaction(transactionType);
 
-    await Promise.all(
-      normalizedItems.map((item) =>
-        InventoryMovement.create({
-          productId: item.productId,
-          productName: item.productName,
-          warehouseId: scopeWarehouseId,
-          warehouseName: scopeWarehouseName,
-          regionId: toTrimmedString(body.regionId),
-          regionName: toTrimmedString(body.regionName),
-          zoneId: toTrimmedString(body.zoneId),
-          zoneName: toTrimmedString(body.zoneName),
-          areaId: toTrimmedString(body.areaId),
-          areaName: toTrimmedString(body.areaName),
-          movementScope: toTrimmedString(body.movementScope || "warehouse"),
-          quantity: quantitySign * item.totalPacks,
-          movementType,
-          referenceId: transaction.transactionCode,
-          createdBy: req.user?.uid,
-        })
-      )
-    );
+    try {
+      transaction = await WarehouseTransaction.create({
+        transactionCode,
+        transactionType,
+        transactionAt: body.transactionAt ? new Date(body.transactionAt) : now,
+        fromEntityType: toTrimmedString(body.fromEntityType),
+        fromEntityName: toTrimmedString(body.fromEntityName),
+        toEntityType: toTrimmedString(body.toEntityType),
+        toEntityName: toTrimmedString(body.toEntityName),
+        warehouseId: scopeWarehouseId,
+        warehouseName: scopeWarehouseName,
+        regionId: toTrimmedString(body.regionId),
+        regionName: toTrimmedString(body.regionName),
+        zoneId: toTrimmedString(body.zoneId),
+        zoneName: toTrimmedString(body.zoneName),
+        territory: toTrimmedString(body.territory),
+        fieldId: toTrimmedString(body.fieldId),
+        fieldName: toTrimmedString(body.fieldName),
+        brandId: toTrimmedString(body.brandId),
+        brandName: toTrimmedString(body.brandName),
+        distributorId: toTrimmedString(body.distributorId),
+        distributorName: toTrimmedString(body.distributorName),
+        subDistributorId: toTrimmedString(body.subDistributorId),
+        subDistributorName: toTrimmedString(body.subDistributorName),
+        note: toTrimmedString(body.note),
+        paymentDueDate,
+        returnPaymentStatus: transactionType === "RETURN_STOCK" ? "PENDING" : "NOT_APPLICABLE",
+        subtotal,
+        adjustment,
+        grandTotal,
+        items: normalizedItems,
+        createdBy: req.user?.uid,
+      });
+
+      await Promise.all(
+        normalizedItems.map((item) =>
+          InventoryMovement.create({
+            productId: item.productId,
+            productName: item.productName,
+            warehouseId: scopeWarehouseId,
+            warehouseName: scopeWarehouseName,
+            regionId: toTrimmedString(body.regionId),
+            regionName: toTrimmedString(body.regionName),
+            zoneId: toTrimmedString(body.zoneId),
+            zoneName: toTrimmedString(body.zoneName),
+            areaId: toTrimmedString(body.areaId),
+            areaName: toTrimmedString(body.areaName),
+            movementScope: toTrimmedString(body.movementScope || "warehouse"),
+            quantity: quantitySign * item.totalPacks,
+            movementType,
+            referenceId: transaction.transactionCode,
+            createdBy: req.user?.uid,
+          })
+        )
+      );
+    } catch (persistError) {
+      if (transaction?._id) {
+        await InventoryMovement.deleteMany({ referenceId: transaction.transactionCode });
+        await WarehouseTransaction.findByIdAndDelete(transaction._id);
+      }
+      throw persistError;
+    }
 
     const productBalances = await calculateProductBalanceMap(
       scopeWarehouseId,
       normalizedItems.map((item) => item.productId)
     );
-    await createLowStockMessageIfRequired(transaction, productBalances, req.user?.uid);
+    try {
+      await createLowStockMessageIfRequired(transaction, productBalances, req.user?.uid);
+    } catch (alertError) {
+      console.error("Failed to create low stock alert", alertError);
+    }
 
     return res.status(201).json({ ok: true, transaction, productBalances });
   } catch (e) {

@@ -64,6 +64,10 @@ async function fetchJson(url, { method, body, headers, credentials }) {
   return data;
 }
 
+function isNetworkError(error) {
+  return /Failed to fetch|NetworkError|Could not reach the API server/i.test(error?.message || "");
+}
+
 export async function apiFetch(path, { method = "GET", body, token, credentials } = {}) {
   const t = token || (typeof window !== "undefined" ? localStorage.getItem("aim_token") : null);
   const headers = {
@@ -73,16 +77,21 @@ export async function apiFetch(path, { method = "GET", body, token, credentials 
 
   const candidates = resolveApiCandidates();
   let lastError = null;
+  const normalizedMethod = String(method || "GET").toUpperCase();
+  const canRetryAcrossBases = ["GET", "HEAD", "OPTIONS"].includes(normalizedMethod);
 
   for (const baseUrl of candidates) {
     try {
       return await fetchJson(`${baseUrl}${path}`, { method, body, headers, credentials });
     } catch (error) {
       lastError = error;
+      if (!canRetryAcrossBases || !isNetworkError(error)) {
+        throw error;
+      }
     }
   }
 
-  if (lastError && !/Failed to fetch|NetworkError/i.test(lastError.message || "")) {
+  if (lastError && !isNetworkError(lastError)) {
     throw lastError;
   }
 
