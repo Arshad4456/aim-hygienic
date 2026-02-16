@@ -21,6 +21,11 @@ const saleModes = [
   { key: "subDistributor", label: "Sale to Sub-Distributor" },
 ];
 
+const returnStockModes = [
+  { key: "brand", label: "From Brand" },
+  { key: "distributor", label: "From Distributor" },
+];
+
 const emptyLine = {
   productId: "",
   qty: "",
@@ -90,11 +95,13 @@ function uniqById(rows = []) {
 export default function WarehouseInventoryModulePage() {
   const [selectedCard, setSelectedCard] = useState(cards[0].key);
   const [saleMode, setSaleMode] = useState("brand");
+  const [returnStockMode, setReturnStockMode] = useState("brand");
   const [products, setProducts] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [users, setUsers] = useState([]);
   const [regions, setRegions] = useState([]);
   const [zones, setZones] = useState([]);
+  const [fields, setFields] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [transfers, setTransfers] = useState([]);
   const [summary, setSummary] = useState([]);
@@ -118,7 +125,6 @@ export default function WarehouseInventoryModulePage() {
     distributorUserId: "",
     subDistributorName: "",
     address: "",
-    adjustment: "0",
     extraDiscPer: "0",
     advTaxPer: "0",
     whTaxPer: "0",
@@ -133,6 +139,7 @@ export default function WarehouseInventoryModulePage() {
       apiFetch("/users"),
       apiFetch("/regions"),
       apiFetch("/zones"),
+      apiFetch("/fields?limit=500"),
       apiFetch("/inventory/transactions"),
       apiFetch("/inventory/transfers"),
       apiFetch("/inventory/summary"),
@@ -140,7 +147,7 @@ export default function WarehouseInventoryModulePage() {
       apiFetch("/inventory/near-expiry-products"),
     ]);
 
-    const [productsRes, warehousesRes, usersRes, regionsRes, zonesRes, txRes, transfersRes, summaryRes, lowStockRes, nearRes] =
+    const [productsRes, warehousesRes, usersRes, regionsRes, zonesRes, fieldsRes, txRes, transfersRes, summaryRes, lowStockRes, nearRes] =
       result.map((entry) => (entry.status === "fulfilled" ? entry.value : null));
 
     if (productsRes) setProducts(productsRes.products || []);
@@ -148,6 +155,7 @@ export default function WarehouseInventoryModulePage() {
     if (usersRes) setUsers(usersRes.users || []);
     if (regionsRes) setRegions(regionsRes.regions || []);
     if (zonesRes) setZones(zonesRes.zones || []);
+    if (fieldsRes) setFields(fieldsRes.fields || []);
     if (txRes) setTransactions(uniqById(txRes.transactions || []));
     if (transfersRes) setTransfers(transfersRes.transfers || []);
     if (summaryRes) setSummary(summaryRes.summary || []);
@@ -188,6 +196,18 @@ export default function WarehouseInventoryModulePage() {
       ),
     ];
   }, [zones, users, form.zoneId]);
+  const fieldsForTerritory = useMemo(() => {
+    return fields.filter((f) => {
+      const regionMatch = !form.regionId || f.regionId === (regions.find((r) => r._id === form.regionId)?.regionId || "");
+      const zoneMatch = !form.zoneId || f.zoneId === (zones.find((z) => z._id === form.zoneId)?.zoneId || "");
+      const territoryMatch =
+        !form.territoryName ||
+        f.territoryName === form.territoryName ||
+        f.areaName === form.territoryName;
+      return regionMatch && zoneMatch && territoryMatch;
+    });
+  }, [fields, form.regionId, form.zoneId, form.territoryName, regions, zones]);
+
   const distributorsForTerritory = useMemo(
     () => distributors.filter((d) => !form.territoryName || d.territoryName === form.territoryName),
     [distributors, form.territoryName],
@@ -200,6 +220,15 @@ export default function WarehouseInventoryModulePage() {
   const cardTx = useMemo(() => {
     if (["W2W_TRANSFER", "STOCK_SUMMARY", "LOW_STOCK"].includes(selectedCard)) return [];
     const byType = transactions.filter((t) => t.transactionType === selectedCard);
+    if (selectedCard === "RETURN_STOCK") {
+      const returnSourceType = returnStockMode === "brand" ? "BRAND" : "DISTRIBUTOR";
+      return byType.filter((t) => {
+        const storedType = String(t.fromEntityType || "").trim().toUpperCase();
+        if (storedType) return storedType === returnSourceType;
+        return returnStockMode === "brand" ? !t.distributorName : Boolean(t.distributorName);
+      });
+    }
+
     if (selectedCard !== "SALE_STOCK") return byType;
 
     const saleTargetType = {
@@ -216,7 +245,7 @@ export default function WarehouseInventoryModulePage() {
       if (saleMode === "distributor") return Boolean(t.distributorName) && !t.subDistributorName;
       return !t.distributorName && !t.subDistributorName;
     });
-  }, [transactions, selectedCard, saleMode]);
+  }, [transactions, selectedCard, saleMode, returnStockMode]);
 
   const lineRows = useMemo(
     () =>
@@ -232,7 +261,7 @@ export default function WarehouseInventoryModulePage() {
   const advTaxAmt = useMemo(() => (totalAmount * toNum(form.advTaxPer)) / 100, [totalAmount, form.advTaxPer]);
   const whTaxAmt = useMemo(() => (totalAmount * toNum(form.whTaxPer)) / 100, [totalAmount, form.whTaxPer]);
   const grandTotal = useMemo(
-    () => totalAmount - extraDiscAmt + advTaxAmt + whTaxAmt - toNum(form.expense),
+    () => totalAmount - extraDiscAmt + advTaxAmt + whTaxAmt + toNum(form.expense),
     [totalAmount, extraDiscAmt, advTaxAmt, whTaxAmt, form.expense],
   );
 
@@ -290,13 +319,13 @@ export default function WarehouseInventoryModulePage() {
       const region = regions.find((r) => r._id === form.regionId);
       const zone = zones.find((z) => z._id === form.zoneId);
 
-      const movementWarehouse = selectedCard === "PURCHASING_STOCK" ? toWarehouse : fromWarehouse;
+      const movementWarehouse = ["PURCHASING_STOCK", "RETURN_STOCK"].includes(selectedCard) ? toWarehouse : fromWarehouse;
 
       const body = {
         transactionType: selectedCard,
         warehouseId: movementWarehouse?.warehouseId || "",
         warehouseName: movementWarehouse?.name || "",
-        adjustment: Number(form.adjustment || 0),
+        adjustment: 0,
         extraDiscPer: Number(form.extraDiscPer || 0),
         advTaxPer: Number(form.advTaxPer || 0),
         whTaxPer: Number(form.whTaxPer || 0),
@@ -342,9 +371,32 @@ export default function WarehouseInventoryModulePage() {
         }
       }
 
+      if (selectedCard === "RETURN_STOCK") {
+        body.toEntityName = toWarehouse?.name || "";
+        body.warehouseId = toWarehouse?.warehouseId || "";
+        body.warehouseName = toWarehouse?.name || "";
+        body.regionId = region?.regionId || "";
+        body.regionName = region?.name || "";
+        body.zoneId = zone?.zoneId || "";
+        body.zoneName = zone?.name || "";
+        body.territory = form.territoryName;
+        body.note = form.address;
+        if (returnStockMode === "distributor") {
+          body.fromEntityType = "DISTRIBUTOR";
+          body.distributorName = selectedDist?.businessName || selectedDist?.fullName || "";
+          body.fromEntityName = body.distributorName;
+        } else {
+          body.fromEntityType = "BRAND";
+          body.fieldId = form.fieldId;
+          body.fieldName = fieldsForTerritory.find((f) => f._id === form.fieldId)?.name || "";
+          body.brandName = selectedBrand?.businessName || selectedBrand?.fullName || form.businessName;
+          body.fromEntityName = body.brandName;
+        }
+      }
+
       await apiFetch("/inventory/transactions", { method: "POST", body });
       setOk("✅ Saved.");
-      setForm((s) => ({ ...s, adjustment: "0", items: [{ ...emptyLine }], extraDiscPer: "0", advTaxPer: "0", whTaxPer: "0", expense: "0" }));
+      setForm((s) => ({ ...s, items: [{ ...emptyLine }], extraDiscPer: "0", advTaxPer: "0", whTaxPer: "0", expense: "0" }));
       await loadAll();
     } catch (e2) {
       setErr(e2.message || "Failed to save");
@@ -374,7 +426,11 @@ export default function WarehouseInventoryModulePage() {
     }, 0);
     const totalAmount = toNum(txn.subtotal || lineTotal);
     const extraDiscPer = toNum(txn.extraDiscPer);
-    const heading = txn.transactionType === "DAMAGE_STOCK" ? "Damage Stock" : "Sales Tax Invoice";
+    const heading = txn.transactionType === "DAMAGE_STOCK"
+      ? "Damage Stock"
+      : txn.transactionType === "RETURN_STOCK"
+        ? "Return Stock"
+        : "Sales Tax Invoice";
     const rawNote = String(txn.note || "").trim();
     const extractedAddress = (rawNote.match(/Address\s*:\s*(.*)$/i)?.[1] || rawNote).trim();
     const advTaxPer = toNum(txn.advTaxPer);
@@ -560,7 +616,86 @@ export default function WarehouseInventoryModulePage() {
                 />
               ) : null}
 
-              {["RETURN_STOCK", "RETURN_TO_SD"].includes(selectedCard) ? (
+              {selectedCard === "RETURN_STOCK" ? (
+                <>
+                  <div className="md:col-span-2 flex gap-2">
+                    {returnStockModes.map((m) => (
+                      <button
+                        key={m.key}
+                        type="button"
+                        onClick={() => setReturnStockMode(m.key)}
+                        className={`rounded border px-2 py-1 text-xs ${returnStockMode === m.key ? "bg-emerald-50 border-emerald-300" : ""}`}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="text-sm font-semibold">From</div>
+                  <div className="text-sm font-semibold">To</div>
+
+                  <Select
+                    label="Region"
+                    value={form.regionId}
+                    onChange={(v) => setField("regionId", v)}
+                    options={regions.map((r) => ({ value: r._id, label: r.name }))}
+                  />
+                  <Select
+                    label="Warehouse"
+                    value={form.toWarehouseId}
+                    onChange={(v) => setField("toWarehouseId", v)}
+                    options={warehouses.map((w) => ({ value: w._id, label: w.name }))}
+                  />
+
+                  <Select
+                    label="Zone"
+                    value={form.zoneId}
+                    onChange={(v) => setField("zoneId", v)}
+                    options={zonesForRegion.map((z) => ({ value: z._id, label: z.name }))}
+                  />
+                  <div />
+
+                  <Select
+                    label="Territory"
+                    value={form.territoryName}
+                    onChange={(v) => setField("territoryName", v)}
+                    options={territoriesForZone.map((t) => ({ value: t, label: t }))}
+                  />
+                  <div />
+
+                  {returnStockMode === "distributor" ? (
+                    <Select
+                      label="Distributor Name"
+                      value={form.distributorUserId}
+                      onChange={(v) => setField("distributorUserId", v)}
+                      options={distributorsForTerritory.map((u) => ({ value: u._id, label: u.businessName || u.fullName }))}
+                    />
+                  ) : (
+                    <>
+                      <Select
+                        label="Field Name"
+                        value={form.fieldId || ""}
+                        onChange={(v) => setField("fieldId", v)}
+                        options={fieldsForTerritory.map((f) => ({ value: f._id, label: f.name }))}
+                      />
+                      <Select
+                        label="Bussiness Type"
+                        value={form.businessType}
+                        onChange={(v) => setField("businessType", v)}
+                        options={businessTypes.map((x) => ({ value: x, label: x }))}
+                      />
+                      <Select
+                        label="Bussiness Name"
+                        value={form.businessUserId}
+                        onChange={(v) => setField("businessUserId", v)}
+                        options={brandBusinessUsers.map((u) => ({ value: u._id, label: u.businessName || u.fullName }))}
+                      />
+                    </>
+                  )}
+                </>
+              ) : null}
+
+              {selectedCard === "RETURN_TO_SD" ? (
                 <Select
                   label="Warehouse"
                   value={form.warehouseId}
@@ -568,8 +703,6 @@ export default function WarehouseInventoryModulePage() {
                   options={warehouses.map((w) => ({ value: w._id, label: w.name }))}
                 />
               ) : null}
-
-              <Input label="Adjustment" type="number" value={form.adjustment} onChange={(v) => setField("adjustment", v)} />
 
               <div className="md:col-span-2">
                 <div className="font-semibold text-sm mb-2">Product Detail</div>
@@ -671,7 +804,7 @@ export default function WarehouseInventoryModulePage() {
         {["PURCHASING_STOCK", "SALE_STOCK", "DAMAGE_STOCK", "RETURN_STOCK", "RETURN_TO_SD"].includes(selectedCard) ? (
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
             <h3 className="text-lg font-semibold">{cards.find((c) => c.key === selectedCard)?.title} Ledger</h3>
-            <LedgerTable type={selectedCard} rows={cardTx} onDelete={deleteRecord} onInvoice={printInvoice} />
+            <LedgerTable type={selectedCard} rows={cardTx} onDelete={deleteRecord} onInvoice={printInvoice} returnStockMode={returnStockMode} />
           </section>
         ) : null}
       </div>
@@ -679,17 +812,18 @@ export default function WarehouseInventoryModulePage() {
   );
 }
 
-function LedgerTable({ type, rows, onDelete, onInvoice }) {
+function LedgerTable({ type, rows, onDelete, onInvoice, returnStockMode }) {
   const purchase = type === "PURCHASING_STOCK";
   const sale = type === "SALE_STOCK";
+  const returnStock = type === "RETURN_STOCK";
   return (
     <div className="overflow-x-auto mt-2">
       <table className="min-w-full text-sm">
         <thead>
           {purchase ? (
             <tr className="border-b"><th className="p-2 text-left">Code</th><th className="p-2 text-left">From</th><th className="p-2 text-left">To</th><th className="p-2 text-left">Date and Time</th><th className="p-2 text-left">Grand Total</th><th className="p-2 text-left">Action</th></tr>
-          ) : sale ? (
-            <tr className="border-b"><th className="p-2 text-left">Code</th><th className="p-2 text-left">From</th><th className="p-2 text-left">Distributor Name</th><th className="p-2 text-left">Bussiness Name</th><th className="p-2 text-left">Date and Time</th><th className="p-2 text-left">Grand Total</th><th className="p-2 text-left">Action</th></tr>
+          ) : sale || returnStock ? (
+            <tr className="border-b"><th className="p-2 text-left">Code</th><th className="p-2 text-left">From</th><th className="p-2 text-left">Distributor Name</th><th className="p-2 text-left">Bussiness Name</th><th className="p-2 text-left">Date and Time</th><th className="p-2 text-left">Action</th></tr>
           ) : (
             <tr className="border-b"><th className="p-2 text-left">Code</th><th className="p-2 text-left">Date and Time</th><th className="p-2 text-left">Grand Total</th><th className="p-2 text-left">Action</th></tr>
           )}
@@ -700,8 +834,8 @@ function LedgerTable({ type, rows, onDelete, onInvoice }) {
               <td className="p-2">{r.transactionCode}</td>
               {purchase ? <><td className="p-2">{r.fromEntityName || "-"}</td><td className="p-2">{r.toEntityName || "-"}</td></> : null}
               {sale ? <><td className="p-2">{r.fromEntityName || "-"}</td><td className="p-2">{r.distributorName || "-"}</td><td className="p-2">{r.brandName || r.toEntityName || "-"}</td></> : null}
+              {returnStock ? <><td className="p-2">{r.fromEntityName || "-"}</td><td className="p-2">{returnStockMode === "distributor" ? (r.distributorName || r.fromEntityName || "-") : "-"}</td><td className="p-2">{returnStockMode === "brand" ? (r.brandName || r.fromEntityName || "-") : "-"}</td></> : null}
               <td className="p-2">{new Date(r.transactionAt).toLocaleString()}</td>
-              <td className="p-2">{Number(r.grandTotal || 0).toFixed(2)}</td>
               <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" onClick={() => onInvoice(r)}>Invoice/Receipt</button><button className="rounded border border-red-300 text-red-700 px-2 py-1" onClick={() => onDelete(r._id)}>Delete</button></div></td>
             </tr>
           ))}
