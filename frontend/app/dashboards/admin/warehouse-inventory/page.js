@@ -281,6 +281,10 @@ export default function WarehouseInventoryModulePage() {
         warehouseId: movementWarehouse?.warehouseId || "",
         warehouseName: movementWarehouse?.name || "",
         adjustment: Number(form.adjustment || 0),
+        extraDiscPer: Number(form.extraDiscPer || 0),
+        advTaxPer: Number(form.advTaxPer || 0),
+        whTaxPer: Number(form.whTaxPer || 0),
+        expense: Number(form.expense || 0),
         items: normalizedItems,
         subtotal: totalAmount,
         grandTotal,
@@ -349,7 +353,7 @@ export default function WarehouseInventoryModulePage() {
       const parts = Object.fromEntries(String(i.notes || "").split(",").map((seg) => seg.split(":")));
       return sum + toNum(parts.net || i.totalPrice);
     }, 0);
-    const totalAmount = lineTotal;
+    const totalAmount = toNum(txn.subtotal || lineTotal);
     const extraDiscPer = toNum(txn.extraDiscPer);
     const advTaxPer = toNum(txn.advTaxPer);
     const whTaxPer = toNum(txn.whTaxPer);
@@ -379,10 +383,10 @@ export default function WarehouseInventoryModulePage() {
         <div style="margin-top:12px; font-size:12px; display:flex; justify-content:flex-end;">
           <div style="min-width:280px;">
             <div style="display:flex; justify-content:space-between;"><span>Total Amount:</span><strong>${totalAmount.toFixed(2)}</strong></div>
-            <div style="display:flex; justify-content:space-between;"><span>Extra Disc (${extraDiscPer}%):</span><span>- ${extraDiscAmt.toFixed(2)}</span></div>
-            <div style="display:flex; justify-content:space-between;"><span>Adv Tax (${advTaxPer}%):</span><span>+ ${advTaxAmt.toFixed(2)}</span></div>
-            <div style="display:flex; justify-content:space-between;"><span>W.H Tax (${whTaxPer}%):</span><span>+ ${whTaxAmt.toFixed(2)}</span></div>
-            <div style="display:flex; justify-content:space-between;"><span>Expense:</span><span>+ ${expense.toFixed(2)}</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>Extra Disc (${extraDiscPer}%):</span><span>${extraDiscAmt.toFixed(2)}</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>Adv Tax (${advTaxPer}%):</span><span>${advTaxAmt.toFixed(2)}</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>W.H Tax (${whTaxPer}%):</span><span>${whTaxAmt.toFixed(2)}</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>Expense:</span><span>${expense.toFixed(2)}</span></div>
             <div style="display:flex; justify-content:space-between; margin-top:4px; border-top:1px solid #ccc; padding-top:4px;"><span><strong>Grand Total:</strong></span><strong>${calculatedGrandTotal.toFixed(2)}</strong></div>
           </div>
         </div>
