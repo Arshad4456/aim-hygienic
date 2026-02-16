@@ -16,6 +16,7 @@ const WarehouseTransactionItemSchema = new mongoose.Schema(
     unitPrice: { type: Number, default: 0 },
     manufactureDate: { type: Date },
     expiryDate: { type: Date },
+    returnDate: { type: Date },
     notes: { type: String, trim: true },
   },
   { _id: false }
