@@ -254,9 +254,10 @@ export default function WarehouseInventoryModulePage() {
     if (["W2W_TRANSFER", "STOCK_SUMMARY", "LOW_STOCK", "INVENTORY_LEDGER"].includes(selectedCard)) return [];
     const byType = transactions.filter((t) => t.transactionType === selectedCard);
     if (selectedCard === "RETURN_STOCK") {
-      if (returnStockLedgerFilter === "all") return byType;
+      const processed = byType.filter((t) => String(t.requestStatus || "APPROVED").toUpperCase() !== "PENDING");
+      if (returnStockLedgerFilter === "all") return processed;
       const returnSourceType = returnStockLedgerFilter === "brand" ? "BRAND" : "DISTRIBUTOR";
-      return byType.filter((t) => {
+      return processed.filter((t) => {
         const storedType = String(t.fromEntityType || "").trim().toUpperCase();
         if (storedType) return storedType === returnSourceType;
         return returnStockLedgerFilter === "brand" ? !t.distributorName : Boolean(t.distributorName);
@@ -282,6 +283,15 @@ export default function WarehouseInventoryModulePage() {
       return !t.distributorName && !t.subDistributorName;
     });
   }, [transactions, selectedCard, saleLedgerFilter, returnStockLedgerFilter]);
+
+  const returnStockRequests = useMemo(
+    () =>
+      transactions
+        .filter((t) => t.transactionType === "RETURN_STOCK")
+        .filter((t) => ["Brand Manager", "Distributor"].includes(String(t.requestSourceRole || "")))
+        .sort((a, b) => new Date(b.transactionAt).getTime() - new Date(a.transactionAt).getTime()),
+    [transactions],
+  );
 
   const filteredSummary = useMemo(() => {
     if (!summaryWarehouseFilter) return summary;
@@ -684,6 +694,25 @@ export default function WarehouseInventoryModulePage() {
     win.document.write(html);
     win.document.close();
     win.print();
+  }
+
+  async function markRequestRead(id) {
+    try {
+      await apiFetch(`/inventory/transactions/${id}/mark-read`, { method: "PUT", body: {} });
+      await loadAll();
+    } catch (e) {
+      toast.error(e.message || "Failed to open request");
+    }
+  }
+
+  async function updateReturnRequestStatus(id, status) {
+    try {
+      await apiFetch(`/inventory/transactions/${id}/request-status`, { method: "PUT", body: { status } });
+      toast.success(`Request ${String(status || "").toLowerCase()} successfully.`);
+      await loadAll();
+    } catch (e) {
+      toast.error(e.message || "Failed to update request status");
+    }
   }
 
   async function deleteRecord(id) {
@@ -1105,6 +1134,18 @@ export default function WarehouseInventoryModulePage() {
           </section>
         ) : null}
 
+        {selectedCard === "RETURN_STOCK" ? (
+          <section className="rounded-2xl border bg-white p-5 shadow-sm">
+            <h3 className="text-lg font-semibold">Requests Return Stocks</h3>
+            <RequestReturnStocksTable
+              rows={returnStockRequests}
+              onOpen={markRequestRead}
+              onApprove={(id) => updateReturnRequestStatus(id, "APPROVED")}
+              onReject={(id) => updateReturnRequestStatus(id, "REJECTED")}
+            />
+          </section>
+        ) : null}
+
         {["PURCHASING_STOCK", "SALE_STOCK", "DAMAGE_STOCK", "RETURN_STOCK"].includes(selectedCard) ? (
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
             <h3 className="text-lg font-semibold">{cards.find((c) => c.key === selectedCard)?.title} Ledger</h3>
@@ -1161,8 +1202,18 @@ function LedgerTable({ type, rows, onDelete, onInvoice }) {
           )}
         </thead>
         <tbody>
-          {rows.map((r) => (
-            <tr key={r._id} className="border-b">
+          {rows.map((r) => {
+            const requestStatus = String(r.requestStatus || "").toUpperCase();
+            const fromRequester = ["Brand Manager", "Distributor"].includes(String(r.requestSourceRole || ""));
+            const rowClass = returnStock && fromRequester
+              ? requestStatus === "REJECTED"
+                ? "border-b bg-red-50"
+                : requestStatus === "APPROVED"
+                  ? "border-b bg-blue-50"
+                  : "border-b"
+              : "border-b";
+            return (
+            <tr key={r._id} className={rowClass}>
               <td className="p-2">{r.transactionCode}</td>
               {purchase ? <><td className="p-2">{r.fromEntityName || "-"}</td><td className="p-2">{r.toEntityName || "-"}</td></> : null}
               {sale ? <><td className="p-2">{r.fromEntityName || "-"}</td><td className="p-2">{r.distributorName || "-"}</td><td className="p-2">{r.brandName || r.toEntityName || "-"}</td></> : null}
@@ -1170,7 +1221,55 @@ function LedgerTable({ type, rows, onDelete, onInvoice }) {
               <td className="p-2">{new Date(r.transactionAt).toLocaleString()}</td>
               <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" onClick={() => onInvoice(r)}>Invoice/Receipt</button><button className="rounded border border-red-300 text-red-700 px-2 py-1" onClick={() => onDelete(r._id)}>Delete</button></div></td>
             </tr>
-          ))}
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function RequestReturnStocksTable({ rows, onOpen, onApprove, onReject }) {
+  return (
+    <div className="overflow-x-auto mt-2">
+      <table className="min-w-full text-sm">
+        <thead>
+          <tr className="border-b">
+            <th className="p-2 text-left">Code</th>
+            <th className="p-2 text-left">From</th>
+            <th className="p-2 text-left">Source</th>
+            <th className="p-2 text-left">Date and Time</th>
+            <th className="p-2 text-left">Status</th>
+            <th className="p-2 text-left">Unread</th>
+            <th className="p-2 text-left">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const status = String(r.requestStatus || "APPROVED").toUpperCase();
+            const unread = !r.requestReadAt;
+            return (
+              <tr key={r._id} className="border-b">
+                <td className="p-2">{r.transactionCode}</td>
+                <td className="p-2">{r.fromEntityName || "-"}</td>
+                <td className="p-2">{r.requestSourceRole || "-"}</td>
+                <td className="p-2">{r.transactionAt ? new Date(r.transactionAt).toLocaleString() : "-"}</td>
+                <td className="p-2">{status}</td>
+                <td className="p-2">{unread ? <span className="rounded bg-amber-100 px-2 py-1 text-xs text-amber-800">Unread</span> : "Read"}</td>
+                <td className="p-2">
+                  <div className="flex gap-2">
+                    <button className="rounded border px-2 py-1" onClick={() => onOpen(r._id)}>Open</button>
+                    {status === "PENDING" ? (
+                      <>
+                        <button className="rounded border border-blue-300 px-2 py-1 text-blue-700" onClick={() => onApprove(r._id)}>Approve</button>
+                        <button className="rounded border border-red-300 px-2 py-1 text-red-700" onClick={() => onReject(r._id)}>Reject</button>
+                      </>
+                    ) : null}
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
