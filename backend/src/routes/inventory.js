@@ -150,6 +150,7 @@ router.post("/transactions", requireAuth, async (req, res) => {
         unitPrice,
         manufactureDate: item.manufactureDate ? new Date(item.manufactureDate) : undefined,
         expiryDate: item.expiryDate ? new Date(item.expiryDate) : undefined,
+        returnDate: item.returnDate ? new Date(item.returnDate) : undefined,
         notes: toTrimmedString(item.notes),
       };
     });
