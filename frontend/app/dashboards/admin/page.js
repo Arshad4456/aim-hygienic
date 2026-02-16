@@ -177,6 +177,18 @@ export default function AdminDashboardPage() {
     [overview],
   );
 
+
+  function logout() {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("aim_token");
+      localStorage.removeItem("aim_role");
+      localStorage.removeItem("aim_user");
+      document.cookie = "aim_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+      document.cookie = "aim_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    }
+    router.push("/login");
+  }
+
   const quickActions = [
     {
       title: "Create Sales Order",
@@ -307,6 +319,22 @@ export default function AdminDashboardPage() {
                 <div className="mt-1 text-xs text-zinc-500">{action.description}</div>
               </Link>
             ))}
+          </div>
+
+          <div className="mt-6">
+            <div className="text-lg font-semibold text-zinc-900">Account</div>
+            <div className="text-sm text-zinc-500">Manage your account and session.</div>
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              <Link href="/dashboards/admin/settings" className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-semibold text-zinc-900 transition hover:border-emerald-300 hover:bg-white">
+                Account Settings
+              </Link>
+              <Link href="/dashboards/admin/settings/change-password" className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-semibold text-zinc-900 transition hover:border-emerald-300 hover:bg-white">
+                Change Password
+              </Link>
+              <button type="button" onClick={logout} className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-left text-sm font-semibold text-red-700 transition hover:bg-red-100">
+                Logout
+              </button>
+            </div>
           </div>
         </div>
 
