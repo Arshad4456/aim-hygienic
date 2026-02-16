@@ -62,6 +62,30 @@ function quantitySignForTransaction(transactionType) {
   return outTypes.includes(transactionType) ? -1 : 1;
 }
 
+async function createInventoryMovementsForTransaction(transaction, items = [], userId) {
+  const movementType = movementTypeForTransaction(transaction.transactionType);
+  const quantitySign = quantitySignForTransaction(transaction.transactionType);
+  await Promise.all(
+    items.map((item) =>
+      InventoryMovement.create({
+        productId: item.productId,
+        productName: item.productName,
+        warehouseId: transaction.warehouseId,
+        warehouseName: transaction.warehouseName,
+        regionId: transaction.regionId,
+        regionName: transaction.regionName,
+        zoneId: transaction.zoneId,
+        zoneName: transaction.zoneName,
+        movementScope: "warehouse",
+        quantity: quantitySign * item.totalPacks,
+        movementType,
+        referenceId: transaction.transactionCode,
+        createdBy: userId,
+      })
+    )
+  );
+}
+
 async function createLowStockMessageIfRequired(transaction, productBalances, userId) {
   const lowBalances = productBalances.filter((row) => row.quantity <= (row.minStockLevel || 0));
   if (!lowBalances.length) return;
@@ -127,10 +151,7 @@ router.post("/transactions", requireAuth, async (req, res) => {
       const cartons = Math.max(0, toNumber(item.cartons, parsedSize?.cartonCount || 0));
       const packs = Math.max(0, toNumber(item.packs, 0));
       const packsPerCarton = Math.max(0, toNumber(item.packsPerCarton, parsedSize?.packsPerCarton || 0));
-      const totalPacks = Math.max(
-        0,
-        toNumber(item.totalPacks, parsedSize?.totalPacks || cartons * packsPerCarton + packs)
-      );
+      const totalPacks = Math.max(0, toNumber(item.totalPacks, parsedSize?.totalPacks || cartons * packsPerCarton + packs));
       const onePackPrice = Math.max(0, toNumber(item.onePackPrice, 0));
       const oneCartonPrice = Math.max(0, toNumber(item.oneCartonPrice, 0));
       const totalPrice = Math.max(0, toNumber(item.totalPrice, 0));
@@ -170,6 +191,7 @@ router.post("/transactions", requireAuth, async (req, res) => {
 
     const now = new Date();
     const transactionCode = buildTransactionCode();
+    const isReturnStockRequest = transactionType === "RETURN_STOCK" && req.user?.role !== "admin";
 
     const paymentDueDate =
       transactionType === "RETURN_STOCK"
@@ -179,8 +201,6 @@ router.post("/transactions", requireAuth, async (req, res) => {
           : undefined;
 
     let transaction;
-    const movementType = movementTypeForTransaction(transactionType);
-    const quantitySign = quantitySignForTransaction(transactionType);
 
     try {
       transaction = await WarehouseTransaction.create({
@@ -209,6 +229,9 @@ router.post("/transactions", requireAuth, async (req, res) => {
         note: toTrimmedString(body.note),
         paymentDueDate,
         returnPaymentStatus: transactionType === "RETURN_STOCK" ? "PENDING" : "NOT_APPLICABLE",
+        requestStatus: isReturnStockRequest ? "PENDING" : "APPROVED",
+        requestSourceRole: isReturnStockRequest ? req.user?.role : "admin",
+        requestApplied: !isReturnStockRequest,
         subtotal,
         adjustment,
         extraDiscPer: toNumber(body.extraDiscPer, 0),
@@ -220,27 +243,9 @@ router.post("/transactions", requireAuth, async (req, res) => {
         createdBy: req.user?.uid,
       });
 
-      await Promise.all(
-        normalizedItems.map((item) =>
-          InventoryMovement.create({
-            productId: item.productId,
-            productName: item.productName,
-            warehouseId: scopeWarehouseId,
-            warehouseName: scopeWarehouseName,
-            regionId: toTrimmedString(body.regionId),
-            regionName: toTrimmedString(body.regionName),
-            zoneId: toTrimmedString(body.zoneId),
-            zoneName: toTrimmedString(body.zoneName),
-            areaId: toTrimmedString(body.areaId),
-            areaName: toTrimmedString(body.areaName),
-            movementScope: toTrimmedString(body.movementScope || "warehouse"),
-            quantity: quantitySign * item.totalPacks,
-            movementType,
-            referenceId: transaction.transactionCode,
-            createdBy: req.user?.uid,
-          })
-        )
-      );
+      if (!isReturnStockRequest) {
+        await createInventoryMovementsForTransaction(transaction, normalizedItems, req.user?.uid);
+      }
     } catch (persistError) {
       if (transaction?._id) {
         await InventoryMovement.deleteMany({ referenceId: transaction.transactionCode });
@@ -249,14 +254,30 @@ router.post("/transactions", requireAuth, async (req, res) => {
       throw persistError;
     }
 
-    const productBalances = await calculateProductBalanceMap(
-      scopeWarehouseId,
-      normalizedItems.map((item) => item.productId)
-    );
-    try {
-      await createLowStockMessageIfRequired(transaction, productBalances, req.user?.uid);
-    } catch (alertError) {
-      console.error("Failed to create low stock alert", alertError);
+    const productBalances = !isReturnStockRequest
+      ? await calculateProductBalanceMap(scopeWarehouseId, normalizedItems.map((item) => item.productId))
+      : [];
+
+    if (!isReturnStockRequest) {
+      try {
+        await createLowStockMessageIfRequired(transaction, productBalances, req.user?.uid);
+      } catch (alertError) {
+        console.error("Failed to create low stock alert", alertError);
+      }
+    }
+
+    if (isReturnStockRequest) {
+      try {
+        await Message.create({
+          title: "Return Stock Request",
+          body: `${req.user?.role || "User"} submitted return stock request ${transaction.transactionCode}`,
+          senderRole: req.user?.role,
+          recipientRole: "admin",
+          relatedEntity: transaction.transactionCode,
+        });
+      } catch (messageError) {
+        console.error("Failed to notify admin about return stock request", messageError);
+      }
     }
 
     return res.status(201).json({ ok: true, transaction, productBalances });
@@ -271,6 +292,10 @@ router.get("/transactions", requireAuth, async (req, res) => {
     if (req.query.transactionType) query.transactionType = toTrimmedString(req.query.transactionType);
     if (req.query.warehouseId) query.warehouseId = toTrimmedString(req.query.warehouseId);
     if (req.query.distributorId) query.distributorId = toTrimmedString(req.query.distributorId);
+    if (req.query.requestStatus) query.requestStatus = toTrimmedString(req.query.requestStatus).toUpperCase();
+    if (req.user?.role !== "admin") {
+      query.createdBy = req.user?.uid;
+    }
     const transactions = await WarehouseTransaction.find(query).sort({ transactionAt: -1 }).lean();
 
     const withStatus = transactions.map((txn) => {
@@ -282,6 +307,62 @@ router.get("/transactions", requireAuth, async (req, res) => {
     return res.json({ ok: true, transactions: withStatus });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to load transactions" });
+  }
+});
+
+router.put("/transactions/:id/mark-read", requireAuth, requireRole("admin"), async (req, res) => {
+  try {
+    const transaction = await WarehouseTransaction.findByIdAndUpdate(
+      req.params.id,
+      { requestReadAt: new Date() },
+      { new: true }
+    );
+    if (!transaction) return res.status(404).json({ ok: false, message: "Transaction not found" });
+    return res.json({ ok: true, transaction });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to mark request as read" });
+  }
+});
+
+router.put("/transactions/:id/request-status", requireAuth, requireRole("admin"), async (req, res) => {
+  try {
+    const status = toTrimmedString(req.body?.status || "").toUpperCase();
+    if (!["PENDING", "APPROVED", "REJECTED"].includes(status)) {
+      return res.status(400).json({ ok: false, message: "Invalid status" });
+    }
+
+    const transaction = await WarehouseTransaction.findById(req.params.id);
+    if (!transaction) return res.status(404).json({ ok: false, message: "Transaction not found" });
+
+    transaction.requestStatus = status;
+    transaction.requestReadAt = transaction.requestReadAt || new Date();
+    transaction.requestReviewedAt = new Date();
+    transaction.requestReviewedBy = req.user?.uid;
+
+    if (status === "APPROVED" && !transaction.requestApplied) {
+      await createInventoryMovementsForTransaction(transaction, transaction.items || [], req.user?.uid);
+      transaction.requestApplied = true;
+    }
+
+    await transaction.save();
+
+    if (transaction.requestSourceRole && transaction.requestSourceRole !== "admin") {
+      try {
+        await Message.create({
+          title: "Return Stock Request Update",
+          body: `Request ${transaction.transactionCode} is ${status}`,
+          senderRole: "admin",
+          recipientRole: transaction.requestSourceRole,
+          relatedEntity: transaction.transactionCode,
+        });
+      } catch (notifyError) {
+        console.error("Failed to notify requester", notifyError);
+      }
+    }
+
+    return res.json({ ok: true, transaction });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to update request status" });
   }
 });
 
