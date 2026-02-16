@@ -527,14 +527,38 @@ router.post("/transfers", requireAuth, async (req, res) => {
       toWarehouseName: String(body.toWarehouseName || "").trim(),
       quantity: Number(body.quantity || 0),
       status: String(body.status || "pending").trim(),
-      driverId: String(body.driverId || "").trim(),
-      driverName: String(body.driverName || "").trim(),
-      vehicleId: String(body.vehicleId || "").trim(),
-      vehicleName: String(body.vehicleName || "").trim(),
       requestedBy: req.user?.uid,
       note: String(body.note || "").trim(),
     });
     doc.statusHistory = [{ status: doc.status, at: new Date(), by: req.user?.uid }];
+
+    if (doc.status === "completed" && !doc.transferApplied) {
+      await InventoryMovement.create({
+        productId: doc.productId,
+        productName: doc.productName,
+        warehouseId: doc.fromWarehouseId,
+        warehouseName: doc.fromWarehouseName,
+        movementScope: "warehouse",
+        quantity: -Math.abs(Number(doc.quantity || 0)),
+        movementType: "TRANSFER_OUT",
+        referenceId: `TRANSFER-${doc._id}`,
+        createdBy: req.user?.uid,
+      });
+      await InventoryMovement.create({
+        productId: doc.productId,
+        productName: doc.productName,
+        warehouseId: doc.toWarehouseId,
+        warehouseName: doc.toWarehouseName,
+        movementScope: "warehouse",
+        quantity: Math.abs(Number(doc.quantity || 0)),
+        movementType: "TRANSFER_IN",
+        referenceId: `TRANSFER-${doc._id}`,
+        createdBy: req.user?.uid,
+      });
+      doc.transferApplied = true;
+      doc.transferAppliedAt = new Date();
+    }
+
     await doc.save();
     return res.status(201).json({ ok: true, transfer: doc });
   } catch (e) {
@@ -554,17 +578,43 @@ router.get("/transfers", requireAuth, async (req, res) => {
 router.put("/transfers/:id", requireAuth, async (req, res) => {
   try {
     const body = req.body || {};
+    const existing = await StockTransfer.findById(req.params.id);
+    if (!existing) return res.status(404).json({ ok: false, message: "Not found" });
+
     const updatePayload = {
       status: String(body.status || "").trim(),
       note: String(body.note || "").trim(),
-      driverId: String(body.driverId || "").trim(),
-      driverName: String(body.driverName || "").trim(),
-      vehicleId: String(body.vehicleId || "").trim(),
-      vehicleName: String(body.vehicleName || "").trim(),
     };
     if (updatePayload.status === "approved") updatePayload.approvedBy = req.user?.uid;
+
+    if (updatePayload.status === "completed" && !existing.transferApplied) {
+      await InventoryMovement.create({
+        productId: existing.productId,
+        productName: existing.productName,
+        warehouseId: existing.fromWarehouseId,
+        warehouseName: existing.fromWarehouseName,
+        movementScope: "warehouse",
+        quantity: -Math.abs(Number(existing.quantity || 0)),
+        movementType: "TRANSFER_OUT",
+        referenceId: `TRANSFER-${existing._id}`,
+        createdBy: req.user?.uid,
+      });
+      await InventoryMovement.create({
+        productId: existing.productId,
+        productName: existing.productName,
+        warehouseId: existing.toWarehouseId,
+        warehouseName: existing.toWarehouseName,
+        movementScope: "warehouse",
+        quantity: Math.abs(Number(existing.quantity || 0)),
+        movementType: "TRANSFER_IN",
+        referenceId: `TRANSFER-${existing._id}`,
+        createdBy: req.user?.uid,
+      });
+      updatePayload.transferApplied = true;
+      updatePayload.transferAppliedAt = new Date();
+    }
+
     const updated = await StockTransfer.findByIdAndUpdate(req.params.id, updatePayload, { new: true });
-    if (!updated) return res.status(404).json({ ok: false, message: "Not found" });
     if (updatePayload.status) {
       updated.statusHistory = [
         ...(updated.statusHistory || []),
@@ -575,6 +625,17 @@ router.put("/transfers/:id", requireAuth, async (req, res) => {
     return res.json({ ok: true, transfer: updated });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to update transfer" });
+  }
+});
+
+router.delete("/transfers/:id", requireAuth, async (req, res) => {
+  try {
+    const deleted = await StockTransfer.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ ok: false, message: "Not found" });
+    // Intentionally do not rollback applied transfer inventory movements.
+    return res.json({ ok: true, deletedId: req.params.id });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to delete transfer" });
   }
 });
 

@@ -12,11 +12,9 @@ const StockTransferSchema = new mongoose.Schema(
     status: { type: String, enum: ["pending", "approved", "transit-in", "completed"], default: "pending" },
     requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-    driverId: { type: String, trim: true },
-    driverName: { type: String, trim: true },
-    vehicleId: { type: String, trim: true },
-    vehicleName: { type: String, trim: true },
     note: { type: String, trim: true },
+    transferApplied: { type: Boolean, default: false },
+    transferAppliedAt: { type: Date },
     statusHistory: [
       {
         status: { type: String, trim: true },
