@@ -91,6 +91,22 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
               </button>
             </div>
           </div>
+
+          <div className="mt-4 rounded-2xl border bg-white p-4">
+            <div className="text-sm font-semibold text-zinc-900">Sidebar / Module Navigation</div>
+            <div className="mt-1 text-xs text-zinc-500">Open modules directly from here.</div>
+            <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+              {links.map((item) => (
+                <Link
+                  key={`nav-${item.href}`}
+                  href={item.href}
+                  className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 hover:border-emerald-300 hover:bg-white"
+                >
+                  {item.title}
+                </Link>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
