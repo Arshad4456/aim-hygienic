@@ -1,19 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 import AdminShell from "../components/AdminShell";
 import { apiFetch } from "../../../lib/api";
 
 const cards = [
-  { key: "PURCHASING_STOCK", title: "e.1 Purchasing Stock" },
-  { key: "SALE_STOCK", title: "e.2 Sale Stock" },
-  { key: "DAMAGE_STOCK", title: "e.3 Damage Stock" },
-  { key: "RETURN_STOCK", title: "e.4 Return Stock" },
-  { key: "RETURN_TO_SD", title: "e.5 Return to SD" },
-  { key: "W2W_TRANSFER", title: "e.6 Warehouse to Warehouse Transfer" },
-  { key: "STOCK_SUMMARY", title: "e.7 Stock Summary" },
-  { key: "LOW_STOCK", title: "e.8 Low Stock Alert" },
-  { key: "INVENTORY_LEDGER", title: "e.9 Inventory Ledger" },
+  { key: "PURCHASING_STOCK", title: "1 Purchasing Stock" },
+  { key: "SALE_STOCK", title: "2 Sale Stock" },
+  { key: "DAMAGE_STOCK", title: "3 Damage Stock" },
+  { key: "RETURN_STOCK", title: "4 Return Stock" },
+  { key: "W2W_TRANSFER", title: "5 Warehouse to Warehouse Transfer" },
+  { key: "STOCK_SUMMARY", title: "6 Stock Summary" },
+  { key: "LOW_STOCK", title: "7 Low Stock Alert" },
+  { key: "INVENTORY_LEDGER", title: "8 Inventory Ledger" },
 ];
 
 const transferStatuses = ["pending", "approved", "transit-in", "completed"];
@@ -136,8 +137,6 @@ export default function WarehouseInventoryModulePage() {
   const [saving, setSaving] = useState(false);
   const [transferSaving, setTransferSaving] = useState(false);
   const submitLockRef = useRef(false);
-  const [err, setErr] = useState("");
-  const [ok, setOk] = useState("");
   const [form, setForm] = useState({
     warehouseId: "",
     fromEntityName: "",
@@ -203,9 +202,7 @@ export default function WarehouseInventoryModulePage() {
     if (nearRes) setNearExpiry(nearRes.products || []);
 
     if (result.every((entry) => entry.status === "rejected")) {
-      setErr("Failed to load module data");
-    } else {
-      setErr("");
+      toast.error("Failed to load module data");
     }
     setLoading(false);
   }
@@ -378,8 +375,6 @@ export default function WarehouseInventoryModulePage() {
     e.preventDefault();
     if (submitLockRef.current) return;
     submitLockRef.current = true;
-    setErr("");
-    setOk("");
     setSaving(true);
     try {
       const fromWarehouse = warehouses.find((w) => w._id === form.warehouseId);
@@ -465,11 +460,11 @@ export default function WarehouseInventoryModulePage() {
       }
 
       await apiFetch("/inventory/transactions", { method: "POST", body });
-      setOk("✅ Saved.");
+      toast.success("Saved successfully.");
       setForm((s) => ({ ...s, items: [{ ...emptyLine }], extraDiscPer: "0", advTaxPer: "0", whTaxPer: "0", expense: "0" }));
       await loadAll();
     } catch (e2) {
-      setErr(e2.message || "Failed to save");
+      toast.error(e2.message || "Failed to save");
     } finally {
       setSaving(false);
       submitLockRef.current = false;
@@ -478,8 +473,6 @@ export default function WarehouseInventoryModulePage() {
 
   async function submitTransfer(e) {
     e.preventDefault();
-    setErr("");
-    setOk("");
     setTransferSaving(true);
     try {
       const product = products.find((p) => p._id === transferForm.productId);
@@ -515,10 +508,10 @@ export default function WarehouseInventoryModulePage() {
         vehicleId: "",
         vehicleName: "",
       });
-      setOk("✅ Transfer created.");
+      toast.success("Transfer created.");
       await loadAll();
     } catch (e2) {
-      setErr(e2.message || "Failed to create transfer");
+      toast.error(e2.message || "Failed to create transfer");
     } finally {
       setTransferSaving(false);
     }
@@ -596,28 +589,40 @@ export default function WarehouseInventoryModulePage() {
   }
 
   async function deleteRecord(id) {
-    if (!confirm("Delete this record?")) return;
-    await apiFetch(`/inventory/transactions/${id}`, { method: "DELETE" });
-    setTransactions((prev) => prev.filter((r) => r._id !== id));
+    if (!confirm("Delete this record?")) {
+      toast.info("Delete cancelled.");
+      return;
+    }
+    try {
+      await apiFetch(`/inventory/transactions/${id}`, { method: "DELETE" });
+      setTransactions((prev) => prev.filter((r) => r._id !== id));
+      toast.success("Record deleted.");
+    } catch (e) {
+      toast.error(e.message || "Failed to delete record");
+    }
   }
 
   async function updateMinStock(productDbId, value) {
     const product = products.find((p) => p._id === productDbId);
     if (!product) return;
-    await apiFetch(`/products/${productDbId}`, {
-      method: "PUT",
-      body: { ...product, minStockLevel: Number(value || 0) },
-    });
-    await loadAll();
+    try {
+      await apiFetch(`/products/${productDbId}`, {
+        method: "PUT",
+        body: { ...product, minStockLevel: Number(value || 0) },
+      });
+      toast.success("Minimum stock updated.");
+      await loadAll();
+    } catch (e) {
+      toast.error(e.message || "Failed to update minimum stock");
+    }
   }
 
   return (
     <AdminShell title="Warehouse & Inventory" user={null}>
+      <ToastContainer position="top-right" autoClose={2500} />
       <div className="space-y-6">
         <section className="rounded-2xl border bg-white p-5 shadow-sm">
           <h2 className="text-xl font-semibold">Warehouse & Inventory Module</h2>
-          {err ? <div className="mt-2 text-sm text-red-600">{err}</div> : null}
-          {ok ? <div className="mt-2 text-sm text-emerald-600">{ok}</div> : null}
           <div className="grid md:grid-cols-4 gap-2 mt-3">
             {cards.map((c) => (
               <button
@@ -633,7 +638,7 @@ export default function WarehouseInventoryModulePage() {
           </div>
         </section>
 
-        {["PURCHASING_STOCK", "SALE_STOCK", "DAMAGE_STOCK", "RETURN_STOCK", "RETURN_TO_SD"].includes(selectedCard) ? (
+        {["PURCHASING_STOCK", "SALE_STOCK", "DAMAGE_STOCK", "RETURN_STOCK"].includes(selectedCard) ? (
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
             <form onSubmit={submit} className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {selectedCard === "PURCHASING_STOCK" ? (
@@ -812,15 +817,6 @@ export default function WarehouseInventoryModulePage() {
                     </>
                   )}
                 </>
-              ) : null}
-
-              {selectedCard === "RETURN_TO_SD" ? (
-                <Select
-                  label="Warehouse"
-                  value={form.warehouseId}
-                  onChange={(v) => setField("warehouseId", v)}
-                  options={warehouses.map((w) => ({ value: w._id, label: w.name }))}
-                />
               ) : null}
 
               <div className="md:col-span-2">
@@ -1010,7 +1006,7 @@ export default function WarehouseInventoryModulePage() {
           </section>
         ) : null}
 
-        {["PURCHASING_STOCK", "SALE_STOCK", "DAMAGE_STOCK", "RETURN_STOCK", "RETURN_TO_SD"].includes(selectedCard) ? (
+        {["PURCHASING_STOCK", "SALE_STOCK", "DAMAGE_STOCK", "RETURN_STOCK"].includes(selectedCard) ? (
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
             <h3 className="text-lg font-semibold">{cards.find((c) => c.key === selectedCard)?.title} Ledger</h3>
             {selectedCard === "SALE_STOCK" ? (
