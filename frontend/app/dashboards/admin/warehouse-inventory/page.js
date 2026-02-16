@@ -199,8 +199,24 @@ export default function WarehouseInventoryModulePage() {
 
   const cardTx = useMemo(() => {
     if (["W2W_TRANSFER", "STOCK_SUMMARY", "LOW_STOCK"].includes(selectedCard)) return [];
-    return transactions.filter((t) => t.transactionType === selectedCard);
-  }, [transactions, selectedCard]);
+    const byType = transactions.filter((t) => t.transactionType === selectedCard);
+    if (selectedCard !== "SALE_STOCK") return byType;
+
+    const saleTargetType = {
+      brand: "BRAND",
+      distributor: "DISTRIBUTOR",
+      subDistributor: "SUB_DISTRIBUTOR",
+    }[saleMode];
+
+    return byType.filter((t) => {
+      const storedType = String(t.toEntityType || "").trim().toUpperCase();
+      if (storedType) return storedType === saleTargetType;
+
+      if (saleMode === "subDistributor") return Boolean(t.subDistributorName);
+      if (saleMode === "distributor") return Boolean(t.distributorName) && !t.subDistributorName;
+      return !t.distributorName && !t.subDistributorName;
+    });
+  }, [transactions, selectedCard, saleMode]);
 
   const lineRows = useMemo(
     () =>
@@ -298,10 +314,12 @@ export default function WarehouseInventoryModulePage() {
       if (selectedCard === "SALE_STOCK") {
         body.fromEntityName = fromWarehouse?.name || "";
         if (saleMode === "brand") {
+          body.toEntityType = "BRAND";
           body.toEntityName = selectedBrand?.businessName || selectedBrand?.fullName || "";
-          body.note = `Address:${form.address}`;
+          body.note = form.address;
         }
         if (saleMode === "distributor") {
+          body.toEntityType = "DISTRIBUTOR";
           body.regionId = region?.regionId || "";
           body.regionName = region?.name || "";
           body.zoneId = zone?.zoneId || "";
@@ -309,9 +327,10 @@ export default function WarehouseInventoryModulePage() {
           body.territory = form.territoryName;
           body.distributorName = selectedDist?.businessName || selectedDist?.fullName || "";
           body.toEntityName = body.distributorName;
-          body.note = `Address:${form.address}`;
+          body.note = form.address;
         }
         if (saleMode === "subDistributor") {
+          body.toEntityType = "SUB_DISTRIBUTOR";
           body.regionId = region?.regionId || "";
           body.regionName = region?.name || "";
           body.zoneId = zone?.zoneId || "";
@@ -319,7 +338,7 @@ export default function WarehouseInventoryModulePage() {
           body.territory = form.territoryName;
           body.subDistributorName = form.subDistributorName;
           body.toEntityName = form.subDistributorName;
-          body.note = `Business Type:${form.businessType}, Business Name:${form.businessName}, Address:${form.address}`;
+          body.note = form.address;
         }
       }
 
@@ -355,6 +374,9 @@ export default function WarehouseInventoryModulePage() {
     }, 0);
     const totalAmount = toNum(txn.subtotal || lineTotal);
     const extraDiscPer = toNum(txn.extraDiscPer);
+    const heading = txn.transactionType === "DAMAGE_STOCK" ? "Damage Stock" : "Sales Tax Invoice";
+    const rawNote = String(txn.note || "").trim();
+    const extractedAddress = (rawNote.match(/Address\s*:\s*(.*)$/i)?.[1] || rawNote).trim();
     const advTaxPer = toNum(txn.advTaxPer);
     const whTaxPer = toNum(txn.whTaxPer);
     const expense = toNum(txn.expense);
@@ -366,14 +388,14 @@ export default function WarehouseInventoryModulePage() {
     const html = `
       <html>
       <body style="font-family: Arial; padding: 16px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;">${logo}<div style="text-align:right;"><div style="font-size:13px;font-weight:700;">Sales Tax Invoice</div></div></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">${logo}<div style="text-align:right;"><div style="font-size:13px;font-weight:700;">${heading}</div></div></div>
         <div style="margin-top:8px; display:flex; justify-content:space-between; font-size:12px;">
           <div>Date: ${new Date(txn.transactionAt).toLocaleDateString()}</div>
           <div>Invoice #: ${txn.transactionCode}</div>
         </div>
         <div style="margin-top:8px;font-size:12px;">Invoice From: ${txn.fromEntityName || txn.warehouseName || "-"}</div>
         <div style="font-size:12px;">Bill To: ${txn.toEntityName || txn.distributorName || "-"}</div>
-        <div style="font-size:12px;">Address: ${txn.note || "-"}</div>
+        <div style="font-size:12px;">Address: ${extractedAddress || "-"}</div>
         <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; width:100%; margin-top:10px; font-size:12px;">
           <thead><tr><th>#</th><th>Product Name</th><th>Qty</th><th>Rate</th><th>Gross</th><th>TO</th><th>Disc</th><th>Extra</th><th>Bons</th><th>V4GST</th><th>GST</th><th>Net Amt</th></tr></thead>
           <tbody>
