@@ -163,10 +163,6 @@ export default function WarehouseInventoryModulePage() {
     quantity: "",
     status: "pending",
     note: "",
-    driverId: "",
-    driverName: "",
-    vehicleId: "",
-    vehicleName: "",
   });
 
   async function loadAll() {
@@ -478,6 +474,10 @@ export default function WarehouseInventoryModulePage() {
       const product = products.find((p) => p._id === transferForm.productId);
       const fromWarehouse = warehouses.find((w) => w._id === transferForm.fromWarehouseId);
       const toWarehouse = warehouses.find((w) => w._id === transferForm.toWarehouseId);
+      if (!product || !fromWarehouse || !toWarehouse || Number(transferForm.quantity || 0) <= 0 || !String(transferForm.status || "").trim() || !String(transferForm.note || "").trim()) {
+        toast.error("Please fill all transfer fields.");
+        return;
+      }
       await apiFetch("/inventory/transfers", {
         method: "POST",
         body: {
@@ -490,10 +490,6 @@ export default function WarehouseInventoryModulePage() {
           quantity: Number(transferForm.quantity || 0),
           status: transferForm.status,
           note: transferForm.note,
-          driverId: transferForm.driverId,
-          driverName: transferForm.driverName,
-          vehicleId: transferForm.vehicleId,
-          vehicleName: transferForm.vehicleName,
         },
       });
       setTransferForm({
@@ -503,10 +499,6 @@ export default function WarehouseInventoryModulePage() {
         quantity: "",
         status: "pending",
         note: "",
-        driverId: "",
-        driverName: "",
-        vehicleId: "",
-        vehicleName: "",
       });
       toast.success("Transfer created.");
       await loadAll();
@@ -515,6 +507,84 @@ export default function WarehouseInventoryModulePage() {
     } finally {
       setTransferSaving(false);
     }
+  }
+
+  async function updateTransferStatus(transferId, status) {
+    try {
+      await apiFetch(`/inventory/transfers/${transferId}`, {
+        method: "PUT",
+        body: { status },
+      });
+      toast.success("Transfer status updated.");
+      await loadAll();
+    } catch (e) {
+      toast.error(e.message || "Failed to update transfer status");
+    }
+  }
+
+  async function editTransferStatus(transfer) {
+    const status = prompt(`Set transfer status (${transferStatuses.join(", ")})`, transfer.status || "pending");
+    if (!status) {
+      toast.info("Edit cancelled.");
+      return;
+    }
+    if (!transferStatuses.includes(status)) {
+      toast.error("Invalid status.");
+      return;
+    }
+    await updateTransferStatus(transfer._id, status);
+  }
+
+  async function deleteTransfer(transferId) {
+    if (!confirm("Delete this transfer?")) {
+      toast.info("Delete cancelled.");
+      return;
+    }
+    try {
+      await apiFetch(`/inventory/transfers/${transferId}`, { method: "DELETE" });
+      toast.success("Transfer deleted.");
+      await loadAll();
+    } catch (e) {
+      toast.error(e.message || "Failed to delete transfer");
+    }
+  }
+
+  function printTransferReceipt(transfer) {
+    const html = `
+      <html>
+      <body style="font-family: Arial; padding: 16px;">
+        <h2 style="margin: 0 0 8px 0;">Warehouse Transfer</h2>
+        <div style="font-size:12px;margin-bottom:10px;">Receipt #: ${transfer._id}</div>
+        <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;font-size:12px;">
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>From</th>
+              <th>To</th>
+              <th>Qty</th>
+              <th>Date</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>${transfer.productName || "-"}</td>
+              <td>${transfer.fromWarehouseName || "-"}</td>
+              <td>${transfer.toWarehouseName || "-"}</td>
+              <td>${transfer.quantity || 0}</td>
+              <td>${transfer.createdAt ? new Date(transfer.createdAt).toLocaleString() : "-"}</td>
+              <td>${transfer.status || "-"}</td>
+            </tr>
+          </tbody>
+        </table>
+      </body>
+      </html>
+    `;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    win.print();
   }
 
   function printInvoice(txn) {
@@ -946,13 +1016,9 @@ export default function WarehouseInventoryModulePage() {
                 options={transferStatuses.map((s) => ({ value: s, label: s }))}
               />
               <Input label="Note" value={transferForm.note} onChange={(v) => setTransferField("note", v)} />
-              <Input label="Driver ID" value={transferForm.driverId} onChange={(v) => setTransferField("driverId", v)} />
-              <Input label="Driver Name" value={transferForm.driverName} onChange={(v) => setTransferField("driverName", v)} />
-              <Input label="Vehicle ID" value={transferForm.vehicleId} onChange={(v) => setTransferField("vehicleId", v)} />
-              <Input label="Vehicle Name" value={transferForm.vehicleName} onChange={(v) => setTransferField("vehicleName", v)} />
-              <div className="md:col-span-2"><button disabled={transferSaving} className="rounded bg-zinc-900 text-white px-4 py-2">{transferSaving ? "Saving..." : "Create Transfer"}</button></div>
+              <div className="md:col-span-2"><button disabled={transferSaving || loading} className="rounded bg-zinc-900 text-white px-4 py-2">{transferSaving ? "Saving..." : "Create Transfer"}</button></div>
             </form>
-            <TransferTable rows={transfers} />
+            <TransferTable rows={transfers} onEditStatus={editTransferStatus} onDelete={deleteTransfer} onReceipt={printTransferReceipt} />
           </section>
         ) : null}
         {selectedCard === "STOCK_SUMMARY" ? (
@@ -1078,8 +1144,8 @@ function LedgerTable({ type, rows, onDelete, onInvoice }) {
   );
 }
 
-function TransferTable({ rows }) {
-  return <div className="overflow-x-auto mt-2"><table className="min-w-full text-sm"><thead><tr className="border-b"><th className="p-2 text-left">Product</th><th className="p-2 text-left">From</th><th className="p-2 text-left">To</th><th className="p-2 text-left">Qty</th><th className="p-2 text-left">Status</th></tr></thead><tbody>{rows.map((r)=><tr key={r._id} className="border-b"><td className="p-2">{r.productName}</td><td className="p-2">{r.fromWarehouseName}</td><td className="p-2">{r.toWarehouseName}</td><td className="p-2">{r.quantity}</td><td className="p-2">{r.status}</td></tr>)}</tbody></table></div>;
+function TransferTable({ rows, onEditStatus, onDelete, onReceipt }) {
+  return <div className="overflow-x-auto mt-2"><table className="min-w-full text-sm"><thead><tr className="border-b"><th className="p-2 text-left">Product</th><th className="p-2 text-left">From</th><th className="p-2 text-left">To</th><th className="p-2 text-left">Qty</th><th className="p-2 text-left">Date and Time</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Action</th></tr></thead><tbody>{rows.map((r)=><tr key={r._id} className="border-b"><td className="p-2">{r.productName}</td><td className="p-2">{r.fromWarehouseName}</td><td className="p-2">{r.toWarehouseName}</td><td className="p-2">{r.quantity}</td><td className="p-2">{r.createdAt ? new Date(r.createdAt).toLocaleString() : "-"}</td><td className="p-2">{r.status}</td><td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" onClick={()=>onReceipt(r)}>Receipt</button><button className="rounded border px-2 py-1" onClick={()=>onEditStatus(r)}>Edit</button><button className="rounded border border-red-300 text-red-700 px-2 py-1" onClick={()=>onDelete(r._id)}>Delete</button></div></td></tr>)}</tbody></table></div>;
 }
 
 function InventoryMovementTable({ rows }) {
