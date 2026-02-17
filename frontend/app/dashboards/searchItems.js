@@ -64,8 +64,8 @@ export const adminDashboardSearchItems = [
 
 const commonUserLinks = [
   { title: "Dashboard Home", href: "/dashboards" },
-  { title: "Messages", href: "/dashboards/admin/messages" },
 ];
+
 
 export const userDashboardSearchItems = {
   ceo: [{ title: "CEO Dashboard", href: "/dashboards/ceo" }, ...commonUserLinks],
@@ -75,12 +75,12 @@ export const userDashboardSearchItems = {
   cashier: [{ title: "Cashier Dashboard", href: "/dashboards/cashier" }, ...commonUserLinks],
   hrAssistant: [{ title: "HR Assistant Dashboard", href: "/dashboards/hrAssistant" }, ...commonUserLinks],
   kpo: [{ title: "KPO Dashboard", href: "/dashboards/kpo" }, ...commonUserLinks],
-  brandManager: [{ title: "Brand Manager Dashboard", href: "/dashboards/brandManager" }, { title: "Return Stock", href: "/dashboards/brandManager/return-stock" }, ...commonUserLinks],
+  brandManager: [{ title: "Brand Manager Dashboard", href: "/dashboards/brandManager" }, { title: "Return Stock", href: "/dashboards/brandManager/return-stock" }, { title: "Messages", href: "/dashboards/brandManager/messages" }, { title: "Account Settings", href: "/dashboards/brandManager/settings" }, { title: "Change Password", href: "/dashboards/brandManager/settings/change-password" }, ...commonUserLinks],
   nationalSM: [{ title: "National Sale Manager Dashboard", href: "/dashboards/nationalSM" }, ...commonUserLinks],
   regionalSM: [{ title: "Regional Sale Manager Dashboard", href: "/dashboards/regionalSM" }, ...commonUserLinks],
   zoneSM: [{ title: "Zone Sale Manager Dashboard", href: "/dashboards/zoneSM" }, ...commonUserLinks],
   territorySM: [{ title: "Territory Sale Manager Dashboard", href: "/dashboards/territorySM" }, ...commonUserLinks],
-  distributor: [{ title: "Distributor Dashboard", href: "/dashboards/distributor" }, { title: "Return Stock", href: "/dashboards/distributor/return-stock" }, ...commonUserLinks],
+  distributor: [{ title: "Distributor Dashboard", href: "/dashboards/distributor" }, { title: "Return Stock", href: "/dashboards/distributor/return-stock" }, { title: "Messages", href: "/dashboards/distributor/messages" }, { title: "Account Settings", href: "/dashboards/distributor/settings" }, { title: "Change Password", href: "/dashboards/distributor/settings/change-password" }, ...commonUserLinks],
   fieldSM: [{ title: "Field Sale Manager Dashboard", href: "/dashboards/fieldSM" }, ...commonUserLinks],
   orderBooker: [{ title: "Order Booker Dashboard", href: "/dashboards/orderBooker" }, ...commonUserLinks],
   salesman: [{ title: "Salesman Dashboard", href: "/dashboards/salesman" }, ...commonUserLinks],

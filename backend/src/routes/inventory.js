@@ -297,6 +297,7 @@ router.get("/transactions", requireAuth, async (req, res) => {
     if (req.query.warehouseId) query.warehouseId = toTrimmedString(req.query.warehouseId);
     if (req.query.distributorId) query.distributorId = toTrimmedString(req.query.distributorId);
     if (req.query.requestStatus) query.requestStatus = toTrimmedString(req.query.requestStatus).toUpperCase();
+    if (req.query.requestSourceRole) query.requestSourceRole = toTrimmedString(req.query.requestSourceRole);
     if (!isAdminRole(req.user?.role)) {
       query.createdBy = req.user?.uid;
     }
