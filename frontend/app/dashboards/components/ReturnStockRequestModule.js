@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { apiFetch } from "../../lib/api";
+import { getAuthItem } from "../../lib/clientAuth";
 
 const emptyLine = {
   productId: "",
@@ -40,7 +41,7 @@ export default function ReturnStockRequestModule({ role = "Brand Manager" }) {
   });
 
   async function loadData() {
-    const localUser = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("aim_user") || "{}") : {};
+    const localUser = typeof window !== "undefined" ? JSON.parse(getAuthItem("aim_user") || "{}") : {};
     try {
       const [wRes, pRes, rRes, zRes, reqRes, meRes] = await Promise.all([
         apiFetch("/warehouses"),
@@ -80,6 +81,7 @@ export default function ReturnStockRequestModule({ role = "Brand Manager" }) {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const selectedRegion = useMemo(() => regions.find((r) => r._id === form.regionId) || null, [regions, form.regionId]);

@@ -1,3 +1,5 @@
+import { getAuthItem } from "./clientAuth";
+
 function normalizeApiBase(rawApiBase) {
   const apiBase = rawApiBase?.trim().replace(/\/$/, "") || "";
   if (!apiBase) return "/api";
@@ -69,7 +71,7 @@ function isNetworkError(error) {
 }
 
 export async function apiFetch(path, { method = "GET", body, token, credentials } = {}) {
-  const t = token || (typeof window !== "undefined" ? localStorage.getItem("aim_token") : null);
+  const t = token || (typeof window !== "undefined" ? getAuthItem("aim_token") : null);
   const headers = {
     "Content-Type": "application/json",
     ...(t ? { Authorization: `Bearer ${t}` } : {}),

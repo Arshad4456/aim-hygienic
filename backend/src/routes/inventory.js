@@ -84,6 +84,8 @@ async function createInventoryMovementsForTransaction(transaction, items = [], u
         quantity: quantitySign * item.totalPacks,
         movementType,
         referenceId: transaction.transactionCode,
+        batchManufactureDate: item.manufactureDate || undefined,
+        batchExpiryDate: item.expiryDate || undefined,
         createdBy: userId,
       })
     )
@@ -423,18 +425,33 @@ router.get("/near-expiry-products", requireAuth, async (req, res) => {
   try {
     const now = new Date();
     const threeMonthsLater = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
-    const rows = await WarehouseTransaction.aggregate([
-      { $match: { transactionType: "PURCHASING_STOCK" } },
-      { $unwind: "$items" },
-      { $match: { "items.expiryDate": { $gte: now, $lte: threeMonthsLater } } },
+    const rows = await InventoryMovement.aggregate([
+      {
+        $match: {
+          batchExpiryDate: { $gte: now, $lte: threeMonthsLater },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            productId: "$productId",
+            warehouseId: "$warehouseId",
+            manufactureDate: "$batchManufactureDate",
+            expiryDate: "$batchExpiryDate",
+          },
+          productName: { $first: "$productName" },
+          warehouseName: { $first: "$warehouseName" },
+          quantity: { $sum: "$quantity" },
+        },
+      },
+      { $match: { quantity: { $gt: 0 } } },
       {
         $project: {
-          productName: "$items.productName",
-          quantity: "$items.totalPacks",
-          warehouseName: "$warehouseName",
-          manufactureDate: "$items.manufactureDate",
-          expiryDate: "$items.expiryDate",
-          transactionCode: 1,
+          productName: 1,
+          quantity: 1,
+          warehouseName: 1,
+          manufactureDate: "$_id.manufactureDate",
+          expiryDate: "$_id.expiryDate",
         },
       },
       { $sort: { expiryDate: 1 } },
@@ -751,6 +768,53 @@ router.get("/summary", requireAuth, async (req, res) => {
     return res.json({ ok: true, summary: items });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to load summary" });
+  }
+});
+
+
+router.get("/summary-detail", requireAuth, async (req, res) => {
+  try {
+    const productId = toTrimmedString(req.query.productId);
+    const warehouseId = toTrimmedString(req.query.warehouseId);
+    if (!productId || !warehouseId) {
+      return res.status(400).json({ ok: false, message: "productId and warehouseId are required" });
+    }
+
+    const rows = await InventoryMovement.aggregate([
+      {
+        $match: {
+          productId,
+          warehouseId,
+          batchManufactureDate: { $exists: true, $ne: null },
+          batchExpiryDate: { $exists: true, $ne: null },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            manufactureDate: "$batchManufactureDate",
+            expiryDate: "$batchExpiryDate",
+          },
+          quantity: { $sum: "$quantity" },
+          productName: { $first: "$productName" },
+        },
+      },
+      { $match: { quantity: { $gt: 0 } } },
+      { $sort: { "_id.expiryDate": 1, "_id.manufactureDate": 1 } },
+      {
+        $project: {
+          _id: 0,
+          productName: 1,
+          quantity: 1,
+          manufactureDate: "$_id.manufactureDate",
+          expiryDate: "$_id.expiryDate",
+        },
+      },
+    ]);
+
+    return res.json({ ok: true, rows });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to load stock detail" });
   }
 });
 

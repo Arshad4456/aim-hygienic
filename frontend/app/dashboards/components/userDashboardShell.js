@@ -1,21 +1,25 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { clearAuthStorage } from "../../lib/clientAuth";
 
 export default function UserDashboardShell({ title, subtitle, roleKey, links = [], showAccountCards = false }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const router = useRouter();
 
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.title = `${title} | AIM Hygienic`;
+    }
+  }, [title]);
 
 
   function logout() {
     if (typeof window !== "undefined") {
-      localStorage.removeItem("aim_token");
-      localStorage.removeItem("aim_role");
-      localStorage.removeItem("aim_user");
+      clearAuthStorage();
       document.cookie = "aim_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
       document.cookie = "aim_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     }

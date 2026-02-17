@@ -5,17 +5,20 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AdminShell from "../admin/components/AdminShell";
 import { apiFetch } from "../../lib/api";
+import { getAuthItem } from "../../lib/clientAuth";
 
 export default function AdminDashboardPage() {
   const router = useRouter();
-  const [user, setUser] = useState(null);
+  const user = useMemo(() => {
+    const raw = getAuthItem("aim_user");
+    return raw ? JSON.parse(raw) : null;
+  }, []);
   const [overview, setOverview] = useState(null);
   const [err, setErr] = useState("");
 
   useEffect(() => {
-    const token = localStorage.getItem("aim_token");
-    const role = localStorage.getItem("aim_role");
-    const u = localStorage.getItem("aim_user");
+    const token = getAuthItem("aim_token");
+    const role = getAuthItem("aim_role");
 
     if (!token) {
       router.replace("/login");
@@ -25,7 +28,6 @@ export default function AdminDashboardPage() {
       router.replace("/login");
       return;
     }
-    setUser(u ? JSON.parse(u) : null);
   }, [router]);
 
   useEffect(() => {

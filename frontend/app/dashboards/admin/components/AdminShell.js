@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { clearAuthStorage } from "../../../lib/clientAuth";
 import { useRouter } from "next/navigation";
 import Sidebar from "./Sidebar";
 import { adminDashboardSearchItems } from "../../searchItems";
@@ -23,6 +24,12 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
   useEffect(() => {
     localStorage.setItem("aim_sidebar_collapsed", collapsed ? "1" : "0");
   }, [collapsed]);
+
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.title = `${title} | AIM Hygienic`;
+    }
+  }, [title]);
 
   useEffect(() => {
     function onDocClick(e) {
@@ -54,9 +61,7 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
   }, [mobileOpen, showSearchDropdown]);
 
   function logout() {
-    localStorage.removeItem("aim_token");
-    localStorage.removeItem("aim_role");
-    localStorage.removeItem("aim_user");
+    clearAuthStorage();
     document.cookie = "aim_token=; Max-Age=0; path=/";
     document.cookie = "aim_role=; Max-Age=0; path=/";
     setUserMenuOpen(false);
