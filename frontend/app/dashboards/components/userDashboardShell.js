@@ -225,7 +225,7 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
               <button
                 type="button"
                 onClick={() => setMobileOpen(true)}
-                className="md:hidden rounded-xl border-none px-3 py-2 hover:bg-zinc-50"
+                className="md:hidden rounded-xl border-none px-3 py-2 text-sm hover:bg-zinc-50"
               >
                 ☰
               </button>
@@ -240,7 +240,7 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
               </button>
 
               <div className="leading-tight">
-                <div className="text-xs text-zinc-500">AIM Hygienic (PVT) Limited</div>
+                <div className="text-xs text-zinc-500">AIM Hygienic ERP</div>
                 <div className="text-lg font-semibold text-zinc-900">{title}</div>
                 <div className="text-xs text-zinc-500">{subtitle}</div>
               </div>
@@ -332,7 +332,6 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
         <main className="flex-1 overflow-y-auto px-4 md:px-6 py-5">
           {children ? children : (
             <>
-
               {showAccountCards ? (
                 <div className="mt-4 rounded-2xl border bg-white p-4">
                   <div className="text-sm font-semibold text-zinc-900">Quick Actions</div>
@@ -350,7 +349,21 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
                 </div>
               ) : null}
 
-             
+              <div className="mt-4 rounded-2xl border bg-white p-4">
+                <div className="text-sm font-semibold text-zinc-900">Modules</div>
+                <div className="mt-1 text-xs text-zinc-500">Navigate all pages assigned to this dashboard.</div>
+                <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+                  {moduleLinks.map((item) => (
+                    <Link
+                      key={`nav-${item.href}`}
+                      href={item.href}
+                      className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 hover:border-emerald-300 hover:bg-white"
+                    >
+                      {item.title}
+                    </Link>
+                  ))}
+                </div>
+              </div>
             </>
           )}
         </main>
@@ -368,15 +381,13 @@ function UserSidebar({ title, roleKey, groups, pathname, openGroups, setOpenGrou
   }
 
   return (
-    <aside className={["h-screen border-r bg-white flex flex-col", collapsed ? "w-[78px]" : "w-[260px]"].join(" ")}>
-      <div className="px-4 py-4 border-none items-center">
-        <div className="h-10 w-10 rounded-md bg-emerald-100 flex items-center justify-center">
-                    <span className="text-emerald-700 font-bold">{userInitials}</span>
-                  </div>
+    <aside className={["h-screen border-r bg-white flex flex-col", collapsed ? "w-[76px]" : "w-[260px]"].join(" ")}>
+      <div className="px-5 py-3 border-none">
+        <div className="text-xs text-zinc-500">AIM Hygienic Dashboard</div>
         {!collapsed ? (
           <>
             <div className="font-semibold text-zinc-900">{roleKey}</div>
-            {/* <div className="text-xs text-zinc-500 mt-1 truncate">{title}</div> */}
+            <div className="text-xs text-zinc-500 mt-1 truncate">{title}</div>
           </>
         ) : null}
       </div>
