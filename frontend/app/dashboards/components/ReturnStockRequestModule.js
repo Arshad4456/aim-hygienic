@@ -48,7 +48,7 @@ export default function ReturnStockRequestModule({ role = "Brand Manager" }) {
         apiFetch("/products"),
         apiFetch("/regions"),
         apiFetch("/zones"),
-        apiFetch("/inventory/transactions?transactionType=RETURN_STOCK"),
+        apiFetch(`/inventory/transactions?transactionType=RETURN_STOCK&requestSourceRole=${encodeURIComponent(role)}`),
       ]);
       setWarehouses(wRes.warehouses || []);
       setProducts(pRes.products || []);

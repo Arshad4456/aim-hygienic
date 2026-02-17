@@ -68,11 +68,7 @@ export default function LoginPage() {
       document.cookie = `aim_role=${data.user?.role || ""}; path=/; Secure; SameSite=Lax`;
 
       const destination = roleRedirect(data.user?.role);
-      if (typeof window !== "undefined") {
-        window.open(destination, "_blank", "noopener,noreferrer");
-      } else {
-        router.push(destination);
-      }
+      router.replace(destination);
     } catch (err) {
       setError(err.message || "Failed to login");
     } finally {
