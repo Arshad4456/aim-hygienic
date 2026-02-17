@@ -185,6 +185,13 @@ router.post("/transactions", requireAuth, async (req, res) => {
       return res.status(400).json({ ok: false, message: "Each item needs product and quantity" });
     }
 
+    if (transactionType === "RETURN_STOCK") {
+      const missingDates = normalizedItems.some((item) => !item.manufactureDate || !item.expiryDate);
+      if (missingDates) {
+        return res.status(400).json({ ok: false, message: "Manufacture date and expiry date are required for return stock items" });
+      }
+    }
+
     if (!scopeWarehouseId) {
       return res.status(400).json({ ok: false, message: "Warehouse is required" });
     }
