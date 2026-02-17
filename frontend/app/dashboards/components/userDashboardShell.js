@@ -233,7 +233,7 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
               <button
                 type="button"
                 onClick={() => setCollapsed((v) => !v)}
-                className="hidden md:inline-flex rounded-xl border px-3 py-2 text-sm hover:bg-zinc-50"
+                className="hidden md:inline-flex rounded-xl px-3 py-2 text-sm hover:bg-zinc-50"
                 title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
               >
                 ☰
@@ -386,9 +386,9 @@ function UserSidebar({ title, roleKey, groups, pathname, openGroups, setOpenGrou
 
   return (
     <aside className={["h-screen border-r bg-white flex flex-col", collapsed ? "w-[70px]" : "w-[220px]"].join(" ")}>
-      <div className="px-3 py-4 border-b flex flex-col items-center gap-2">
+      <div className={["px-3 py-[15px] flex flex-col items-center gap-2", collapsed ? "border-b" : ""].join(" ")}>
         <div className="h-11 w-11 rounded-md bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center">AH</div>
-        {!collapsed ? <div className="text-xs font-semibold text-zinc-900 text-center">{roleKey}</div> : null}
+        {!collapsed ? (<><div className="text-base font-bold text-zinc-900 text-center">AIM</div><div className="text-[11px] font-medium text-zinc-600 text-center">{roleKey}</div></>) : null}
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 space-y-2">

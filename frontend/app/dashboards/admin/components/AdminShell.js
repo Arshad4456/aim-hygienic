@@ -124,7 +124,7 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
               <button
                 type="button"
                 onClick={() => setCollapsed((v) => !v)}
-                className="hidden md:inline-flex rounded-xl border px-3 py-2 text-sm hover:bg-zinc-50"
+                className="hidden md:inline-flex rounded-xl px-3 py-2 text-sm hover:bg-zinc-50"
                 title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
               >
                 ☰
