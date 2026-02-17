@@ -577,7 +577,7 @@ export default function WarehouseInventoryModulePage() {
 
     const html = `
       <html>
-      <body style="font-family: Arial; padding: 16px;">
+      <body style="font-family: Arial; padding: 16px; position:relative;">
         <div style="display:flex;justify-content:space-between;align-items:center;">${logo}<div style="text-align:right;"><div style="font-size:13px;font-weight:700;">Warehouse Transfer</div></div></div>
         <div style="margin-top:8px; display:flex; justify-content:space-between; font-size:12px;">
           <div>Date: ${transfer.createdAt ? new Date(transfer.createdAt).toLocaleDateString() : "-"}</div>
@@ -651,6 +651,13 @@ export default function WarehouseInventoryModulePage() {
       : txn.transactionType === "RETURN_STOCK"
         ? "Return Stock"
         : "Sales Tax Invoice";
+    const requestStatus = String(txn.requestStatus || "").toUpperCase();
+    const showDecisionStamp = txn.transactionType === "RETURN_STOCK" && ["APPROVED", "REJECTED"].includes(requestStatus);
+    const stampColor = requestStatus === "APPROVED" ? "#166534" : "#991b1b";
+    const stampBg = requestStatus === "APPROVED" ? "rgba(220,252,231,0.82)" : "rgba(254,226,226,0.82)";
+    const statusStamp = showDecisionStamp
+      ? `<div style="position:absolute; top:96px; right:22px; transform:rotate(-16deg); border:3px solid ${stampColor}; color:${stampColor}; background:${stampBg}; padding:8px 14px; font-size:22px; font-weight:800; letter-spacing:1px; border-radius:8px;">${requestStatus}</div>`
+      : "";
     const rawNote = String(txn.note || "").trim();
     const extractedAddress = (rawNote.match(/Address\s*:\s*(.*)$/i)?.[1] || rawNote).trim();
     const advTaxPer = toNum(txn.advTaxPer);
@@ -663,8 +670,9 @@ export default function WarehouseInventoryModulePage() {
 
     const html = `
       <html>
-      <body style="font-family: Arial; padding: 16px;">
+      <body style="font-family: Arial; padding: 16px; position:relative;">
         <div style="display:flex;justify-content:space-between;align-items:center;">${logo}<div style="text-align:right;"><div style="font-size:13px;font-weight:700;">${heading}</div></div></div>
+        ${statusStamp}
         <div style="margin-top:8px; display:flex; justify-content:space-between; font-size:12px;">
           <div>Date: ${new Date(txn.transactionAt).toLocaleDateString()}</div>
           <div>Invoice #: ${txn.transactionCode}</div>
