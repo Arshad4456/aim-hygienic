@@ -28,6 +28,17 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
     return links.filter((item) => item.title.toLowerCase().includes(value));
   }, [query, links]);
 
+  const roleSlug = useMemo(() => {
+    if (!roleKey) return "";
+    if (roleKey === "Brand Manager") return "brandManager";
+    if (roleKey === "Distributor") return "distributor";
+    return "";
+  }, [roleKey]);
+
+  const settingsHref = roleSlug ? `/dashboards/${roleSlug}/settings` : "/dashboards/admin/settings";
+  const changePasswordHref = roleSlug ? `/dashboards/${roleSlug}/settings/change-password` : "/dashboards/admin/settings/change-password";
+  const messagesHref = roleSlug ? `/dashboards/${roleSlug}/messages` : "/dashboards/admin/messages";
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-emerald-50 via-white to-zinc-50 px-4 py-5 md:px-8">
       <div className="mx-auto max-w-5xl">
@@ -80,12 +91,15 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
           {showAccountCards ? (
             <div className="mt-4 rounded-2xl border bg-white p-4">
               <div className="text-sm font-semibold text-zinc-900">Account</div>
-              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
-                <Link href="/dashboards/admin/settings" className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-medium text-zinc-900 hover:border-emerald-300 hover:bg-white">
+              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-4">
+                <Link href={settingsHref} className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-medium text-zinc-900 hover:border-emerald-300 hover:bg-white">
                   Account Settings
                 </Link>
-                <Link href="/dashboards/admin/settings/change-password" className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-medium text-zinc-900 hover:border-emerald-300 hover:bg-white">
+                <Link href={changePasswordHref} className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-medium text-zinc-900 hover:border-emerald-300 hover:bg-white">
                   Change Password
+                </Link>
+                <Link href={messagesHref} className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-medium text-zinc-900 hover:border-emerald-300 hover:bg-white">
+                  Messages
                 </Link>
                 <button type="button" onClick={logout} className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-left text-sm font-medium text-red-700 hover:bg-red-100">
                   Logout
