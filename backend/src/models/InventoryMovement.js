@@ -31,6 +31,8 @@ const InventoryMovementSchema = new mongoose.Schema(
       ],
     },
     referenceId: { type: String, trim: true },
+    batchManufactureDate: { type: Date },
+    batchExpiryDate: { type: Date },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }

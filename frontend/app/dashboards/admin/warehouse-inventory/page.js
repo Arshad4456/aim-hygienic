@@ -128,6 +128,10 @@ export default function WarehouseInventoryModulePage() {
   const [summary, setSummary] = useState([]);
   const [lowStock, setLowStock] = useState([]);
   const [nearExpiry, setNearExpiry] = useState([]);
+  const [summaryDetailModal, setSummaryDetailModal] = useState(null);
+  const [summaryDetailRows, setSummaryDetailRows] = useState([]);
+  const [summaryDetailLoading, setSummaryDetailLoading] = useState(false);
+  const [summaryDetailRemoving, setSummaryDetailRemoving] = useState(false);
   const [summaryWarehouseFilter, setSummaryWarehouseFilter] = useState("");
   const [lowStockWarehouseFilter, setLowStockWarehouseFilter] = useState("");
   const [ledgerWarehouseFilter, setLedgerWarehouseFilter] = useState("");
@@ -753,6 +757,68 @@ export default function WarehouseInventoryModulePage() {
     }
   }
 
+  async function openSummaryDetail(row) {
+    setSummaryDetailModal(row);
+    setSummaryDetailRows([]);
+    setSummaryDetailLoading(true);
+    try {
+      const data = await apiFetch(`/inventory/summary-detail?productId=${encodeURIComponent(row._id.productId)}&warehouseId=${encodeURIComponent(row._id.warehouseId)}`);
+      setSummaryDetailRows(data.rows || []);
+    } catch (e) {
+      toast.error(e.message || "Failed to load stock details");
+    } finally {
+      setSummaryDetailLoading(false);
+    }
+  }
+
+  async function removeSummaryBatch(batchRow) {
+    if (!summaryDetailModal) return;
+    if (!confirm("Remove this batch quantity from stock?")) return;
+
+    const product = products.find((p) => p.productId === summaryDetailModal._id.productId);
+    const warehouse = warehouses.find((w) => w.warehouseId === summaryDetailModal._id.warehouseId);
+    if (!product || !warehouse) {
+      toast.error("Product or warehouse not found");
+      return;
+    }
+
+    setSummaryDetailRemoving(true);
+    try {
+      await apiFetch("/inventory/transactions", {
+        method: "POST",
+        body: {
+          transactionType: "DAMAGE_STOCK",
+          warehouseId: warehouse.warehouseId,
+          warehouseName: warehouse.name,
+          fromEntityName: warehouse.name,
+          toEntityName: "Damage Stock",
+          note: `Removed from Stock Summary detail (${batchRow.expiryDate ? new Date(batchRow.expiryDate).toLocaleDateString() : "No expiry"})`,
+          items: [{
+            productId: product.productId,
+            productName: product.name,
+            cartonSize: `1x${batchRow.quantity}`,
+            cartons: 1,
+            totalPacks: Number(batchRow.quantity || 0),
+            packsPerCarton: Number(batchRow.quantity || 0),
+            unitPrice: Number(product.wholesalePrice || 0),
+            onePackPrice: Number(product.wholesalePrice || 0),
+            oneCartonPrice: Number(product.wholesalePrice || 0),
+            totalPrice: Number(product.wholesalePrice || 0) * Number(batchRow.quantity || 0),
+            manufactureDate: batchRow.manufactureDate,
+            expiryDate: batchRow.expiryDate,
+          }],
+        },
+      });
+      toast.success("Batch removed and logged in Damage Stock ledger.");
+      await openSummaryDetail(summaryDetailModal);
+      await loadAll();
+    } catch (e) {
+      toast.error(e.message || "Failed to remove stock batch");
+    } finally {
+      setSummaryDetailRemoving(false);
+    }
+  }
+
   return (
     <AdminShell title="Warehouse & Inventory" user={null}>
       <ToastContainer position="top-right" autoClose={2500} />
@@ -1103,7 +1169,7 @@ export default function WarehouseInventoryModulePage() {
                 options={warehouses.map((w) => ({ value: w.warehouseId, label: w.name }))}
               />
             </div>
-            <SummaryTable rows={filteredSummary} products={products} onUpdateMin={updateMinStock} />
+            <SummaryTable rows={filteredSummary} products={products} onUpdateMin={updateMinStock} onDetail={openSummaryDetail} />
           </section>
         ) : null}
         {selectedCard === "LOW_STOCK" ? (
@@ -1191,6 +1257,14 @@ export default function WarehouseInventoryModulePage() {
           </section>
         ) : null}
         <RequestPreviewModal row={previewRequest} onClose={() => setPreviewRequest(null)} />
+        <SummaryDetailModal
+          row={summaryDetailModal}
+          rows={summaryDetailRows}
+          loading={summaryDetailLoading}
+          removing={summaryDetailRemoving}
+          onClose={() => setSummaryDetailModal(null)}
+          onRemove={removeSummaryBatch}
+        />
       </div>
     </AdminShell>
   );
@@ -1361,9 +1435,44 @@ function InventoryMovementTable({ rows }) {
   return <div className="overflow-x-auto mt-3"><table className="min-w-full text-sm"><thead><tr className="border-b"><th className="p-2 text-left">Date</th><th className="p-2 text-left">Product</th><th className="p-2 text-left">Warehouse</th><th className="p-2 text-left">Quantity</th><th className="p-2 text-left">Type</th><th className="p-2 text-left">Reference</th></tr></thead><tbody>{rows.map((r)=><tr key={r._id} className="border-b"><td className="p-2">{new Date(r.createdAt).toLocaleString()}</td><td className="p-2">{r.productName}</td><td className="p-2">{r.warehouseName}</td><td className="p-2">{r.quantity}</td><td className="p-2">{r.movementType}</td><td className="p-2">{r.referenceId || "-"}</td></tr>)}</tbody></table></div>;
 }
 
-function SummaryTable({ rows, products, onUpdateMin }) {
+function SummaryTable({ rows, products, onUpdateMin, onDetail }) {
   const [edits, setEdits] = useState({});
-  return <div className="overflow-x-auto mt-2"><table className="min-w-full text-sm"><thead><tr className="border-b"><th className="p-2 text-left">Product</th><th className="p-2 text-left">Warehouse</th><th className="p-2 text-left">Quantity</th><th className="p-2 text-left">Minimum Stock Level</th><th className="p-2 text-left">Action</th></tr></thead><tbody>{rows.map((r)=>{const p=products.find((x)=>x.productId===r._id.productId);return <tr key={`${r._id.productId}-${r._id.warehouseId}`} className="border-b"><td className="p-2">{r.productName}</td><td className="p-2">{r.warehouseName}</td><td className="p-2">{r.quantity}</td><td className="p-2"><input className="border rounded px-2 py-1 w-24" value={edits[p?._id] ?? p?.minStockLevel ?? 0} onChange={(e)=>setEdits((s)=>({...s,[p?._id]:e.target.value}))} /></td><td className="p-2"><button className="rounded border px-2 py-1" onClick={()=>p&&onUpdateMin(p._id,edits[p._id] ?? p.minStockLevel)}>Update</button></td></tr>;})}</tbody></table></div>;
+  return <div className="overflow-x-auto mt-2"><table className="min-w-full text-sm"><thead><tr className="border-b"><th className="p-2 text-left">Product</th><th className="p-2 text-left">Warehouse</th><th className="p-2 text-left">Quantity</th><th className="p-2 text-left">Minimum Stock Level</th><th className="p-2 text-left">Action</th></tr></thead><tbody>{rows.map((r)=>{const p=products.find((x)=>x.productId===r._id.productId);return <tr key={`${r._id.productId}-${r._id.warehouseId}`} className="border-b"><td className="p-2">{r.productName}</td><td className="p-2">{r.warehouseName}</td><td className="p-2">{r.quantity}</td><td className="p-2"><input className="border rounded px-2 py-1 w-24" value={edits[p?._id] ?? p?.minStockLevel ?? 0} onChange={(e)=>setEdits((s)=>({...s,[p?._id]:e.target.value}))} /></td><td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" onClick={()=>p&&onUpdateMin(p._id,edits[p._id] ?? p.minStockLevel)}>Update</button><button className="rounded border border-blue-300 px-2 py-1 text-blue-700" onClick={()=>onDetail(r)}>Detail</button></div></td></tr>;})}</tbody></table></div>;
+}
+
+function SummaryDetailModal({ row, rows, loading, removing, onClose, onRemove }) {
+  if (!row) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-4xl rounded-2xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b px-5 py-3">
+          <div><div className="text-lg font-semibold">Stock Detail</div><div className="text-sm text-zinc-500">{row.productName} - {row.warehouseName}</div></div>
+          <button type="button" className="rounded border px-3 py-1 text-sm" onClick={onClose}>Close</button>
+        </div>
+        <div className="max-h-[70vh] overflow-auto p-5">
+          {loading ? <div className="text-sm text-zinc-500">Loading...</div> : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead><tr className="border-b"><th className="p-2 text-left">Product</th><th className="p-2 text-left">Quantity</th><th className="p-2 text-left">Manufacture Date</th><th className="p-2 text-left">Expiry Date</th><th className="p-2 text-left">Action</th></tr></thead>
+                <tbody>
+                  {rows.map((r, idx) => (
+                    <tr key={`${idx}-${r.manufactureDate}-${r.expiryDate}`} className="border-b">
+                      <td className="p-2">{r.productName || row.productName}</td>
+                      <td className="p-2">{r.quantity}</td>
+                      <td className="p-2">{r.manufactureDate ? new Date(r.manufactureDate).toLocaleDateString() : "-"}</td>
+                      <td className="p-2">{r.expiryDate ? new Date(r.expiryDate).toLocaleDateString() : "-"}</td>
+                      <td className="p-2"><button disabled={removing} className="rounded border border-red-300 px-2 py-1 text-red-700 disabled:opacity-50" onClick={() => onRemove(r)}>Remove</button></td>
+                    </tr>
+                  ))}
+                  {!rows.length ? <tr><td className="p-2 text-zinc-500" colSpan={5}>No batch details found.</td></tr> : null}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function LowStockTable({ rows }) {
