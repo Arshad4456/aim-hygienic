@@ -7,8 +7,8 @@ import { apiFetch } from "../../../lib/api";
 
 const cards = [
   {
-    title: "Sales Orders",
-    description: "Capture customer, distributor, or salesman orders.",
+    title: "Primary & Secondary Requests",
+    description: "Capture primary (brand/distributor) and secondary (field/customer) orders.",
     href: "/dashboards/admin/order-management/sales-orders",
   },
   {
@@ -55,7 +55,8 @@ export default function OrderManagementModulePage() {
       { label: "Pending Approval", value: formatNumber(summary?.pending) },
       { label: "Approved", value: formatNumber(summary?.approved) },
       { label: "Dispatched", value: formatNumber(summary?.dispatched) },
-      { label: "Completed", value: formatNumber(summary?.completed) },
+      { label: "Rejected", value: formatNumber(summary?.rejected) },
+      { label: "Delivered", value: formatNumber(summary?.delivered) },
       { label: "Order Value", value: formatCurrency(summary?.totalAmount) },
     ],
     [summary],
@@ -69,7 +70,7 @@ export default function OrderManagementModulePage() {
             <div>
               <div className="text-xl font-semibold text-zinc-900">Order Management Module</div>
               <div className="text-sm text-zinc-500 mt-1">
-                Manage the end-to-end sales order lifecycle from request to delivery.
+                Manage primary and secondary sale workflows from request, approval, dispatch, proof, and delivery.
               </div>
             </div>
             <div className="text-xs text-emerald-600">Auto-refreshing every 30 seconds</div>
@@ -77,7 +78,7 @@ export default function OrderManagementModulePage() {
               href="/dashboards/admin/order-management/sales-orders"
               className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
             >
-              Create Sales Order
+              Create Request Order
             </Link>
           </div>
 
@@ -129,6 +130,7 @@ export default function OrderManagementModulePage() {
                   <th className="text-left px-3 py-2 border-b">Customer</th>
                   <th className="text-left px-3 py-2 border-b">Status</th>
                   <th className="text-left px-3 py-2 border-b">Order Value</th>
+                  <th className="text-left px-3 py-2 border-b">Sale Type</th>
                   <th className="text-left px-3 py-2 border-b">Order Date</th>
                 </tr>
               </thead>
@@ -141,13 +143,15 @@ export default function OrderManagementModulePage() {
                       <td className="px-3 py-2 border-b capitalize">{order.status}</td>
                       <td className="px-3 py-2 border-b">{formatCurrency(order.totalAmount)}</td>
                       <td className="px-3 py-2 border-b">
+                        <span className="capitalize">{order.saleType || "primary"}</span></td>
+                      <td className="px-3 py-2 border-b">
                         {order.orderDate ? new Date(order.orderDate).toLocaleDateString() : "—"}
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={5} className="px-3 py-6 text-center text-zinc-500">
+                    <td colSpan={6} className="px-3 py-6 text-center text-zinc-500">
                       No recent orders yet.
                     </td>
                   </tr>

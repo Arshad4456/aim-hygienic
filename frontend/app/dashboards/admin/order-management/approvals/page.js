@@ -80,7 +80,7 @@ export default function OrderApprovalsPage() {
                         </button>
                         <button
                           className="rounded-full border px-3 py-1 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 disabled:opacity-60"
-                          onClick={() => updateStatus(order._id, "cancelled")}
+                          onClick={() => updateStatus(order._id, "rejected")}
                           disabled={updatingId === order._id}
                         >
                           Reject
