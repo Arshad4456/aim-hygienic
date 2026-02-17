@@ -369,7 +369,17 @@ function UserSidebar({ title, roleKey, groups, pathname, openGroups, setOpenGrou
 
   return (
     <aside className={["h-screen border-r bg-white flex flex-col", collapsed ? "w-[78px]" : "w-[260px]"].join(" ")}>
-      
+      <div className="px-4 py-4 border-none items-center">
+        <div className="h-10 w-10 rounded-md bg-emerald-100 flex items-center justify-center">
+                    <span className="text-emerald-700 font-bold">{userInitials}</span>
+                  </div>
+        {!collapsed ? (
+          <>
+            <div className="font-semibold text-zinc-900">{roleKey}</div>
+            {/* <div className="text-xs text-zinc-500 mt-1 truncate">{title}</div> */}
+          </>
+        ) : null}
+      </div>
 
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {groups.map((group) => {
