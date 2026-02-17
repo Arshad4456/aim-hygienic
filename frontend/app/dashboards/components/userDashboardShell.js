@@ -225,7 +225,7 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
               <button
                 type="button"
                 onClick={() => setMobileOpen(true)}
-                className="md:hidden rounded-xl border-none px-3 py-2 text-sm hover:bg-zinc-50"
+                className="md:hidden rounded-xl border px-3 py-2 text-sm hover:bg-zinc-50"
               >
                 ☰
               </button>
@@ -233,7 +233,7 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
               <button
                 type="button"
                 onClick={() => setCollapsed((v) => !v)}
-                className="hidden md:inline-flex rounded-xl border-none px-3 py-2 text-sm hover:bg-zinc-50"
+                className="hidden md:inline-flex rounded-xl border px-3 py-2 text-sm hover:bg-zinc-50"
                 title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
               >
                 ☰
@@ -242,12 +242,11 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
               <div className="leading-tight">
                 <div className="text-xs text-zinc-500">AIM HYGIENICS (PVT) LIMITED</div>
                 <div className="text-lg font-semibold text-zinc-900">{title}</div>
-                <div className="text-xs text-zinc-500">{subtitle}</div>
               </div>
             </div>
 
-            <div className="flex w-full md:w-auto md:min-w-[560px] md:justify-end md:flex-nowrap items-center gap-3">
-              <div className="relative w-full md:flex-1 md:min-w-[260px] md:max-w-[300px]">
+            <div className="flex w-full md:w-auto md:min-w-[520px] md:justify-end md:flex-nowrap items-center gap-3">
+              <div className="relative w-full md:min-w-[300px] md:max-w-[300px]">
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
@@ -332,6 +331,11 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
         <main className="flex-1 overflow-y-auto px-4 md:px-6 py-5">
           {children ? children : (
             <>
+              <div className="rounded-2xl border bg-white p-5">
+                <div className="text-sm text-zinc-600">Signed in role</div>
+                <div className="text-base font-semibold text-zinc-900">{roleKey}</div>
+              </div>
+
               {showAccountCards ? (
                 <div className="mt-4 rounded-2xl border bg-white p-4">
                   <div className="text-sm font-semibold text-zinc-900">Quick Actions</div>
@@ -382,14 +386,9 @@ function UserSidebar({ title, roleKey, groups, pathname, openGroups, setOpenGrou
 
   return (
     <aside className={["h-screen border-r bg-white flex flex-col", collapsed ? "w-[70px]" : "w-[220px]"].join(" ")}>
-      <div className="px-3 pt-3 pb-6 border-none">
-        <div className="text-xs text-zinc-500">AIM Hygienic Dashboard</div>
-        {!collapsed ? (
-          <>
-            <div className="font-semibold text-zinc-900">{roleKey}</div>
-            <div className="text-xs text-zinc-500 mt-1 truncate">{title}</div>
-          </>
-        ) : null}
+      <div className="px-3 py-4 border-b flex flex-col items-center gap-2">
+        <div className="h-11 w-11 rounded-md bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center">AH</div>
+        {!collapsed ? <div className="text-xs font-semibold text-zinc-900 text-center">{roleKey}</div> : null}
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
@@ -418,17 +417,17 @@ function UserSidebar({ title, roleKey, groups, pathname, openGroups, setOpenGrou
                   }
                 }}
                 className={[
-                  "w-full flex items-center gap-2 px-3 py-2 text-left text-sm",
+                  "w-full flex items-center gap-2 px-3 py-2 text-sm",
                   active ? "text-emerald-700" : "text-zinc-800",
-                  collapsed ? "justify-center" : "justify-between",
+                  collapsed ? "justify-center" : "justify-center",
                 ].join(" ")}
                 title={group.title}
               >
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-2 min-w-0 justify-center">
                   <ModuleIcon name={group.iconName} />
-                  {!collapsed ? <span className="truncate">{group.title}</span> : null}
+                  {!collapsed ? <span className="truncate text-center">{group.title}</span> : null}
                 </div>
-                {!collapsed ? <span className="text-xs text-zinc-500">{isOpen ? "▾" : "▸"}</span> : null}
+                {!collapsed ? <span className="text-xs text-zinc-500 ml-1">{isOpen ? "▾" : "▸"}</span> : null}
               </button>
 
               {!collapsed && isOpen ? (
@@ -441,7 +440,7 @@ function UserSidebar({ title, roleKey, groups, pathname, openGroups, setOpenGrou
                         type="button"
                         onClick={() => go(item.href)}
                         className={[
-                          "w-full text-left rounded-lg px-3 py-2 text-sm",
+                          "w-full rounded-lg px-3 py-2 text-sm text-center",
                           itemActive
                             ? "bg-emerald-100 text-emerald-800"
                             : "text-zinc-700 hover:bg-white",
