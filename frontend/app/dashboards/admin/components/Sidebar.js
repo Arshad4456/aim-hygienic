@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 function Icon({ name }) {
   // No extra library required — simple, safe icons
@@ -37,69 +37,21 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
   const pathname = usePathname();
   const router = useRouter();
 
-  const [open, setOpen] = useState(() => {
-    if (typeof window === "undefined") {
-      return {
-        dashboard: false,
-        company: false,
-        hr: false,
-        products: false,
-        expense: false,
-        qc: false,
-        procurement: false,
-        orders: false,
-        logistics: false,
-        finance: false,
-        territory: false,
-        users: false,
-        inventory: false,
-      };
-    }
-
-    const raw = localStorage.getItem("aim_admin_sidebar_open");
-    if (!raw) {
-      return {
-        dashboard: false,
-        company: false,
-        hr: false,
-        products: false,
-        expense: false,
-        qc: false,
-        procurement: false,
-        orders: false,
-        logistics: false,
-        finance: false,
-        territory: false,
-        users: false,
-        inventory: false,
-      };
-    }
-
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return {
-        dashboard: false,
-        company: false,
-        hr: false,
-        products: false,
-        expense: false,
-        qc: false,
-        procurement: false,
-        orders: false,
-        logistics: false,
-        finance: false,
-        territory: false,
-        users: false,
-        inventory: false,
-      };
-    }
+  const [open, setOpen] = useState({
+    dashboard: false,
+    company: false,
+    hr: false,
+    products: false,
+    expense: false,
+    qc: false,
+    procurement: false,
+    orders: false,
+    logistics: false,
+    finance: false,
+    territory: false,
+    users: false,
+    inventory: false,
   });
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    localStorage.setItem("aim_admin_sidebar_open", JSON.stringify(open));
-  }, [open]);
 
   const menu = useMemo(
     () => [
