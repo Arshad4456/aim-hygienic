@@ -386,7 +386,7 @@ function UserSidebar({ title, roleKey, groups, pathname, openGroups, setOpenGrou
   }
 
   return (
-    <aside className={["h-screen border-r bg-white flex flex-col", collapsed ? "w-[84px]" : "w-[290px]"].join(" ")}>
+    <aside className={["h-screen border-r bg-white flex flex-col", collapsed ? "w-[84px]" : "w-[200px]"].join(" ")}>
       <div className="px-4 py-4 border-b">
         <div className="text-xs text-zinc-500">AIM Hygienic Dashboard</div>
         {!collapsed ? (
