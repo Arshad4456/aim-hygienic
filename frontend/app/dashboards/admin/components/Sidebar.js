@@ -33,25 +33,30 @@ function Icon({ name }) {
   return <span className={common}>•</span>;
 }
 
+
+const defaultOpenState = {
+  dashboard: false,
+  company: false,
+  hr: false,
+  products: false,
+  expense: false,
+  qc: false,
+  procurement: false,
+  orders: false,
+  logistics: false,
+  finance: false,
+  territory: false,
+  users: false,
+  inventory: false,
+};
+
+let adminSidebarOpenCache = { ...defaultOpenState };
+
 export default function Sidebar({ user, variant = "desktop", onClose, collapsed = false }) {
   const pathname = usePathname();
   const router = useRouter();
 
-  const [open, setOpen] = useState({
-    dashboard: false,
-    company: false,
-    hr: false,
-    products: false,
-    expense: false,
-    qc: false,
-    procurement: false,
-    orders: false,
-    logistics: false,
-    finance: false,
-    territory: false,
-    users: false,
-    inventory: false,
-  });
+  const [open, setOpen] = useState(() => ({ ...adminSidebarOpenCache }));
 
   const menu = useMemo(
     () => [
@@ -228,6 +233,14 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
     if (variant === "mobile" && onClose) onClose();
   }
 
+  function toggleOpen(key) {
+    setOpen((state) => {
+      const next = { ...state, [key]: !state[key] };
+      adminSidebarOpenCache = next;
+      return next;
+    });
+  }
+
   const widthClass =
     variant === "desktop"
       ? collapsed
@@ -305,7 +318,7 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
           return (
             <div key={item.title} className="mb-1">
               <button
-                onClick={() => setOpen((s) => ({ ...s, [item.key]: !s[item.key] }))}
+                onClick={() => toggleOpen(item.key)}
                 className="w-full flex items-center justify-between rounded-xl px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
                 title={collapsed ? item.title : undefined}
               >
@@ -327,7 +340,7 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
                       return (
                         <div key={c.title}>
                           <button
-                            onClick={() => setOpen((s) => ({ ...s, [key]: !s[key] }))}
+                            onClick={() => toggleOpen(key)}
                             className="w-full flex items-center justify-between rounded-lg px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50"
                           >
                             <span>{c.title}</span>
