@@ -40,22 +40,40 @@ export default function ReturnStockRequestModule({ role = "Brand Manager" }) {
   });
 
   async function loadData() {
-    const me = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("aim_user") || "{}") : {};
-    setUser(me);
+    const localUser = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("aim_user") || "{}") : {};
     try {
-      const [wRes, pRes, rRes, zRes, reqRes] = await Promise.all([
+      const [wRes, pRes, rRes, zRes, reqRes, meRes] = await Promise.all([
         apiFetch("/warehouses"),
         apiFetch("/products"),
         apiFetch("/regions"),
         apiFetch("/zones"),
         apiFetch(`/inventory/transactions?transactionType=RETURN_STOCK&requestSourceRole=${encodeURIComponent(role)}`),
+        apiFetch("/users/me"),
       ]);
+      const me = meRes?.user || localUser;
+      const allRegions = rRes.regions || [];
+      const allZones = zRes.zones || [];
+      const matchedRegion = allRegions.find((r) => r.regionId === me?.regionId || r.name === me?.regionName) || null;
+      const matchedZone =
+        allZones.find(
+          (z) => (z.zoneId === me?.zoneId || z.name === me?.zoneName) && (!matchedRegion || z.regionId === matchedRegion.regionId),
+        ) || null;
+
+      setUser(me);
       setWarehouses(wRes.warehouses || []);
       setProducts(pRes.products || []);
-      setRegions(rRes.regions || []);
-      setZones(zRes.zones || []);
+      setRegions(allRegions);
+      setZones(allZones);
       setRequests((reqRes.transactions || []).sort((a, b) => new Date(b.transactionAt) - new Date(a.transactionAt)));
+      setForm((prev) => ({
+        ...prev,
+        regionId: matchedRegion?._id || "",
+        zoneId: matchedZone?._id || "",
+        territoryName: (me?.territoryName || me?.areaName || "").trim(),
+        address: (me?.address || me?.shopAddress || "").trim(),
+      }));
     } catch (e) {
+      setUser(localUser);
       toast.error(e.message || "Failed to load return stock module");
     }
   }
@@ -64,10 +82,8 @@ export default function ReturnStockRequestModule({ role = "Brand Manager" }) {
     loadData();
   }, []);
 
-  const zonesForRegion = useMemo(() => {
-    const region = regions.find((r) => r._id === form.regionId);
-    return region ? zones.filter((z) => z.regionId === region.regionId) : [];
-  }, [regions, zones, form.regionId]);
+  const selectedRegion = useMemo(() => regions.find((r) => r._id === form.regionId) || null, [regions, form.regionId]);
+  const selectedZone = useMemo(() => zones.find((z) => z._id === form.zoneId) || null, [zones, form.zoneId]);
 
   function setField(key, value) {
     setForm((s) => ({ ...s, [key]: value }));
@@ -98,6 +114,12 @@ export default function ReturnStockRequestModule({ role = "Brand Manager" }) {
 
       if (!toWarehouse || !rows.length) {
         toast.error("Please select warehouse and at least one valid product row.");
+        return;
+      }
+
+      const hasMissingDates = rows.some(({ line }) => !line.manufactureDate || !line.expiryDate);
+      if (hasMissingDates) {
+        toast.error("Manufacture date and expiry date are required for all selected products.");
         return;
       }
 
@@ -167,10 +189,10 @@ export default function ReturnStockRequestModule({ role = "Brand Manager" }) {
           <form onSubmit={submit} className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
             <Input label="From" value={user?.businessName || user?.fullName || ""} onChange={() => {}} readOnly />
             <Select label="To Warehouse" value={form.toWarehouseId} onChange={(v) => setField("toWarehouseId", v)} options={warehouses.map((w) => ({ value: w._id, label: w.name }))} />
-            <Select label="Region" value={form.regionId} onChange={(v) => setField("regionId", v)} options={regions.map((r) => ({ value: r._id, label: r.name }))} />
-            <Select label="Zone" value={form.zoneId} onChange={(v) => setField("zoneId", v)} options={zonesForRegion.map((z) => ({ value: z._id, label: z.name }))} />
-            <Input label="Territory" value={form.territoryName} onChange={(v) => setField("territoryName", v)} />
-            <Input label="Address" value={form.address} onChange={(v) => setField("address", v)} />
+            <Input label="Region" value={selectedRegion?.name || user?.regionName || ""} onChange={() => {}} readOnly />
+            <Input label="Zone" value={selectedZone?.name || user?.zoneName || ""} onChange={() => {}} readOnly />
+            <Input label="Territory" value={form.territoryName} onChange={() => {}} readOnly />
+            <Input label="Address" value={form.address} onChange={() => {}} readOnly />
 
             <div className="md:col-span-2">
               <h4 className="font-semibold mb-2">Product Detail</h4>
@@ -195,8 +217,8 @@ export default function ReturnStockRequestModule({ role = "Brand Manager" }) {
                       <tr key={idx} className="border-b">
                         <td className="p-2"><SelectBare value={line.productId} onChange={(v) => setItem(idx, "productId", v)} options={products.map((p) => ({ value: p._id, label: `${p.productId} - ${p.name}` }))} /></td>
                         <td className="p-2"><InputBare value={line.qty} onChange={(v) => setItem(idx, "qty", v)} type="number" /></td>
-                        <td className="p-2"><InputBare value={line.manufactureDate} onChange={(v) => setItem(idx, "manufactureDate", v)} type="date" /></td>
-                        <td className="p-2"><InputBare value={line.expiryDate} onChange={(v) => setItem(idx, "expiryDate", v)} type="date" /></td>
+                        <td className="p-2"><InputBare value={line.manufactureDate} onChange={(v) => setItem(idx, "manufactureDate", v)} type="date" required /></td>
+                        <td className="p-2"><InputBare value={line.expiryDate} onChange={(v) => setItem(idx, "expiryDate", v)} type="date" required /></td>
                         <td className="p-2"><InputBare value={line.toValue} readOnly /></td>
                         <td className="p-2"><InputBare value={line.discValue} readOnly /></td>
                         <td className="p-2"><InputBare value={line.extraValue} readOnly /></td>
@@ -261,8 +283,8 @@ function Select({ label, value, onChange, options }) {
   return <label className="text-sm"><span className="text-zinc-600">{label}</span><select className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" value={value} onChange={(e) => onChange(e.target.value)}><option value="">Select...</option>{options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>;
 }
 
-function InputBare({ value, onChange = () => {}, type = "text", readOnly = false }) {
-  return <input className="w-full min-w-[82px] border rounded px-2 py-1" type={type} value={value} readOnly={readOnly} onChange={(e) => onChange(e.target.value)} />;
+function InputBare({ value, onChange = () => {}, type = "text", readOnly = false, required = false }) {
+  return <input className="w-full min-w-[82px] border rounded px-2 py-1" type={type} value={value} readOnly={readOnly} required={required} onChange={(e) => onChange(e.target.value)} />;
 }
 
 function SelectBare({ value, onChange, options }) {

@@ -135,6 +135,7 @@ export default function WarehouseInventoryModulePage() {
   const [ledgerSearch, setLedgerSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [previewRequest, setPreviewRequest] = useState(null);
   const [transferSaving, setTransferSaving] = useState(false);
   const submitLockRef = useRef(false);
   const [form, setForm] = useState({
@@ -1142,6 +1143,7 @@ export default function WarehouseInventoryModulePage() {
               onOpen={markRequestRead}
               onApprove={(id) => updateReturnRequestStatus(id, "APPROVED")}
               onReject={(id) => updateReturnRequestStatus(id, "REJECTED")}
+              onPreview={(row) => setPreviewRequest(row)}
             />
           </section>
         ) : null}
@@ -1180,6 +1182,7 @@ export default function WarehouseInventoryModulePage() {
             <LedgerTable type={selectedCard} rows={cardTx} onDelete={deleteRecord} onInvoice={printInvoice} />
           </section>
         ) : null}
+        <RequestPreviewModal row={previewRequest} onClose={() => setPreviewRequest(null)} />
       </div>
     </AdminShell>
   );
@@ -1229,7 +1232,7 @@ function LedgerTable({ type, rows, onDelete, onInvoice }) {
   );
 }
 
-function RequestReturnStocksTable({ rows, onOpen, onApprove, onReject }) {
+function RequestReturnStocksTable({ rows, onOpen, onApprove, onReject, onPreview }) {
   return (
     <div className="overflow-x-auto mt-2">
       <table className="min-w-full text-sm">
@@ -1259,6 +1262,7 @@ function RequestReturnStocksTable({ rows, onOpen, onApprove, onReject }) {
                 <td className="p-2">
                   <div className="flex gap-2">
                     <button className="rounded border px-2 py-1" onClick={() => onOpen(r._id)}>Open</button>
+                    <button className="rounded border border-emerald-300 px-2 py-1 text-emerald-700" onClick={() => onPreview(r)}>Preview</button>
                     {status === "PENDING" ? (
                       <>
                         <button className="rounded border border-blue-300 px-2 py-1 text-blue-700" onClick={() => onApprove(r._id)}>Approve</button>
@@ -1272,6 +1276,71 @@ function RequestReturnStocksTable({ rows, onOpen, onApprove, onReject }) {
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+
+function RequestPreviewModal({ row, onClose }) {
+  if (!row) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-4xl rounded-2xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b px-5 py-3">
+          <div>
+            <div className="text-lg font-semibold">Return Stock Request Preview</div>
+            <div className="text-sm text-zinc-500">{row.transactionCode || "-"}</div>
+          </div>
+          <button type="button" className="rounded border px-3 py-1 text-sm" onClick={onClose}>Close</button>
+        </div>
+
+        <div className="max-h-[70vh] overflow-auto p-5">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <PreviewField label="From" value={row.fromEntityName || "-"} />
+            <PreviewField label="Source" value={row.requestSourceRole || row.fromEntityType || "-"} />
+            <PreviewField label="Region" value={row.regionName || row.regionId || "-"} />
+            <PreviewField label="Zone" value={row.zoneName || row.zoneId || "-"} />
+            <PreviewField label="Territory" value={row.territory || "-"} />
+            <PreviewField label="To" value={row.toEntityName || row.warehouseName || "-"} />
+            <div className="md:col-span-2">
+              <PreviewField label="Address" value={row.note || "-"} />
+            </div>
+          </div>
+
+          <div className="mt-4 overflow-x-auto rounded-xl border">
+            <table className="min-w-full text-sm">
+              <thead className="bg-zinc-50">
+                <tr>
+                  <th className="px-3 py-2 text-left border-b">Product</th>
+                  <th className="px-3 py-2 text-left border-b">Quantity</th>
+                  <th className="px-3 py-2 text-left border-b">Manufacture Date</th>
+                  <th className="px-3 py-2 text-left border-b">Expiry Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(row.items || []).map((item, idx) => (
+                  <tr key={`${item.productId || item.productName}-${idx}`} className="border-b">
+                    <td className="px-3 py-2">{item.productName || item.productId || "-"}</td>
+                    <td className="px-3 py-2">{item.totalPacks ?? item.qty ?? "-"}</td>
+                    <td className="px-3 py-2">{item.manufactureDate ? new Date(item.manufactureDate).toLocaleDateString() : "-"}</td>
+                    <td className="px-3 py-2">{item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PreviewField({ label, value }) {
+  return (
+    <div>
+      <div className="text-xs font-medium text-zinc-500">{label}</div>
+      <div className="mt-1 rounded border bg-zinc-50 px-3 py-2 text-sm">{value || "-"}</div>
     </div>
   );
 }
