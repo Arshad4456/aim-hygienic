@@ -245,7 +245,7 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
     variant === "desktop"
       ? collapsed
         ? "w-[70px]"
-        : "w-[220px]"
+        : "w-[260px]"
       : "w-[290px]";
 
   return (
