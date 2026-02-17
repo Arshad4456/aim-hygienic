@@ -76,6 +76,10 @@ function deriveRoleSlug(links, roleKey) {
 
 let userSidebarOpenGroupsCache = {};
 
+function clearUserSidebarOpenGroupsCache() {
+  userSidebarOpenGroupsCache = {};
+}
+
 export default function UserDashboardShell({ title, subtitle, roleKey, links = [], showAccountCards = false, children = null }) {
   const [query, setQuery] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -123,6 +127,7 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
       document.cookie = "aim_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
       document.cookie = "aim_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     }
+    clearUserSidebarOpenGroupsCache();
     setMenuOpen(false);
     setMobileOpen(false);
     router.push("/login");
@@ -400,14 +405,10 @@ function UserSidebar({ title, roleKey, groups, pathname, openGroups, setOpenGrou
                   } else {
                     setOpenGroups((prev) => {
                       const isCurrentlyOpen = prev[group.key] ?? false;
-                      if (isCurrentlyOpen) return { ...prev, [group.key]: false };
-
-                      const next = {};
-                      groups.forEach((entry) => {
-                        next[entry.key] = false;
-                      });
-                      next[group.key] = true;
-                      return next;
+                      return {
+                        ...prev,
+                        [group.key]: !isCurrentlyOpen,
+                      };
                     });
                   }
                 }}
