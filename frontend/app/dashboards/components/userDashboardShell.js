@@ -331,11 +331,6 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
         <main className="flex-1 overflow-y-auto px-4 md:px-6 py-5">
           {children ? children : (
             <>
-              <div className="rounded-2xl border bg-white p-5">
-                <div className="text-sm text-zinc-600">Signed in role</div>
-                <div className="text-base font-semibold text-zinc-900">{roleKey}</div>
-              </div>
-
               {showAccountCards ? (
                 <div className="mt-4 rounded-2xl border bg-white p-4">
                   <div className="text-sm font-semibold text-zinc-900">Quick Actions</div>
