@@ -1,5 +1,17 @@
 import UserSettingsView from "../../components/UserSettingsView";
+import UserDashboardShell from "../../components/userDashboardShell";
+import { userDashboardSearchItems } from "../../searchItems";
 
 export default function Page() {
-  return <UserSettingsView titlePrefix="Brand Manager" />;
+  return (
+    <UserDashboardShell
+      title="Brand Manager Dashboard"
+      subtitle="Manage brand modules from the sidebar."
+      roleKey="Brand Manager"
+      links={userDashboardSearchItems.brandManager || []}
+      showAccountCards
+    >
+      <UserSettingsView titlePrefix="Brand Manager" />
+    </UserDashboardShell>
+  );
 }
