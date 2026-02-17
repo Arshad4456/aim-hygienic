@@ -74,6 +74,8 @@ function deriveRoleSlug(links, roleKey) {
   return "";
 }
 
+let userSidebarOpenGroupsCache = {};
+
 export default function UserDashboardShell({ title, subtitle, roleKey, links = [], showAccountCards = false, children = null }) {
   const [query, setQuery] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -82,7 +84,9 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
     if (typeof window === "undefined") return false;
     return localStorage.getItem("aim_user_sidebar_collapsed") === "1";
   });
-  const [openGroups, setOpenGroups] = useState({});
+  const roleSlug = useMemo(() => deriveRoleSlug(links, roleKey), [links, roleKey]);
+  const sidebarCacheKey = roleSlug || roleKey || "default";
+  const [openGroups, setOpenGroups] = useState(() => userSidebarOpenGroupsCache[sidebarCacheKey] || {});
   const router = useRouter();
   const pathname = usePathname();
   const menuRef = useRef(null);
@@ -130,8 +134,6 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
     return links.filter((item) => item.title.toLowerCase().includes(value));
   }, [query, links]);
 
-  const roleSlug = useMemo(() => deriveRoleSlug(links, roleKey), [links, roleKey]);
-
   const settingsHref = roleSlug ? `/dashboards/${roleSlug}/settings` : "/dashboards/admin/settings";
   const changePasswordHref = roleSlug ? `/dashboards/${roleSlug}/settings/change-password` : "/dashboards/admin/settings/change-password";
 
@@ -147,6 +149,14 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
     () => links.filter((item) => !/account settings|change password/i.test(item.title)),
     [links],
   );
+
+
+  useEffect(() => {
+    userSidebarOpenGroupsCache = {
+      ...userSidebarOpenGroupsCache,
+      [sidebarCacheKey]: openGroups,
+    };
+  }, [openGroups, sidebarCacheKey]);
 
   const moduleGroups = useMemo(() => {
     const grouped = [];
@@ -236,8 +246,8 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
               </div>
             </div>
 
-            <div className="flex w-full md:w-auto items-center gap-3">
-              <div className="relative w-full max-w-[380px]">
+            <div className="flex w-full md:w-auto md:min-w-[560px] md:justify-end md:flex-nowrap items-center gap-3">
+              <div className="relative w-full md:flex-1 md:min-w-[260px] md:max-w-[430px]">
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
@@ -273,7 +283,7 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
                   onClick={() => setMenuOpen((v) => !v)}
                   className="flex items-center gap-3 rounded-2xl hover:bg-zinc-50 px-2 py-1.5"
                 >
-                  <div className="text-right hidden sm:block leading-tight">
+                  <div className="text-right hidden sm:block leading-tight whitespace-nowrap">
                     <div className="text-sm font-medium text-zinc-900">{user?.fullName || roleKey}</div>
                     <div className="text-xs text-zinc-500">{user?.role || roleKey}</div>
                   </div>

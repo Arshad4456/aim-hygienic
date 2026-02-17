@@ -136,8 +136,8 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
               </div>
             </div>
 
-            <div className="flex w-full md:w-auto items-center gap-3">
-              <div className="relative w-full max-w-[420px]" ref={searchRef}>
+            <div className="flex w-full md:w-auto md:min-w-[620px] md:justify-end md:flex-nowrap items-center gap-3">
+              <div className="relative w-full md:flex-1 md:min-w-[280px] md:max-w-[500px]" ref={searchRef}>
                 <input
                   type="text"
                   value={searchTerm}
@@ -176,7 +176,7 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
                   onClick={() => setUserMenuOpen((v) => !v)}
                   className="flex items-center gap-3 rounded-2xl hover:bg-zinc-50 px-2 py-1.5"
                 >
-                  <div className="text-right hidden sm:block leading-tight">
+                  <div className="text-right hidden sm:block leading-tight whitespace-nowrap">
                     <div className="text-sm font-medium text-zinc-900">
                       {user?.fullName || "System Admin"}
                     </div>
