@@ -137,7 +137,7 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
             </div>
 
             <div className="flex w-full md:w-auto md:min-w-[620px] md:justify-end md:flex-nowrap items-center gap-3">
-              <div className="relative w-full md:flex-1 md:min-w-[280px] md:max-w-[500px]" ref={searchRef}>
+              <div className="relative w-full md:flex-1 md:min-w-[280px] md:max-w-[300px]" ref={searchRef}>
                 <input
                   type="text"
                   value={searchTerm}
