@@ -11,6 +11,8 @@ export default function SalesOrdersPage() {
   const [err, setErr] = useState("");
   const [form, setForm] = useState({
     customerName: "",
+    saleType: "primary",
+    sourceType: "brand",
     customerType: "customer",
     orderNo: "",
     expectedDelivery: "",
@@ -62,7 +64,9 @@ export default function SalesOrdersPage() {
   const resetForm = () => {
     setForm({
       customerName: "",
-      customerType: "customer",
+      saleType: "primary",
+    sourceType: "brand",
+    customerType: "customer",
       orderNo: "",
       expectedDelivery: "",
       notes: "",
@@ -77,6 +81,8 @@ export default function SalesOrdersPage() {
     try {
       const payload = {
         customerName: form.customerName,
+        saleType: form.saleType,
+        sourceType: form.sourceType,
         customerType: form.customerType,
         orderNo: form.orderNo || undefined,
         expectedDelivery: form.expectedDelivery || undefined,
@@ -130,6 +136,30 @@ export default function SalesOrdersPage() {
                   <option value="customer">Customer</option>
                   <option value="distributor">Distributor</option>
                   <option value="salesman">Salesman</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-zinc-600">Sale Type</label>
+                <select
+                  className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
+                  value={form.saleType}
+                  onChange={(event) => setForm((prev) => ({ ...prev, saleType: event.target.value }))}
+                >
+                  <option value="primary">Primary Sale</option>
+                  <option value="secondary">Secondary Sale</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-zinc-600">Request Source</label>
+                <select
+                  className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
+                  value={form.sourceType}
+                  onChange={(event) => setForm((prev) => ({ ...prev, sourceType: event.target.value }))}
+                >
+                  <option value="brand">Brand</option>
+                  <option value="distributor">Distributor</option>
+                  <option value="order_booker">Order Booker</option>
+                  <option value="customer">Customer</option>
                 </select>
               </div>
               <div>
@@ -274,6 +304,8 @@ export default function SalesOrdersPage() {
                 <tr>
                   <th className="text-left px-3 py-2 border-b">Order No</th>
                   <th className="text-left px-3 py-2 border-b">Customer</th>
+                  <th className="text-left px-3 py-2 border-b">Sale Type</th>
+                  <th className="text-left px-3 py-2 border-b">Source</th>
                   <th className="text-left px-3 py-2 border-b">Type</th>
                   <th className="text-left px-3 py-2 border-b">Status</th>
                   <th className="text-left px-3 py-2 border-b">Total</th>
@@ -286,6 +318,8 @@ export default function SalesOrdersPage() {
                     <tr key={order._id} className="hover:bg-zinc-50">
                       <td className="px-3 py-2 border-b font-medium text-zinc-900">{order.orderNo}</td>
                       <td className="px-3 py-2 border-b">{order.customerName}</td>
+                      <td className="px-3 py-2 border-b capitalize">{order.saleType || "primary"}</td>
+                      <td className="px-3 py-2 border-b capitalize">{(order.sourceType || "customer").replace("_", " ")}</td>
                       <td className="px-3 py-2 border-b capitalize">{order.customerType}</td>
                       <td className="px-3 py-2 border-b capitalize">{order.status}</td>
                       <td className="px-3 py-2 border-b">₨ {formatNumber(order.totalAmount)}</td>
@@ -296,7 +330,7 @@ export default function SalesOrdersPage() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6} className="px-3 py-6 text-center text-zinc-500">
+                    <td colSpan={8} className="px-3 py-6 text-center text-zinc-500">
                       No orders yet. Create your first sales order above.
                     </td>
                   </tr>
