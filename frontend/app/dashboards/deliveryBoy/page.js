@@ -4,10 +4,10 @@ import { userDashboardSearchItems } from "../searchItems";
 export default function Page() {
   return (
     <UserDashboardShell
-      title="Distributor Dashboard"
+      title="Delivery Boy Dashboard"
       subtitle="Use quick search to navigate all available items for your dashboard."
-      roleKey="Distributor"
-      links={userDashboardSearchItems.distributor || []}
+      roleKey="Delivery Boy"
+      links={userDashboardSearchItems.deliveryBoy || []}
     />
   );
 }

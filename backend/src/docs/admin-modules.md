@@ -60,38 +60,39 @@ This document defines a structured, detailed module map for the Admin Dashboard 
 
 ---
 
-## 2) Order Management Module (Detailed)
+## 2) Order Management Module (Updated Primary + Secondary Sale)
 
-### 2.1 Sales Channels & Roles
-- **Customer Orders** from customer dashboard.
-- **Distributor Orders** for assigned zones.
-- **Salesman/Order Booker Orders** on behalf of customers.
-- **Channel-specific pricing** and discount rules.
+### 2.1 Primary Sale (Warehouse Sale Stock Clone)
+- Primary sale reuses warehouse sale stock behavior and APIs.
+- Order request sources: **Brand Manager** and **Distributor**.
+- Request queue supports **Unread** marker and **Preview**.
+- Status flow: **pending → approved/rejected → dispatched → delivered**.
+- Rejected status is visible on relevant dashboards and can be recovered **once**.
+- On approval, invoice/receipt is generated and sent to relevant dashboards.
+- Receipt action by brand/distributor: **Agree** / **Not Agree**.
+  - Agree turns receipt line green.
+- Warehouse/Admin then pick-pack, assign vehicle, dispatch, collect proof, and mark delivered.
 
-### 2.2 Order Lifecycle
-1. **Inquiry / Quote (optional)**
-2. **Sales Order** (SO) created by customer/salesman/distributor
-3. **Approval workflow** (credit limit, stock check, pricing check)
-4. **Pick & Pack** (warehouse allocation)
-5. **Dispatch & Delivery** (vehicle assignment, route plan)
-6. **Invoice & Payment** (cash/credit, collection schedule)
-7. **Returns & Claims** (RMA, defective, replacements)
+### 2.2 Secondary Sale (Field Booking Flow)
+- Order Booker books secondary sale orders from shops/markets/malls.
+- Requests route to the relevant territory distributor and admin.
+- Queue supports unread and preview states.
+- If rejected, ledger receipt shows **Rejected stamp** in red for relevant stakeholders.
+- If approved, receipt and alerts go to relevant salesman and related users.
+- Salesman packs from distributor stock and dispatch is set by distributor/admin.
+- Salesman uploads **Proof of Delivery** (camera/upload flow equivalent).
+- Distributor/admin verifies proof and marks order delivered.
+- Delivered status generates delivered-stamped receipt in ledger.
 
-### 2.3 Key Features
-- **Order validation**
-  - Check stock availability, customer credit limits, and pricing rules.
-- **Allocation rules**
-  - Allocate from main warehouse or nearest branch warehouse.
-- **Delivery scheduling**
-  - Assign distributor/vehicle/driver/route per zone/area.
-- **Order status tracking**
-  - Draft → Approved → Picking → Dispatched → Delivered → Closed.
+### 2.3 Direct Customer Requests
+- Customer can place request directly from customer dashboard.
+- Requests route to the linked territory distributor (not all distributors) and admin.
+- Follow same approval, dispatch, proof, and delivery lifecycle as secondary sale.
 
-### 2.4 Reporting
-- **Open order backlog**
-- **Fulfillment SLA**
-- **Sales performance by zone/area**
-- **Customer purchase history**
+### 2.4 Operational Controls
+- Role-aware dashboards show relevant requests and status updates.
+- Receipt agreement and proof-of-delivery are tracked at order level.
+- Status history is kept for audit and ledger stamping workflows.
 
 ---
 
@@ -127,6 +128,6 @@ This document defines a structured, detailed module map for the Admin Dashboard 
 ## 5) Immediate Priorities for Implementation
 1. Supplier role + linkage to warehouses (done in User Management fields).
 2. Warehouse → Zone → Area linkage (done by attaching warehouses to zones, and zones to areas).
-3. Order Management module scaffolding (Sales Order → Approval → Dispatch → Delivery).
+3. Order Management module update (Primary + Secondary sale workflows, receipt agreement, proof of delivery, delivered stamping).
 4. Inventory ledger-based flow to keep audit and consistency.
 

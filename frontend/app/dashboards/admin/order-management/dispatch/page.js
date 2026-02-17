@@ -165,7 +165,7 @@ export default function OrderDispatchPage() {
                         ) : (
                           <button
                             className="rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-                            onClick={() => updateStatus(order._id, "completed")}
+                            onClick={() => updateStatus(order._id, "delivered")}
                             disabled={updatingId === order._id}
                           >
                             Mark Delivered
