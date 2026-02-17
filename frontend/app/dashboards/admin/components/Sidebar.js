@@ -2,7 +2,6 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { apiFetch } from "../../../lib/api";
 
 function Icon({ name }) {
   // No extra library required — simple, safe icons
@@ -38,48 +37,83 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
   const pathname = usePathname();
   const router = useRouter();
 
-  const [open, setOpen] = useState({
-    products: true,
-    company: false,
-    expense: false,
-    qc: false,
-    procurement: false,
-    orders: false,
-    logistics: false,
-    finance: false,
-    hr: false,
-    territory: false,
-    users: false,
-    inventory: false,
+  const [open, setOpen] = useState(() => {
+    if (typeof window === "undefined") {
+      return {
+        dashboard: false,
+        company: false,
+        hr: false,
+        products: false,
+        expense: false,
+        qc: false,
+        procurement: false,
+        orders: false,
+        logistics: false,
+        finance: false,
+        territory: false,
+        users: false,
+        inventory: false,
+      };
+    }
+
+    const raw = localStorage.getItem("aim_admin_sidebar_open");
+    if (!raw) {
+      return {
+        dashboard: false,
+        company: false,
+        hr: false,
+        products: false,
+        expense: false,
+        qc: false,
+        procurement: false,
+        orders: false,
+        logistics: false,
+        finance: false,
+        territory: false,
+        users: false,
+        inventory: false,
+      };
+    }
+
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return {
+        dashboard: false,
+        company: false,
+        hr: false,
+        products: false,
+        expense: false,
+        qc: false,
+        procurement: false,
+        orders: false,
+        logistics: false,
+        finance: false,
+        territory: false,
+        users: false,
+        inventory: false,
+      };
+    }
   });
-  const [hasLowStock, setHasLowStock] = useState(false);
 
   useEffect(() => {
-    let isMounted = true;
-    async function loadLowStock() {
-      try {
-        const data = await apiFetch("/inventory/low-stock");
-        if (isMounted) setHasLowStock((data.lowStock || []).length > 0);
-      } catch {
-        if (isMounted) setHasLowStock(false);
-      }
-    }
-    loadLowStock();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+    if (typeof window === "undefined") return;
+    localStorage.setItem("aim_admin_sidebar_open", JSON.stringify(open));
+  }, [open]);
 
   const menu = useMemo(
     () => [
-      { type: "link", title: "Dashboard", href: "/dashboards/admin", icon: "dashboard" },
       {
-        type: "link",
-        title: "Operations Command Center",
-        href: "/dashboards/admin/operations",
-        icon: "operations",
+        type: "group",
+        key: "dashboard",
+        title: "Dashboard",
+        icon: "dashboard",
+        children: [
+          { title: "Dashboard Overview", href: "/dashboards/admin" },
+          { title: "Operations Command Center", href: "/dashboards/admin/operations" },
+          { title: "Sales KPI", href: "/dashboards/admin/sales-kpi" },
+        ],
       },
-      { type: "link", title: "Sales KPI", href: "/dashboards/admin/sales-kpi", badge: "Premium", icon: "sales" },
 
       {
         type: "group",
@@ -89,6 +123,18 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
         children: [
           { title: "Add New Company", href: "/dashboards/admin/companies/add" },
           { title: "Company List", href: "/dashboards/admin/companies" },
+        ],
+      },
+
+      {
+        type: "group",
+        key: "hr",
+        title: "HR & Role Management",
+        icon: "hr",
+        children: [
+          { title: "Module Overview", href: "/dashboards/admin/hr" },
+          { title: "Add User", href: "/dashboards/admin/users/add" },
+          { title: "User List", href: "/dashboards/admin/users" },
         ],
       },
 
@@ -193,18 +239,6 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
 
       {
         type: "group",
-        key: "hr",
-        title: "HR & Role Management",
-        icon: "hr",
-        children: [
-          { title: "Module Overview", href: "/dashboards/admin/hr" },
-          { title: "Add User", href: "/dashboards/admin/users/add" },
-          { title: "User List", href: "/dashboards/admin/users" },
-        ],
-      },
-
-      {
-        type: "group",
         key: "qc",
         title: "Quality & Compliance",
         icon: "qc",
@@ -234,7 +268,7 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
       { type: "link", title: "Reports", href: "/dashboards/admin/reports", icon: "reports" },
       { type: "link", title: "Settings", href: "/dashboards/admin/settings", icon: "settings" },
     ],
-    [hasLowStock]
+    []
   );
 
   function go(href) {
