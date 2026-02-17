@@ -390,7 +390,7 @@ function UserSidebar({ title, roleKey, groups, pathname, openGroups, setOpenGrou
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {groups.map((group) => {
           const active = group.items.some((item) => pathname === item.href);
-          const isOpen = openGroups[group.key] ?? true;
+          const isOpen = openGroups[group.key] ?? false;
           return (
             <div key={group.key} className="rounded-xl border border-zinc-200 bg-zinc-50">
               <button
@@ -399,7 +399,17 @@ function UserSidebar({ title, roleKey, groups, pathname, openGroups, setOpenGrou
                   if (collapsed) {
                     go(group.items[0].href);
                   } else {
-                    setOpenGroups((prev) => ({ ...prev, [group.key]: !prev[group.key] }));
+                    setOpenGroups((prev) => {
+                      const isCurrentlyOpen = prev[group.key] ?? false;
+                      if (isCurrentlyOpen) return { ...prev, [group.key]: false };
+
+                      const next = {};
+                      groups.forEach((entry) => {
+                        next[entry.key] = false;
+                      });
+                      next[group.key] = true;
+                      return next;
+                    });
                   }
                 }}
                 className={[
