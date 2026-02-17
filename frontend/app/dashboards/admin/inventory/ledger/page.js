@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import AdminShell from "../../components/AdminShell";
 import { apiFetch } from "../../../../lib/api";
+import { getAuthItem } from "../../../../lib/clientAuth";
 
 const movementTypes = [
   "PURCHASE_IN",
@@ -208,7 +209,7 @@ export default function InventoryLedgerPage() {
     win.print();
   }
 
-  const role = typeof window !== "undefined" ? localStorage.getItem("aim_role") : "";
+  const role = typeof window !== "undefined" ? getAuthItem("aim_role") : "";
   const filteredRows = filterType ? rows.filter((r) => r.movementType === filterType) : rows;
 
   return (

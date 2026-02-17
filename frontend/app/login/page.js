@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "../lib/api";
+import { getAuthItem, setAuthSession } from "../lib/clientAuth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,8 +15,8 @@ export default function LoginPage() {
 
   // If already logged in
   useEffect(() => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("aim_token") : null;
-    const role = typeof window !== "undefined" ? localStorage.getItem("aim_role") : null;
+    const token = typeof window !== "undefined" ? getAuthItem("aim_token") : null;
+    const role = typeof window !== "undefined" ? getAuthItem("aim_role") : null;
     if (token && role) {
       router.replace(roleRedirect(role));
     }
@@ -59,9 +60,7 @@ export default function LoginPage() {
       });
 
       // Save token + role (fast production approach)
-      localStorage.setItem("aim_token", data.token);
-      localStorage.setItem("aim_role", data.user?.role || "");
-      localStorage.setItem("aim_user", JSON.stringify(data.user || {}));
+      setAuthSession({ token: data.token, role: data.user?.role || "", user: data.user || {} });
 
       // Cookie for middleware/protection (optional now, useful later)
       document.cookie = `aim_token=${data.token}; path=/; Secure; SameSite=Lax`;
