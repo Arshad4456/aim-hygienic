@@ -15,6 +15,13 @@ function normalizeItems(items = []) {
       productCode: item.productCode ? String(item.productCode).trim() : undefined,
       quantity: Number(item.quantity),
       unitPrice: Number(item.unitPrice || 0),
+      manufactureDate: item.manufactureDate ? new Date(item.manufactureDate) : undefined,
+      expiryDate: item.expiryDate ? new Date(item.expiryDate) : undefined,
+      toValue: Number(item.toValue || 0),
+      discValue: Number(item.discValue || 0),
+      extraValue: Number(item.extraValue || 0),
+      bonsValue: Number(item.bonsValue || 0),
+      gstPer: Number(item.gstPer || 0),
     }));
 }
 
@@ -249,6 +256,11 @@ router.patch("/:id/status", requireAuth, async (req, res) => {
       order.unreadForDistributor = true;
       order.unreadForBrandManager = true;
     }
+    if (status === "approved" && !order.invoiceNo) {
+      order.invoiceNo = `INV-${Date.now()}`;
+      order.invoiceGeneratedAt = new Date();
+      order.receiptAgreement = "pending";
+    }
     if (status === "delivered") {
       order.deliveredAt = new Date();
       order.unreadForDistributor = true;
@@ -280,6 +292,11 @@ router.post("/", requireAuth, async (req, res) => {
     }
 
     const totalAmount = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+    const role = String(req.user?.role || "").trim();
+    const ownUserId = req.user?.userId || "";
+    const isBrandManager = role === "Brand Manager";
+    const isDistributor = role === "Distributor";
+
     const order = await SalesOrder.create({
       orderNo: orderNo || `SO-${Date.now()}`,
       customerName: String(customerName).trim(),
@@ -291,13 +308,23 @@ router.post("/", requireAuth, async (req, res) => {
       totalAmount,
       notes: notes ? String(notes).trim() : undefined,
       createdBy: req.user?._id,
-      brandManagerId: req.body?.brandManagerId || req.user?.managerId || "",
-      distributorId: req.body?.distributorId || req.user?.distributorId || "",
+      brandManagerId: req.body?.brandManagerId || (isBrandManager ? ownUserId : req.user?.managerId) || "",
+      distributorId: req.body?.distributorId || (isDistributor ? ownUserId : req.user?.distributorId) || "",
       orderBookerId: req.body?.orderBookerId || req.user?.orderBookerId || req.user?.userId || "",
       salesmanId: req.body?.salesmanId || req.user?.salesmanId || "",
       customerId: req.body?.customerId || req.user?.customerId || req.user?.userId || "",
       warehouseManagerId: req.body?.warehouseManagerId || req.user?.warehouseManagerId || "",
       deliveryBoyId: req.body?.deliveryBoyId || req.user?.deliveryBoyId || "",
+      fromEntityName: req.body?.fromEntityName || req.user?.businessName || req.user?.fullName || "",
+      fromEntityRole: req.body?.fromEntityRole || role,
+      toWarehouseId: req.body?.toWarehouseId || "",
+      toWarehouseName: req.body?.toWarehouseName || "",
+      regionId: req.body?.regionId || req.user?.regionId || "",
+      regionName: req.body?.regionName || req.user?.regionName || "",
+      zoneId: req.body?.zoneId || req.user?.zoneId || "",
+      zoneName: req.body?.zoneName || req.user?.zoneName || "",
+      territoryName: req.body?.territoryName || req.user?.territoryName || req.user?.areaName || "",
+      address: req.body?.address || req.user?.address || req.user?.shopAddress || "",
       statusHistory: [{ status: "pending", changedBy: req.user?._id, changedAt: new Date(), note: "Order created" }],
     });
 

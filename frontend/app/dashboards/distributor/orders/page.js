@@ -1,6 +1,17 @@
-import UserOrderCenter from "../../components/UserOrderCenter";
+import PrimaryOrderRequestModule from "../../components/PrimaryOrderRequestModule";
+import UserDashboardShell from "../../components/userDashboardShell";
 import { userDashboardSearchItems } from "../../searchItems";
 
 export default function Page() {
-  return <UserOrderCenter title="Distributor Order Desk" roleKey="Distributor" links={userDashboardSearchItems.distributor || []} canConfirmReceipt />;
+  return (
+    <UserDashboardShell
+      title="Distributor Order Desk"
+      subtitle="Create primary sale order requests and manage receipt agreement from ledger."
+      roleKey="Distributor"
+      links={userDashboardSearchItems.distributor || []}
+      showAccountCards
+    >
+      <PrimaryOrderRequestModule role="Distributor" />
+    </UserDashboardShell>
+  );
 }
