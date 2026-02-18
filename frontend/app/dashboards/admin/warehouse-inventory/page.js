@@ -110,6 +110,24 @@ function uniqById(rows = []) {
   });
 }
 
+function normalizeRequestSource(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z]/g, "");
+}
+
+function isSaleOrderRequest(row) {
+  if (!row || row.transactionType !== "SALE_STOCK") return false;
+  const source = normalizeRequestSource(row.requestSourceRole || row.fromEntityType || "");
+  const hasKnownSource = source.includes("brandmanager") || source.includes("distributor") || source === "brand";
+  return hasKnownSource || Boolean(row.requestStatus) || Boolean(row.requestReadAt);
+}
+
+function sourceRoleLabel(row) {
+  const source = normalizeRequestSource(row?.requestSourceRole || row?.fromEntityType || "");
+  if (source.includes("brandmanager") || source === "brand") return "Brand Manager";
+  if (source.includes("distributor")) return "Distributor";
+  return row?.requestSourceRole || row?.fromEntityType || "-";
+}
+
 export default function WarehouseInventoryModulePage() {
   const [selectedCard, setSelectedCard] = useState(cards[0].key);
   const [saleMode, setSaleMode] = useState("brand");
@@ -324,8 +342,7 @@ export default function WarehouseInventoryModulePage() {
   const saleStockRequests = useMemo(
     () =>
       transactions
-        .filter((t) => t.transactionType === "SALE_STOCK")
-        .filter((t) => ["Brand Manager", "Distributor"].includes(String(t.requestSourceRole || "")))
+        .filter((t) => isSaleOrderRequest(t))
         .sort((a, b) => new Date(b.transactionAt).getTime() - new Date(a.transactionAt).getTime()),
     [transactions],
   );
@@ -1399,7 +1416,7 @@ function RequestOrderStocksTable({ rows, onOpen, onApprove, onReject, onDispatch
               <tr key={r._id} className="border-b">
                 <td className="p-2">{r.transactionCode}</td>
                 <td className="p-2">{r.fromEntityName || "-"}</td>
-                <td className="p-2">{r.requestSourceRole || "-"}</td>
+                <td className="p-2">{sourceRoleLabel(r)}</td>
                 <td className="p-2">{r.transactionAt ? new Date(r.transactionAt).toLocaleString() : "-"}</td>
                 <td className="p-2">{status}</td>
                 <td className="p-2">{unread ? <span className="rounded bg-amber-100 px-2 py-1 text-xs text-amber-800">Unread</span> : "Read"}</td>
@@ -1436,7 +1453,7 @@ function RequestReturnStocksTable({ rows, onOpen, onApprove, onReject, onPreview
               <tr key={r._id} className="border-b">
                 <td className="p-2">{r.transactionCode}</td>
                 <td className="p-2">{r.fromEntityName || "-"}</td>
-                <td className="p-2">{r.requestSourceRole || "-"}</td>
+                <td className="p-2">{sourceRoleLabel(r)}</td>
                 <td className="p-2">{r.transactionAt ? new Date(r.transactionAt).toLocaleString() : "-"}</td>
                 <td className="p-2">{status}</td>
                 <td className="p-2">{unread ? <span className="rounded bg-amber-100 px-2 py-1 text-xs text-amber-800">Unread</span> : "Read"}</td>
@@ -1479,7 +1496,7 @@ function RequestPreviewModal({ row, onClose }) {
         <div className="max-h-[70vh] overflow-auto p-5">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <PreviewField label="From" value={row.fromEntityName || "-"} />
-            <PreviewField label="Source" value={row.requestSourceRole || row.fromEntityType || "-"} />
+            <PreviewField label="Source" value={sourceRoleLabel(row)} />
             <PreviewField label="Region" value={row.regionName || row.regionId || "-"} />
             <PreviewField label="Zone" value={row.zoneName || row.zoneId || "-"} />
             <PreviewField label="Territory" value={row.territory || "-"} />
