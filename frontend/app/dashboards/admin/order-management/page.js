@@ -42,6 +42,8 @@ export default function OrderManagementModulePage() {
   const [products, setProducts] = useState([]);
   const [regions, setRegions] = useState([]);
   const [zones, setZones] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [fields, setFields] = useState([]);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
   const [form, setForm] = useState({
@@ -49,6 +51,9 @@ export default function OrderManagementModulePage() {
     primarySaleMode: "brand",
     businessType: "",
     businessName: "",
+    businessUserId: "",
+    distributorUserId: "",
+    fieldId: "",
     distributorName: "",
     subDistributorName: "",
     customerName: "",
@@ -62,20 +67,64 @@ export default function OrderManagementModulePage() {
 
   const selectedRegion = useMemo(() => regions.find((item) => item._id === form.regionId), [regions, form.regionId]);
   const selectedZone = useMemo(() => zones.find((item) => item._id === form.zoneId), [zones, form.zoneId]);
+  const brandManagers = useMemo(() => users.filter((u) => u.role === "Brand Manager"), [users]);
+  const distributors = useMemo(() => users.filter((u) => u.role === "Distributor"), [users]);
+  const zonesForRegion = useMemo(() => {
+    const region = regions.find((r) => r._id === form.regionId);
+    return region ? zones.filter((z) => z.regionId === region.regionId) : [];
+  }, [regions, zones, form.regionId]);
+  const territoriesForZone = useMemo(() => {
+    const zone = zones.find((z) => z._id === form.zoneId);
+    if (!zone) return [];
+    const fromUsers = users
+      .filter((u) => u.zoneId === zone.zoneId || u.zoneName === zone.name)
+      .map((u) => u.territoryName)
+      .filter(Boolean);
+    const fromFields = fields
+      .filter((f) => f.zoneId === zone.zoneId || f.zoneName === zone.name)
+      .map((f) => f.territoryName || f.areaName)
+      .filter(Boolean);
+    return [...new Set([...fromUsers, ...fromFields])];
+  }, [zones, users, fields, form.zoneId]);
+  const fieldsForTerritory = useMemo(() => {
+    return fields.filter((f) => {
+      const regionMatch = !form.regionId || f.regionId === (regions.find((r) => r._id === form.regionId)?.regionId || "");
+      const zoneMatch = !form.zoneId || f.zoneId === (zones.find((z) => z._id === form.zoneId)?.zoneId || "");
+      const territoryMatch = !form.territoryName || f.territoryName === form.territoryName || f.areaName === form.territoryName;
+      return regionMatch && zoneMatch && territoryMatch;
+    });
+  }, [fields, form.regionId, form.zoneId, form.territoryName, regions, zones]);
+  const brandBusinessUsers = useMemo(() => {
+    const selectedField = fieldsForTerritory.find((f) => f._id === form.fieldId);
+    return brandManagers.filter((u) => !selectedField || u.fieldId === selectedField.fieldId || u.fieldName === selectedField.name);
+  }, [brandManagers, fieldsForTerritory, form.fieldId]);
+  const distributorsForTerritory = useMemo(
+    () => distributors.filter((d) => !form.territoryName || d.territoryName === form.territoryName),
+    [distributors, form.territoryName],
+  );
+  const selectedBrandManager = useMemo(() => brandBusinessUsers.find((u) => u._id === form.businessUserId), [brandBusinessUsers, form.businessUserId]);
+  const selectedDistributor = useMemo(
+    () => distributorsForTerritory.find((u) => u._id === form.distributorUserId),
+    [distributorsForTerritory, form.distributorUserId],
+  );
 
   async function loadData() {
-    const [oRes, wRes, pRes, rRes, zRes] = await Promise.all([
+    const [oRes, wRes, pRes, rRes, zRes, uRes, fRes] = await Promise.all([
       apiFetch("/orders"),
       apiFetch("/warehouses"),
       apiFetch("/products"),
       apiFetch("/regions"),
       apiFetch("/zones"),
+      apiFetch("/users"),
+      apiFetch("/fields?limit=500"),
     ]);
     setOrders(oRes.orders || []);
     setWarehouses(wRes.warehouses || []);
     setProducts(pRes.products || []);
     setRegions(rRes.regions || []);
     setZones(zRes.zones || []);
+    setUsers(uRes.users || []);
+    setFields(fRes.fields || []);
   }
 
   useEffect(() => {
@@ -91,6 +140,33 @@ export default function OrderManagementModulePage() {
       primarySaleMode: "brand",
     }));
   }, [activeMode]);
+
+  useEffect(() => {
+    if (!form.regionId && form.zoneId) setField("zoneId", "");
+  }, [form.regionId, form.zoneId]);
+
+  useEffect(() => {
+    if (!form.zoneId && form.territoryName) setField("territoryName", "");
+  }, [form.zoneId, form.territoryName]);
+
+  useEffect(() => {
+    if (!form.territoryName) {
+      if (form.fieldId) setField("fieldId", "");
+      if (form.businessUserId) setField("businessUserId", "");
+      if (form.distributorUserId) setField("distributorUserId", "");
+    }
+  }, [form.territoryName, form.fieldId, form.businessUserId, form.distributorUserId]);
+
+  useEffect(() => {
+    if (form.primarySaleMode === "brand") {
+      setField("address", selectedBrandManager?.address || "");
+      setField("businessName", selectedBrandManager?.businessName || selectedBrandManager?.fullName || "");
+    } else if (form.primarySaleMode === "distributor") {
+      const name = selectedDistributor?.businessName || selectedDistributor?.fullName || "";
+      setField("address", selectedDistributor?.address || "");
+      setField("distributorName", name);
+    }
+  }, [form.primarySaleMode, selectedBrandManager, selectedDistributor]);
 
   const filteredOrders = useMemo(() => {
     if (!activeMode) return [];
@@ -116,9 +192,9 @@ export default function OrderManagementModulePage() {
       const targetWarehouse = warehouses.find((item) => item._id === form.toWarehouseId);
       const primaryCustomerName =
         form.primarySaleMode === "brand"
-          ? form.businessName
+          ? selectedBrandManager?.businessName || selectedBrandManager?.fullName || form.businessName
           : form.primarySaleMode === "distributor"
-            ? form.distributorName
+            ? selectedDistributor?.businessName || selectedDistributor?.fullName || form.distributorName
             : form.subDistributorName;
       const customerName = activeMode === "primary" ? primaryCustomerName : form.customerName;
       const items = form.items
@@ -242,24 +318,36 @@ export default function OrderManagementModulePage() {
                     ))}
                   </div>
 
-                  <Select label="From (Warehouse)" value={form.toWarehouseId} onChange={(v) => setField("toWarehouseId", v)} options={warehouses.map((w) => ({ value: w._id, label: w.name }))} />
-                  <Input label="Address" value={form.address} onChange={(v) => setField("address", v)} />
-                  <Select label="Region" value={form.regionId} onChange={(v) => setField("regionId", v)} options={regions.map((r) => ({ value: r._id, label: r.name }))} />
-                  <Select label="Zone" value={form.zoneId} onChange={(v) => setField("zoneId", v)} options={zones.filter((z) => !form.regionId || z.regionId === selectedRegion?.regionId).map((z) => ({ value: z._id, label: z.name }))} />
-                  <Input label="Territory" value={form.territoryName} onChange={(v) => setField("territoryName", v)} />
+                  <div className="text-sm font-semibold">From</div>
+                  <div className="text-sm font-semibold">To</div>
+                  <Select label="Warehouse" value={form.toWarehouseId} onChange={(v) => setField("toWarehouseId", v)} options={warehouses.map((w) => ({ value: w._id, label: w.name }))} />
+                  <div className="grid grid-cols-1 gap-3">
+                    <Select label="Region" value={form.regionId} onChange={(v) => setField("regionId", v)} options={regions.map((r) => ({ value: r._id, label: r.name }))} />
+                    <Select label="Zone" value={form.zoneId} onChange={(v) => setField("zoneId", v)} options={zonesForRegion.map((z) => ({ value: z._id, label: z.name }))} />
+                    <Select label="Territory" value={form.territoryName} onChange={(v) => setField("territoryName", v)} options={territoriesForZone.map((t) => ({ value: t, label: t }))} />
 
-                  {form.primarySaleMode === "brand" ? (
-                    <>
-                      <Input label="Business Type" value={form.businessType} onChange={(v) => setField("businessType", v)} />
-                      <Input label="Business Name" value={form.businessName} onChange={(v) => setField("businessName", v)} />
-                    </>
-                  ) : null}
-                  {form.primarySaleMode === "distributor" ? (
-                    <Input label="Distributor Name" value={form.distributorName} onChange={(v) => setField("distributorName", v)} />
-                  ) : null}
-                  {form.primarySaleMode === "subDistributor" ? (
-                    <Input label="Sub-Distributor Name" value={form.subDistributorName} onChange={(v) => setField("subDistributorName", v)} />
-                  ) : null}
+                    {form.primarySaleMode === "brand" ? (
+                      <>
+                        <Select label="Field" value={form.fieldId || ""} onChange={(v) => setField("fieldId", v)} options={fieldsForTerritory.map((f) => ({ value: f._id, label: f.name }))} />
+                        <Select label="Business name" value={form.businessUserId} onChange={(v) => setField("businessUserId", v)} options={brandBusinessUsers.map((u) => ({ value: u._id, label: u.businessName || u.fullName }))} />
+                        <Input label="Address" value={form.address} onChange={(v) => setField("address", v)} />
+                      </>
+                    ) : null}
+
+                    {form.primarySaleMode === "distributor" ? (
+                      <>
+                        <Select label="Distributor" value={form.distributorUserId} onChange={(v) => setField("distributorUserId", v)} options={distributorsForTerritory.map((u) => ({ value: u._id, label: u.businessName || u.fullName }))} />
+                        <Input label="Address" value={form.address} onChange={(v) => setField("address", v)} />
+                      </>
+                    ) : null}
+
+                    {form.primarySaleMode === "subDistributor" ? (
+                      <>
+                        <Input label="Sub-distributor name" value={form.subDistributorName} onChange={(v) => setField("subDistributorName", v)} />
+                        <Input label="Address" value={form.address} onChange={(v) => setField("address", v)} />
+                      </>
+                    ) : null}
+                  </div>
                 </>
               ) : (
                 <>
