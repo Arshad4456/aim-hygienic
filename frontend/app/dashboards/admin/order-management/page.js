@@ -68,6 +68,7 @@ const primarySaleModes = [
 export default function OrderManagementModulePage() {
   const [activeMode, setActiveMode] = useState("");
   const [orders, setOrders] = useState([]);
+  const [transactions, setTransactions] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [products, setProducts] = useState([]);
   const [regions, setRegions] = useState([]);
@@ -156,8 +157,9 @@ export default function OrderManagementModulePage() {
   const grandTotal = useMemo(() => totalAmount - extraDiscAmt + advTaxAmt + whTaxAmt + toNum(form.expense), [totalAmount, extraDiscAmt, advTaxAmt, whTaxAmt, form.expense]);
 
   async function loadData() {
-    const [oRes, wRes, pRes, rRes, zRes, uRes, fRes] = await Promise.all([
+    const [oRes, txRes, wRes, pRes, rRes, zRes, uRes, fRes] = await Promise.all([
       apiFetch("/orders"),
+      apiFetch("/inventory/transactions"),
       apiFetch("/warehouses"),
       apiFetch("/products"),
       apiFetch("/regions"),
@@ -166,6 +168,7 @@ export default function OrderManagementModulePage() {
       apiFetch("/fields?limit=500"),
     ]);
     setOrders(oRes.orders || []);
+    setTransactions(txRes.transactions || []);
     setWarehouses(wRes.warehouses || []);
     setProducts(pRes.products || []);
     setRegions(rRes.regions || []);
@@ -217,8 +220,11 @@ export default function OrderManagementModulePage() {
 
   const filteredOrders = useMemo(() => {
     if (!activeMode) return [];
+    if (activeMode === "primary") {
+      return transactions.filter((t) => t.transactionType === "SALE_STOCK");
+    }
     return orders.filter((order) => order.saleType === modeConfig[activeMode].saleType);
-  }, [activeMode, orders]);
+  }, [activeMode, orders, transactions]);
 
   function setField(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -245,6 +251,7 @@ export default function OrderManagementModulePage() {
     setSaving(true);
     try {
       const targetWarehouse = warehouses.find((item) => item._id === form.toWarehouseId);
+      const selectedField = fieldsForTerritory.find((f) => f._id === form.fieldId);
       const primaryCustomerName =
         form.primarySaleMode === "brand"
           ? selectedBrandManager?.businessName || selectedBrandManager?.fullName || form.businessName
@@ -252,64 +259,117 @@ export default function OrderManagementModulePage() {
             ? selectedDistributor?.businessName || selectedDistributor?.fullName || form.distributorName
             : form.subDistributorName;
       const customerName = activeMode === "primary" ? primaryCustomerName : form.customerName;
-      const items = form.items
-        .map((line) => ({ line, product: products.find((p) => p._id === line.productId) }))
-        .filter((row) => row.product && Number(row.line.qty) > 0)
-        .map(({ line, product }) => ({
-          productName: product.name,
-          productCode: product.productId,
-          quantity: Number(line.qty),
-          unitPrice: Number(product.wholesalePrice || 0),
-          toValue: Number(line.toValue || 0),
-          discValue: Number(line.discValue || 0),
-          extraValue: Number(line.extraValue || 0),
-          bonsValue: Number(line.bonsValue || 0),
-          gstPer: Number(line.gstPer || 0),
-        }));
 
-      if (!targetWarehouse || !items.length || !customerName.trim()) {
-        throw new Error("Customer/source name, warehouse, and one product row are required");
+      if (!targetWarehouse || !customerName?.trim()) {
+        throw new Error("Customer/source name and warehouse are required");
       }
 
-      const sourceType =
-        activeMode === "primary"
-          ? form.primarySaleMode === "subDistributor"
-            ? "distributor"
-            : form.primarySaleMode
-          : form.sourceType;
+      if (activeMode === "primary") {
+        const normalizedItems = lineRows
+          .filter((r) => r.product && r.calc.qty > 0)
+          .map((r) => ({
+            productId: r.product.productId,
+            productName: r.product.name,
+            cartonSize: `1x${r.calc.qty || 0}`,
+            quantity: r.calc.qty,
+            unitPrice: r.calc.rate,
+            amount: r.calc.gross,
+            stockValue: r.calc.gross,
+            note: `to:${toNum(r.line.toValue)},disc:${toNum(r.line.discValue)},extra:${toNum(r.line.extraValue)},bons:${toNum(r.line.bonsValue)},v4gst:${r.calc.v4gst},gst:${r.calc.gstAmount},net:${r.calc.netAmt}`,
+          }));
 
-      const primaryMeta =
-        activeMode === "primary"
-          ? [form.businessType, form.businessName, form.distributorName, form.subDistributorName].filter(Boolean).join(" | ")
-          : "";
+        if (!normalizedItems.length) {
+          throw new Error("Add at least one product row with quantity");
+        }
 
-      await apiFetch("/orders", {
-        method: "POST",
-        body: {
-          saleType: modeConfig[activeMode].saleType,
-          sourceType,
-          customerType: sourceType === "brand" ? "brand" : sourceType,
-          customerName,
-          fromEntityName: customerName,
-          fromEntityRole: modeConfig[activeMode].title,
-          toWarehouseId: targetWarehouse.warehouseId || targetWarehouse._id,
-          toWarehouseName: targetWarehouse.name,
-          regionId: selectedRegion?.regionId || "",
-          regionName: selectedRegion?.name || "",
-          zoneId: selectedZone?.zoneId || "",
-          zoneName: selectedZone?.name || "",
-          territoryName: form.territoryName,
-          address: form.address,
-          items,
-          subtotal: totalAmount,
-          grandTotal,
+        const region = regions.find((r) => r._id === form.regionId);
+        const zone = zones.find((z) => z._id === form.zoneId);
+        const body = {
+          transactionType: "SALE_STOCK",
+          warehouseId: targetWarehouse.warehouseId || "",
+          warehouseName: targetWarehouse.name || "",
+          adjustment: 0,
           extraDiscPer: Number(form.extraDiscPer || 0),
           advTaxPer: Number(form.advTaxPer || 0),
           whTaxPer: Number(form.whTaxPer || 0),
           expense: Number(form.expense || 0),
-          notes: primaryMeta ? `Sale stock detail: ${primaryMeta}` : undefined,
-        },
-      });
+          items: normalizedItems,
+          subtotal: totalAmount,
+          grandTotal,
+          fromEntityName: targetWarehouse.name || "",
+          regionId: region?.regionId || "",
+          regionName: region?.name || "",
+          zoneId: zone?.zoneId || "",
+          zoneName: zone?.name || "",
+          territory: form.territoryName,
+          note: form.address,
+        };
+
+        if (form.primarySaleMode === "brand") {
+          body.toEntityType = "BRAND";
+          body.fieldId = form.fieldId;
+          body.fieldName = selectedField?.name || "";
+          body.toEntityName = selectedBrandManager?.businessName || selectedBrandManager?.fullName || "";
+          body.brandName = body.toEntityName;
+        } else if (form.primarySaleMode === "distributor") {
+          body.toEntityType = "DISTRIBUTOR";
+          body.distributorName = selectedDistributor?.businessName || selectedDistributor?.fullName || "";
+          body.toEntityName = body.distributorName;
+        } else {
+          body.toEntityType = "SUB_DISTRIBUTOR";
+          body.subDistributorName = form.subDistributorName;
+          body.toEntityName = form.subDistributorName;
+        }
+
+        await apiFetch("/inventory/transactions", { method: "POST", body });
+      } else {
+        const items = form.items
+          .map((line) => ({ line, product: products.find((p) => p._id === line.productId) }))
+          .filter((row) => row.product && Number(row.line.qty) > 0)
+          .map(({ line, product }) => ({
+            productName: product.name,
+            productCode: product.productId,
+            quantity: Number(line.qty),
+            unitPrice: Number(product.wholesalePrice || 0),
+            toValue: Number(line.toValue || 0),
+            discValue: Number(line.discValue || 0),
+            extraValue: Number(line.extraValue || 0),
+            bonsValue: Number(line.bonsValue || 0),
+            gstPer: Number(line.gstPer || 0),
+          }));
+
+        if (!items.length) {
+          throw new Error("Add at least one product row with quantity");
+        }
+
+        const sourceType = form.sourceType;
+        await apiFetch("/orders", {
+          method: "POST",
+          body: {
+            saleType: modeConfig[activeMode].saleType,
+            sourceType,
+            customerType: sourceType === "brand" ? "brand" : sourceType,
+            customerName,
+            fromEntityName: customerName,
+            fromEntityRole: modeConfig[activeMode].title,
+            toWarehouseId: targetWarehouse.warehouseId || targetWarehouse._id,
+            toWarehouseName: targetWarehouse.name,
+            regionId: selectedRegion?.regionId || "",
+            regionName: selectedRegion?.name || "",
+            zoneId: selectedZone?.zoneId || "",
+            zoneName: selectedZone?.name || "",
+            territoryName: form.territoryName,
+            address: form.address,
+            items,
+            subtotal: totalAmount,
+            grandTotal,
+            extraDiscPer: Number(form.extraDiscPer || 0),
+            advTaxPer: Number(form.advTaxPer || 0),
+            whTaxPer: Number(form.whTaxPer || 0),
+            expense: Number(form.expense || 0),
+          },
+        });
+      }
 
       notify("success", `${modeConfig[activeMode].title} request created successfully.`);
       setForm((prev) => ({
@@ -335,10 +395,9 @@ export default function OrderManagementModulePage() {
   }
 
 
-
   async function deleteOrder(orderId) {
     try {
-      await apiFetch(`/orders/${orderId}`, { method: "DELETE" });
+      await apiFetch(activeMode === "primary" ? `/inventory/transactions/${orderId}` : `/orders/${orderId}`, { method: "DELETE" });
       notify("success", "Order deleted successfully.");
       await loadData();
     } catch (e) {
@@ -531,9 +590,9 @@ export default function OrderManagementModulePage() {
                   <tbody>
                     {filteredOrders.map((order) => (
                       <tr key={order._id} className={`border-t ${order.status === "rejected" ? "bg-red-50" : order.status === "delivered" ? "bg-emerald-50" : ""}`}>
-                        <td className="p-2">{order.orderNo}</td>
-                        <td className="p-2">{order.customerName}</td>
-                        <td className="p-2">{order.toWarehouseName || "-"}</td>
+                        <td className="p-2">{order.orderNo || order.transactionCode}</td>
+                        <td className="p-2">{order.customerName || order.fromEntityName || "-"}</td>
+                        <td className="p-2">{order.toWarehouseName || order.warehouseName || "-"}</td>
                         <td className="p-2 capitalize">{order.status}</td>
                         <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" type="button" onClick={() => printOrderInvoice(order)}>Invoice/Receipt</button><button className="rounded border border-red-300 text-red-700 px-2 py-1" type="button" onClick={() => deleteOrder(order._id)}>Delete</button></div></td>
                         <td className="p-2">{order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}</td>
@@ -559,8 +618,8 @@ export default function OrderManagementModulePage() {
                     <tr key={order._id} className="border-t">
                       <td className="p-2">{order.orderNo || "-"}</td>
                       <td className="p-2">{order.fromEntityName || order.customerName || "-"}</td>
-                      <td className="p-2">{order.sourceType === "distributor" ? order.customerName || "-" : "-"}</td>
-                      <td className="p-2">{order.sourceType === "brand" ? order.customerName || "-" : "-"}</td>
+                      <td className="p-2">{order.distributorName || (String(order.toEntityType || "").toUpperCase() === "DISTRIBUTOR" ? (order.toEntityName || "-") : "-")}</td>
+                      <td className="p-2">{order.brandName || (String(order.toEntityType || "").toUpperCase() === "BRAND" ? (order.toEntityName || "-") : "-")}</td>
                       <td className="p-2">{order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}</td>
                       <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" type="button" onClick={() => printOrderInvoice(order)}>Invoice/Receipt</button><button className="rounded border border-red-300 text-red-700 px-2 py-1" type="button" onClick={() => deleteOrder(order._id)}>Delete</button></div></td>
                     </tr>
