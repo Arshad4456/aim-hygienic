@@ -75,7 +75,7 @@ export default function OrderManagementModulePage() {
   const [users, setUsers] = useState([]);
   const [fields, setFields] = useState([]);
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState(null);
+  const [toastState, setToastState] = useState(null);
   const [form, setForm] = useState({
     sourceType: "brand",
     primarySaleMode: "brand",
@@ -92,6 +92,10 @@ export default function OrderManagementModulePage() {
     zoneId: "",
     territoryName: "",
     address: "",
+    extraDiscPer: "0",
+    advTaxPer: "0",
+    whTaxPer: "0",
+    expense: "0",
     items: [{ ...emptyItem }],
   });
 
@@ -146,6 +150,10 @@ export default function OrderManagementModulePage() {
     [form.items, products],
   );
   const totalAmount = useMemo(() => lineRows.reduce((sum, r) => sum + r.calc.netAmt, 0), [lineRows]);
+  const extraDiscAmt = useMemo(() => (totalAmount * toNum(form.extraDiscPer)) / 100, [totalAmount, form.extraDiscPer]);
+  const advTaxAmt = useMemo(() => (totalAmount * toNum(form.advTaxPer)) / 100, [totalAmount, form.advTaxPer]);
+  const whTaxAmt = useMemo(() => (totalAmount * toNum(form.whTaxPer)) / 100, [totalAmount, form.whTaxPer]);
+  const grandTotal = useMemo(() => totalAmount - extraDiscAmt + advTaxAmt + whTaxAmt + toNum(form.expense), [totalAmount, extraDiscAmt, advTaxAmt, whTaxAmt, form.expense]);
 
   async function loadData() {
     const [oRes, wRes, pRes, rRes, zRes, uRes, fRes] = await Promise.all([
@@ -167,7 +175,7 @@ export default function OrderManagementModulePage() {
   }
 
   useEffect(() => {
-    loadData().catch((e) => showToast("error", e.message || "Failed to load order module"));
+    loadData().catch((e) => notify("error", e.message || "Failed to load order module"));
   }, []);
 
   useEffect(() => {
@@ -293,11 +301,17 @@ export default function OrderManagementModulePage() {
           territoryName: form.territoryName,
           address: form.address,
           items,
+          subtotal: totalAmount,
+          grandTotal,
+          extraDiscPer: Number(form.extraDiscPer || 0),
+          advTaxPer: Number(form.advTaxPer || 0),
+          whTaxPer: Number(form.whTaxPer || 0),
+          expense: Number(form.expense || 0),
           notes: primaryMeta ? `Sale stock detail: ${primaryMeta}` : undefined,
         },
       });
 
-      showToast("success", `${modeConfig[activeMode].title} request created successfully.`);
+      notify("success", `${modeConfig[activeMode].title} request created successfully.`);
       setForm((prev) => ({
         ...prev,
         customerName: "",
@@ -306,25 +320,68 @@ export default function OrderManagementModulePage() {
         distributorName: "",
         subDistributorName: "",
         toWarehouseId: "",
+        extraDiscPer: "0",
+        advTaxPer: "0",
+        whTaxPer: "0",
+        expense: "0",
         items: [{ ...emptyItem }],
       }));
       await loadData();
     } catch (e) {
-      showToast("error", e.message || "Failed to submit order request");
+      notify("error", e.message || "Failed to submit order request");
     } finally {
       setSaving(false);
     }
   }
 
-  function showToast(type, message) {
-    setToast({ type, message });
-    setTimeout(() => setToast(null), 2500);
+
+
+  async function deleteOrder(orderId) {
+    try {
+      await apiFetch(`/orders/${orderId}`, { method: "DELETE" });
+      notify("success", "Order deleted successfully.");
+      await loadData();
+    } catch (e) {
+      notify("error", e.message || "Failed to delete order");
+    }
+  }
+
+  function notify(type, message) {
+    setToastState({ type, message });
+    setTimeout(() => setToastState(null), 2500);
+  }
+
+  function printOrderInvoice(order) {
+    const lines = Array.isArray(order.items) ? order.items : [];
+    const lineRowsHtml = lines
+      .map((it, idx) => `<tr><td>${idx + 1}</td><td>${it.productName || "-"}</td><td>${it.quantity || 0}</td><td>${it.unitPrice || 0}</td></tr>`)
+      .join("");
+    const popup = window.open("", "_blank", "width=900,height=700");
+    if (!popup) {
+      notify("info", "Please allow popups to print invoice/receipt.");
+      return;
+    }
+    popup.document.write(`
+      <html><head><title>Invoice/Receipt</title></head><body>
+      <h2>Invoice/Receipt</h2>
+      <p><strong>Order:</strong> ${order.orderNo || "-"}</p>
+      <p><strong>Customer:</strong> ${order.customerName || "-"}</p>
+      <p><strong>Date:</strong> ${order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}</p>
+      <table border="1" cellpadding="6" cellspacing="0" width="100%">
+        <thead><tr><th>#</th><th>Product</th><th>Qty</th><th>Rate</th></tr></thead>
+        <tbody>${lineRowsHtml || '<tr><td colspan="4">No items</td></tr>'}</tbody>
+      </table>
+      </body></html>
+    `);
+    popup.document.close();
+    popup.focus();
+    popup.print();
   }
 
   return (
     <AdminShell title="Order Management" user={null}>
       <div className="space-y-6">
-        {toast ? <InlineToast type={toast.type} message={toast.message} /> : null}
+        {toastState ? <InlineToast type={toastState.type} message={toastState.message} /> : null}
 
         <section className="rounded-2xl border bg-white p-6 shadow-sm">
           <div className="text-xl font-semibold text-zinc-900">Order Management Module Overview</div>
@@ -445,7 +502,18 @@ export default function OrderManagementModulePage() {
                   </table>
                 </div>
                 <button type="button" className="mt-2 rounded border px-3 py-1 text-sm" onClick={addItem}>+ Add Product</button>
-                <div className="mt-3 rounded border p-3 text-right text-sm">Total amount: <strong>{totalAmount.toFixed(2)}</strong></div>
+                <div className="grid md:grid-cols-2 gap-4 mt-4 text-sm">
+                  <div className="rounded border p-3 space-y-2">
+                    <div>Total amount: <strong>{totalAmount.toFixed(2)}</strong></div>
+                    <div className="grid grid-cols-3 gap-2 items-center"><span>Extra Disc (%)</span><InputBare type="number" value={form.extraDiscPer} onChange={(v) => setField("extraDiscPer", v)} /><span>{extraDiscAmt.toFixed(2)}</span></div>
+                    <div className="grid grid-cols-3 gap-2 items-center"><span>Adv Tax (%)</span><InputBare type="number" value={form.advTaxPer} onChange={(v) => setField("advTaxPer", v)} /><span>{advTaxAmt.toFixed(2)}</span></div>
+                    <div className="grid grid-cols-3 gap-2 items-center"><span>W.H Tax (%)</span><InputBare type="number" value={form.whTaxPer} onChange={(v) => setField("whTaxPer", v)} /><span>{whTaxAmt.toFixed(2)}</span></div>
+                    <div className="grid grid-cols-3 gap-2 items-center"><span>Expense</span><InputBare type="number" value={form.expense} onChange={(v) => setField("expense", v)} /><span>{toNum(form.expense).toFixed(2)}</span></div>
+                  </div>
+                  <div className="rounded border p-3 text-right">
+                    <div className="text-lg font-semibold">Grand Total: {grandTotal.toFixed(2)}</div>
+                  </div>
+                </div>
               </div>
 
               <div className="md:col-span-2">
@@ -459,7 +527,7 @@ export default function OrderManagementModulePage() {
               <div className="text-lg font-semibold text-zinc-900">{activeMode === "primary" ? "Sale Order Ledger" : `${modeConfig[activeMode].title} Ledger`}</div>
               <div className="overflow-x-auto mt-3 rounded border">
                 <table className="min-w-full text-sm">
-                  <thead className="bg-zinc-50"><tr><th className="p-2 text-left">Order Code</th><th className="p-2 text-left">From</th><th className="p-2 text-left">Warehouse</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Invoice</th><th className="p-2 text-left">Date</th></tr></thead>
+                  <thead className="bg-zinc-50"><tr><th className="p-2 text-left">Order Code</th><th className="p-2 text-left">From</th><th className="p-2 text-left">Warehouse</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Action</th><th className="p-2 text-left">Date</th></tr></thead>
                   <tbody>
                     {filteredOrders.map((order) => (
                       <tr key={order._id} className={`border-t ${order.status === "rejected" ? "bg-red-50" : order.status === "delivered" ? "bg-emerald-50" : ""}`}>
@@ -467,7 +535,7 @@ export default function OrderManagementModulePage() {
                         <td className="p-2">{order.customerName}</td>
                         <td className="p-2">{order.toWarehouseName || "-"}</td>
                         <td className="p-2 capitalize">{order.status}</td>
-                        <td className="p-2">{order.invoiceNo || "Pending"}</td>
+                        <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" type="button" onClick={() => printOrderInvoice(order)}>Invoice/Receipt</button><button className="rounded border border-red-300 text-red-700 px-2 py-1" type="button" onClick={() => deleteOrder(order._id)}>Delete</button></div></td>
                         <td className="p-2">{order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}</td>
                       </tr>
                     ))}
@@ -485,7 +553,7 @@ export default function OrderManagementModulePage() {
             <div className="text-lg font-semibold text-zinc-900">Sale Stock Ledger (Cloned)</div>
             <div className="overflow-x-auto mt-3 rounded border">
               <table className="min-w-full text-sm">
-                <thead className="bg-zinc-50"><tr><th className="p-2 text-left">Code</th><th className="p-2 text-left">From</th><th className="p-2 text-left">Distributor Name</th><th className="p-2 text-left">Business Name</th><th className="p-2 text-left">Date and Time</th><th className="p-2 text-left">Invoice</th></tr></thead>
+                <thead className="bg-zinc-50"><tr><th className="p-2 text-left">Code</th><th className="p-2 text-left">From</th><th className="p-2 text-left">Distributor Name</th><th className="p-2 text-left">Business Name</th><th className="p-2 text-left">Date and Time</th><th className="p-2 text-left">Action</th></tr></thead>
                 <tbody>
                   {filteredOrders.map((order) => (
                     <tr key={order._id} className="border-t">
@@ -494,7 +562,7 @@ export default function OrderManagementModulePage() {
                       <td className="p-2">{order.sourceType === "distributor" ? order.customerName || "-" : "-"}</td>
                       <td className="p-2">{order.sourceType === "brand" ? order.customerName || "-" : "-"}</td>
                       <td className="p-2">{order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}</td>
-                      <td className="p-2">{order.invoiceNo || "Pending"}</td>
+                      <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" type="button" onClick={() => printOrderInvoice(order)}>Invoice/Receipt</button><button className="rounded border border-red-300 text-red-700 px-2 py-1" type="button" onClick={() => deleteOrder(order._id)}>Delete</button></div></td>
                     </tr>
                   ))}
                   {!filteredOrders.length ? <tr><td colSpan={6} className="p-5 text-center text-zinc-500">No records in this ledger.</td></tr> : null}
@@ -524,7 +592,18 @@ function InputBare({ type = "text", value, onChange = () => {}, readOnly = false
   return <input className="w-full min-w-[88px] rounded border px-2 py-1" type={type} value={value} readOnly={readOnly} onChange={(e) => onChange(e.target.value)} />;
 }
 
+
 function InlineToast({ type, message }) {
-  const classes = type === "success" ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-red-300 bg-red-50 text-red-700";
-  return <div className={`fixed right-4 top-4 z-50 rounded-xl border px-4 py-3 text-sm shadow ${classes}`}>{message}</div>;
+  const styleMap = {
+    success: "border-l-4 border-l-emerald-500 text-zinc-800",
+    error: "border-l-4 border-l-red-500 text-zinc-800",
+    info: "border-l-4 border-l-blue-500 text-zinc-800",
+    warning: "border-l-4 border-l-amber-500 text-zinc-800",
+  };
+  return (
+    <div className={`fixed right-4 top-4 z-50 min-w-[280px] rounded-lg border bg-white px-4 py-3 text-sm shadow-lg ${styleMap[type] || styleMap.info}`}>
+      <div className="font-semibold capitalize">{type || "info"}</div>
+      <div className="mt-1">{message}</div>
+    </div>
+  );
 }
