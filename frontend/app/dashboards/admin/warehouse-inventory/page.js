@@ -321,6 +321,15 @@ export default function WarehouseInventoryModulePage() {
     });
   }, [transactions, selectedCard, saleLedgerFilter, returnStockLedgerFilter]);
 
+  const saleStockRequests = useMemo(
+    () =>
+      transactions
+        .filter((t) => t.transactionType === "SALE_STOCK")
+        .filter((t) => ["Brand Manager", "Distributor"].includes(String(t.requestSourceRole || "")))
+        .sort((a, b) => new Date(b.transactionAt).getTime() - new Date(a.transactionAt).getTime()),
+    [transactions],
+  );
+
   const returnStockRequests = useMemo(
     () =>
       transactions
@@ -750,7 +759,7 @@ export default function WarehouseInventoryModulePage() {
     }
   }
 
-  async function updateReturnRequestStatus(id, status) {
+  async function updateRequestStatus(id, status) {
     try {
       await apiFetch(`/inventory/transactions/${id}/request-status`, { method: "PUT", body: { status } });
       toast.success(`Request ${String(status || "").toLowerCase()} successfully.`);
@@ -1247,14 +1256,29 @@ export default function WarehouseInventoryModulePage() {
           </section>
         ) : null}
 
+        {selectedCard === "SALE_STOCK" ? (
+          <section className="rounded-2xl border bg-white p-5 shadow-sm">
+            <h3 className="text-lg font-semibold">Order requests list</h3>
+            <RequestOrderStocksTable
+              rows={saleStockRequests}
+              onOpen={markRequestRead}
+              onApprove={(id) => updateRequestStatus(id, "APPROVED")}
+              onReject={(id) => updateRequestStatus(id, "REJECTED")}
+              onDispatch={(id) => updateRequestStatus(id, "DISPATCH")}
+              onDelivered={(id) => updateRequestStatus(id, "DELIVERED")}
+              onPreview={(row) => setPreviewRequest(row)}
+            />
+          </section>
+        ) : null}
+
         {selectedCard === "RETURN_STOCK" ? (
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
             <h3 className="text-lg font-semibold">Requests Return Stocks</h3>
             <RequestReturnStocksTable
               rows={returnStockRequests}
               onOpen={markRequestRead}
-              onApprove={(id) => updateReturnRequestStatus(id, "APPROVED")}
-              onReject={(id) => updateReturnRequestStatus(id, "REJECTED")}
+              onApprove={(id) => updateRequestStatus(id, "APPROVED")}
+              onReject={(id) => updateRequestStatus(id, "REJECTED")}
               onPreview={(row) => setPreviewRequest(row)}
             />
           </section>
@@ -1352,6 +1376,43 @@ function LedgerTable({ type, rows, onDelete, onInvoice }) {
   );
 }
 
+function RequestOrderStocksTable({ rows, onOpen, onApprove, onReject, onDispatch, onDelivered, onPreview }) {
+  return (
+    <div className="overflow-x-auto mt-2">
+      <table className="min-w-full text-sm">
+        <thead>
+          <tr className="border-b">
+            <th className="p-2 text-left">Code</th>
+            <th className="p-2 text-left">From</th>
+            <th className="p-2 text-left">Source</th>
+            <th className="p-2 text-left">Date and Time</th>
+            <th className="p-2 text-left">Status</th>
+            <th className="p-2 text-left">Unread</th>
+            <th className="p-2 text-left">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const status = String(r.requestStatus || "PENDING").toUpperCase();
+            const unread = !r.requestReadAt;
+            return (
+              <tr key={r._id} className="border-b">
+                <td className="p-2">{r.transactionCode}</td>
+                <td className="p-2">{r.fromEntityName || "-"}</td>
+                <td className="p-2">{r.requestSourceRole || "-"}</td>
+                <td className="p-2">{r.transactionAt ? new Date(r.transactionAt).toLocaleString() : "-"}</td>
+                <td className="p-2">{status}</td>
+                <td className="p-2">{unread ? <span className="rounded bg-amber-100 px-2 py-1 text-xs text-amber-800">Unread</span> : "Read"}</td>
+                <td className="p-2"><div className="flex gap-2 flex-wrap"><button className="rounded border px-2 py-1" onClick={() => onOpen(r._id)}>Open</button><button className="rounded border border-emerald-300 px-2 py-1 text-emerald-700" onClick={() => onPreview(r)}>Preview</button><button className="rounded border border-red-300 px-2 py-1 text-red-700" onClick={() => onReject(r._id)}>Reject</button><button className="rounded border border-blue-300 px-2 py-1 text-blue-700" onClick={() => onApprove(r._id)}>Approve</button><button className="rounded border border-indigo-300 px-2 py-1 text-indigo-700" onClick={() => onDispatch(r._id)}>Dispatch</button><button className="rounded border border-emerald-500 px-2 py-1 text-emerald-800" onClick={() => onDelivered(r._id)}>Delivered</button></div></td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function RequestReturnStocksTable({ rows, onOpen, onApprove, onReject, onPreview }) {
   return (
     <div className="overflow-x-auto mt-2">
@@ -1409,7 +1470,7 @@ function RequestPreviewModal({ row, onClose }) {
       <div className="w-full max-w-4xl rounded-2xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b px-5 py-3">
           <div>
-            <div className="text-lg font-semibold">Return Stock Request Preview</div>
+            <div className="text-lg font-semibold">Order Request Preview</div>
             <div className="text-sm text-zinc-500">{row.transactionCode || "-"}</div>
           </div>
           <button type="button" className="rounded border px-3 py-1 text-sm" onClick={onClose}>Close</button>
