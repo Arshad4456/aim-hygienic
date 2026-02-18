@@ -15,8 +15,6 @@ function normalizeItems(items = []) {
       productCode: item.productCode ? String(item.productCode).trim() : undefined,
       quantity: Number(item.quantity),
       unitPrice: Number(item.unitPrice || 0),
-      manufactureDate: item.manufactureDate ? new Date(item.manufactureDate) : undefined,
-      expiryDate: item.expiryDate ? new Date(item.expiryDate) : undefined,
       toValue: Number(item.toValue || 0),
       discValue: Number(item.discValue || 0),
       extraValue: Number(item.extraValue || 0),
