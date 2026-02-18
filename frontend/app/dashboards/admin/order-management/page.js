@@ -411,31 +411,92 @@ export default function OrderManagementModulePage() {
   }
 
   function printOrderInvoice(order) {
-    const lines = Array.isArray(order.items) ? order.items : [];
-    const lineRowsHtml = lines
-      .map((it, idx) => `<tr><td>${idx + 1}</td><td>${it.productName || "-"}</td><td>${it.quantity || 0}</td><td>${it.unitPrice || 0}</td></tr>`)
-      .join("");
+    const logo = `
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="width:54px;height:54px;border-radius:10px;background:linear-gradient(135deg,#065f46,#10b981);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;">AH</div>
+        <div>
+          <div style="font-weight:700;font-size:16px;">AIM-HYGIENICS</div>
+          <div style="font-size:11px;color:#555;">PVT LIMITED</div>
+        </div>
+      </div>`;
+
+    const rows = (order.items || []).map((item, idx) => {
+      const parts = Object.fromEntries(String(item.notes || "").split(",").map((seg) => seg.split(":")));
+      const gross = toNum(parts.gross || item.amount || 0);
+      const toVal = toNum(parts.to || item.toValue || 0);
+      const disc = toNum(parts.disc || item.discValue || 0);
+      const extra = toNum(parts.extra || item.extraValue || 0);
+      const bons = toNum(parts.bons || item.bonsValue || 0);
+      const v4gst = toNum(parts.v4gst || gross - toVal - disc - extra - bons);
+      const gst = toNum(parts.gst || (v4gst * toNum(item.gstPer || 0)) / 100);
+      const net = toNum(parts.net || item.totalPrice || v4gst + gst);
+      return `<tr><td>${idx + 1}</td><td>${item.productName || "-"}</td><td>${item.totalPacks || item.quantity || 0}</td><td>${item.onePackPrice || item.unitPrice || 0}</td><td>${gross.toFixed(2)}</td><td>${toVal.toFixed(2)}</td><td>${disc.toFixed(2)}</td><td>${extra.toFixed(2)}</td><td>${bons.toFixed(2)}</td><td>${v4gst.toFixed(2)}</td><td>${gst.toFixed(2)}</td><td>${net.toFixed(2)}</td></tr>`;
+    });
+
+    const lineTotal = (order.items || []).reduce((sum, item) => {
+      const parts = Object.fromEntries(String(item.notes || "").split(",").map((seg) => seg.split(":")));
+      const fallbackNet = toNum(item.totalPrice || item.unitPrice) * toNum(item.quantity || item.totalPacks || 1);
+      return sum + toNum(parts.net || fallbackNet);
+    }, 0);
+
+    const totalAmount = toNum(order.subtotal || lineTotal);
+    const extraDiscPer = toNum(order.extraDiscPer);
+    const advTaxPer = toNum(order.advTaxPer);
+    const whTaxPer = toNum(order.whTaxPer);
+    const expense = toNum(order.expense);
+    const extraDiscAmt = (totalAmount * extraDiscPer) / 100;
+    const advTaxAmt = (totalAmount * advTaxPer) / 100;
+    const whTaxAmt = (totalAmount * whTaxPer) / 100;
+    const calculatedGrandTotal = totalAmount - extraDiscAmt + advTaxAmt + whTaxAmt + expense;
+
+    const rawNote = String(order.note || order.address || "").trim();
+    const extractedAddress = (rawNote.match(/Address\s*:\s*(.*)$/i)?.[1] || rawNote).trim();
+    const heading = order.transactionType === "DAMAGE_STOCK"
+      ? "Damage Stock"
+      : order.transactionType === "RETURN_STOCK"
+        ? "Return Stock"
+        : "Sales Tax Invoice";
+
+    const html = `
+      <html>
+      <body style="font-family: Arial; padding: 16px; position:relative;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">${logo}<div style="text-align:right;"><div style="font-size:13px;font-weight:700;">${heading}</div></div></div>
+        <div style="margin-top:8px; display:flex; justify-content:space-between; font-size:12px;">
+          <div>Date: ${new Date(order.transactionAt || order.createdAt || Date.now()).toLocaleDateString()}</div>
+          <div>Invoice #: ${order.transactionCode || order.orderNo || "-"}</div>
+        </div>
+        <div style="margin-top:8px;font-size:12px;">Invoice From: ${order.fromEntityName || order.warehouseName || "-"}</div>
+        <div style="font-size:12px;">Bill To: ${order.toEntityName || order.distributorName || order.customerName || "-"}</div>
+        <div style="font-size:12px;">Address: ${extractedAddress || "-"}</div>
+        <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; width:100%; margin-top:10px; font-size:12px;">
+          <thead><tr><th>#</th><th>Product Name</th><th>Qty</th><th>Rate</th><th>Gross</th><th>TO</th><th>Disc</th><th>Extra</th><th>Bons</th><th>V4GST</th><th>GST</th><th>Net Amt</th></tr></thead>
+          <tbody>
+          ${rows.join("") || '<tr><td colspan="12">No items</td></tr>'}
+          </tbody>
+        </table>
+        <div style="margin-top:12px; font-size:12px; display:flex; justify-content:flex-end;">
+          <div style="min-width:280px;">
+            <div style="display:flex; justify-content:space-between;"><span>Total Amount:</span><strong>${totalAmount.toFixed(2)}</strong></div>
+            <div style="display:flex; justify-content:space-between;"><span>Extra Disc (${extraDiscPer}%):</span><span>${extraDiscAmt.toFixed(2)}</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>Adv Tax (${advTaxPer}%):</span><span>${advTaxAmt.toFixed(2)}</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>W.H Tax (${whTaxPer}%):</span><span>${whTaxAmt.toFixed(2)}</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>Expense:</span><span>${expense.toFixed(2)}</span></div>
+            <div style="display:flex; justify-content:space-between; margin-top:4px; border-top:1px solid #ccc; padding-top:4px;"><span><strong>Grand Total:</strong></span><strong>${calculatedGrandTotal.toFixed(2)}</strong></div>
+          </div>
+        </div>
+        <div style="margin-top:16px;text-align:center;font-size:13px;font-weight:600;">Thank you for bussiness with us</div>
+      </body></html>`;
+
     const popup = window.open("", "_blank", "width=900,height=700");
     if (!popup) {
       notify("info", "Please allow popups to print invoice/receipt.");
       return;
     }
-    popup.document.write(`
-      <html><head><title>Invoice/Receipt</title></head><body>
-      <h2>Invoice/Receipt</h2>
-      <p><strong>Order:</strong> ${order.orderNo || "-"}</p>
-      <p><strong>Customer:</strong> ${order.customerName || "-"}</p>
-      <p><strong>Date:</strong> ${order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}</p>
-      <table border="1" cellpadding="6" cellspacing="0" width="100%">
-        <thead><tr><th>#</th><th>Product</th><th>Qty</th><th>Rate</th></tr></thead>
-        <tbody>${lineRowsHtml || '<tr><td colspan="4">No items</td></tr>'}</tbody>
-      </table>
-      </body></html>
-    `);
+    popup.document.write(html);
     popup.document.close();
-    popup.focus();
     popup.print();
   }
+
 
   return (
     <AdminShell title="Order Management" user={null}>
