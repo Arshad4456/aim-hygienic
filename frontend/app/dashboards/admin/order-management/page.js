@@ -672,12 +672,6 @@ export default function OrderManagementModulePage() {
 
         ) : null}
 
-        {activeMode === "primary" ? (
-          <section className="rounded-2xl border bg-white p-6 shadow-sm">
-            <div className="text-lg font-semibold text-zinc-900">Sale Stock Ledger (Cloned)</div>
-            <SaleStockLedgerTable rows={filteredOrders} onInvoice={printOrderInvoice} onDelete={deleteOrder} />
-          </section>
-        ) : null}
       </div>
     </AdminShell>
   );
