@@ -14,6 +14,31 @@ const emptyLine = {
   gstPer: "0",
 };
 
+
+function normalizeRole(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z]/g, "");
+}
+
+function resolveRequestRole(row) {
+  return normalizeRole(row?.requestSourceRole || row?.fromEntityType || "");
+}
+
+function matchesDashboardRole(row, role) {
+  const requestRole = resolveRequestRole(row);
+  const targetRole = normalizeRole(role);
+  if (!requestRole || !targetRole) return false;
+  if (targetRole === "brandmanager") return requestRole.includes("brandmanager") || requestRole === "brand";
+  if (targetRole === "distributor") return requestRole.includes("distributor");
+  return requestRole === targetRole;
+}
+
+function sourceRoleLabel(row) {
+  const role = resolveRequestRole(row);
+  if (role.includes("brandmanager") || role === "brand") return "Brand Manager";
+  if (role.includes("distributor")) return "Distributor";
+  return row?.requestSourceRole || row?.fromEntityType || "-";
+}
+
 function toNum(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
@@ -77,6 +102,17 @@ export default function PrimaryOrderRequestModule({ role = "Brand Manager" }) {
   const advTaxAmt = useMemo(() => (totalAmount * toNum(form.advTaxPer)) / 100, [totalAmount, form.advTaxPer]);
   const whTaxAmt = useMemo(() => (totalAmount * toNum(form.whTaxPer)) / 100, [totalAmount, form.whTaxPer]);
   const grandTotal = useMemo(() => totalAmount - extraDiscAmt + advTaxAmt + whTaxAmt + toNum(form.expense), [totalAmount, extraDiscAmt, advTaxAmt, whTaxAmt, form.expense]);
+  const visibleRequests = useMemo(() => {
+    const myNames = [me?.businessName, me?.fullName].filter(Boolean).map((v) => String(v).trim().toLowerCase());
+    return requests
+      .filter((row) => {
+        if (!row || row.transactionType !== "SALE_STOCK") return false;
+        if (matchesDashboardRole(row, role)) return true;
+        const fromName = String(row.fromEntityName || "").trim().toLowerCase();
+        return Boolean(fromName) && myNames.includes(fromName);
+      })
+      .sort((a, b) => new Date(b.transactionAt || b.createdAt || 0).getTime() - new Date(a.transactionAt || a.createdAt || 0).getTime());
+  }, [requests, me?.businessName, me?.fullName, role]);
 
   const loadAll = useCallback(async () => {
     const localUser = typeof window !== "undefined" ? JSON.parse(getAuthItem("aim_user") || "{}") : {};
@@ -94,11 +130,7 @@ export default function PrimaryOrderRequestModule({ role = "Brand Manager" }) {
     setProducts(pRes.products || []);
     setRegions(rRes.regions || []);
     setZones(zRes.zones || []);
-    setRequests(
-      (txRes.transactions || []).filter(
-        (row) => row.transactionType === "SALE_STOCK" && String(row.requestSourceRole || "") === role,
-      ),
-    );
+    setRequests((txRes.transactions || []).filter((row) => row.transactionType === "SALE_STOCK"));
     setForm((prev) => ({
       ...prev,
       regionId: prev.regionId || user?.regionId || "",
@@ -106,7 +138,7 @@ export default function PrimaryOrderRequestModule({ role = "Brand Manager" }) {
       territoryName: prev.territoryName || user?.territoryName || user?.areaName || "",
       address: prev.address || user?.address || user?.shopAddress || "",
     }));
-  }, [role]);
+  }, []);
 
   useEffect(() => {
     loadAll().catch((e) => showToast("error", e.message || "Failed to load order request module"));
@@ -143,6 +175,7 @@ export default function PrimaryOrderRequestModule({ role = "Brand Manager" }) {
           warehouseId: targetWarehouse.warehouseId || "",
           warehouseName: targetWarehouse.name || "",
           fromEntityName: me?.businessName || me?.fullName || role,
+          fromEntityType: role === "Distributor" ? "DISTRIBUTOR" : "BRAND_MANAGER",
           requestSourceRole: role,
           requestStatus: "PENDING",
           toEntityType: role === "Distributor" ? "DISTRIBUTOR" : "BRAND",
@@ -243,7 +276,7 @@ export default function PrimaryOrderRequestModule({ role = "Brand Manager" }) {
           <table className="min-w-full text-sm">
             <thead><tr className="border-b"><th className="p-2 text-left">Code</th><th className="p-2 text-left">To</th><th className="p-2 text-left">Date and Time</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Action</th></tr></thead>
             <tbody>
-              {requests.map((row) => (
+              {visibleRequests.map((row) => (
                 <tr key={row._id} className="border-b">
                   <td className="p-2">{row.transactionCode || "-"}</td>
                   <td className="p-2">{row.warehouseName || row.toEntityName || "-"}</td>
@@ -252,7 +285,7 @@ export default function PrimaryOrderRequestModule({ role = "Brand Manager" }) {
                   <td className="p-2"><button className="rounded border px-2 py-1" type="button" onClick={() => setPreviewRow(row)}>Preview</button></td>
                 </tr>
               ))}
-              {!requests.length ? <tr><td colSpan={5} className="p-4 text-center text-zinc-500">No requests yet.</td></tr> : null}
+              {!visibleRequests.length ? <tr><td colSpan={5} className="p-4 text-center text-zinc-500">No requests yet.</td></tr> : null}
             </tbody>
           </table>
         </div>
@@ -296,7 +329,7 @@ function RequestPreviewModal({ row, onClose }) {
           <PreviewField label="Code" value={row.transactionCode || "-"} />
           <PreviewField label="From" value={row.fromEntityName || "-"} />
           <PreviewField label="To" value={row.warehouseName || row.toEntityName || "-"} />
-          <PreviewField label="Source" value={row.requestSourceRole || "-"} />
+          <PreviewField label="Source" value={sourceRoleLabel(row)} />
           <PreviewField label="Date and Time" value={row.transactionAt ? new Date(row.transactionAt).toLocaleString() : "-"} />
           <PreviewField label="Status" value={String(row.requestStatus || row.status || "PENDING").toUpperCase()} />
         </div>

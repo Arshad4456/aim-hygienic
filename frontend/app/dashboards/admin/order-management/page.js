@@ -65,6 +65,24 @@ const primarySaleModes = [
   { key: "subDistributor", label: "Sub-Distributor" },
 ];
 
+function normalizeRequestSource(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z]/g, "");
+}
+
+function isSaleOrderRequest(row) {
+  if (!row || row.transactionType !== "SALE_STOCK") return false;
+  const source = normalizeRequestSource(row.requestSourceRole || row.fromEntityType || "");
+  const hasKnownSource = source.includes("brandmanager") || source.includes("distributor") || source === "brand";
+  return hasKnownSource || Boolean(row.requestStatus) || Boolean(row.requestReadAt);
+}
+
+function sourceRoleLabel(row) {
+  const source = normalizeRequestSource(row?.requestSourceRole || row?.fromEntityType || "");
+  if (source.includes("brandmanager") || source === "brand") return "Brand Manager";
+  if (source.includes("distributor")) return "Distributor";
+  return row?.requestSourceRole || row?.fromEntityType || "-";
+}
+
 export default function OrderManagementModulePage() {
   const [activeMode, setActiveMode] = useState("");
   const [orders, setOrders] = useState([]);
@@ -223,8 +241,7 @@ export default function OrderManagementModulePage() {
   const saleOrderRequests = useMemo(
     () =>
       transactions
-        .filter((t) => t.transactionType === "SALE_STOCK")
-        .filter((t) => ["Brand Manager", "Distributor"].includes(String(t.requestSourceRole || "")))
+        .filter((t) => isSaleOrderRequest(t))
         .sort((a, b) => new Date(b.transactionAt || 0).getTime() - new Date(a.transactionAt || 0).getTime()),
     [transactions],
   );
@@ -781,7 +798,7 @@ function RequestSaleStocksTable({ rows, onOpen, onApprove, onReject, onDispatch,
               <tr key={r._id} className="border-b">
                 <td className="p-2">{r.transactionCode}</td>
                 <td className="p-2">{r.fromEntityName || "-"}</td>
-                <td className="p-2">{r.requestSourceRole || "-"}</td>
+                <td className="p-2">{sourceRoleLabel(r)}</td>
                 <td className="p-2">{r.transactionAt ? new Date(r.transactionAt).toLocaleString() : "-"}</td>
                 <td className="p-2">{status}</td>
                 <td className="p-2">{unread ? <span className="rounded bg-amber-100 px-2 py-1 text-xs text-amber-800">Unread</span> : "Read"}</td>
@@ -803,7 +820,7 @@ function RequestPreviewModal({ row, onClose }) {
       <div className="w-full max-w-5xl rounded-2xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b px-5 py-3"><div className="text-lg font-semibold">Order Request Preview</div><button type="button" className="rounded border px-3 py-1 text-sm" onClick={onClose}>Close</button></div>
         <div className="max-h-[70vh] overflow-y-auto p-5 space-y-4 text-sm">
-          <div className="grid md:grid-cols-3 gap-3"><PreviewField label="Code" value={row.transactionCode || "-"} /><PreviewField label="From" value={row.fromEntityName || "-"} /><PreviewField label="Source" value={row.requestSourceRole || "-"} /><PreviewField label="Region" value={row.regionName || "-"} /><PreviewField label="Zone" value={row.zoneName || "-"} /><PreviewField label="Territory" value={row.territory || "-"} /><PreviewField label="To" value={row.toEntityName || row.warehouseName || "-"} /><PreviewField label="Address" value={row.note || "-"} /><PreviewField label="Status" value={String(row.requestStatus || "PENDING").toUpperCase()} /></div>
+          <div className="grid md:grid-cols-3 gap-3"><PreviewField label="Code" value={row.transactionCode || "-"} /><PreviewField label="From" value={row.fromEntityName || "-"} /><PreviewField label="Source" value={sourceRoleLabel(row)} /><PreviewField label="Region" value={row.regionName || "-"} /><PreviewField label="Zone" value={row.zoneName || "-"} /><PreviewField label="Territory" value={row.territory || "-"} /><PreviewField label="To" value={row.toEntityName || row.warehouseName || "-"} /><PreviewField label="Address" value={row.note || "-"} /><PreviewField label="Status" value={String(row.requestStatus || "PENDING").toUpperCase()} /></div>
           <div className="overflow-x-auto rounded border"><table className="min-w-full text-xs"><thead><tr className="border-b bg-zinc-50"><th className="p-2">Product</th><th className="p-2">Qty</th><th className="p-2">Rate</th><th className="p-2">Amount</th><th className="p-2">Note</th></tr></thead><tbody>{(row.items || []).map((it, i) => <tr key={i} className="border-b"><td className="p-2">{it.productName || "-"}</td><td className="p-2">{it.quantity || 0}</td><td className="p-2">{it.unitPrice || 0}</td><td className="p-2">{it.amount || 0}</td><td className="p-2">{it.note || "-"}</td></tr>)}</tbody></table></div>
         </div>
       </div>
