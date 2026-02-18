@@ -77,6 +77,7 @@ export default function OrderManagementModulePage() {
   const [fields, setFields] = useState([]);
   const [saving, setSaving] = useState(false);
   const [toastState, setToastState] = useState(null);
+  const [previewRequest, setPreviewRequest] = useState(null);
   const [form, setForm] = useState({
     sourceType: "brand",
     primarySaleMode: "brand",
@@ -217,6 +218,16 @@ export default function OrderManagementModulePage() {
       setField("distributorName", name);
     }
   }, [form.primarySaleMode, selectedBrandManager, selectedDistributor]);
+
+
+  const saleOrderRequests = useMemo(
+    () =>
+      transactions
+        .filter((t) => t.transactionType === "SALE_STOCK")
+        .filter((t) => ["Brand Manager", "Distributor"].includes(String(t.requestSourceRole || "")))
+        .sort((a, b) => new Date(b.transactionAt || 0).getTime() - new Date(a.transactionAt || 0).getTime()),
+    [transactions],
+  );
 
   const filteredOrders = useMemo(() => {
     if (!activeMode) return [];
@@ -498,6 +509,26 @@ export default function OrderManagementModulePage() {
   }
 
 
+
+  async function markRequestRead(id) {
+    try {
+      await apiFetch(`/inventory/transactions/${id}/mark-read`, { method: "PUT", body: {} });
+      await loadData();
+    } catch (e) {
+      notify("error", e.message || "Failed to open request");
+    }
+  }
+
+  async function updateSaleRequestStatus(id, status) {
+    try {
+      await apiFetch(`/inventory/transactions/${id}/request-status`, { method: "PUT", body: { status } });
+      notify("success", `Request ${String(status || "").toLowerCase()} successfully.`);
+      await loadData();
+    } catch (e) {
+      notify("error", e.message || "Failed to update request status");
+    }
+  }
+
   return (
     <AdminShell title="Order Management" user={null}>
       <div className="space-y-6">
@@ -523,6 +554,7 @@ export default function OrderManagementModulePage() {
         </section>
 
         {activeMode ? (
+          <>
           <section className="rounded-2xl border bg-white p-6 shadow-sm space-y-5">
             <div className="text-lg font-semibold text-zinc-900">{activeMode === "primary" ? "Create Sale Order" : "Secondary Order Request"}</div>
             {activeMode === "primary" ? <div className="text-sm text-zinc-500">Sale Stock functionality with Sale Order Ledger.</div> : null}
@@ -670,8 +702,25 @@ export default function OrderManagementModulePage() {
             </div>
           </section>
 
+          {activeMode === "primary" ? (
+            <section className="rounded-2xl border bg-white p-6 shadow-sm">
+              <div className="text-lg font-semibold text-zinc-900">Order requests list</div>
+              <RequestSaleStocksTable
+                rows={saleOrderRequests}
+                onOpen={markRequestRead}
+                onApprove={(id) => updateSaleRequestStatus(id, "APPROVED")}
+                onReject={(id) => updateSaleRequestStatus(id, "REJECTED")}
+                onDispatch={(id) => updateSaleRequestStatus(id, "DISPATCH")}
+                onDelivered={(id) => updateSaleRequestStatus(id, "DELIVERED")}
+                onPreview={(row) => setPreviewRequest(row)}
+              />
+            </section>
+          ) : null}
+
+          </>
         ) : null}
 
+        <RequestPreviewModal row={previewRequest} onClose={() => setPreviewRequest(null)} />
       </div>
     </AdminShell>
   );
@@ -716,6 +765,54 @@ function SaleStockLedgerTable({ rows, onInvoice, onDelete }) {
       </table>
     </div>
   );
+}
+
+
+function RequestSaleStocksTable({ rows, onOpen, onApprove, onReject, onDispatch, onDelivered, onPreview }) {
+  return (
+    <div className="overflow-x-auto mt-3 rounded border">
+      <table className="min-w-full text-sm">
+        <thead><tr className="border-b bg-zinc-50"><th className="p-2 text-left">Code</th><th className="p-2 text-left">From</th><th className="p-2 text-left">Source</th><th className="p-2 text-left">Date and Time</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Read/Unread</th><th className="p-2 text-left">Action</th></tr></thead>
+        <tbody>
+          {rows.map((r) => {
+            const status = String(r.requestStatus || "PENDING").toUpperCase();
+            const unread = !r.requestReadAt;
+            return (
+              <tr key={r._id} className="border-b">
+                <td className="p-2">{r.transactionCode}</td>
+                <td className="p-2">{r.fromEntityName || "-"}</td>
+                <td className="p-2">{r.requestSourceRole || "-"}</td>
+                <td className="p-2">{r.transactionAt ? new Date(r.transactionAt).toLocaleString() : "-"}</td>
+                <td className="p-2">{status}</td>
+                <td className="p-2">{unread ? <span className="rounded bg-amber-100 px-2 py-1 text-xs text-amber-800">Unread</span> : "Read"}</td>
+                <td className="p-2"><div className="flex flex-wrap gap-2"><button className="rounded border px-2 py-1" onClick={() => onOpen(r._id)}>Open</button><button className="rounded border border-emerald-300 px-2 py-1 text-emerald-700" onClick={() => onPreview(r)}>Preview</button><button className="rounded border border-red-300 px-2 py-1 text-red-700" onClick={() => onReject(r._id)}>Reject</button><button className="rounded border border-blue-300 px-2 py-1 text-blue-700" onClick={() => onApprove(r._id)}>Approve</button><button className="rounded border border-indigo-300 px-2 py-1 text-indigo-700" onClick={() => onDispatch(r._id)}>Dispatch</button><button className="rounded border border-emerald-500 px-2 py-1 text-emerald-800" onClick={() => onDelivered(r._id)}>Delivered</button></div></td>
+              </tr>
+            );
+          })}
+          {!rows.length ? <tr><td colSpan={7} className="p-5 text-center text-zinc-500">No order requests.</td></tr> : null}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function RequestPreviewModal({ row, onClose }) {
+  if (!row) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-5xl rounded-2xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b px-5 py-3"><div className="text-lg font-semibold">Order Request Preview</div><button type="button" className="rounded border px-3 py-1 text-sm" onClick={onClose}>Close</button></div>
+        <div className="max-h-[70vh] overflow-y-auto p-5 space-y-4 text-sm">
+          <div className="grid md:grid-cols-3 gap-3"><PreviewField label="Code" value={row.transactionCode || "-"} /><PreviewField label="From" value={row.fromEntityName || "-"} /><PreviewField label="Source" value={row.requestSourceRole || "-"} /><PreviewField label="Region" value={row.regionName || "-"} /><PreviewField label="Zone" value={row.zoneName || "-"} /><PreviewField label="Territory" value={row.territory || "-"} /><PreviewField label="To" value={row.toEntityName || row.warehouseName || "-"} /><PreviewField label="Address" value={row.note || "-"} /><PreviewField label="Status" value={String(row.requestStatus || "PENDING").toUpperCase()} /></div>
+          <div className="overflow-x-auto rounded border"><table className="min-w-full text-xs"><thead><tr className="border-b bg-zinc-50"><th className="p-2">Product</th><th className="p-2">Qty</th><th className="p-2">Rate</th><th className="p-2">Amount</th><th className="p-2">Note</th></tr></thead><tbody>{(row.items || []).map((it, i) => <tr key={i} className="border-b"><td className="p-2">{it.productName || "-"}</td><td className="p-2">{it.quantity || 0}</td><td className="p-2">{it.unitPrice || 0}</td><td className="p-2">{it.amount || 0}</td><td className="p-2">{it.note || "-"}</td></tr>)}</tbody></table></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PreviewField({ label, value }) {
+  return <div><div className="text-zinc-500">{label}</div><div className="font-medium">{value}</div></div>;
 }
 
 function InlineToast({ type, message }) {
