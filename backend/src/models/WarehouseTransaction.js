@@ -67,7 +67,7 @@ const WarehouseTransactionSchema = new mongoose.Schema(
       enum: ["NOT_APPLICABLE", "PENDING", "PAID", "OVERDUE"],
       default: "NOT_APPLICABLE",
     },
-    requestStatus: { type: String, enum: ["PENDING", "APPROVED", "REJECTED"], default: "APPROVED" },
+    requestStatus: { type: String, enum: ["PENDING", "APPROVED", "REJECTED", "DISPATCHED", "DELIVERED"], default: "APPROVED" },
     requestSourceRole: { type: String, trim: true },
     requestReadAt: { type: Date },
     requestReviewedAt: { type: Date },
