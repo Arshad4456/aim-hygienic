@@ -72,6 +72,7 @@ export const userDashboardSearchItems = {
   kpo: [{ title: "Dashboard", href: "/dashboards/kpo" }],
   brandManager: [
     { title: "Dashboard", href: "/dashboards/brandManager" },
+    { title: "Primary Order Request", href: "/dashboards/brandManager/primary-order-request" },
     { title: "Primary Sale Orders", href: "/dashboards/brandManager/orders" },
     { title: "Return Stock", href: "/dashboards/brandManager/return-stock" },
     { title: "Messages", href: "/dashboards/brandManager/messages" },
@@ -84,6 +85,7 @@ export const userDashboardSearchItems = {
   territorySM: [{ title: "Dashboard", href: "/dashboards/territorySM" }],
   distributor: [
     { title: "Dashboard", href: "/dashboards/distributor" },
+    { title: "Primary Order Request", href: "/dashboards/distributor/primary-order-request" },
     { title: "Primary & Secondary Orders", href: "/dashboards/distributor/orders" },
     { title: "Return Stock", href: "/dashboards/distributor/return-stock" },
     { title: "Messages", href: "/dashboards/distributor/messages" },

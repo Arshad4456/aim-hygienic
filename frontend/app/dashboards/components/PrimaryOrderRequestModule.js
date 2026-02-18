@@ -184,11 +184,11 @@ export default function PrimaryOrderRequestModule({ role = "Brand Manager" }) {
                     <tr key={idx} className="border-b">
                       <td className="p-2"><SelectBare value={line.productId} onChange={(v) => setItem(idx, "productId", v)} options={products.map((p) => ({ value: p._id, label: `${p.productId} - ${p.name}` }))} /></td>
                       <td className="p-2"><InputBare type="number" value={line.qty} onChange={(v) => setItem(idx, "qty", v)} /></td>
-                      <td className="p-2"><InputBare type="number" value={line.toValue} onChange={(v) => setItem(idx, "toValue", v)} /></td>
-                      <td className="p-2"><InputBare type="number" value={line.discValue} onChange={(v) => setItem(idx, "discValue", v)} /></td>
-                      <td className="p-2"><InputBare type="number" value={line.extraValue} onChange={(v) => setItem(idx, "extraValue", v)} /></td>
-                      <td className="p-2"><InputBare type="number" value={line.bonsValue} onChange={(v) => setItem(idx, "bonsValue", v)} /></td>
-                      <td className="p-2"><InputBare type="number" value={line.gstPer} onChange={(v) => setItem(idx, "gstPer", v)} /></td>
+                      <td className="p-2"><InputBare type="number" value={line.toValue} readOnly /></td>
+                      <td className="p-2"><InputBare type="number" value={line.discValue} readOnly /></td>
+                      <td className="p-2"><InputBare type="number" value={line.extraValue} readOnly /></td>
+                      <td className="p-2"><InputBare type="number" value={line.bonsValue} readOnly /></td>
+                      <td className="p-2"><InputBare type="number" value={line.gstPer} readOnly /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -247,8 +247,8 @@ function SelectBare({ value, onChange, options }) {
   return <select className="w-full border rounded px-2 py-1 min-w-[220px]" value={value} onChange={(e) => onChange(e.target.value)}><option value="">Select</option>{options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>;
 }
 
-function InputBare({ type = "text", value, onChange }) {
-  return <input className="w-full border rounded px-2 py-1 min-w-[90px]" type={type} value={value} onChange={(e) => onChange(e.target.value)} />;
+function InputBare({ type = "text", value, onChange = () => {}, readOnly = false }) {
+  return <input className="w-full border rounded px-2 py-1 min-w-[90px]" type={type} value={value} readOnly={readOnly} onChange={(e) => onChange(e.target.value)} />;
 }
 
 function InlineToast({ type, message }) {
