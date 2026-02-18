@@ -250,10 +250,42 @@ export default function WarehouseInventoryModulePage() {
     () => distributors.filter((d) => !form.territoryName || d.territoryName === form.territoryName),
     [distributors, form.territoryName],
   );
-  const brandBusinessUsers = useMemo(
-    () => brandManagers.filter((u) => !form.businessType || u.businessType === form.businessType),
-    [brandManagers, form.businessType],
+  const brandBusinessUsers = useMemo(() => {
+    const selectedField = fieldsForTerritory.find((f) => f._id === form.fieldId);
+    return brandManagers.filter((u) => !selectedField || u.fieldId === selectedField.fieldId || u.fieldName === selectedField.name);
+  }, [brandManagers, fieldsForTerritory, form.fieldId]);
+  const selectedBrandManager = useMemo(() => brandBusinessUsers.find((u) => u._id === form.businessUserId), [brandBusinessUsers, form.businessUserId]);
+  const selectedDistributor = useMemo(
+    () => distributorsForTerritory.find((u) => u._id === form.distributorUserId),
+    [distributorsForTerritory, form.distributorUserId],
   );
+
+  useEffect(() => {
+    if (!form.regionId && form.zoneId) setField("zoneId", "");
+  }, [form.regionId, form.zoneId]);
+
+  useEffect(() => {
+    if (!form.zoneId && form.territoryName) setField("territoryName", "");
+  }, [form.zoneId, form.territoryName]);
+
+  useEffect(() => {
+    if (!form.territoryName) {
+      if (form.fieldId) setField("fieldId", "");
+      if (form.businessUserId) setField("businessUserId", "");
+      if (form.distributorUserId) setField("distributorUserId", "");
+    }
+  }, [form.territoryName, form.fieldId, form.businessUserId, form.distributorUserId]);
+
+  useEffect(() => {
+    if (saleMode === "brand") {
+      setField("address", selectedBrandManager?.address || "");
+      setField("businessName", selectedBrandManager?.businessName || selectedBrandManager?.fullName || "");
+    } else if (saleMode === "distributor") {
+      const name = selectedDistributor?.businessName || selectedDistributor?.fullName || "";
+      setField("address", selectedDistributor?.address || "");
+      setField("distributorName", name);
+    }
+  }, [saleMode, selectedBrandManager, selectedDistributor]);
 
   const cardTx = useMemo(() => {
     if (["W2W_TRANSFER", "STOCK_SUMMARY", "LOW_STOCK", "INVENTORY_LEDGER"].includes(selectedCard)) return [];
@@ -884,55 +916,61 @@ export default function WarehouseInventoryModulePage() {
                     </div>
 
                     <div className="grid grid-cols-1 gap-3">
+                      <Select
+                        label="Region"
+                        value={form.regionId}
+                        onChange={(v) => setField("regionId", v)}
+                        options={regions.map((r) => ({ value: r._id, label: r.name }))}
+                      />
+                      <Select
+                        label="Zone"
+                        value={form.zoneId}
+                        onChange={(v) => setField("zoneId", v)}
+                        options={zonesForRegion.map((z) => ({ value: z._id, label: z.name }))}
+                      />
+                      <Select
+                        label="Territory"
+                        value={form.territoryName}
+                        onChange={(v) => setField("territoryName", v)}
+                        options={territoriesForZone.map((t) => ({ value: t, label: t }))}
+                      />
+
                       {saleMode === "brand" ? (
                         <>
                           <Select
-                            label="Business Type"
-                            value={form.businessType}
-                            onChange={(v) => setField("businessType", v)}
-                            options={businessTypes.map((x) => ({ value: x, label: x }))}
+                            label="Field"
+                            value={form.fieldId || ""}
+                            onChange={(v) => setField("fieldId", v)}
+                            options={fieldsForTerritory.map((f) => ({ value: f._id, label: f.name }))}
                           />
-                          <Input label="Bussiness Name" value={form.businessName} onChange={(v) => setField("businessName", v)} />
+                          <Select
+                            label="Business Name"
+                            value={form.businessUserId}
+                            onChange={(v) => setField("businessUserId", v)}
+                            options={brandBusinessUsers.map((u) => ({ value: u._id, label: u.businessName || u.fullName }))}
+                          />
+                          <Input label="Address" value={form.address} onChange={(v) => setField("address", v)} />
                         </>
-                      ) : (
+                      ) : null}
+
+                      {saleMode === "distributor" ? (
                         <>
                           <Select
-                            label="Region"
-                            value={form.regionId}
-                            onChange={(v) => setField("regionId", v)}
-                            options={regions.map((r) => ({ value: r._id, label: r.name }))}
+                            label="Distributor"
+                            value={form.distributorUserId}
+                            onChange={(v) => setField("distributorUserId", v)}
+                            options={distributorsForTerritory.map((u) => ({ value: u._id, label: u.businessName || u.fullName }))}
                           />
-                          <Select
-                            label="Zone"
-                            value={form.zoneId}
-                            onChange={(v) => setField("zoneId", v)}
-                            options={zonesForRegion.map((z) => ({ value: z._id, label: z.name }))}
-                          />
-                          <Select
-                            label="Territory"
-                            value={form.territoryName}
-                            onChange={(v) => setField("territoryName", v)}
-                            options={territoriesForZone.map((t) => ({ value: t, label: t }))}
-                          />
-                          {saleMode === "distributor" ? (
-                            <Select
-                              label="Distributor Name"
-                              value={form.distributorUserId}
-                              onChange={(v) => setField("distributorUserId", v)}
-                              options={distributorsForTerritory.map((u) => ({ value: u._id, label: u.businessName || u.fullName }))}
-                            />
-                          ) : null}
-                          {saleMode === "subDistributor" ? (
-                            <>
-                              <Input label="Sub-Distributor Name" value={form.subDistributorName} onChange={(v) => setField("subDistributorName", v)} />
-                              <Input label="Business Type" value={form.businessType} onChange={(v) => setField("businessType", v)} />
-                              <Input label="Business Name" value={form.businessName} onChange={(v) => setField("businessName", v)} />
-                            </>
-                          ) : null}
+                          <Input label="Address" value={form.address} onChange={(v) => setField("address", v)} />
                         </>
-                      )}
+                      ) : null}
 
-                      <Input label="Address" value={form.address} onChange={(v) => setField("address", v)} />
+                      {saleMode === "subDistributor" ? (
+                        <>
+                          <Input label="Sub-distributor name" value={form.subDistributorName} onChange={(v) => setField("subDistributorName", v)} />
+                          <Input label="Address" value={form.address} onChange={(v) => setField("address", v)} />
+                        </>
+                      ) : null}
                     </div>
                   </div>
                 </>
