@@ -61,6 +61,8 @@ function movementTypeForTransaction(transactionType) {
   return map[transactionType] || "ADJUSTMENT";
 }
 
+const requestLifecycleStatuses = ["PENDING", "APPROVED", "REJECTED", "DISPATCHED", "DELIVERED"];
+
 function quantitySignForTransaction(transactionType) {
   const outTypes = ["SALE_STOCK", "DAMAGE_STOCK", "RETURN_TO_SD", "STOCK_OUT", "PURCHASING_OUT"];
   return outTypes.includes(transactionType) ? -1 : 1;
@@ -204,7 +206,12 @@ router.post("/transactions", requireAuth, async (req, res) => {
 
     const now = new Date();
     const transactionCode = buildTransactionCode();
+    const sourceRole = toTrimmedString(body.requestSourceRole || req.user?.role || "");
     const isReturnStockRequest = transactionType === "RETURN_STOCK" && !isAdminRole(req.user?.role);
+    const isSaleStockRequest =
+      transactionType === "SALE_STOCK"
+      && ["brand manager", "distributor"].includes(String(sourceRole || "").trim().toLowerCase());
+    const isApprovalRequest = isReturnStockRequest || isSaleStockRequest;
 
     const paymentDueDate =
       transactionType === "RETURN_STOCK"
@@ -242,9 +249,9 @@ router.post("/transactions", requireAuth, async (req, res) => {
         note: toTrimmedString(body.note),
         paymentDueDate,
         returnPaymentStatus: transactionType === "RETURN_STOCK" ? "PENDING" : "NOT_APPLICABLE",
-        requestStatus: isReturnStockRequest ? "PENDING" : "APPROVED",
-        requestSourceRole: isReturnStockRequest ? req.user?.role : "admin",
-        requestApplied: !isReturnStockRequest,
+        requestStatus: isApprovalRequest ? "PENDING" : "APPROVED",
+        requestSourceRole: isApprovalRequest ? sourceRole : "admin",
+        requestApplied: !isApprovalRequest,
         subtotal,
         adjustment,
         extraDiscPer: toNumber(body.extraDiscPer, 0),
@@ -256,7 +263,7 @@ router.post("/transactions", requireAuth, async (req, res) => {
         createdBy: req.user?.uid,
       });
 
-      if (!isReturnStockRequest) {
+      if (!isApprovalRequest) {
         await createInventoryMovementsForTransaction(transaction, normalizedItems, req.user?.uid);
       }
     } catch (persistError) {
@@ -267,11 +274,11 @@ router.post("/transactions", requireAuth, async (req, res) => {
       throw persistError;
     }
 
-    const productBalances = !isReturnStockRequest
+    const productBalances = !isApprovalRequest
       ? await calculateProductBalanceMap(scopeWarehouseId, normalizedItems.map((item) => item.productId))
       : [];
 
-    if (!isReturnStockRequest) {
+    if (!isApprovalRequest) {
       try {
         await createLowStockMessageIfRequired(transaction, productBalances, req.user?.uid);
       } catch (alertError) {
@@ -324,7 +331,7 @@ router.get("/transactions", requireAuth, async (req, res) => {
   }
 });
 
-router.put("/transactions/:id/mark-read", requireAuth, requireRole("admin"), async (req, res) => {
+router.put("/transactions/:id/mark-read", requireAuth, requireRole("admin", "warehouse manager"), async (req, res) => {
   try {
     const transaction = await WarehouseTransaction.findByIdAndUpdate(
       req.params.id,
@@ -338,10 +345,10 @@ router.put("/transactions/:id/mark-read", requireAuth, requireRole("admin"), asy
   }
 });
 
-router.put("/transactions/:id/request-status", requireAuth, requireRole("admin"), async (req, res) => {
+router.put("/transactions/:id/request-status", requireAuth, requireRole("admin", "warehouse manager"), async (req, res) => {
   try {
     const status = toTrimmedString(req.body?.status || "").toUpperCase();
-    if (!["PENDING", "APPROVED", "REJECTED"].includes(status)) {
+    if (!requestLifecycleStatuses.includes(status)) {
       return res.status(400).json({ ok: false, message: "Invalid status" });
     }
 
@@ -353,7 +360,7 @@ router.put("/transactions/:id/request-status", requireAuth, requireRole("admin")
     transaction.requestReviewedAt = new Date();
     transaction.requestReviewedBy = req.user?.uid;
 
-    if (status === "APPROVED" && !transaction.requestApplied) {
+    if (["APPROVED", "DISPATCHED", "DELIVERED"].includes(status) && !transaction.requestApplied) {
       await createInventoryMovementsForTransaction(transaction, transaction.items || [], req.user?.uid);
       transaction.requestApplied = true;
     }
@@ -363,7 +370,7 @@ router.put("/transactions/:id/request-status", requireAuth, requireRole("admin")
     if (transaction.requestSourceRole && transaction.requestSourceRole !== "admin") {
       try {
         await Message.create({
-          title: "Return Stock Request Update",
+          title: "Stock Request Update",
           body: `Request ${transaction.transactionCode} is ${status}`,
           senderRole: "admin",
           recipientRole: transaction.requestSourceRole,
