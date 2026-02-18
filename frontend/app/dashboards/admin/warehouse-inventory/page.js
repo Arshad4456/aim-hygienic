@@ -128,6 +128,23 @@ function sourceRoleLabel(row) {
   return row?.requestSourceRole || row?.fromEntityType || "-";
 }
 
+
+function normalizeRequestStatus(value) {
+  const status = String(value || "").toUpperCase();
+  return status === "DISPATCH" ? "DISPATCHED" : status;
+}
+
+function requestRowClass(status) {
+  if (status === "REJECTED") return "border-b bg-red-50";
+  if (status === "APPROVED" || status === "DISPATCHED") return "border-b bg-blue-50";
+  if (status === "DELIVERED") return "border-b bg-emerald-50";
+  return "border-b";
+}
+
+function mapRequestStatusForApi(status) {
+  return normalizeRequestStatus(status);
+}
+
 export default function WarehouseInventoryModulePage() {
   const [selectedCard, setSelectedCard] = useState(cards[0].key);
   const [saleMode, setSaleMode] = useState("brand");
@@ -713,12 +730,16 @@ export default function WarehouseInventoryModulePage() {
       : txn.transactionType === "RETURN_STOCK"
         ? "Return Stock"
         : "Sales Tax Invoice";
-    const requestStatus = String(txn.requestStatus || "").toUpperCase();
-    const showDecisionStamp = txn.transactionType === "RETURN_STOCK" && ["APPROVED", "REJECTED"].includes(requestStatus);
-    const stampColor = requestStatus === "APPROVED" ? "#166534" : "#991b1b";
-    const stampBg = requestStatus === "APPROVED" ? "rgba(220,252,231,0.82)" : "rgba(254,226,226,0.82)";
+    const requestStatus = normalizeRequestStatus(txn.requestStatus || txn.status || "");
+    const showDecisionStamp = ["APPROVED", "REJECTED", "DISPATCHED", "DELIVERED"].includes(requestStatus)
+      && ["SALE_STOCK", "RETURN_STOCK"].includes(String(txn.transactionType || ""));
+    const stampStyle = requestStatus === "REJECTED"
+      ? { color: "#991b1b", bg: "rgba(254,226,226,0.82)" }
+      : requestStatus === "DELIVERED"
+        ? { color: "#166534", bg: "rgba(220,252,231,0.82)" }
+        : { color: "#1d4ed8", bg: "rgba(219,234,254,0.90)" };
     const statusStamp = showDecisionStamp
-      ? `<div style="position:absolute; top:96px; right:22px; transform:rotate(-16deg); border:3px solid ${stampColor}; color:${stampColor}; background:${stampBg}; padding:8px 14px; font-size:22px; font-weight:800; letter-spacing:1px; border-radius:8px;">${requestStatus}</div>`
+      ? `<div style="position:absolute; top:96px; right:22px; transform:rotate(-16deg); border:3px solid ${stampStyle.color}; color:${stampStyle.color}; background:${stampStyle.bg}; padding:8px 14px; font-size:22px; font-weight:800; letter-spacing:1px; border-radius:8px;">${requestStatus}</div>`
       : "";
     const rawNote = String(txn.note || "").trim();
     const extractedAddress = (rawNote.match(/Address\s*:\s*(.*)$/i)?.[1] || rawNote).trim();
@@ -778,8 +799,9 @@ export default function WarehouseInventoryModulePage() {
 
   async function updateRequestStatus(id, status) {
     try {
-      await apiFetch(`/inventory/transactions/${id}/request-status`, { method: "PUT", body: { status } });
-      toast.success(`Request ${String(status || "").toLowerCase()} successfully.`);
+      const mappedStatus = mapRequestStatusForApi(status);
+      await apiFetch(`/inventory/transactions/${id}/request-status`, { method: "PUT", body: { status: mappedStatus } });
+      toast.success(`Request ${String(mapRequestStatusForApi(status) || "").toLowerCase()} successfully.`);
       await loadAll();
     } catch (e) {
       toast.error(e.message || "Failed to update request status");
@@ -1281,7 +1303,7 @@ export default function WarehouseInventoryModulePage() {
               onOpen={markRequestRead}
               onApprove={(id) => updateRequestStatus(id, "APPROVED")}
               onReject={(id) => updateRequestStatus(id, "REJECTED")}
-              onDispatch={(id) => updateRequestStatus(id, "DISPATCH")}
+              onDispatch={(id) => updateRequestStatus(id, "DISPATCHED")}
               onDelivered={(id) => updateRequestStatus(id, "DELIVERED")}
               onPreview={(row) => setPreviewRequest(row)}
             />
@@ -1367,15 +1389,9 @@ function LedgerTable({ type, rows, onDelete, onInvoice }) {
         </thead>
         <tbody>
           {rows.map((r) => {
-            const requestStatus = String(r.requestStatus || "").toUpperCase();
-            const fromRequester = ["Brand Manager", "Distributor"].includes(String(r.requestSourceRole || ""));
-            const rowClass = returnStock && fromRequester
-              ? requestStatus === "REJECTED"
-                ? "border-b bg-red-50"
-                : requestStatus === "APPROVED"
-                  ? "border-b bg-blue-50"
-                  : "border-b"
-              : "border-b";
+            const requestStatus = normalizeRequestStatus(r.requestStatus || "");
+            const fromRequester = isSaleOrderRequest(r) || ["Brand Manager", "Distributor"].includes(String(r.requestSourceRole || ""));
+            const rowClass = (sale || returnStock) && fromRequester ? requestRowClass(requestStatus) : "border-b";
             return (
             <tr key={r._id} className={rowClass}>
               <td className="p-2">{r.transactionCode}</td>
@@ -1410,7 +1426,7 @@ function RequestOrderStocksTable({ rows, onOpen, onApprove, onReject, onDispatch
         </thead>
         <tbody>
           {rows.map((r) => {
-            const status = String(r.requestStatus || "PENDING").toUpperCase();
+            const status = normalizeRequestStatus(r.requestStatus || "PENDING");
             const unread = !r.requestReadAt;
             return (
               <tr key={r._id} className="border-b">
@@ -1447,7 +1463,7 @@ function RequestReturnStocksTable({ rows, onOpen, onApprove, onReject, onPreview
         </thead>
         <tbody>
           {rows.map((r) => {
-            const status = String(r.requestStatus || "APPROVED").toUpperCase();
+            const status = normalizeRequestStatus(r.requestStatus || "APPROVED");
             const unread = !r.requestReadAt;
             return (
               <tr key={r._id} className="border-b">
