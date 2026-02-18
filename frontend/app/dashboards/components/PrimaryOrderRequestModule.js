@@ -39,6 +39,19 @@ function sourceRoleLabel(row) {
   return row?.requestSourceRole || row?.fromEntityType || "-";
 }
 
+
+function normalizeRequestStatus(value) {
+  const status = String(value || "").toUpperCase();
+  return status === "DISPATCH" ? "DISPATCHED" : status;
+}
+
+function requestRowClass(status) {
+  if (status === "REJECTED") return "border-b bg-red-50";
+  if (status === "APPROVED" || status === "DISPATCHED") return "border-b bg-blue-50";
+  if (status === "DELIVERED") return "border-b bg-emerald-50";
+  return "border-b";
+}
+
 function toNum(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
@@ -277,11 +290,11 @@ export default function PrimaryOrderRequestModule({ role = "Brand Manager" }) {
             <thead><tr className="border-b"><th className="p-2 text-left">Code</th><th className="p-2 text-left">To</th><th className="p-2 text-left">Date and Time</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Action</th></tr></thead>
             <tbody>
               {visibleRequests.map((row) => (
-                <tr key={row._id} className="border-b">
+                <tr key={row._id} className={requestRowClass(normalizeRequestStatus(row.requestStatus || row.status || "PENDING"))}>
                   <td className="p-2">{row.transactionCode || "-"}</td>
                   <td className="p-2">{row.warehouseName || row.toEntityName || "-"}</td>
                   <td className="p-2">{row.transactionAt ? new Date(row.transactionAt).toLocaleString() : "-"}</td>
-                  <td className="p-2">{String(row.requestStatus || row.status || "PENDING").toUpperCase()}</td>
+                  <td className="p-2">{normalizeRequestStatus(row.requestStatus || row.status || "PENDING")}</td>
                   <td className="p-2"><button className="rounded border px-2 py-1" type="button" onClick={() => setPreviewRow(row)}>Preview</button></td>
                 </tr>
               ))}
@@ -331,7 +344,7 @@ function RequestPreviewModal({ row, onClose }) {
           <PreviewField label="To" value={row.warehouseName || row.toEntityName || "-"} />
           <PreviewField label="Source" value={sourceRoleLabel(row)} />
           <PreviewField label="Date and Time" value={row.transactionAt ? new Date(row.transactionAt).toLocaleString() : "-"} />
-          <PreviewField label="Status" value={String(row.requestStatus || row.status || "PENDING").toUpperCase()} />
+          <PreviewField label="Status" value={normalizeRequestStatus(row.requestStatus || row.status || "PENDING")} />
         </div>
       </div>
     </div>

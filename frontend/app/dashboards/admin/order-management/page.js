@@ -83,6 +83,35 @@ function sourceRoleLabel(row) {
   return row?.requestSourceRole || row?.fromEntityType || "-";
 }
 
+
+function normalizeRequestStatus(value) {
+  const status = String(value || "").toUpperCase();
+  return status === "DISPATCH" ? "DISPATCHED" : status;
+}
+
+function requestRowClass(status) {
+  if (status === "REJECTED") return "border-t bg-red-50";
+  if (status === "APPROVED" || status === "DISPATCHED") return "border-t bg-blue-50";
+  if (status === "DELIVERED") return "border-t bg-emerald-50";
+  return "border-t";
+}
+
+function mapRequestStatusForApi(status) {
+  const normalized = normalizeRequestStatus(status);
+  return normalized === "DISPATCHED" ? "DISPATCHED" : normalized;
+}
+
+function shouldShowDecisionStamp(status) {
+  return ["REJECTED", "APPROVED", "DISPATCHED", "DELIVERED"].includes(status);
+}
+
+function decisionStampStyle(status) {
+  if (status === "REJECTED") return { color: "#b91c1c", bg: "rgba(254,226,226,0.9)", text: "REJECTED" };
+  if (status === "DELIVERED") return { color: "#166534", bg: "rgba(220,252,231,0.9)", text: "DELIVERED" };
+  if (status === "DISPATCHED") return { color: "#1d4ed8", bg: "rgba(219,234,254,0.92)", text: "DISPATCHED" };
+  return { color: "#1d4ed8", bg: "rgba(219,234,254,0.92)", text: "APPROVED" };
+}
+
 export default function OrderManagementModulePage() {
   const [activeMode, setActiveMode] = useState("");
   const [orders, setOrders] = useState([]);
@@ -485,9 +514,13 @@ export default function OrderManagementModulePage() {
         ? "Return Stock"
         : "Sales Tax Invoice";
 
+    const invoiceStatus = normalizeRequestStatus(order.requestStatus || order.status || "");
+    const stamp = shouldShowDecisionStamp(invoiceStatus) ? decisionStampStyle(invoiceStatus) : null;
+
     const html = `
       <html>
       <body style="font-family: Arial; padding: 16px; position:relative;">
+        ${stamp ? `<div style="position:absolute; top:96px; right:22px; transform:rotate(-16deg); border:3px solid ${stamp.color}; color:${stamp.color}; background:${stamp.bg}; padding:8px 14px; font-size:22px; font-weight:800; letter-spacing:1px; border-radius:8px;">${stamp.text}</div>` : ""}
         <div style="display:flex;justify-content:space-between;align-items:center;">${logo}<div style="text-align:right;"><div style="font-size:13px;font-weight:700;">${heading}</div></div></div>
         <div style="margin-top:8px; display:flex; justify-content:space-between; font-size:12px;">
           <div>Date: ${new Date(order.transactionAt || order.createdAt || Date.now()).toLocaleDateString()}</div>
@@ -538,8 +571,9 @@ export default function OrderManagementModulePage() {
 
   async function updateSaleRequestStatus(id, status) {
     try {
-      await apiFetch(`/inventory/transactions/${id}/request-status`, { method: "PUT", body: { status } });
-      notify("success", `Request ${String(status || "").toLowerCase()} successfully.`);
+      const mappedStatus = mapRequestStatusForApi(status);
+      await apiFetch(`/inventory/transactions/${id}/request-status`, { method: "PUT", body: { status: mappedStatus } });
+      notify("success", `Request ${String(mapRequestStatusForApi(status) || "").toLowerCase()} successfully.`);
       await loadData();
     } catch (e) {
       notify("error", e.message || "Failed to update request status");
@@ -727,7 +761,7 @@ export default function OrderManagementModulePage() {
                 onOpen={markRequestRead}
                 onApprove={(id) => updateSaleRequestStatus(id, "APPROVED")}
                 onReject={(id) => updateSaleRequestStatus(id, "REJECTED")}
-                onDispatch={(id) => updateSaleRequestStatus(id, "DISPATCH")}
+                onDispatch={(id) => updateSaleRequestStatus(id, "DISPATCHED")}
                 onDelivered={(id) => updateSaleRequestStatus(id, "DELIVERED")}
                 onPreview={(row) => setPreviewRequest(row)}
               />
@@ -768,7 +802,7 @@ function SaleStockLedgerTable({ rows, onInvoice, onDelete }) {
         <thead className="bg-zinc-50"><tr><th className="p-2 text-left">Code</th><th className="p-2 text-left">From</th><th className="p-2 text-left">Distributor Name</th><th className="p-2 text-left">Business Name</th><th className="p-2 text-left">Date and Time</th><th className="p-2 text-left">Action</th></tr></thead>
         <tbody>
           {rows.map((order) => (
-            <tr key={order._id} className="border-t">
+            <tr key={order._id} className={requestRowClass(normalizeRequestStatus(order.requestStatus || order.status || ""))}>
               <td className="p-2">{order.orderNo || order.transactionCode || "-"}</td>
               <td className="p-2">{order.fromEntityName || order.customerName || "-"}</td>
               <td className="p-2">{order.distributorName || (String(order.toEntityType || "").toUpperCase() === "DISTRIBUTOR" ? (order.toEntityName || "-") : "-")}</td>
@@ -792,7 +826,7 @@ function RequestSaleStocksTable({ rows, onOpen, onApprove, onReject, onDispatch,
         <thead><tr className="border-b bg-zinc-50"><th className="p-2 text-left">Code</th><th className="p-2 text-left">From</th><th className="p-2 text-left">Source</th><th className="p-2 text-left">Date and Time</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Read/Unread</th><th className="p-2 text-left">Action</th></tr></thead>
         <tbody>
           {rows.map((r) => {
-            const status = String(r.requestStatus || "PENDING").toUpperCase();
+            const status = normalizeRequestStatus(r.requestStatus || "PENDING");
             const unread = !r.requestReadAt;
             return (
               <tr key={r._id} className="border-b">
@@ -820,7 +854,7 @@ function RequestPreviewModal({ row, onClose }) {
       <div className="w-full max-w-5xl rounded-2xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b px-5 py-3"><div className="text-lg font-semibold">Order Request Preview</div><button type="button" className="rounded border px-3 py-1 text-sm" onClick={onClose}>Close</button></div>
         <div className="max-h-[70vh] overflow-y-auto p-5 space-y-4 text-sm">
-          <div className="grid md:grid-cols-3 gap-3"><PreviewField label="Code" value={row.transactionCode || "-"} /><PreviewField label="From" value={row.fromEntityName || "-"} /><PreviewField label="Source" value={sourceRoleLabel(row)} /><PreviewField label="Region" value={row.regionName || "-"} /><PreviewField label="Zone" value={row.zoneName || "-"} /><PreviewField label="Territory" value={row.territory || "-"} /><PreviewField label="To" value={row.toEntityName || row.warehouseName || "-"} /><PreviewField label="Address" value={row.note || "-"} /><PreviewField label="Status" value={String(row.requestStatus || "PENDING").toUpperCase()} /></div>
+          <div className="grid md:grid-cols-3 gap-3"><PreviewField label="Code" value={row.transactionCode || "-"} /><PreviewField label="From" value={row.fromEntityName || "-"} /><PreviewField label="Source" value={sourceRoleLabel(row)} /><PreviewField label="Region" value={row.regionName || "-"} /><PreviewField label="Zone" value={row.zoneName || "-"} /><PreviewField label="Territory" value={row.territory || "-"} /><PreviewField label="To" value={row.toEntityName || row.warehouseName || "-"} /><PreviewField label="Address" value={row.note || "-"} /><PreviewField label="Status" value={normalizeRequestStatus(row.requestStatus || "PENDING")} /></div>
           <div className="overflow-x-auto rounded border"><table className="min-w-full text-xs"><thead><tr className="border-b bg-zinc-50"><th className="p-2">Product</th><th className="p-2">Qty</th><th className="p-2">Rate</th><th className="p-2">Amount</th><th className="p-2">Note</th></tr></thead><tbody>{(row.items || []).map((it, i) => <tr key={i} className="border-b"><td className="p-2">{it.productName || "-"}</td><td className="p-2">{it.quantity || 0}</td><td className="p-2">{it.unitPrice || 0}</td><td className="p-2">{it.amount || 0}</td><td className="p-2">{it.note || "-"}</td></tr>)}</tbody></table></div>
         </div>
       </div>
