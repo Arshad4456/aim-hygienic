@@ -6,8 +6,6 @@ const SalesOrderItemSchema = new mongoose.Schema(
     productCode: { type: String, trim: true },
     quantity: { type: Number, required: true, min: 1 },
     unitPrice: { type: Number, required: true, min: 0 },
-    manufactureDate: { type: Date },
-    expiryDate: { type: Date },
     toValue: { type: Number, default: 0 },
     discValue: { type: Number, default: 0 },
     extraValue: { type: Number, default: 0 },

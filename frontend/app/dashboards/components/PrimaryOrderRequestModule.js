@@ -7,8 +7,6 @@ import { getAuthItem } from "../../lib/clientAuth";
 const emptyLine = {
   productId: "",
   qty: "",
-  manufactureDate: "",
-  expiryDate: "",
   toValue: "0",
   discValue: "0",
   extraValue: "0",
@@ -24,7 +22,7 @@ export default function PrimaryOrderRequestModule({ role = "Brand Manager" }) {
   const [orders, setOrders] = useState([]);
   const [me, setMe] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [toast, setToast] = useState(null);
   const [form, setForm] = useState({
     toWarehouseId: "",
     regionId: "",
@@ -53,7 +51,7 @@ export default function PrimaryOrderRequestModule({ role = "Brand Manager" }) {
     setProducts(pRes.products || []);
     setRegions(rRes.regions || []);
     setZones(zRes.zones || []);
-    setOrders(oRes.orders || []);
+    setOrders((oRes.orders || []).filter((order) => order.saleType === "primary"));
     setForm((prev) => ({
       ...prev,
       regionId: prev.regionId || user?.regionId || "",
@@ -64,7 +62,7 @@ export default function PrimaryOrderRequestModule({ role = "Brand Manager" }) {
   }
 
   useEffect(() => {
-    loadAll().catch((e) => setError(e.message || "Failed to load order request module"));
+    loadAll().catch((e) => showToast("error", e.message || "Failed to load order request module"));
   }, []);
 
   function setField(key, value) {
@@ -82,7 +80,6 @@ export default function PrimaryOrderRequestModule({ role = "Brand Manager" }) {
   async function submitRequest(event) {
     event.preventDefault();
     setSaving(true);
-    setError("");
     try {
       const targetWarehouse = warehouses.find((w) => w._id === form.toWarehouseId);
       const items = form.items
@@ -93,8 +90,6 @@ export default function PrimaryOrderRequestModule({ role = "Brand Manager" }) {
           productCode: product.productId,
           quantity: Number(line.qty),
           unitPrice: Number(product.wholesalePrice || 0),
-          manufactureDate: line.manufactureDate || undefined,
-          expiryDate: line.expiryDate || undefined,
           toValue: Number(line.toValue || 0),
           discValue: Number(line.discValue || 0),
           extraValue: Number(line.extraValue || 0),
@@ -125,10 +120,11 @@ export default function PrimaryOrderRequestModule({ role = "Brand Manager" }) {
         },
       });
 
+      showToast("success", "Order request submitted successfully.");
       setForm((s) => ({ ...s, toWarehouseId: "", items: [{ ...emptyLine }] }));
       await loadAll();
     } catch (e) {
-      setError(e.message || "Failed to submit order request");
+      showToast("error", e.message || "Failed to submit order request");
     } finally {
       setSaving(false);
     }
@@ -137,19 +133,32 @@ export default function PrimaryOrderRequestModule({ role = "Brand Manager" }) {
   async function setAgreement(orderId, agreement) {
     try {
       await apiFetch(`/orders/${orderId}/receipt-agreement`, { method: "PATCH", body: { agreement } });
+      showToast("success", "Receipt response saved.");
       await loadAll();
     } catch (e) {
-      setError(e.message || "Failed to save receipt agreement");
+      showToast("error", e.message || "Failed to save receipt agreement");
     }
+  }
+
+  function showToast(type, message) {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 2500);
   }
 
   return (
     <div className="space-y-6">
+      {toast ? <InlineToast type={toast.type} message={toast.message} /> : null}
+
       <section className="rounded-2xl border bg-white p-5 shadow-sm">
         <h3 className="text-lg font-semibold">Primary Sale Order Request</h3>
         <form className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3" onSubmit={submitRequest}>
           <Input label="From" value={me?.businessName || me?.fullName || "-"} readOnly />
-          <Select label="To Warehouse" value={form.toWarehouseId} onChange={(v) => setField("toWarehouseId", v)} options={warehouses.map((w) => ({ value: w._id, label: w.name }))} />
+          <Select
+            label="To Warehouse"
+            value={form.toWarehouseId}
+            onChange={(v) => setField("toWarehouseId", v)}
+            options={warehouses.map((w) => ({ value: w._id, label: w.name }))}
+          />
           <Input label="Region" value={selectedRegion?.name || me?.regionName || ""} readOnly />
           <Input label="Zone" value={selectedZone?.name || me?.zoneName || ""} readOnly />
           <Input label="Territory" value={form.territoryName} onChange={(v) => setField("territoryName", v)} readOnly />
@@ -161,7 +170,13 @@ export default function PrimaryOrderRequestModule({ role = "Brand Manager" }) {
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="border-b bg-zinc-50">
-                    <th className="p-2 text-left">Product</th><th className="p-2 text-left">Qty</th><th className="p-2 text-left">MFG Date</th><th className="p-2 text-left">EXP Date</th><th className="p-2 text-left">TO</th><th className="p-2 text-left">Disc</th><th className="p-2 text-left">Extra</th><th className="p-2 text-left">Bons</th><th className="p-2 text-left">GST%</th>
+                    <th className="p-2 text-left">Product</th>
+                    <th className="p-2 text-left">Qty</th>
+                    <th className="p-2 text-left">TO</th>
+                    <th className="p-2 text-left">Disc</th>
+                    <th className="p-2 text-left">Extra</th>
+                    <th className="p-2 text-left">Bons</th>
+                    <th className="p-2 text-left">GST%</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -169,8 +184,6 @@ export default function PrimaryOrderRequestModule({ role = "Brand Manager" }) {
                     <tr key={idx} className="border-b">
                       <td className="p-2"><SelectBare value={line.productId} onChange={(v) => setItem(idx, "productId", v)} options={products.map((p) => ({ value: p._id, label: `${p.productId} - ${p.name}` }))} /></td>
                       <td className="p-2"><InputBare type="number" value={line.qty} onChange={(v) => setItem(idx, "qty", v)} /></td>
-                      <td className="p-2"><InputBare type="date" value={line.manufactureDate} onChange={(v) => setItem(idx, "manufactureDate", v)} /></td>
-                      <td className="p-2"><InputBare type="date" value={line.expiryDate} onChange={(v) => setItem(idx, "expiryDate", v)} /></td>
                       <td className="p-2"><InputBare type="number" value={line.toValue} onChange={(v) => setItem(idx, "toValue", v)} /></td>
                       <td className="p-2"><InputBare type="number" value={line.discValue} onChange={(v) => setItem(idx, "discValue", v)} /></td>
                       <td className="p-2"><InputBare type="number" value={line.extraValue} onChange={(v) => setItem(idx, "extraValue", v)} /></td>
@@ -184,7 +197,6 @@ export default function PrimaryOrderRequestModule({ role = "Brand Manager" }) {
             <button type="button" onClick={addItem} className="mt-2 rounded border px-3 py-1 text-sm">+ Add Product</button>
           </div>
 
-          {error ? <div className="md:col-span-2 rounded border border-red-200 bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div> : null}
           <div className="md:col-span-2"><button className="rounded-xl bg-emerald-600 text-white px-4 py-2" disabled={saving}>{saving ? "Submitting..." : "Submit Request"}</button></div>
         </form>
       </section>
@@ -214,7 +226,7 @@ export default function PrimaryOrderRequestModule({ role = "Brand Manager" }) {
                   </td>
                 </tr>
               ))}
-              {!orders.length ? <tr><td colSpan={5} className="p-4 text-center text-zinc-500">No orders yet.</td></tr> : null}
+              {!orders.length ? <tr><td colSpan={5} className="p-4 text-center text-zinc-500">No primary orders yet.</td></tr> : null}
             </tbody>
           </table>
         </div>
@@ -226,12 +238,20 @@ export default function PrimaryOrderRequestModule({ role = "Brand Manager" }) {
 function Input({ label, value, onChange = () => {}, readOnly = false }) {
   return <label className="text-sm"><div className="text-zinc-600">{label}</div><input className="mt-1 w-full rounded-lg border px-3 py-2" value={value || ""} readOnly={readOnly} onChange={(e) => onChange(e.target.value)} /></label>;
 }
+
 function Select({ label, value, onChange, options }) {
   return <label className="text-sm"><div className="text-zinc-600">{label}</div><select className="mt-1 w-full rounded-lg border px-3 py-2" value={value} onChange={(e) => onChange(e.target.value)}><option value="">Select...</option>{options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>;
 }
+
 function SelectBare({ value, onChange, options }) {
   return <select className="w-full border rounded px-2 py-1 min-w-[220px]" value={value} onChange={(e) => onChange(e.target.value)}><option value="">Select</option>{options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>;
 }
+
 function InputBare({ type = "text", value, onChange }) {
   return <input className="w-full border rounded px-2 py-1 min-w-[90px]" type={type} value={value} onChange={(e) => onChange(e.target.value)} />;
+}
+
+function InlineToast({ type, message }) {
+  const classes = type === "success" ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-red-300 bg-red-50 text-red-700";
+  return <div className={`fixed right-4 top-4 z-50 rounded-xl border px-4 py-3 text-sm shadow ${classes}`}>{message}</div>;
 }
