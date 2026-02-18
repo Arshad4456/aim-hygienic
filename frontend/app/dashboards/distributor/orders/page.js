@@ -5,13 +5,13 @@ import { userDashboardSearchItems } from "../../searchItems";
 export default function Page() {
   return (
     <UserDashboardShell
-      title="Brand Manager Order Desk"
+      title="Distributor Order Desk"
       subtitle="Create primary sale order requests and manage receipt agreement from ledger."
-      roleKey="Brand Manager"
-      links={userDashboardSearchItems.brandManager || []}
+      roleKey="Distributor"
+      links={userDashboardSearchItems.distributor || []}
       showAccountCards
     >
-      <PrimaryOrderRequestModule role="Brand Manager" />
+      <PrimaryOrderRequestModule role="Distributor" />
     </UserDashboardShell>
   );
 }
