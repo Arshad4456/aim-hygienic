@@ -583,25 +583,29 @@ export default function OrderManagementModulePage() {
             </form>
 
             <div className="pt-2">
-              <div className="text-lg font-semibold text-zinc-900">{activeMode === "primary" ? "Sale Order Ledger" : `${modeConfig[activeMode].title} Ledger`}</div>
-              <div className="overflow-x-auto mt-3 rounded border">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-zinc-50"><tr><th className="p-2 text-left">Order Code</th><th className="p-2 text-left">From</th><th className="p-2 text-left">Warehouse</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Action</th><th className="p-2 text-left">Date</th></tr></thead>
-                  <tbody>
-                    {filteredOrders.map((order) => (
-                      <tr key={order._id} className={`border-t ${order.status === "rejected" ? "bg-red-50" : order.status === "delivered" ? "bg-emerald-50" : ""}`}>
-                        <td className="p-2">{order.orderNo || order.transactionCode}</td>
-                        <td className="p-2">{order.customerName || order.fromEntityName || "-"}</td>
-                        <td className="p-2">{order.toWarehouseName || order.warehouseName || "-"}</td>
-                        <td className="p-2 capitalize">{order.status}</td>
-                        <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" type="button" onClick={() => printOrderInvoice(order)}>Invoice/Receipt</button><button className="rounded border border-red-300 text-red-700 px-2 py-1" type="button" onClick={() => deleteOrder(order._id)}>Delete</button></div></td>
-                        <td className="p-2">{order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}</td>
-                      </tr>
-                    ))}
-                    {!filteredOrders.length ? <tr><td colSpan={6} className="p-5 text-center text-zinc-500">No records in this ledger.</td></tr> : null}
-                  </tbody>
-                </table>
-              </div>
+              <div className="text-lg font-semibold text-zinc-900">{activeMode === "primary" ? "Sale Stock Ledger" : `${modeConfig[activeMode].title} Ledger`}</div>
+              {activeMode === "primary" ? (
+                <SaleStockLedgerTable rows={filteredOrders} onInvoice={printOrderInvoice} onDelete={deleteOrder} />
+              ) : (
+                <div className="overflow-x-auto mt-3 rounded border">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-zinc-50"><tr><th className="p-2 text-left">Order Code</th><th className="p-2 text-left">From</th><th className="p-2 text-left">Warehouse</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Action</th><th className="p-2 text-left">Date</th></tr></thead>
+                    <tbody>
+                      {filteredOrders.map((order) => (
+                        <tr key={order._id} className={`border-t ${order.status === "rejected" ? "bg-red-50" : order.status === "delivered" ? "bg-emerald-50" : ""}`}>
+                          <td className="p-2">{order.orderNo || order.transactionCode}</td>
+                          <td className="p-2">{order.customerName || order.fromEntityName || "-"}</td>
+                          <td className="p-2">{order.toWarehouseName || order.warehouseName || "-"}</td>
+                          <td className="p-2 capitalize">{order.status}</td>
+                          <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" type="button" onClick={() => printOrderInvoice(order)}>Invoice/Receipt</button><button className="rounded border border-red-300 text-red-700 px-2 py-1" type="button" onClick={() => deleteOrder(order._id)}>Delete</button></div></td>
+                          <td className="p-2">{order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}</td>
+                        </tr>
+                      ))}
+                      {!filteredOrders.length ? <tr><td colSpan={6} className="p-5 text-center text-zinc-500">No records in this ledger.</td></tr> : null}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </section>
 
@@ -610,24 +614,7 @@ export default function OrderManagementModulePage() {
         {activeMode === "primary" ? (
           <section className="rounded-2xl border bg-white p-6 shadow-sm">
             <div className="text-lg font-semibold text-zinc-900">Sale Stock Ledger (Cloned)</div>
-            <div className="overflow-x-auto mt-3 rounded border">
-              <table className="min-w-full text-sm">
-                <thead className="bg-zinc-50"><tr><th className="p-2 text-left">Code</th><th className="p-2 text-left">From</th><th className="p-2 text-left">Distributor Name</th><th className="p-2 text-left">Business Name</th><th className="p-2 text-left">Date and Time</th><th className="p-2 text-left">Action</th></tr></thead>
-                <tbody>
-                  {filteredOrders.map((order) => (
-                    <tr key={order._id} className="border-t">
-                      <td className="p-2">{order.orderNo || "-"}</td>
-                      <td className="p-2">{order.fromEntityName || order.customerName || "-"}</td>
-                      <td className="p-2">{order.distributorName || (String(order.toEntityType || "").toUpperCase() === "DISTRIBUTOR" ? (order.toEntityName || "-") : "-")}</td>
-                      <td className="p-2">{order.brandName || (String(order.toEntityType || "").toUpperCase() === "BRAND" ? (order.toEntityName || "-") : "-")}</td>
-                      <td className="p-2">{order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}</td>
-                      <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" type="button" onClick={() => printOrderInvoice(order)}>Invoice/Receipt</button><button className="rounded border border-red-300 text-red-700 px-2 py-1" type="button" onClick={() => deleteOrder(order._id)}>Delete</button></div></td>
-                    </tr>
-                  ))}
-                  {!filteredOrders.length ? <tr><td colSpan={6} className="p-5 text-center text-zinc-500">No records in this ledger.</td></tr> : null}
-                </tbody>
-              </table>
-            </div>
+            <SaleStockLedgerTable rows={filteredOrders} onInvoice={printOrderInvoice} onDelete={deleteOrder} />
           </section>
         ) : null}
       </div>
@@ -651,6 +638,30 @@ function InputBare({ type = "text", value, onChange = () => {}, readOnly = false
   return <input className="w-full min-w-[88px] rounded border px-2 py-1" type={type} value={value} readOnly={readOnly} onChange={(e) => onChange(e.target.value)} />;
 }
 
+
+
+function SaleStockLedgerTable({ rows, onInvoice, onDelete }) {
+  return (
+    <div className="overflow-x-auto mt-3 rounded border">
+      <table className="min-w-full text-sm">
+        <thead className="bg-zinc-50"><tr><th className="p-2 text-left">Code</th><th className="p-2 text-left">From</th><th className="p-2 text-left">Distributor Name</th><th className="p-2 text-left">Business Name</th><th className="p-2 text-left">Date and Time</th><th className="p-2 text-left">Action</th></tr></thead>
+        <tbody>
+          {rows.map((order) => (
+            <tr key={order._id} className="border-t">
+              <td className="p-2">{order.orderNo || order.transactionCode || "-"}</td>
+              <td className="p-2">{order.fromEntityName || order.customerName || "-"}</td>
+              <td className="p-2">{order.distributorName || (String(order.toEntityType || "").toUpperCase() === "DISTRIBUTOR" ? (order.toEntityName || "-") : "-")}</td>
+              <td className="p-2">{order.brandName || (String(order.toEntityType || "").toUpperCase() === "BRAND" ? (order.toEntityName || "-") : "-")}</td>
+              <td className="p-2">{(order.createdAt || order.transactionAt) ? new Date(order.createdAt || order.transactionAt).toLocaleString() : "-"}</td>
+              <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" type="button" onClick={() => onInvoice(order)}>Invoice/Receipt</button><button className="rounded border border-red-300 text-red-700 px-2 py-1" type="button" onClick={() => onDelete(order._id)}>Delete</button></div></td>
+            </tr>
+          ))}
+          {!rows.length ? <tr><td colSpan={6} className="p-5 text-center text-zinc-500">No records in this ledger.</td></tr> : null}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 function InlineToast({ type, message }) {
   const styleMap = {
