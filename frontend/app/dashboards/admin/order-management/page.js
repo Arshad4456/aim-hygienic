@@ -16,15 +16,11 @@ const emptyItem = {
 
 const modeConfig = {
   primary: {
-    title: "Primary Order",
+    title: "Primary Orders",
     saleType: "primary",
-    sourceOptions: [
-      { value: "brand", label: "Brand" },
-      { value: "distributor", label: "Distributor" },
-    ],
   },
   secondary: {
-    title: "Secondary Order",
+    title: "Secondary Orders",
     saleType: "secondary",
     sourceOptions: [
       { value: "order_booker", label: "Order Booker" },
@@ -32,6 +28,12 @@ const modeConfig = {
     ],
   },
 };
+
+const primarySaleModes = [
+  { key: "brand", label: "Brand" },
+  { key: "distributor", label: "Distributor" },
+  { key: "subDistributor", label: "Sub-Distributor" },
+];
 
 export default function OrderManagementModulePage() {
   const [activeMode, setActiveMode] = useState("");
@@ -44,6 +46,11 @@ export default function OrderManagementModulePage() {
   const [toast, setToast] = useState(null);
   const [form, setForm] = useState({
     sourceType: "brand",
+    primarySaleMode: "brand",
+    businessType: "",
+    businessName: "",
+    distributorName: "",
+    subDistributorName: "",
     customerName: "",
     toWarehouseId: "",
     regionId: "",
@@ -78,7 +85,11 @@ export default function OrderManagementModulePage() {
   useEffect(() => {
     if (!activeMode) return;
     const defaults = modeConfig[activeMode];
-    setForm((prev) => ({ ...prev, sourceType: defaults.sourceOptions[0].value }));
+    setForm((prev) => ({
+      ...prev,
+      sourceType: defaults.sourceOptions?.[0]?.value || "brand",
+      primarySaleMode: "brand",
+    }));
   }, [activeMode]);
 
   const filteredOrders = useMemo(() => {
@@ -103,6 +114,13 @@ export default function OrderManagementModulePage() {
     setSaving(true);
     try {
       const targetWarehouse = warehouses.find((item) => item._id === form.toWarehouseId);
+      const primaryCustomerName =
+        form.primarySaleMode === "brand"
+          ? form.businessName
+          : form.primarySaleMode === "distributor"
+            ? form.distributorName
+            : form.subDistributorName;
+      const customerName = activeMode === "primary" ? primaryCustomerName : form.customerName;
       const items = form.items
         .map((line) => ({ line, product: products.find((p) => p._id === line.productId) }))
         .filter((row) => row.product && Number(row.line.qty) > 0)
@@ -118,18 +136,30 @@ export default function OrderManagementModulePage() {
           gstPer: Number(line.gstPer || 0),
         }));
 
-      if (!targetWarehouse || !items.length || !form.customerName.trim()) {
+      if (!targetWarehouse || !items.length || !customerName.trim()) {
         throw new Error("Customer/source name, warehouse, and one product row are required");
       }
+
+      const sourceType =
+        activeMode === "primary"
+          ? form.primarySaleMode === "subDistributor"
+            ? "distributor"
+            : form.primarySaleMode
+          : form.sourceType;
+
+      const primaryMeta =
+        activeMode === "primary"
+          ? [form.businessType, form.businessName, form.distributorName, form.subDistributorName].filter(Boolean).join(" | ")
+          : "";
 
       await apiFetch("/orders", {
         method: "POST",
         body: {
           saleType: modeConfig[activeMode].saleType,
-          sourceType: form.sourceType,
-          customerType: form.sourceType === "brand" ? "brand" : form.sourceType,
-          customerName: form.customerName,
-          fromEntityName: form.customerName,
+          sourceType,
+          customerType: sourceType === "brand" ? "brand" : sourceType,
+          customerName,
+          fromEntityName: customerName,
           fromEntityRole: modeConfig[activeMode].title,
           toWarehouseId: targetWarehouse.warehouseId || targetWarehouse._id,
           toWarehouseName: targetWarehouse.name,
@@ -140,11 +170,21 @@ export default function OrderManagementModulePage() {
           territoryName: form.territoryName,
           address: form.address,
           items,
+          notes: primaryMeta ? `Sale stock detail: ${primaryMeta}` : undefined,
         },
       });
 
       showToast("success", `${modeConfig[activeMode].title} request created successfully.`);
-      setForm((prev) => ({ ...prev, customerName: "", toWarehouseId: "", items: [{ ...emptyItem }] }));
+      setForm((prev) => ({
+        ...prev,
+        customerName: "",
+        businessType: "",
+        businessName: "",
+        distributorName: "",
+        subDistributorName: "",
+        toWarehouseId: "",
+        items: [{ ...emptyItem }],
+      }));
       await loadData();
     } catch (e) {
       showToast("error", e.message || "Failed to submit order request");
@@ -176,7 +216,7 @@ export default function OrderManagementModulePage() {
                 className={`rounded-2xl border p-5 text-left ${activeMode === key ? "border-emerald-300 bg-emerald-50" : "bg-zinc-50 hover:bg-white"}`}
               >
                 <div className="text-base font-semibold text-zinc-900">{cfg.title} Card</div>
-                <div className="text-xs text-zinc-600 mt-1">Open {cfg.title.toLowerCase()} request form and ledger.</div>
+                <div className="text-xs text-zinc-600 mt-1">Open {cfg.title.toLowerCase()} flow.</div>
               </button>
             ))}
           </div>
@@ -184,20 +224,59 @@ export default function OrderManagementModulePage() {
 
         {activeMode ? (
           <section className="rounded-2xl border bg-white p-6 shadow-sm space-y-5">
-            <div className="text-lg font-semibold text-zinc-900">{modeConfig[activeMode].title} Request Form</div>
+            <div className="text-lg font-semibold text-zinc-900">{activeMode === "primary" ? "Create Sale Order" : "Secondary Order Request"}</div>
+            {activeMode === "primary" ? <div className="text-sm text-zinc-500">Sale Stock functionality with Sale Order Ledger.</div> : null}
             <form className="grid grid-cols-1 md:grid-cols-2 gap-3" onSubmit={submitOrder}>
-              <Select
-                label="Request Source"
-                value={form.sourceType}
-                onChange={(v) => setField("sourceType", v)}
-                options={modeConfig[activeMode].sourceOptions}
-              />
-              <Input label="From" value={form.customerName} onChange={(v) => setField("customerName", v)} placeholder="Enter source name" />
-              <Select label="To Warehouse" value={form.toWarehouseId} onChange={(v) => setField("toWarehouseId", v)} options={warehouses.map((w) => ({ value: w._id, label: w.name }))} />
-              <Input label="Address" value={form.address} onChange={(v) => setField("address", v)} />
-              <Select label="Region" value={form.regionId} onChange={(v) => setField("regionId", v)} options={regions.map((r) => ({ value: r._id, label: r.name }))} />
-              <Select label="Zone" value={form.zoneId} onChange={(v) => setField("zoneId", v)} options={zones.filter((z) => !form.regionId || z.regionId === selectedRegion?.regionId).map((z) => ({ value: z._id, label: z.name }))} />
-              <Input label="Territory" value={form.territoryName} onChange={(v) => setField("territoryName", v)} />
+              {activeMode === "primary" ? (
+                <>
+                  <div className="md:col-span-2 flex gap-2">
+                    {primarySaleModes.map((mode) => (
+                      <button
+                        key={mode.key}
+                        type="button"
+                        onClick={() => setField("primarySaleMode", mode.key)}
+                        className={`rounded border px-2 py-1 text-xs ${form.primarySaleMode === mode.key ? "bg-emerald-50 border-emerald-300" : ""}`}
+                      >
+                        {mode.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <Select label="From (Warehouse)" value={form.toWarehouseId} onChange={(v) => setField("toWarehouseId", v)} options={warehouses.map((w) => ({ value: w._id, label: w.name }))} />
+                  <Input label="Address" value={form.address} onChange={(v) => setField("address", v)} />
+                  <Select label="Region" value={form.regionId} onChange={(v) => setField("regionId", v)} options={regions.map((r) => ({ value: r._id, label: r.name }))} />
+                  <Select label="Zone" value={form.zoneId} onChange={(v) => setField("zoneId", v)} options={zones.filter((z) => !form.regionId || z.regionId === selectedRegion?.regionId).map((z) => ({ value: z._id, label: z.name }))} />
+                  <Input label="Territory" value={form.territoryName} onChange={(v) => setField("territoryName", v)} />
+
+                  {form.primarySaleMode === "brand" ? (
+                    <>
+                      <Input label="Business Type" value={form.businessType} onChange={(v) => setField("businessType", v)} />
+                      <Input label="Business Name" value={form.businessName} onChange={(v) => setField("businessName", v)} />
+                    </>
+                  ) : null}
+                  {form.primarySaleMode === "distributor" ? (
+                    <Input label="Distributor Name" value={form.distributorName} onChange={(v) => setField("distributorName", v)} />
+                  ) : null}
+                  {form.primarySaleMode === "subDistributor" ? (
+                    <Input label="Sub-Distributor Name" value={form.subDistributorName} onChange={(v) => setField("subDistributorName", v)} />
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <Select
+                    label="Request Source"
+                    value={form.sourceType}
+                    onChange={(v) => setField("sourceType", v)}
+                    options={modeConfig[activeMode].sourceOptions}
+                  />
+                  <Input label="From" value={form.customerName} onChange={(v) => setField("customerName", v)} placeholder="Enter source name" />
+                  <Select label="To Warehouse" value={form.toWarehouseId} onChange={(v) => setField("toWarehouseId", v)} options={warehouses.map((w) => ({ value: w._id, label: w.name }))} />
+                  <Input label="Address" value={form.address} onChange={(v) => setField("address", v)} />
+                  <Select label="Region" value={form.regionId} onChange={(v) => setField("regionId", v)} options={regions.map((r) => ({ value: r._id, label: r.name }))} />
+                  <Select label="Zone" value={form.zoneId} onChange={(v) => setField("zoneId", v)} options={zones.filter((z) => !form.regionId || z.regionId === selectedRegion?.regionId).map((z) => ({ value: z._id, label: z.name }))} />
+                  <Input label="Territory" value={form.territoryName} onChange={(v) => setField("territoryName", v)} />
+                </>
+              )}
 
               <div className="md:col-span-2">
                 <div className="font-semibold mb-2">Product Detail</div>
@@ -234,13 +313,13 @@ export default function OrderManagementModulePage() {
 
               <div className="md:col-span-2">
                 <button type="submit" className="rounded-xl bg-emerald-600 px-4 py-2 text-white disabled:opacity-60" disabled={saving}>
-                  {saving ? "Submitting..." : "Submit Request"}
+                  {saving ? "Submitting..." : activeMode === "primary" ? "Create Sale Order" : "Submit Request"}
                 </button>
               </div>
             </form>
 
             <div className="pt-2">
-              <div className="text-lg font-semibold text-zinc-900">{modeConfig[activeMode].title} Ledger</div>
+              <div className="text-lg font-semibold text-zinc-900">{activeMode === "primary" ? "Sale Order Ledger" : `${modeConfig[activeMode].title} Ledger`}</div>
               <div className="overflow-x-auto mt-3 rounded border">
                 <table className="min-w-full text-sm">
                   <thead className="bg-zinc-50"><tr><th className="p-2 text-left">Order Code</th><th className="p-2 text-left">From</th><th className="p-2 text-left">Warehouse</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Invoice</th><th className="p-2 text-left">Date</th></tr></thead>
