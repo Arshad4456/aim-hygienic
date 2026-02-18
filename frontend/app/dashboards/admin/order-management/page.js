@@ -14,6 +14,36 @@ const emptyItem = {
   gstPer: "0",
 };
 
+function toNum(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function getSizeMultiplier(product) {
+  if (!product) return 1;
+  const raw = String(product.size || "");
+  const nums = raw.match(/\d+(?:\.\d+)?/g)?.map(Number) || [];
+  if (nums.length) return nums.reduce((acc, n) => acc * n, 1);
+  if (toNum(product.packSize) > 0) return toNum(product.packSize);
+  return 1;
+}
+
+function computeLine(line, product) {
+  const sizeMultiplier = getSizeMultiplier(product);
+  const qty = toNum(line.qty);
+  const rate = toNum(product?.wholesalePrice || 0);
+  const gross = sizeMultiplier * qty * rate;
+  const toValue = toNum(line.toValue);
+  const discValue = line.discValue === "" ? toNum(product?.discountPer || 0) : toNum(line.discValue);
+  const extraValue = toNum(line.extraValue);
+  const bonsValue = toNum(line.bonsValue);
+  const v4gst = gross - toValue - discValue - extraValue - bonsValue;
+  const gstPer = toNum(line.gstPer);
+  const gstAmount = (v4gst * gstPer) / 100;
+  const netAmt = v4gst + gstAmount;
+  return { sizeText: product?.size || "-", qty, rate, gross, discValue, v4gst, gstAmount, netAmt };
+}
+
 const modeConfig = {
   primary: {
     title: "Primary Orders",
@@ -107,6 +137,15 @@ export default function OrderManagementModulePage() {
     () => distributorsForTerritory.find((u) => u._id === form.distributorUserId),
     [distributorsForTerritory, form.distributorUserId],
   );
+  const lineRows = useMemo(
+    () =>
+      form.items.map((line, idx) => {
+        const product = products.find((p) => p._id === line.productId);
+        return { idx, line, product, calc: computeLine(line, product) };
+      }),
+    [form.items, products],
+  );
+  const totalAmount = useMemo(() => lineRows.reduce((sum, r) => sum + r.calc.netAmt, 0), [lineRows]);
 
   async function loadData() {
     const [oRes, wRes, pRes, rRes, zRes, uRes, fRes] = await Promise.all([
@@ -182,6 +221,14 @@ export default function OrderManagementModulePage() {
       ...prev,
       items: prev.items.map((item, idx) => (idx === index ? { ...item, [key]: value } : item)),
     }));
+  }
+
+  function addItem() {
+    setForm((prev) => ({ ...prev, items: [...prev.items, { ...emptyItem }] }));
+  }
+
+  function removeItem(index) {
+    setForm((prev) => ({ ...prev, items: prev.items.filter((_, idx) => idx !== index) }));
   }
 
   async function submitOrder(event) {
@@ -369,34 +416,36 @@ export default function OrderManagementModulePage() {
               <div className="md:col-span-2">
                 <div className="font-semibold mb-2">Product Detail</div>
                 <div className="overflow-x-auto rounded border">
-                  <table className="min-w-full text-sm">
+                  <table className="min-w-full text-xs">
                     <thead>
                       <tr className="border-b bg-zinc-50">
-                        <th className="p-2 text-left">Product</th>
-                        <th className="p-2 text-left">Qty</th>
-                        <th className="p-2 text-left">TO</th>
-                        <th className="p-2 text-left">Disc</th>
-                        <th className="p-2 text-left">Extra</th>
-                        <th className="p-2 text-left">Bons</th>
-                        <th className="p-2 text-left">GST%</th>
+                        <th className="p-2">S.No</th><th className="p-2">Product Name</th><th className="p-2">Size</th><th className="p-2">Qty</th><th className="p-2">Rate</th><th className="p-2">Gross</th><th className="p-2">TO</th><th className="p-2">Disc</th><th className="p-2">Extra</th><th className="p-2">Bons</th><th className="p-2">V4GST</th><th className="p-2">GST</th><th className="p-2">Net Amt</th><th className="p-2">-</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {form.items.map((line, idx) => (
+                      {lineRows.map(({ idx, line, product, calc }) => (
                         <tr key={idx} className="border-b">
-                          <td className="p-2"><SelectBare value={line.productId} onChange={(v) => setItem(idx, "productId", v)} options={products.map((p) => ({ value: p._id, label: `${p.productId} - ${p.name}` }))} /></td>
-                          <td className="p-2"><InputBare type="number" value={line.qty} onChange={(v) => setItem(idx, "qty", v)} /></td>
-                          <td className="p-2"><InputBare type="number" value={line.toValue} onChange={(v) => setItem(idx, "toValue", v)} /></td>
-                          <td className="p-2"><InputBare type="number" value={line.discValue} onChange={(v) => setItem(idx, "discValue", v)} /></td>
-                          <td className="p-2"><InputBare type="number" value={line.extraValue} onChange={(v) => setItem(idx, "extraValue", v)} /></td>
-                          <td className="p-2"><InputBare type="number" value={line.bonsValue} onChange={(v) => setItem(idx, "bonsValue", v)} /></td>
-                          <td className="p-2"><InputBare type="number" value={line.gstPer} onChange={(v) => setItem(idx, "gstPer", v)} /></td>
+                          <td className="p-1 text-center">{idx + 1}</td>
+                          <td className="p-1 min-w-[180px]"><SelectBare value={line.productId} onChange={(v) => setItem(idx, "productId", v)} options={products.map((p) => ({ value: p._id, label: p.name }))} /></td>
+                          <td className="p-1 min-w-[120px]"><InputBare type="text" value={calc.sizeText} readOnly /></td>
+                          <td className="p-1"><InputBare type="number" value={line.qty} onChange={(v) => setItem(idx, "qty", v)} /></td>
+                          <td className="p-1"><InputBare type="number" value={calc.rate} readOnly /></td>
+                          <td className="p-1"><InputBare type="number" value={calc.gross.toFixed(2)} readOnly /></td>
+                          <td className="p-1"><InputBare type="number" value={line.toValue} onChange={(v) => setItem(idx, "toValue", v)} /></td>
+                          <td className="p-1"><InputBare type="number" value={line.discValue || String(product?.discountPer || 0)} onChange={(v) => setItem(idx, "discValue", v)} /></td>
+                          <td className="p-1"><InputBare type="number" value={line.extraValue} onChange={(v) => setItem(idx, "extraValue", v)} /></td>
+                          <td className="p-1"><InputBare type="number" value={line.bonsValue} onChange={(v) => setItem(idx, "bonsValue", v)} /></td>
+                          <td className="p-1"><InputBare type="number" value={calc.v4gst.toFixed(2)} readOnly /></td>
+                          <td className="p-1"><InputBare type="number" value={line.gstPer} onChange={(v) => setItem(idx, "gstPer", v)} /></td>
+                          <td className="p-1"><InputBare type="number" value={calc.netAmt.toFixed(2)} readOnly /></td>
+                          <td className="p-1"><button type="button" className="rounded border px-2 py-1" onClick={() => removeItem(idx)}>X</button></td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-                <button type="button" className="mt-2 rounded border px-3 py-1 text-sm" onClick={() => setForm((prev) => ({ ...prev, items: [...prev.items, { ...emptyItem }] }))}>+ Add Product</button>
+                <button type="button" className="mt-2 rounded border px-3 py-1 text-sm" onClick={addItem}>+ Add Product</button>
+                <div className="mt-3 rounded border p-3 text-right text-sm">Total amount: <strong>{totalAmount.toFixed(2)}</strong></div>
               </div>
 
               <div className="md:col-span-2">
@@ -428,6 +477,31 @@ export default function OrderManagementModulePage() {
               </div>
             </div>
           </section>
+
+        ) : null}
+
+        {activeMode === "primary" ? (
+          <section className="rounded-2xl border bg-white p-6 shadow-sm">
+            <div className="text-lg font-semibold text-zinc-900">Sale Stock Ledger (Cloned)</div>
+            <div className="overflow-x-auto mt-3 rounded border">
+              <table className="min-w-full text-sm">
+                <thead className="bg-zinc-50"><tr><th className="p-2 text-left">Code</th><th className="p-2 text-left">From</th><th className="p-2 text-left">Distributor Name</th><th className="p-2 text-left">Business Name</th><th className="p-2 text-left">Date and Time</th><th className="p-2 text-left">Invoice</th></tr></thead>
+                <tbody>
+                  {filteredOrders.map((order) => (
+                    <tr key={order._id} className="border-t">
+                      <td className="p-2">{order.orderNo || "-"}</td>
+                      <td className="p-2">{order.fromEntityName || order.customerName || "-"}</td>
+                      <td className="p-2">{order.sourceType === "distributor" ? order.customerName || "-" : "-"}</td>
+                      <td className="p-2">{order.sourceType === "brand" ? order.customerName || "-" : "-"}</td>
+                      <td className="p-2">{order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}</td>
+                      <td className="p-2">{order.invoiceNo || "Pending"}</td>
+                    </tr>
+                  ))}
+                  {!filteredOrders.length ? <tr><td colSpan={6} className="p-5 text-center text-zinc-500">No records in this ledger.</td></tr> : null}
+                </tbody>
+              </table>
+            </div>
+          </section>
         ) : null}
       </div>
     </AdminShell>
@@ -446,8 +520,8 @@ function SelectBare({ value, onChange, options }) {
   return <select className="w-full min-w-[220px] rounded border px-2 py-1" value={value} onChange={(e) => onChange(e.target.value)}><option value="">Select</option>{options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>;
 }
 
-function InputBare({ type = "text", value, onChange }) {
-  return <input className="w-full min-w-[88px] rounded border px-2 py-1" type={type} value={value} onChange={(e) => onChange(e.target.value)} />;
+function InputBare({ type = "text", value, onChange = () => {}, readOnly = false }) {
+  return <input className="w-full min-w-[88px] rounded border px-2 py-1" type={type} value={value} readOnly={readOnly} onChange={(e) => onChange(e.target.value)} />;
 }
 
 function InlineToast({ type, message }) {
