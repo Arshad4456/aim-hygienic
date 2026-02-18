@@ -33,21 +33,6 @@ const modeConfig = {
   },
 };
 
-const statusOptions = ["pending", "approved", "rejected", "dispatched", "delivered"];
-
-function getUnread(order) {
-  return Boolean(order.unreadForAdmin || order.unreadForWarehouse);
-}
-
-function nextStatuses(order) {
-  const current = order.status;
-  if (current === "pending") return ["approved", "rejected"];
-  if (current === "approved") return ["dispatched", "rejected"];
-  if (current === "dispatched") return ["delivered"];
-  if (current === "rejected" && order.canRecoverFromRejected) return ["pending", "approved", "dispatched", "delivered"];
-  return [];
-}
-
 export default function OrderManagementModulePage() {
   const [activeMode, setActiveMode] = useState("");
   const [orders, setOrders] = useState([]);
@@ -56,8 +41,6 @@ export default function OrderManagementModulePage() {
   const [regions, setRegions] = useState([]);
   const [zones, setZones] = useState([]);
   const [saving, setSaving] = useState(false);
-  const [statusSavingId, setStatusSavingId] = useState("");
-  const [previewOrder, setPreviewOrder] = useState(null);
   const [toast, setToast] = useState(null);
   const [form, setForm] = useState({
     sourceType: "brand",
@@ -102,8 +85,6 @@ export default function OrderManagementModulePage() {
     if (!activeMode) return [];
     return orders.filter((order) => order.saleType === modeConfig[activeMode].saleType);
   }, [activeMode, orders]);
-
-  const unreadCount = useMemo(() => filteredOrders.filter(getUnread).length, [filteredOrders]);
 
   function setField(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -172,33 +153,6 @@ export default function OrderManagementModulePage() {
     }
   }
 
-  async function changeStatus(order, status) {
-    setStatusSavingId(order._id);
-    try {
-      const body = { status };
-      if (status === "rejected") {
-        const reason = typeof window !== "undefined" ? window.prompt("Rejection reason (optional)", order.rejectionReason || "") : "";
-        if (reason) body.rejectionReason = reason;
-      }
-      await apiFetch(`/orders/${order._id}/status`, { method: "PATCH", body });
-      await loadData();
-      showToast("success", `Order ${order.orderNo} moved to ${status}.`);
-    } catch (e) {
-      showToast("error", e.message || "Failed to change status");
-    } finally {
-      setStatusSavingId("");
-    }
-  }
-
-  async function markRead(order) {
-    try {
-      await apiFetch(`/orders/${order._id}/mark-read`, { method: "PATCH" });
-      await loadData();
-    } catch (e) {
-      showToast("error", e.message || "Failed to mark read");
-    }
-  }
-
   function showToast(type, message) {
     setToast({ type, message });
     setTimeout(() => setToast(null), 2500);
@@ -211,7 +165,7 @@ export default function OrderManagementModulePage() {
 
         <section className="rounded-2xl border bg-white p-6 shadow-sm">
           <div className="text-xl font-semibold text-zinc-900">Order Management Module Overview</div>
-          <div className="mt-1 text-sm text-zinc-500">Choose one workflow card to manage request form and ledger.</div>
+          <div className="text-sm text-zinc-500 mt-1">Choose one workflow card to manage request form and ledger.</div>
 
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             {Object.entries(modeConfig).map(([key, cfg]) => (
@@ -219,133 +173,92 @@ export default function OrderManagementModulePage() {
                 key={key}
                 type="button"
                 onClick={() => setActiveMode(key)}
-                className={`rounded-xl border p-4 text-left transition ${
-                  activeMode === key ? "border-emerald-500 bg-emerald-50" : "border-zinc-200 bg-white hover:bg-zinc-50"
-                }`}
+                className={`rounded-2xl border p-5 text-left ${activeMode === key ? "border-emerald-300 bg-emerald-50" : "bg-zinc-50 hover:bg-white"}`}
               >
-                <div className="text-lg font-semibold text-zinc-900">{cfg.title}</div>
-                <div className="mt-1 text-sm text-zinc-600">Manage requests, approvals, dispatch, delivery, and ledger visibility.</div>
+                <div className="text-base font-semibold text-zinc-900">{cfg.title} Card</div>
+                <div className="text-xs text-zinc-600 mt-1">Open {cfg.title.toLowerCase()} request form and ledger.</div>
               </button>
             ))}
           </div>
         </section>
 
         {activeMode ? (
-          <section className="rounded-2xl border bg-white p-6 shadow-sm">
-            <div className="grid gap-8 lg:grid-cols-2">
-              <form className="grid grid-cols-1 gap-3 md:grid-cols-2" onSubmit={submitOrder}>
-                <Select
-                  label="Request Source"
-                  value={form.sourceType}
-                  onChange={(v) => setField("sourceType", v)}
-                  options={modeConfig[activeMode].sourceOptions}
-                />
-                <Input label="From" value={form.customerName} onChange={(v) => setField("customerName", v)} placeholder="Enter source name" />
-                <Select label="To Warehouse" value={form.toWarehouseId} onChange={(v) => setField("toWarehouseId", v)} options={warehouses.map((w) => ({ value: w._id, label: w.name }))} />
-                <Input label="Address" value={form.address} onChange={(v) => setField("address", v)} />
-                <Select label="Region" value={form.regionId} onChange={(v) => setField("regionId", v)} options={regions.map((r) => ({ value: r._id, label: r.name }))} />
-                <Select label="Zone" value={form.zoneId} onChange={(v) => setField("zoneId", v)} options={zones.filter((z) => !form.regionId || z.regionId === selectedRegion?.regionId).map((z) => ({ value: z._id, label: z.name }))} />
-                <Input label="Territory" value={form.territoryName} onChange={(v) => setField("territoryName", v)} />
+          <section className="rounded-2xl border bg-white p-6 shadow-sm space-y-5">
+            <div className="text-lg font-semibold text-zinc-900">{modeConfig[activeMode].title} Request Form</div>
+            <form className="grid grid-cols-1 md:grid-cols-2 gap-3" onSubmit={submitOrder}>
+              <Select
+                label="Request Source"
+                value={form.sourceType}
+                onChange={(v) => setField("sourceType", v)}
+                options={modeConfig[activeMode].sourceOptions}
+              />
+              <Input label="From" value={form.customerName} onChange={(v) => setField("customerName", v)} placeholder="Enter source name" />
+              <Select label="To Warehouse" value={form.toWarehouseId} onChange={(v) => setField("toWarehouseId", v)} options={warehouses.map((w) => ({ value: w._id, label: w.name }))} />
+              <Input label="Address" value={form.address} onChange={(v) => setField("address", v)} />
+              <Select label="Region" value={form.regionId} onChange={(v) => setField("regionId", v)} options={regions.map((r) => ({ value: r._id, label: r.name }))} />
+              <Select label="Zone" value={form.zoneId} onChange={(v) => setField("zoneId", v)} options={zones.filter((z) => !form.regionId || z.regionId === selectedRegion?.regionId).map((z) => ({ value: z._id, label: z.name }))} />
+              <Input label="Territory" value={form.territoryName} onChange={(v) => setField("territoryName", v)} />
 
-                <div className="md:col-span-2">
-                  <div className="mb-2 font-semibold">Product Detail</div>
-                  <div className="overflow-x-auto rounded border">
-                    <table className="min-w-full text-sm">
-                      <thead>
-                        <tr className="border-b bg-zinc-50">
-                          <th className="p-2 text-left">Product</th>
-                          <th className="p-2 text-left">Qty</th>
-                          <th className="p-2 text-left">TO</th>
-                          <th className="p-2 text-left">Disc</th>
-                          <th className="p-2 text-left">Extra</th>
-                          <th className="p-2 text-left">Bons</th>
-                          <th className="p-2 text-left">GST%</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {form.items.map((line, idx) => (
-                          <tr key={idx} className="border-b">
-                            <td className="p-2"><SelectBare value={line.productId} onChange={(v) => setItem(idx, "productId", v)} options={products.map((p) => ({ value: p._id, label: `${p.productId} - ${p.name}` }))} /></td>
-                            <td className="p-2"><InputBare type="number" value={line.qty} onChange={(v) => setItem(idx, "qty", v)} /></td>
-                            <td className="p-2"><InputBare type="number" value={line.toValue} onChange={(v) => setItem(idx, "toValue", v)} /></td>
-                            <td className="p-2"><InputBare type="number" value={line.discValue} onChange={(v) => setItem(idx, "discValue", v)} /></td>
-                            <td className="p-2"><InputBare type="number" value={line.extraValue} onChange={(v) => setItem(idx, "extraValue", v)} /></td>
-                            <td className="p-2"><InputBare type="number" value={line.bonsValue} onChange={(v) => setItem(idx, "bonsValue", v)} /></td>
-                            <td className="p-2"><InputBare type="number" value={line.gstPer} onChange={(v) => setItem(idx, "gstPer", v)} /></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <button type="button" className="mt-2 rounded border px-3 py-1 text-sm" onClick={() => setForm((prev) => ({ ...prev, items: [...prev.items, { ...emptyItem }] }))}>+ Add Product</button>
-                </div>
-
-                <div className="md:col-span-2">
-                  <button type="submit" className="rounded-xl bg-emerald-600 px-4 py-2 text-white disabled:opacity-60" disabled={saving}>
-                    {saving ? "Submitting..." : "Submit Request"}
-                  </button>
-                </div>
-              </form>
-
-              <div className="pt-2">
-                <div className="flex items-center justify-between">
-                  <div className="text-lg font-semibold text-zinc-900">{modeConfig[activeMode].title} Ledger</div>
-                  <div className="rounded-full bg-amber-100 px-3 py-1 text-xs text-amber-700">Unread: {unreadCount}</div>
-                </div>
-                <div className="mt-3 overflow-x-auto rounded border">
+              <div className="md:col-span-2">
+                <div className="font-semibold mb-2">Product Detail</div>
+                <div className="overflow-x-auto rounded border">
                   <table className="min-w-full text-sm">
-                    <thead className="bg-zinc-50"><tr><th className="p-2 text-left">Order Code</th><th className="p-2 text-left">From</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Actions</th><th className="p-2 text-left">Preview</th></tr></thead>
+                    <thead>
+                      <tr className="border-b bg-zinc-50">
+                        <th className="p-2 text-left">Product</th>
+                        <th className="p-2 text-left">Qty</th>
+                        <th className="p-2 text-left">TO</th>
+                        <th className="p-2 text-left">Disc</th>
+                        <th className="p-2 text-left">Extra</th>
+                        <th className="p-2 text-left">Bons</th>
+                        <th className="p-2 text-left">GST%</th>
+                      </tr>
+                    </thead>
                     <tbody>
-                      {filteredOrders.map((order) => (
-                        <tr key={order._id} className={`border-t ${order.status === "rejected" ? "bg-red-50" : order.status === "delivered" ? "bg-emerald-50" : ""}`}>
-                          <td className="p-2">
-                            {order.orderNo}
-                            {getUnread(order) ? <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-700">Unread</span> : null}
-                          </td>
-                          <td className="p-2">{order.customerName}</td>
-                          <td className={`p-2 capitalize ${order.status === "rejected" ? "text-red-600" : order.status === "delivered" ? "text-emerald-700" : ""}`}>{order.status}</td>
-                          <td className="p-2">
-                            <select
-                              className="rounded border px-2 py-1 text-xs"
-                              value=""
-                              disabled={statusSavingId === order._id || !nextStatuses(order).length}
-                              onChange={(e) => {
-                                if (e.target.value) changeStatus(order, e.target.value);
-                              }}
-                            >
-                              <option value="">Change status...</option>
-                              {statusOptions.filter((status) => nextStatuses(order).includes(status)).map((status) => (
-                                <option key={status} value={status}>{status}</option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="p-2">
-                            <button className="rounded border px-2 py-1 text-xs" onClick={() => { setPreviewOrder(order); markRead(order); }}>Preview</button>
-                          </td>
+                      {form.items.map((line, idx) => (
+                        <tr key={idx} className="border-b">
+                          <td className="p-2"><SelectBare value={line.productId} onChange={(v) => setItem(idx, "productId", v)} options={products.map((p) => ({ value: p._id, label: `${p.productId} - ${p.name}` }))} /></td>
+                          <td className="p-2"><InputBare type="number" value={line.qty} onChange={(v) => setItem(idx, "qty", v)} /></td>
+                          <td className="p-2"><InputBare type="number" value={line.toValue} onChange={(v) => setItem(idx, "toValue", v)} /></td>
+                          <td className="p-2"><InputBare type="number" value={line.discValue} onChange={(v) => setItem(idx, "discValue", v)} /></td>
+                          <td className="p-2"><InputBare type="number" value={line.extraValue} onChange={(v) => setItem(idx, "extraValue", v)} /></td>
+                          <td className="p-2"><InputBare type="number" value={line.bonsValue} onChange={(v) => setItem(idx, "bonsValue", v)} /></td>
+                          <td className="p-2"><InputBare type="number" value={line.gstPer} onChange={(v) => setItem(idx, "gstPer", v)} /></td>
                         </tr>
                       ))}
-                      {!filteredOrders.length ? <tr><td colSpan={5} className="p-5 text-center text-zinc-500">No records in this ledger.</td></tr> : null}
                     </tbody>
                   </table>
                 </div>
+                <button type="button" className="mt-2 rounded border px-3 py-1 text-sm" onClick={() => setForm((prev) => ({ ...prev, items: [...prev.items, { ...emptyItem }] }))}>+ Add Product</button>
               </div>
-            </div>
-          </section>
-        ) : null}
 
-        {previewOrder ? (
-          <section className="rounded-2xl border bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div className="text-lg font-semibold">Order Preview: {previewOrder.orderNo}</div>
-              <button className="rounded border px-3 py-1 text-sm" onClick={() => setPreviewOrder(null)}>Close</button>
-            </div>
-            <div className="mt-3 grid gap-2 text-sm md:grid-cols-2">
-              <div><span className="text-zinc-500">Source:</span> {previewOrder.customerName} ({previewOrder.sourceType})</div>
-              <div><span className="text-zinc-500">Warehouse:</span> {previewOrder.toWarehouseName || "-"}</div>
-              <div><span className="text-zinc-500">Status:</span> <span className="capitalize">{previewOrder.status}</span></div>
-              <div><span className="text-zinc-500">Invoice:</span> {previewOrder.invoiceNo || "Pending"}</div>
-              <div><span className="text-zinc-500">Receipt:</span> {(previewOrder.receiptAgreement || "pending").replace("_", " ")}</div>
-              <div><span className="text-zinc-500">Proof:</span> {previewOrder.proofOfDeliveryImageUrl || "Pending"}</div>
+              <div className="md:col-span-2">
+                <button type="submit" className="rounded-xl bg-emerald-600 px-4 py-2 text-white disabled:opacity-60" disabled={saving}>
+                  {saving ? "Submitting..." : "Submit Request"}
+                </button>
+              </div>
+            </form>
+
+            <div className="pt-2">
+              <div className="text-lg font-semibold text-zinc-900">{modeConfig[activeMode].title} Ledger</div>
+              <div className="overflow-x-auto mt-3 rounded border">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-zinc-50"><tr><th className="p-2 text-left">Order Code</th><th className="p-2 text-left">From</th><th className="p-2 text-left">Warehouse</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Invoice</th><th className="p-2 text-left">Date</th></tr></thead>
+                  <tbody>
+                    {filteredOrders.map((order) => (
+                      <tr key={order._id} className={`border-t ${order.status === "rejected" ? "bg-red-50" : order.status === "delivered" ? "bg-emerald-50" : ""}`}>
+                        <td className="p-2">{order.orderNo}</td>
+                        <td className="p-2">{order.customerName}</td>
+                        <td className="p-2">{order.toWarehouseName || "-"}</td>
+                        <td className="p-2 capitalize">{order.status}</td>
+                        <td className="p-2">{order.invoiceNo || "Pending"}</td>
+                        <td className="p-2">{order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}</td>
+                      </tr>
+                    ))}
+                    {!filteredOrders.length ? <tr><td colSpan={6} className="p-5 text-center text-zinc-500">No records in this ledger.</td></tr> : null}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </section>
         ) : null}

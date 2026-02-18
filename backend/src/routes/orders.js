@@ -7,10 +7,6 @@ const router = express.Router();
 const ALLOWED_STATUSES = ["pending", "approved", "rejected", "dispatched", "delivered"];
 const ADMIN_ROLES = new Set(["admin", "Warehouse Manager"]);
 
-function isAdminLikeRole(role) {
-  return ADMIN_ROLES.has(String(role || "").trim());
-}
-
 function normalizeItems(items = []) {
   return items
     .filter((item) => item && item.productName && Number(item.quantity) > 0)
@@ -58,53 +54,6 @@ function canTransition(order, nextStatus) {
   if (current === "rejected") return order.canRecoverFromRejected && ["pending", "approved", "dispatched", "delivered"].includes(nextStatus);
 
   return false;
-}
-
-function canUpdateStatus(user, order, nextStatus) {
-  const role = String(user?.role || "").trim();
-  if (isAdminLikeRole(role)) return true;
-
-  if (order.saleType === "primary") {
-    if (["Brand Manager", "Distributor"].includes(role)) return nextStatus === "rejected";
-    return false;
-  }
-
-  if (order.saleType === "secondary") {
-    if (role === "Distributor") return ["approved", "rejected", "dispatched", "delivered"].includes(nextStatus);
-    return false;
-  }
-
-  return false;
-}
-
-function resolveOrderOwnership(req) {
-  const role = String(req.user?.role || "").trim();
-  const ownUserId = req.user?.userId || "";
-  const requestSaleType = req.body?.saleType === "secondary" ? "secondary" : "primary";
-  const requestSourceType = String(req.body?.sourceType || "").trim() || (requestSaleType === "secondary" ? "customer" : "brand");
-  const ownership = {
-    brandManagerId: req.body?.brandManagerId || (role === "Brand Manager" ? ownUserId : req.user?.managerId) || "",
-    distributorId: req.body?.distributorId || (role === "Distributor" ? ownUserId : req.user?.distributorId) || "",
-    orderBookerId: req.body?.orderBookerId || req.user?.orderBookerId || "",
-    salesmanId: req.body?.salesmanId || req.user?.salesmanId || "",
-    customerId: req.body?.customerId || req.user?.customerId || "",
-  };
-
-  if (!ownership.customerId && role === "customer") ownership.customerId = ownUserId;
-  if (!ownership.orderBookerId && role === "Order Booker") ownership.orderBookerId = ownUserId;
-  if (!ownership.salesmanId && role === "Salesman") ownership.salesmanId = ownUserId;
-
-  if (requestSaleType === "primary") {
-    if (requestSourceType === "brand" && !ownership.brandManagerId && ownUserId) ownership.brandManagerId = ownUserId;
-    if (requestSourceType === "distributor" && !ownership.distributorId && ownUserId) ownership.distributorId = ownUserId;
-  }
-
-  if (requestSaleType === "secondary") {
-    if (requestSourceType === "order_booker" && !ownership.orderBookerId && ownUserId) ownership.orderBookerId = ownUserId;
-    if (requestSourceType === "customer" && !ownership.customerId && ownUserId) ownership.customerId = ownUserId;
-  }
-
-  return ownership;
 }
 
 router.get("/", requireAuth, async (req, res) => {
@@ -198,7 +147,7 @@ router.patch("/:id/mark-read", requireAuth, async (req, res) => {
     if (!order) return res.status(404).json({ ok: false, message: "Order not found" });
 
     const role = String(req.user?.role || "");
-    if (isAdminLikeRole(role)) {
+    if (ADMIN_ROLES.has(role)) {
       order.unreadForAdmin = false;
       order.unreadForWarehouse = false;
     } else if (role === "Brand Manager") {
@@ -279,9 +228,6 @@ router.patch("/:id/status", requireAuth, async (req, res) => {
     if (!order) {
       return res.status(404).json({ ok: false, message: "Order not found" });
     }
-    if (!canUpdateStatus(req.user, order, status)) {
-      return res.status(403).json({ ok: false, message: "You are not allowed to change this status" });
-    }
     if (!canTransition(order, status)) {
       return res.status(400).json({ ok: false, message: "Invalid status transition" });
     }
@@ -345,24 +291,26 @@ router.post("/", requireAuth, async (req, res) => {
 
     const totalAmount = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
     const role = String(req.user?.role || "").trim();
-    const ownership = resolveOrderOwnership(req);
+    const ownUserId = req.user?.userId || "";
+    const isBrandManager = role === "Brand Manager";
+    const isDistributor = role === "Distributor";
 
     const order = await SalesOrder.create({
       orderNo: orderNo || `SO-${Date.now()}`,
       customerName: String(customerName).trim(),
       customerType: customerType || "customer",
       saleType: saleType === "secondary" ? "secondary" : "primary",
-      sourceType: sourceType || (saleType === "secondary" ? "customer" : "brand"),
+      sourceType: sourceType || "customer",
       expectedDelivery: expectedDelivery ? new Date(expectedDelivery) : undefined,
       items,
       totalAmount,
       notes: notes ? String(notes).trim() : undefined,
       createdBy: req.user?._id,
-      brandManagerId: ownership.brandManagerId,
-      distributorId: ownership.distributorId,
-      orderBookerId: ownership.orderBookerId,
-      salesmanId: ownership.salesmanId,
-      customerId: ownership.customerId,
+      brandManagerId: req.body?.brandManagerId || (isBrandManager ? ownUserId : req.user?.managerId) || "",
+      distributorId: req.body?.distributorId || (isDistributor ? ownUserId : req.user?.distributorId) || "",
+      orderBookerId: req.body?.orderBookerId || req.user?.orderBookerId || req.user?.userId || "",
+      salesmanId: req.body?.salesmanId || req.user?.salesmanId || "",
+      customerId: req.body?.customerId || req.user?.customerId || req.user?.userId || "",
       warehouseManagerId: req.body?.warehouseManagerId || req.user?.warehouseManagerId || "",
       deliveryBoyId: req.body?.deliveryBoyId || req.user?.deliveryBoyId || "",
       fromEntityName: req.body?.fromEntityName || req.user?.businessName || req.user?.fullName || "",
