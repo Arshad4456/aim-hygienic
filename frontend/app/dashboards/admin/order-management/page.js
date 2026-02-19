@@ -12,6 +12,9 @@ const emptyItem = {
   extraValue: "0",
   bonsValue: "0",
   gstPer: "0",
+  manufactureDate: "",
+  expiryDate: "",
+  returnDate: "",
 };
 
 function toNum(v) {
@@ -57,6 +60,13 @@ function findProductByLine(products, line) {
   return products.find((p) => p._id === line.productId || p.productId === line.productId) || null;
 }
 
+function dateInputValue(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 10);
+}
+
 function itemToEditableLine(item) {
   const noteMap = parseNoteMap(item.notes || item.note || "");
   return {
@@ -67,6 +77,9 @@ function itemToEditableLine(item) {
     extraValue: String(noteMap.extra || item.extraValue || 0),
     bonsValue: String(noteMap.bons || item.bonsValue || 0),
     gstPer: String(item.gstPer || noteMap.gstPer || 0),
+    manufactureDate: dateInputValue(item.manufactureDate),
+    expiryDate: dateInputValue(item.expiryDate),
+    returnDate: dateInputValue(item.returnDate),
   };
 }
 
@@ -100,7 +113,7 @@ const returnStockModes = [
   { key: "distributor", label: "Distributor" },
 ];
 
-const businessTypes = ["Private Limited", "Sole Proprietorship"];
+const defaultBusinessTypes = ["Private Limited", "Sole Proprietorship"];
 
 function normalizeRequestSource(value) {
   return String(value || "").toLowerCase().replace(/[^a-z]/g, "");
@@ -217,10 +230,25 @@ export default function OrderManagementModulePage() {
       return regionMatch && zoneMatch && territoryMatch;
     });
   }, [fields, form.regionId, form.zoneId, form.territoryName, regions, zones]);
+  const selectedFieldForForm = useMemo(() => fieldsForTerritory.find((f) => f._id === form.fieldId), [fieldsForTerritory, form.fieldId]);
   const brandBusinessUsers = useMemo(() => {
-    const selectedField = fieldsForTerritory.find((f) => f._id === form.fieldId);
-    return brandManagers.filter((u) => !selectedField || u.fieldId === selectedField.fieldId || u.fieldName === selectedField.name);
-  }, [brandManagers, fieldsForTerritory, form.fieldId]);
+    return brandManagers.filter((u) => !selectedFieldForForm || u.fieldId === selectedFieldForForm.fieldId || u.fieldName === selectedFieldForForm.name);
+  }, [brandManagers, selectedFieldForForm]);
+  const businessTypes = useMemo(() => {
+    const fieldRaw = selectedFieldForForm?.businessType || selectedFieldForForm?.businessTypes || "";
+    const fromField = String(fieldRaw)
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+    if (fromField.length) return [...new Set(fromField)];
+
+    const fromUsers = brandBusinessUsers
+      .map((u) => String(u.businessType || "").trim())
+      .filter(Boolean);
+    if (fromUsers.length) return [...new Set(fromUsers)];
+
+    return defaultBusinessTypes;
+  }, [selectedFieldForForm, brandBusinessUsers]);
   const distributorsForTerritory = useMemo(
     () => distributors.filter((d) => !form.territoryName || d.territoryName === form.territoryName),
     [distributors, form.territoryName],
@@ -276,7 +304,7 @@ export default function OrderManagementModulePage() {
       ...prev,
       sourceType: defaults.sourceOptions?.[0]?.value || "brand",
       primarySaleMode: "brand",
-      businessType: prev.businessType || businessTypes[0],
+      businessType: prev.businessType || defaultBusinessTypes[0],
     }));
   }, [activeMode]);
 
@@ -318,6 +346,17 @@ export default function OrderManagementModulePage() {
       setField("distributorName", name);
     }
   }, [activeMode, returnStockMode, selectedBrandManager, selectedDistributor]);
+
+  useEffect(() => {
+    if (activeMode !== "returnStock" || returnStockMode !== "brand") return;
+    if (form.businessType && !businessTypes.includes(form.businessType)) {
+      setField("businessType", "");
+      return;
+    }
+    if (!form.businessType && businessTypes.length) {
+      setField("businessType", businessTypes[0]);
+    }
+  }, [activeMode, returnStockMode, form.businessType, businessTypes]);
 
   const saleOrderRequests = useMemo(
     () =>
@@ -462,6 +501,7 @@ export default function OrderManagementModulePage() {
             oneCartonPrice: r.calc.rate * getSizeMultiplier(r.product),
             totalPrice: r.calc.netAmt,
             unitPrice: r.calc.rate,
+            manufactureDate: r.line.manufactureDate || r.line.returnDate || undefined,
             returnDate: r.line.returnDate || undefined,
             expiryDate: r.line.expiryDate || undefined,
             notes: `gross:${r.calc.gross},to:${toNum(r.line.toValue)},disc:${toNum(r.line.discValue)},extra:${toNum(r.line.extraValue)},bons:${toNum(r.line.bonsValue)},v4gst:${r.calc.v4gst},gst:${r.calc.gstAmount},net:${r.calc.netAmt}`,
@@ -863,7 +903,7 @@ export default function OrderManagementModulePage() {
                   <table className="min-w-full text-xs">
                     <thead>
                       <tr className="border-b bg-zinc-50">
-                        <th className="p-2">S.No</th><th className="p-2">Product Name</th><th className="p-2">Size</th><th className="p-2">Qty</th><th className="p-2">Rate</th><th className="p-2">Gross</th><th className="p-2">TO</th><th className="p-2">Disc</th><th className="p-2">Extra</th><th className="p-2">Bons</th><th className="p-2">V4GST</th><th className="p-2">GST</th><th className="p-2">Net Amt</th>{activeMode === "returnStock" ? <><th className="p-2">EXP Date</th><th className="p-2">Return Date</th></> : null}<th className="p-2">-</th>
+                        <th className="p-2">S.No</th><th className="p-2">Product Name</th><th className="p-2">Size</th><th className="p-2">Qty</th><th className="p-2">Rate</th><th className="p-2">Gross</th><th className="p-2">TO</th><th className="p-2">Disc</th><th className="p-2">Extra</th><th className="p-2">Bons</th><th className="p-2">V4GST</th><th className="p-2">GST</th><th className="p-2">Net Amt</th>{activeMode === "returnStock" ? <><th className="p-2">MFG Date</th><th className="p-2">EXP Date</th><th className="p-2">Return Date</th></> : null}<th className="p-2">-</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -882,7 +922,7 @@ export default function OrderManagementModulePage() {
                           <td className="p-1"><InputBare type="number" value={calc.v4gst.toFixed(2)} readOnly /></td>
                           <td className="p-1"><InputBare type="number" value={line.gstPer} onChange={(v) => setItem(idx, "gstPer", v)} /></td>
                           <td className="p-1"><InputBare type="number" value={calc.netAmt.toFixed(2)} readOnly /></td>
-                          {activeMode === "returnStock" ? <><td className="p-1"><InputBare type="date" value={line.expiryDate || ""} onChange={(v) => setItem(idx, "expiryDate", v)} /></td><td className="p-1"><InputBare type="date" value={line.returnDate || ""} onChange={(v) => setItem(idx, "returnDate", v)} /></td></> : null}
+                          {activeMode === "returnStock" ? <><td className="p-1"><InputBare type="date" value={line.manufactureDate || ""} onChange={(v) => setItem(idx, "manufactureDate", v)} /></td><td className="p-1"><InputBare type="date" value={line.expiryDate || ""} onChange={(v) => setItem(idx, "expiryDate", v)} /></td><td className="p-1"><InputBare type="date" value={line.returnDate || ""} onChange={(v) => setItem(idx, "returnDate", v)} /></td></> : null}
                           <td className="p-1"><button type="button" className="rounded border px-2 py-1" onClick={() => removeItem(idx)}>X</button></td>
                         </tr>
                       ))}
@@ -1144,6 +1184,7 @@ function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
   if (!row || !draft) return null;
 
   const canEditPending = normalizeRequestStatus(row.requestStatus || "PENDING") === "PENDING";
+  const isReturnStockRow = row.transactionType === "RETURN_STOCK";
 
   function setDraftField(key, value) {
     setDraft((prev) => ({ ...prev, [key]: value }));
@@ -1177,6 +1218,9 @@ function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
           totalPacks: r.calc.qty,
           unitPrice: r.calc.rate,
           totalPrice: r.calc.netAmt,
+          manufactureDate: isReturnStockRow ? (r.line.manufactureDate || r.line.returnDate || undefined) : undefined,
+          expiryDate: isReturnStockRow ? (r.line.expiryDate || undefined) : undefined,
+          returnDate: isReturnStockRow ? (r.line.returnDate || undefined) : undefined,
           notes: `gross:${r.calc.gross},to:${toNum(r.line.toValue)},disc:${toNum(r.line.discValue)},extra:${toNum(r.line.extraValue)},bons:${toNum(r.line.bonsValue)},v4gst:${r.calc.v4gst},gst:${r.calc.gstAmount},net:${r.calc.netAmt}`,
         }));
 
@@ -1238,7 +1282,7 @@ function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
             <div className="font-semibold text-base">Product Detail</div>
             <div className="overflow-x-auto rounded border">
               <table className="min-w-full text-xs">
-                <thead><tr className="border-b bg-zinc-50"><th className="p-2">S.No</th><th className="p-2">Product Name</th><th className="p-2">Size</th><th className="p-2">Qty</th><th className="p-2">Rate</th><th className="p-2">Gross</th><th className="p-2">TO</th><th className="p-2">Disc</th><th className="p-2">Extra</th><th className="p-2">Bons</th><th className="p-2">V4GST</th><th className="p-2">GST</th><th className="p-2">Net Amt</th>{activeMode === "returnStock" ? <><th className="p-2">EXP Date</th><th className="p-2">Return Date</th></> : null}<th className="p-2">-</th></tr></thead>
+                <thead><tr className="border-b bg-zinc-50"><th className="p-2">S.No</th><th className="p-2">Product Name</th><th className="p-2">Size</th><th className="p-2">Qty</th><th className="p-2">Rate</th><th className="p-2">Gross</th><th className="p-2">TO</th><th className="p-2">Disc</th><th className="p-2">Extra</th><th className="p-2">Bons</th><th className="p-2">V4GST</th><th className="p-2">GST</th><th className="p-2">Net Amt</th>{isReturnStockRow ? <><th className="p-2">MFG Date</th><th className="p-2">EXP Date</th><th className="p-2">Return Date</th></> : null}<th className="p-2">-</th></tr></thead>
                 <tbody>
                   {lineRows.map(({ idx, line, product, calc }) => (
                     <tr key={idx} className="border-b">
@@ -1255,6 +1299,11 @@ function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
                       <td className="p-1"><InputBare type="number" value={calc.v4gst.toFixed(2)} readOnly /></td>
                       <td className="p-1"><InputBare type="number" value={line.gstPer} onChange={(v) => setItem(idx, "gstPer", v)} /></td>
                       <td className="p-1"><InputBare type="number" value={calc.netAmt.toFixed(2)} readOnly /></td>
+                      {isReturnStockRow ? (<>
+                        <td className="p-1"><InputBare type="date" value={line.manufactureDate || ""} onChange={(v) => setItem(idx, "manufactureDate", v)} /></td>
+                        <td className="p-1"><InputBare type="date" value={line.expiryDate || ""} onChange={(v) => setItem(idx, "expiryDate", v)} /></td>
+                        <td className="p-1"><InputBare type="date" value={line.returnDate || ""} onChange={(v) => setItem(idx, "returnDate", v)} /></td>
+                      </>) : null}
                       <td className="p-1"><button type="button" onClick={() => removeItem(idx)} className="rounded border px-2 py-1">X</button></td>
                     </tr>
                   ))}
