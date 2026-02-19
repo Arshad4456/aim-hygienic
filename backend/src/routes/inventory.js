@@ -331,6 +331,92 @@ router.get("/transactions", requireAuth, async (req, res) => {
   }
 });
 
+
+router.put("/transactions/:id", requireAuth, requireRole("admin", "warehouse manager"), async (req, res) => {
+  try {
+    const transaction = await WarehouseTransaction.findById(req.params.id);
+    if (!transaction) return res.status(404).json({ ok: false, message: "Transaction not found" });
+
+    if (String(transaction.requestStatus || "").toUpperCase() !== "PENDING" || transaction.requestApplied) {
+      return res.status(400).json({ ok: false, message: "Only pending requests can be updated" });
+    }
+
+    const body = req.body || {};
+    const incomingItems = Array.isArray(body.items) ? body.items : [];
+    if (!incomingItems.length) {
+      return res.status(400).json({ ok: false, message: "At least one item is required" });
+    }
+
+    const normalizedItems = incomingItems.map((item) => {
+      const parsedSize = parseCartonSizeLabel(item.cartonSize);
+      const cartons = Math.max(0, toNumber(item.cartons, parsedSize?.cartonCount || 0));
+      const packs = Math.max(0, toNumber(item.packs, 0));
+      const packsPerCarton = Math.max(0, toNumber(item.packsPerCarton, parsedSize?.packsPerCarton || 0));
+      const totalPacks = Math.max(0, toNumber(item.totalPacks, parsedSize?.totalPacks || cartons * packsPerCarton + packs));
+      const onePackPrice = Math.max(0, toNumber(item.onePackPrice, 0));
+      const oneCartonPrice = Math.max(0, toNumber(item.oneCartonPrice, 0));
+      const totalPrice = Math.max(0, toNumber(item.totalPrice, 0));
+      const unitPrice = totalPacks > 0 ? toNumber(item.unitPrice, totalPrice / totalPacks) : 0;
+      return {
+        productId: toTrimmedString(item.productId),
+        productName: toTrimmedString(item.productName),
+        cartonSize: parsedSize?.cartonSize || toTrimmedString(item.cartonSize),
+        cartonCount: parsedSize?.cartonCount || cartons,
+        packsPerCarton,
+        cartons,
+        packs,
+        totalPacks,
+        onePackPrice,
+        oneCartonPrice,
+        totalPrice,
+        unitPrice,
+        notes: toTrimmedString(item.notes),
+      };
+    });
+
+    const invalidItem = normalizedItems.find((item) => !item.productId || item.totalPacks <= 0);
+    if (invalidItem) {
+      return res.status(400).json({ ok: false, message: "Each item needs product and quantity" });
+    }
+
+    const subtotal = normalizedItems.reduce((sum, item) => sum + (item.totalPrice || item.totalPacks * item.unitPrice), 0);
+    const extraDiscPer = toNumber(body.extraDiscPer, transaction.extraDiscPer || 0);
+    const advTaxPer = toNumber(body.advTaxPer, transaction.advTaxPer || 0);
+    const whTaxPer = toNumber(body.whTaxPer, transaction.whTaxPer || 0);
+    const expense = toNumber(body.expense, transaction.expense || 0);
+    const extraDiscAmt = (subtotal * extraDiscPer) / 100;
+    const advTaxAmt = (subtotal * advTaxPer) / 100;
+    const whTaxAmt = (subtotal * whTaxPer) / 100;
+    const grandTotal = subtotal - extraDiscAmt + advTaxAmt + whTaxAmt + expense;
+
+    transaction.fromEntityName = toTrimmedString(body.fromEntityName || transaction.fromEntityName);
+    transaction.toEntityName = toTrimmedString(body.toEntityName || transaction.toEntityName);
+    transaction.regionId = toTrimmedString(body.regionId || transaction.regionId);
+    transaction.regionName = toTrimmedString(body.regionName || transaction.regionName);
+    transaction.zoneId = toTrimmedString(body.zoneId || transaction.zoneId);
+    transaction.zoneName = toTrimmedString(body.zoneName || transaction.zoneName);
+    transaction.territory = toTrimmedString(body.territory || transaction.territory);
+    transaction.fieldId = toTrimmedString(body.fieldId || transaction.fieldId);
+    transaction.fieldName = toTrimmedString(body.fieldName || transaction.fieldName);
+    transaction.brandName = toTrimmedString(body.brandName || transaction.brandName);
+    transaction.distributorName = toTrimmedString(body.distributorName || transaction.distributorName);
+    transaction.subDistributorName = toTrimmedString(body.subDistributorName || transaction.subDistributorName);
+    transaction.note = toTrimmedString(body.note || transaction.note);
+    transaction.extraDiscPer = extraDiscPer;
+    transaction.advTaxPer = advTaxPer;
+    transaction.whTaxPer = whTaxPer;
+    transaction.expense = expense;
+    transaction.subtotal = subtotal;
+    transaction.grandTotal = grandTotal;
+    transaction.items = normalizedItems;
+
+    await transaction.save();
+    return res.json({ ok: true, transaction });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to update transaction" });
+  }
+});
+
 router.put("/transactions/:id/mark-read", requireAuth, requireRole("admin", "warehouse manager"), async (req, res) => {
   try {
     const transaction = await WarehouseTransaction.findByIdAndUpdate(
