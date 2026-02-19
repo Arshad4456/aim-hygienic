@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -14,7 +15,6 @@ const emptyItem = {
   gstPer: "0",
   manufactureDate: "",
   expiryDate: "",
-  returnDate: "",
 };
 
 function toNum(v) {
@@ -79,7 +79,6 @@ function itemToEditableLine(item) {
     gstPer: String(item.gstPer || noteMap.gstPer || 0),
     manufactureDate: dateInputValue(item.manufactureDate),
     expiryDate: dateInputValue(item.expiryDate),
-    returnDate: dateInputValue(item.returnDate),
   };
 }
 
@@ -198,7 +197,7 @@ export default function OrderManagementModulePage() {
     advTaxPer: "0",
     whTaxPer: "0",
     expense: "0",
-    items: [{ ...emptyItem, expiryDate: "", returnDate: "" }],
+    items: [{ ...emptyItem, expiryDate: "" }],
   });
 
   const selectedRegion = useMemo(() => regions.find((item) => item._id === form.regionId), [regions, form.regionId]);
@@ -370,7 +369,6 @@ export default function OrderManagementModulePage() {
     () =>
       transactions
         .filter((t) => t.transactionType === "RETURN_STOCK")
-        .filter((t) => ["Brand Manager", "Distributor"].includes(String(t.requestSourceRole || "")))
         .sort((a, b) => new Date(b.transactionAt || 0).getTime() - new Date(a.transactionAt || 0).getTime()),
     [transactions],
   );
@@ -501,8 +499,7 @@ export default function OrderManagementModulePage() {
             oneCartonPrice: r.calc.rate * getSizeMultiplier(r.product),
             totalPrice: r.calc.netAmt,
             unitPrice: r.calc.rate,
-            manufactureDate: r.line.manufactureDate || r.line.returnDate || undefined,
-            returnDate: r.line.returnDate || undefined,
+            manufactureDate: r.line.manufactureDate || undefined,
             expiryDate: r.line.expiryDate || undefined,
             notes: `gross:${r.calc.gross},to:${toNum(r.line.toValue)},disc:${toNum(r.line.discValue)},extra:${toNum(r.line.extraValue)},bons:${toNum(r.line.bonsValue)},v4gst:${r.calc.v4gst},gst:${r.calc.gstAmount},net:${r.calc.netAmt}`,
           }));
@@ -619,7 +616,8 @@ export default function OrderManagementModulePage() {
 
   async function deleteOrder(orderId) {
     try {
-      await apiFetch(activeMode === "primary" ? `/inventory/transactions/${orderId}` : `/orders/${orderId}`, { method: "DELETE" });
+      const isInventoryTransaction = transactions.some((row) => row._id === orderId);
+      await apiFetch(isInventoryTransaction ? `/inventory/transactions/${orderId}` : `/orders/${orderId}`, { method: "DELETE" });
       notify("success", "Order deleted successfully.");
       await loadData();
     } catch (e) {
@@ -903,7 +901,7 @@ export default function OrderManagementModulePage() {
                   <table className="min-w-full text-xs">
                     <thead>
                       <tr className="border-b bg-zinc-50">
-                        <th className="p-2">S.No</th><th className="p-2">Product Name</th><th className="p-2">Size</th><th className="p-2">Qty</th><th className="p-2">Rate</th><th className="p-2">Gross</th><th className="p-2">TO</th><th className="p-2">Disc</th><th className="p-2">Extra</th><th className="p-2">Bons</th><th className="p-2">V4GST</th><th className="p-2">GST</th><th className="p-2">Net Amt</th>{activeMode === "returnStock" ? <><th className="p-2">MFG Date</th><th className="p-2">EXP Date</th><th className="p-2">Return Date</th></> : null}<th className="p-2">-</th>
+                        <th className="p-2">S.No</th><th className="p-2">Product Name</th><th className="p-2">Size</th><th className="p-2">Qty</th><th className="p-2">Rate</th><th className="p-2">Gross</th><th className="p-2">TO</th><th className="p-2">Disc</th><th className="p-2">Extra</th><th className="p-2">Bons</th><th className="p-2">V4GST</th><th className="p-2">GST</th><th className="p-2">Net Amt</th>{activeMode === "returnStock" ? <><th className="p-2">MFG Date</th><th className="p-2">EXP Date</th></> : null}<th className="p-2">-</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -922,7 +920,7 @@ export default function OrderManagementModulePage() {
                           <td className="p-1"><InputBare type="number" value={calc.v4gst.toFixed(2)} readOnly /></td>
                           <td className="p-1"><InputBare type="number" value={line.gstPer} onChange={(v) => setItem(idx, "gstPer", v)} /></td>
                           <td className="p-1"><InputBare type="number" value={calc.netAmt.toFixed(2)} readOnly /></td>
-                          {activeMode === "returnStock" ? <><td className="p-1"><InputBare type="date" value={line.manufactureDate || ""} onChange={(v) => setItem(idx, "manufactureDate", v)} /></td><td className="p-1"><InputBare type="date" value={line.expiryDate || ""} onChange={(v) => setItem(idx, "expiryDate", v)} /></td><td className="p-1"><InputBare type="date" value={line.returnDate || ""} onChange={(v) => setItem(idx, "returnDate", v)} /></td></> : null}
+                          {activeMode === "returnStock" ? <><td className="p-1"><InputBare type="date" value={line.manufactureDate || ""} onChange={(v) => setItem(idx, "manufactureDate", v)} /></td><td className="p-1"><InputBare type="date" value={line.expiryDate || ""} onChange={(v) => setItem(idx, "expiryDate", v)} /></td></> : null}
                           <td className="p-1"><button type="button" className="rounded border px-2 py-1" onClick={() => removeItem(idx)}>X</button></td>
                         </tr>
                       ))}
@@ -1218,9 +1216,8 @@ function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
           totalPacks: r.calc.qty,
           unitPrice: r.calc.rate,
           totalPrice: r.calc.netAmt,
-          manufactureDate: isReturnStockRow ? (r.line.manufactureDate || r.line.returnDate || undefined) : undefined,
+          manufactureDate: isReturnStockRow ? (r.line.manufactureDate || undefined) : undefined,
           expiryDate: isReturnStockRow ? (r.line.expiryDate || undefined) : undefined,
-          returnDate: isReturnStockRow ? (r.line.returnDate || undefined) : undefined,
           notes: `gross:${r.calc.gross},to:${toNum(r.line.toValue)},disc:${toNum(r.line.discValue)},extra:${toNum(r.line.extraValue)},bons:${toNum(r.line.bonsValue)},v4gst:${r.calc.v4gst},gst:${r.calc.gstAmount},net:${r.calc.netAmt}`,
         }));
 
@@ -1282,7 +1279,7 @@ function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
             <div className="font-semibold text-base">Product Detail</div>
             <div className="overflow-x-auto rounded border">
               <table className="min-w-full text-xs">
-                <thead><tr className="border-b bg-zinc-50"><th className="p-2">S.No</th><th className="p-2">Product Name</th><th className="p-2">Size</th><th className="p-2">Qty</th><th className="p-2">Rate</th><th className="p-2">Gross</th><th className="p-2">TO</th><th className="p-2">Disc</th><th className="p-2">Extra</th><th className="p-2">Bons</th><th className="p-2">V4GST</th><th className="p-2">GST</th><th className="p-2">Net Amt</th>{isReturnStockRow ? <><th className="p-2">MFG Date</th><th className="p-2">EXP Date</th><th className="p-2">Return Date</th></> : null}<th className="p-2">-</th></tr></thead>
+                <thead><tr className="border-b bg-zinc-50"><th className="p-2">S.No</th><th className="p-2">Product Name</th><th className="p-2">Size</th><th className="p-2">Qty</th><th className="p-2">Rate</th><th className="p-2">Gross</th><th className="p-2">TO</th><th className="p-2">Disc</th><th className="p-2">Extra</th><th className="p-2">Bons</th><th className="p-2">V4GST</th><th className="p-2">GST</th><th className="p-2">Net Amt</th>{isReturnStockRow ? <><th className="p-2">MFG Date</th><th className="p-2">EXP Date</th></> : null}<th className="p-2">-</th></tr></thead>
                 <tbody>
                   {lineRows.map(({ idx, line, product, calc }) => (
                     <tr key={idx} className="border-b">
@@ -1302,8 +1299,7 @@ function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
                       {isReturnStockRow ? (<>
                         <td className="p-1"><InputBare type="date" value={line.manufactureDate || ""} onChange={(v) => setItem(idx, "manufactureDate", v)} /></td>
                         <td className="p-1"><InputBare type="date" value={line.expiryDate || ""} onChange={(v) => setItem(idx, "expiryDate", v)} /></td>
-                        <td className="p-1"><InputBare type="date" value={line.returnDate || ""} onChange={(v) => setItem(idx, "returnDate", v)} /></td>
-                      </>) : null}
+                                              </>) : null}
                       <td className="p-1"><button type="button" onClick={() => removeItem(idx)} className="rounded border px-2 py-1">X</button></td>
                     </tr>
                   ))}
