@@ -44,6 +44,32 @@ function computeLine(line, product) {
   return { sizeText: product?.size || "-", qty, rate, gross, discValue, v4gst, gstAmount, netAmt };
 }
 
+function parseNoteMap(value) {
+  return Object.fromEntries(
+    String(value || "")
+      .split(",")
+      .map((seg) => seg.split(":"))
+      .filter((parts) => parts.length >= 2),
+  );
+}
+
+function findProductByLine(products, line) {
+  return products.find((p) => p._id === line.productId || p.productId === line.productId) || null;
+}
+
+function itemToEditableLine(item) {
+  const noteMap = parseNoteMap(item.notes || item.note || "");
+  return {
+    productId: item.productId || "",
+    qty: String(item.totalPacks || item.quantity || 0),
+    toValue: String(noteMap.to || item.toValue || 0),
+    discValue: String(noteMap.disc || item.discValue || 0),
+    extraValue: String(noteMap.extra || item.extraValue || 0),
+    bonsValue: String(noteMap.bons || item.bonsValue || 0),
+    gstPer: String(item.gstPer || noteMap.gstPer || 0),
+  };
+}
+
 const modeConfig = {
   primary: {
     title: "Primary Orders",
@@ -771,7 +797,7 @@ export default function OrderManagementModulePage() {
           </>
         ) : null}
 
-        <RequestPreviewModal row={previewRequest} onClose={() => setPreviewRequest(null)} />
+        <RequestPreviewModal row={previewRequest} products={products} onClose={() => setPreviewRequest(null)} onUpdated={loadData} notify={notify} />
       </div>
     </AdminShell>
   );
@@ -847,15 +873,178 @@ function RequestSaleStocksTable({ rows, onOpen, onApprove, onReject, onDispatch,
   );
 }
 
-function RequestPreviewModal({ row, onClose }) {
-  if (!row) return null;
+function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
+  const [saving, setSaving] = useState(false);
+  const [draft, setDraft] = useState(null);
+
+  useEffect(() => {
+    if (!row) {
+      setDraft(null);
+      return;
+    }
+    setDraft({
+      fromEntityName: row.fromEntityName || "",
+      toEntityName: row.toEntityName || row.warehouseName || "",
+      regionId: row.regionId || "",
+      regionName: row.regionName || "",
+      zoneId: row.zoneId || "",
+      zoneName: row.zoneName || "",
+      territory: row.territory || "",
+      note: row.note || "",
+      fieldId: row.fieldId || "",
+      fieldName: row.fieldName || "",
+      brandName: row.brandName || "",
+      distributorName: row.distributorName || "",
+      subDistributorName: row.subDistributorName || "",
+      extraDiscPer: String(row.extraDiscPer || 0),
+      advTaxPer: String(row.advTaxPer || 0),
+      whTaxPer: String(row.whTaxPer || 0),
+      expense: String(row.expense || 0),
+      items: (row.items || []).map(itemToEditableLine),
+    });
+  }, [row]);
+
+  const lineRows = useMemo(() => (draft?.items || []).map((line, idx) => {
+    const product = findProductByLine(products || [], line);
+    return { idx, line, product, calc: computeLine(line, product) };
+  }), [draft?.items, products]);
+
+  const totalAmount = useMemo(() => lineRows.reduce((sum, r) => sum + r.calc.netAmt, 0), [lineRows]);
+  const extraDiscAmt = useMemo(() => (totalAmount * toNum(draft?.extraDiscPer)) / 100, [totalAmount, draft?.extraDiscPer]);
+  const advTaxAmt = useMemo(() => (totalAmount * toNum(draft?.advTaxPer)) / 100, [totalAmount, draft?.advTaxPer]);
+  const whTaxAmt = useMemo(() => (totalAmount * toNum(draft?.whTaxPer)) / 100, [totalAmount, draft?.whTaxPer]);
+  const grandTotal = useMemo(() => totalAmount - extraDiscAmt + advTaxAmt + whTaxAmt + toNum(draft?.expense), [totalAmount, extraDiscAmt, advTaxAmt, whTaxAmt, draft?.expense]);
+
+  if (!row || !draft) return null;
+
+  function setDraftField(key, value) {
+    setDraft((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function setItem(index, key, value) {
+    setDraft((prev) => ({ ...prev, items: prev.items.map((it, idx) => (idx === index ? { ...it, [key]: value } : it)) }));
+  }
+
+  function addItem() {
+    setDraft((prev) => ({ ...prev, items: [...prev.items, { ...emptyItem }] }));
+  }
+
+  function removeItem(index) {
+    setDraft((prev) => ({ ...prev, items: prev.items.filter((_, idx) => idx !== index) }));
+  }
+
+  async function updateRequest() {
+    setSaving(true);
+    try {
+      const normalizedItems = lineRows
+        .filter((r) => r.product && r.calc.qty > 0)
+        .map((r) => ({
+          productId: r.product.productId || r.product._id,
+          productName: r.product.name,
+          cartonSize: `1x${r.calc.qty || 0}`,
+          totalPacks: r.calc.qty,
+          unitPrice: r.calc.rate,
+          totalPrice: r.calc.netAmt,
+          notes: `gross:${r.calc.gross},to:${toNum(r.line.toValue)},disc:${toNum(r.line.discValue)},extra:${toNum(r.line.extraValue)},bons:${toNum(r.line.bonsValue)},v4gst:${r.calc.v4gst},gst:${r.calc.gstAmount},net:${r.calc.netAmt}`,
+        }));
+
+      if (!normalizedItems.length) {
+        throw new Error("Please provide at least one valid product row");
+      }
+
+      await apiFetch(`/inventory/transactions/${row._id}`, {
+        method: "PUT",
+        body: {
+          fromEntityName: draft.fromEntityName,
+          toEntityName: draft.toEntityName,
+          regionId: draft.regionId,
+          regionName: draft.regionName,
+          zoneId: draft.zoneId,
+          zoneName: draft.zoneName,
+          territory: draft.territory,
+          note: draft.note,
+          fieldId: draft.fieldId,
+          fieldName: draft.fieldName,
+          brandName: draft.brandName,
+          distributorName: draft.distributorName,
+          subDistributorName: draft.subDistributorName,
+          extraDiscPer: Number(draft.extraDiscPer || 0),
+          advTaxPer: Number(draft.advTaxPer || 0),
+          whTaxPer: Number(draft.whTaxPer || 0),
+          expense: Number(draft.expense || 0),
+          items: normalizedItems,
+        },
+      });
+      notify("success", "Request updated successfully.");
+      await onUpdated?.();
+      onClose();
+    } catch (e) {
+      notify("error", e.message || "Failed to update request");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-5xl rounded-2xl bg-white shadow-xl">
+      <div className="w-full max-w-[96vw] rounded-2xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b px-5 py-3"><div className="text-lg font-semibold">Order Request Preview</div><button type="button" className="rounded border px-3 py-1 text-sm" onClick={onClose}>Close</button></div>
-        <div className="max-h-[70vh] overflow-y-auto p-5 space-y-4 text-sm">
-          <div className="grid md:grid-cols-3 gap-3"><PreviewField label="Code" value={row.transactionCode || "-"} /><PreviewField label="From" value={row.fromEntityName || "-"} /><PreviewField label="Source" value={sourceRoleLabel(row)} /><PreviewField label="Region" value={row.regionName || "-"} /><PreviewField label="Zone" value={row.zoneName || "-"} /><PreviewField label="Territory" value={row.territory || "-"} /><PreviewField label="To" value={row.toEntityName || row.warehouseName || "-"} /><PreviewField label="Address" value={row.note || "-"} /><PreviewField label="Status" value={normalizeRequestStatus(row.requestStatus || "PENDING")} /></div>
-          <div className="overflow-x-auto rounded border"><table className="min-w-full text-xs"><thead><tr className="border-b bg-zinc-50"><th className="p-2">Product</th><th className="p-2">Qty</th><th className="p-2">Rate</th><th className="p-2">Amount</th><th className="p-2">Note</th></tr></thead><tbody>{(row.items || []).map((it, i) => <tr key={i} className="border-b"><td className="p-2">{it.productName || "-"}</td><td className="p-2">{it.quantity || 0}</td><td className="p-2">{it.unitPrice || 0}</td><td className="p-2">{it.amount || 0}</td><td className="p-2">{it.note || "-"}</td></tr>)}</tbody></table></div>
+        <div className="max-h-[78vh] overflow-y-auto p-5 space-y-4 text-sm">
+          <div className="grid md:grid-cols-3 gap-3">
+            <PreviewField label="Code" value={row.transactionCode || "-"} />
+            <Input label="From" value={draft.fromEntityName} onChange={(v) => setDraftField("fromEntityName", v)} />
+            <Input label="To" value={draft.toEntityName} onChange={(v) => setDraftField("toEntityName", v)} />
+            <Input label="Region" value={draft.regionName} onChange={(v) => setDraftField("regionName", v)} />
+            <Input label="Zone" value={draft.zoneName} onChange={(v) => setDraftField("zoneName", v)} />
+            <Input label="Territory" value={draft.territory} onChange={(v) => setDraftField("territory", v)} />
+            <Input label="Address" value={draft.note} onChange={(v) => setDraftField("note", v)} />
+            <PreviewField label="Source" value={sourceRoleLabel(row)} />
+            <PreviewField label="Status" value={normalizeRequestStatus(row.requestStatus || "PENDING")} />
+          </div>
+
+          <div className="space-y-2">
+            <div className="font-semibold text-base">Product Detail</div>
+            <div className="overflow-x-auto rounded border">
+              <table className="min-w-full text-xs">
+                <thead><tr className="border-b bg-zinc-50"><th className="p-2">S.No</th><th className="p-2">Product Name</th><th className="p-2">Size</th><th className="p-2">Qty</th><th className="p-2">Rate</th><th className="p-2">Gross</th><th className="p-2">TO</th><th className="p-2">Disc</th><th className="p-2">Extra</th><th className="p-2">Bons</th><th className="p-2">V4GST</th><th className="p-2">GST</th><th className="p-2">Net Amt</th><th className="p-2">-</th></tr></thead>
+                <tbody>
+                  {lineRows.map(({ idx, line, product, calc }) => (
+                    <tr key={idx} className="border-b">
+                      <td className="p-1 text-center">{idx + 1}</td>
+                      <td className="p-1 min-w-[180px]"><SelectBare value={line.productId} onChange={(v) => setItem(idx, "productId", v)} options={(products || []).map((p) => ({ value: p.productId || p._id, label: p.name }))} /></td>
+                      <td className="p-1"><InputBare value={calc.sizeText} readOnly /></td>
+                      <td className="p-1"><InputBare type="number" value={line.qty} onChange={(v) => setItem(idx, "qty", v)} /></td>
+                      <td className="p-1"><InputBare type="number" value={calc.rate} readOnly /></td>
+                      <td className="p-1"><InputBare type="number" value={calc.gross.toFixed(2)} readOnly /></td>
+                      <td className="p-1"><InputBare type="number" value={line.toValue} onChange={(v) => setItem(idx, "toValue", v)} /></td>
+                      <td className="p-1"><InputBare type="number" value={line.discValue} onChange={(v) => setItem(idx, "discValue", v)} /></td>
+                      <td className="p-1"><InputBare type="number" value={line.extraValue} onChange={(v) => setItem(idx, "extraValue", v)} /></td>
+                      <td className="p-1"><InputBare type="number" value={line.bonsValue} onChange={(v) => setItem(idx, "bonsValue", v)} /></td>
+                      <td className="p-1"><InputBare type="number" value={calc.v4gst.toFixed(2)} readOnly /></td>
+                      <td className="p-1"><InputBare type="number" value={line.gstPer} onChange={(v) => setItem(idx, "gstPer", v)} /></td>
+                      <td className="p-1"><InputBare type="number" value={calc.netAmt.toFixed(2)} readOnly /></td>
+                      <td className="p-1"><button type="button" onClick={() => removeItem(idx)} className="rounded border px-2 py-1">X</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button type="button" onClick={addItem} className="rounded border px-3 py-1">+ Add Product</button>
+            <div className="grid md:grid-cols-2 gap-4 mt-2 text-sm">
+              <div className="rounded border p-3 space-y-2">
+                <div>Total amount: <strong>{totalAmount.toFixed(2)}</strong></div>
+                <div className="grid grid-cols-3 gap-2 items-center"><span>Extra Disc (%)</span><InputBare type="number" value={draft.extraDiscPer} onChange={(v) => setDraftField("extraDiscPer", v)} /><span>{extraDiscAmt.toFixed(2)}</span></div>
+                <div className="grid grid-cols-3 gap-2 items-center"><span>Adv Tax (%)</span><InputBare type="number" value={draft.advTaxPer} onChange={(v) => setDraftField("advTaxPer", v)} /><span>{advTaxAmt.toFixed(2)}</span></div>
+                <div className="grid grid-cols-3 gap-2 items-center"><span>W.H Tax (%)</span><InputBare type="number" value={draft.whTaxPer} onChange={(v) => setDraftField("whTaxPer", v)} /><span>{whTaxAmt.toFixed(2)}</span></div>
+                <div className="grid grid-cols-3 gap-2 items-center"><span>Expense</span><InputBare type="number" value={draft.expense} onChange={(v) => setDraftField("expense", v)} /><span>{toNum(draft.expense).toFixed(2)}</span></div>
+              </div>
+              <div className="rounded border p-3 text-right"><div className="text-3xl font-semibold">Grand Total: {grandTotal.toFixed(2)}</div></div>
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <button type="button" onClick={updateRequest} disabled={saving} className="rounded-xl bg-emerald-600 text-white px-4 py-2">{saving ? "Updating..." : "Update"}</button>
+          </div>
         </div>
       </div>
     </div>
