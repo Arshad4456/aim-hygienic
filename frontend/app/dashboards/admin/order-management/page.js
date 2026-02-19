@@ -781,6 +781,65 @@ export default function OrderManagementModulePage() {
                     ) : null}
                   </div>
                 </>
+              ) : activeMode === "returnStock" ? (
+                <>
+                  <div className="md:col-span-2 flex gap-2">
+                    {returnStockModes.map((m) => (
+                      <button
+                        key={m.key}
+                        type="button"
+                        onClick={() => setReturnStockMode(m.key)}
+                        className={`rounded border px-2 py-1 text-xs ${returnStockMode === m.key ? "bg-emerald-50 border-emerald-300" : ""}`}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="text-sm font-semibold">From</div>
+                  <div className="text-sm font-semibold">To</div>
+
+                  <Select label="Region" value={form.regionId} onChange={(v) => setField("regionId", v)} options={regions.map((r) => ({ value: r._id, label: r.name }))} />
+                  <Select label="Warehouse" value={form.toWarehouseId} onChange={(v) => setField("toWarehouseId", v)} options={warehouses.map((w) => ({ value: w._id, label: w.name }))} />
+
+                  <Select label="Zone" value={form.zoneId} onChange={(v) => setField("zoneId", v)} options={zonesForRegion.map((z) => ({ value: z._id, label: z.name }))} />
+                  <div />
+
+                  <Select label="Territory" value={form.territoryName} onChange={(v) => setField("territoryName", v)} options={territoriesForZone.map((t) => ({ value: t, label: t }))} />
+                  <div />
+
+                  {returnStockMode === "distributor" ? (
+                    <Select
+                      label="Distributor Name"
+                      value={form.distributorUserId}
+                      onChange={(v) => setField("distributorUserId", v)}
+                      options={distributorsForTerritory.map((u) => ({ value: u._id, label: u.businessName || u.fullName }))}
+                    />
+                  ) : (
+                    <>
+                      <Select
+                        label="Field Name"
+                        value={form.fieldId || ""}
+                        onChange={(v) => setField("fieldId", v)}
+                        options={fieldsForTerritory.map((f) => ({ value: f._id, label: f.name }))}
+                      />
+                      <Select
+                        label="Bussiness Type"
+                        value={form.businessType}
+                        onChange={(v) => setField("businessType", v)}
+                        options={businessTypes.map((x) => ({ value: x, label: x }))}
+                      />
+                      <Select
+                        label="Bussiness Name"
+                        value={form.businessUserId}
+                        onChange={(v) => setField("businessUserId", v)}
+                        options={brandBusinessUsers.map((u) => ({ value: u._id, label: u.businessName || u.fullName }))}
+                      />
+                    </>
+                  )}
+
+                  <Input label="Address" value={form.address} onChange={(v) => setField("address", v)} />
+                </>
               ) : activeMode === "secondary" ? (
                 <>
                   <Select
