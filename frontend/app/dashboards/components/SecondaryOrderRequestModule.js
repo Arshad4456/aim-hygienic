@@ -18,6 +18,45 @@ function computeLine(line, product) {
   return { qty, rate, gross, toValue: 0, discValue: 0, extraValue: 0, bonsValue: 0, v4gst: gross, gstPer: 0, gst: 0, net: gross };
 }
 
+function buildDistributorOptions(user) {
+  if (!user) return [];
+
+  const candidates = [
+    {
+      id: user.distributorId,
+      name: user.distributorName,
+      warehouseId: user.warehouseId,
+    },
+    {
+      id: user.managerId,
+      name: user.managerName,
+      warehouseId: user.warehouseId,
+    },
+    {
+      id: user.warehouseId,
+      name: user.warehouseName,
+      warehouseId: user.warehouseId,
+    },
+  ].filter((entry) => entry.id || entry.name);
+
+  const seen = new Set();
+  return candidates
+    .map((entry) => {
+      const optionId = String(entry.id || entry.name || "").trim();
+      const optionName = String(entry.name || "").trim();
+      if (!optionId || seen.has(optionId)) return null;
+      seen.add(optionId);
+      return {
+        _id: optionId,
+        userId: String(entry.id || "").trim(),
+        businessName: optionName,
+        fullName: optionName,
+        warehouseId: String(entry.warehouseId || "").trim(),
+      };
+    })
+    .filter(Boolean);
+}
+
 export default function SecondaryOrderRequestModule({ roleKey, links, title }) {
   const [user, setUser] = useState(null);
   const [products, setProducts] = useState([]);
@@ -54,16 +93,7 @@ export default function SecondaryOrderRequestModule({ roleKey, links, title }) {
       setErr(ordersResult.reason?.message || "Failed to load orders");
     }
 
-    const distributorOptions = [];
-    if (me?.distributorId || me?.distributorName) {
-      distributorOptions.push({
-        _id: me.distributorId || me.distributorName,
-        userId: me.distributorId || "",
-        businessName: me.distributorName || "",
-        fullName: me.distributorName || "",
-        warehouseId: me.warehouseId || "",
-      });
-    }
+    const distributorOptions = buildDistributorOptions(me);
 
     setUser(me);
     setProducts(productsData);
@@ -74,7 +104,7 @@ export default function SecondaryOrderRequestModule({ roleKey, links, title }) {
       customerName: roleKey === "customer" ? (me?.fullName || me?.customerName || "") : prev.customerName,
       businessName: roleKey === "customer" ? (me?.businessName || "") : prev.businessName,
       address: roleKey === "customer" ? (me?.address || me?.shopAddress || "") : prev.address,
-      distributorId: prev.distributorId || distributorOptions[0]?._id || "",
+      distributorId: distributorOptions.some((d) => d._id === prev.distributorId) ? prev.distributorId : (distributorOptions[0]?._id || ""),
     }));
   }, [roleKey]);
 
@@ -197,6 +227,9 @@ export default function SecondaryOrderRequestModule({ roleKey, links, title }) {
                     ))}
                   </tbody>
                 </table>
+              </div>
+              <div className="mt-3 flex justify-end text-sm">
+                <div className="rounded border bg-zinc-50 px-3 py-2 font-semibold">Total Amount: {total.toFixed(2)}</div>
               </div>
               <button type="button" className="mt-2 rounded border px-3 py-1" onClick={addItem}>+ Add Product</button>
             </div>
