@@ -35,33 +35,47 @@ export default function SecondaryOrderRequestModule({ roleKey, links, title }) {
 
   const loadData = useCallback(async () => {
     setErr("");
-    try {
-      const [meRes, prodRes, usersRes, ordersRes] = await Promise.all([
-        apiFetch("/users/me"),
-        apiFetch("/products"),
-        apiFetch("/users?limit=500"),
-        apiFetch("/orders/my?limit=200"),
-      ]);
-      const me = meRes?.user || null;
-      const allUsers = usersRes?.users || [];
-      const territory = (me?.territoryName || me?.areaName || "").trim();
-      const dist = allUsers.filter((u) => u.role === "Distributor" && (!territory || u.territoryName === territory));
-      const initialDist = dist[0] || null;
 
-      setUser(me);
-      setProducts(prodRes?.products || []);
-      setDistributors(dist);
-      setOrders((ordersRes?.orders || []).filter((o) => o.saleType === "secondary"));
-      setForm((prev) => ({
-        ...prev,
-        customerName: roleKey === "customer" ? (me?.fullName || me?.customerName || "") : prev.customerName,
-        businessName: roleKey === "customer" ? (me?.businessName || "") : prev.businessName,
-        address: roleKey === "customer" ? (me?.address || me?.shopAddress || "") : prev.address,
-        distributorId: prev.distributorId || initialDist?._id || "",
-      }));
-    } catch (e) {
-      setErr(e.message || "Failed to load order module");
+    const [meResult, productsResult, ordersResult] = await Promise.allSettled([
+      apiFetch("/users/me"),
+      apiFetch("/products"),
+      apiFetch("/orders/my?limit=200"),
+    ]);
+
+    const me = meResult.status === "fulfilled" ? (meResult.value?.user || null) : null;
+    const productsData = productsResult.status === "fulfilled" ? (productsResult.value?.products || []) : [];
+    const myOrders = ordersResult.status === "fulfilled" ? (ordersResult.value?.orders || []) : [];
+
+    if (meResult.status === "rejected") {
+      setErr(meResult.reason?.message || "Failed to load profile data");
+    } else if (productsResult.status === "rejected") {
+      setErr(productsResult.reason?.message || "Failed to load products");
+    } else if (ordersResult.status === "rejected") {
+      setErr(ordersResult.reason?.message || "Failed to load orders");
     }
+
+    const distributorOptions = [];
+    if (me?.distributorId || me?.distributorName) {
+      distributorOptions.push({
+        _id: me.distributorId || me.distributorName,
+        userId: me.distributorId || "",
+        businessName: me.distributorName || "",
+        fullName: me.distributorName || "",
+        warehouseId: me.warehouseId || "",
+      });
+    }
+
+    setUser(me);
+    setProducts(productsData);
+    setDistributors(distributorOptions);
+    setOrders(myOrders.filter((o) => o.saleType === "secondary"));
+    setForm((prev) => ({
+      ...prev,
+      customerName: roleKey === "customer" ? (me?.fullName || me?.customerName || "") : prev.customerName,
+      businessName: roleKey === "customer" ? (me?.businessName || "") : prev.businessName,
+      address: roleKey === "customer" ? (me?.address || me?.shopAddress || "") : prev.address,
+      distributorId: prev.distributorId || distributorOptions[0]?._id || "",
+    }));
   }, [roleKey]);
 
   useEffect(() => { loadData(); }, [loadData]);
@@ -85,7 +99,8 @@ export default function SecondaryOrderRequestModule({ roleKey, links, title }) {
     try {
       const distributor = distributors.find((d) => d._id === form.distributorId);
       const rows = lines.filter((r) => r.product && r.calc.qty > 0);
-      if (!rows.length || !distributor) throw new Error("Distributor and at least one product row are required.");
+      if (!distributor) throw new Error("Distributor is required. Please assign a distributor to this user.");
+      if (!rows.length) throw new Error("Please add at least one product row.");
 
       const customerName = roleKey === "customer" ? (user?.fullName || user?.customerName || "") : form.customerName;
       const businessName = roleKey === "customer" ? (user?.businessName || "") : form.businessName;
@@ -147,7 +162,13 @@ export default function SecondaryOrderRequestModule({ roleKey, links, title }) {
           <form onSubmit={submit} className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 text-sm">
             <div className="font-semibold">From</div><div className="font-semibold">To</div>
             <Input label="Source" value={roleKey === "customer" ? "customer" : "Order Booker"} readOnly />
-            <Input label="Distributor" value={distributor?.businessName || distributor?.fullName || ""} readOnly />
+            <label>
+              <div className="text-zinc-600">Distributor</div>
+              <select className="mt-1 w-full rounded border px-3 py-2" value={form.distributorId} onChange={(e) => setField("distributorId", e.target.value)}>
+                <option value="">Select Distributor</option>
+                {distributors.map((d) => <option key={d._id} value={d._id}>{d.businessName || d.fullName || d.userId}</option>)}
+              </select>
+            </label>
             <Input label={roleKey === "customer" ? "Customer Name" : "Order Booker Name"} value={roleKey === "customer" ? (user?.fullName || user?.customerName || "") : (user?.fullName || "")} readOnly />
             <Input label="Region" value={user?.regionName || ""} readOnly />
             <Input label="Zone" value={user?.zoneName || ""} readOnly />
