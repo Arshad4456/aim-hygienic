@@ -53,7 +53,6 @@ const emptyLine = {
   gstPer: "0",
   manufactureDate: "",
   expiryDate: "",
-  returnDate: "",
 };
 
 function toNum(v) {
@@ -452,7 +451,6 @@ export default function WarehouseInventoryModulePage() {
           expiryDate: ["PURCHASING_STOCK", "DAMAGE_STOCK", "RETURN_STOCK"].includes(selectedCard)
             ? r.line.expiryDate || undefined
             : undefined,
-          returnDate: selectedCard === "RETURN_STOCK" ? r.line.returnDate || undefined : undefined,
           notes: `gross:${r.calc.gross},to:${r.calc.toValue},disc:${r.calc.discValue},extra:${r.calc.extraValue},bons:${r.calc.bonsValue},v4gst:${r.calc.v4gst},gst:${r.calc.gstAmount},net:${r.calc.netAmt}`,
         })),
     [lineRows, selectedCard],
@@ -1145,7 +1143,6 @@ export default function WarehouseInventoryModulePage() {
                         <th className="p-2">Net Amt</th>
                         {["PURCHASING_STOCK", "DAMAGE_STOCK"].includes(selectedCard) ? <th className="p-2">MFG Date</th> : null}
                         {["PURCHASING_STOCK", "DAMAGE_STOCK", "RETURN_STOCK"].includes(selectedCard) ? <th className="p-2">EXP Date</th> : null}
-                        {selectedCard === "RETURN_STOCK" ? <th className="p-2">Return Date</th> : null}
                         <th className="p-2">-</th>
                       </tr>
                     </thead>
@@ -1170,9 +1167,6 @@ export default function WarehouseInventoryModulePage() {
                           ) : null}
                           {["PURCHASING_STOCK", "DAMAGE_STOCK", "RETURN_STOCK"].includes(selectedCard) ? (
                             <td className="p-1"><InputBare type="date" value={line.expiryDate} onChange={(v) => setItem(idx, "expiryDate", v)} /></td>
-                          ) : null}
-                          {selectedCard === "RETURN_STOCK" ? (
-                            <td className="p-1"><InputBare type="date" value={line.returnDate || ""} onChange={(v) => setItem(idx, "returnDate", v)} /></td>
                           ) : null}
                           <td className="p-1"><button type="button" className="rounded border px-2 py-1" onClick={() => removeItem(idx)}>X</button></td>
                         </tr>
