@@ -207,7 +207,7 @@ router.post("/transactions", requireAuth, async (req, res) => {
     const now = new Date();
     const transactionCode = buildTransactionCode();
     const sourceRole = toTrimmedString(body.requestSourceRole || req.user?.role || "");
-    const isReturnStockRequest = transactionType === "RETURN_STOCK" && !isAdminRole(req.user?.role);
+    const isReturnStockRequest = transactionType === "RETURN_STOCK";
     const isSaleStockRequest =
       transactionType === "SALE_STOCK"
       && ["brand manager", "distributor"].includes(String(sourceRole || "").trim().toLowerCase());

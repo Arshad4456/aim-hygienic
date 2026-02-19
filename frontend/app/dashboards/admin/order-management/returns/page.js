@@ -1,63 +1,176 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AdminShell from "../../components/AdminShell";
 import { apiFetch } from "../../../../lib/api";
 
+const emptyLine = {
+  productId: "",
+  qty: "",
+  manufactureDate: "",
+  expiryDate: "",
+};
+
+function toNum(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function statusTone(status) {
+  if (status === "REJECTED") return "bg-red-50";
+  if (status === "APPROVED") return "bg-blue-50";
+  return "";
+}
+
 export default function OrderReturnsPage() {
   const [returns, setReturns] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [regions, setRegions] = useState([]);
+  const [zones, setZones] = useState([]);
   const [err, setErr] = useState("");
   const [submitError, setSubmitError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
-    orderNo: "",
-    customerName: "",
-    reason: "",
-    quantity: "",
-    notes: "",
+    toWarehouseId: "",
+    fromEntityType: "BRAND",
+    fromEntityName: "",
+    regionId: "",
+    zoneId: "",
+    territory: "",
+    note: "",
+    items: [{ ...emptyLine }],
   });
-  const [updatingId, setUpdatingId] = useState("");
+
+  async function loadData() {
+    setErr("");
+    try {
+      const [txRes, wRes, pRes, rRes, zRes] = await Promise.all([
+        apiFetch("/inventory/transactions?transactionType=RETURN_STOCK"),
+        apiFetch("/warehouses"),
+        apiFetch("/products"),
+        apiFetch("/regions"),
+        apiFetch("/zones"),
+      ]);
+      setReturns((txRes.transactions || []).sort((a, b) => new Date(b.transactionAt) - new Date(a.transactionAt)));
+      setWarehouses(wRes.warehouses || []);
+      setProducts(pRes.products || []);
+      setRegions(rRes.regions || []);
+      setZones(zRes.zones || []);
+    } catch (e) {
+      setErr(e.message || "Failed to load return stock requests");
+    }
+  }
 
   useEffect(() => {
-    async function loadReturns() {
-      setErr("");
-      try {
-        const data = await apiFetch("/returns");
-        setReturns(data.returns || []);
-      } catch (e) {
-        setErr(e.message || "Failed to load returns");
-      }
-    }
-    loadReturns();
+    loadData();
   }, []);
+
+  const zonesForRegion = useMemo(() => {
+    const region = regions.find((r) => r._id === form.regionId);
+    if (!region) return [];
+    return zones.filter((z) => z.regionId === region.regionId);
+  }, [regions, zones, form.regionId]);
+
+  function setField(key, value) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function setItem(index, key, value) {
+    setForm((prev) => ({
+      ...prev,
+      items: prev.items.map((line, idx) => (idx === index ? { ...line, [key]: value } : line)),
+    }));
+  }
+
+  function addItem() {
+    setForm((prev) => ({ ...prev, items: [...prev.items, { ...emptyLine }] }));
+  }
+
+  function removeItem(index) {
+    setForm((prev) => ({ ...prev, items: prev.items.filter((_, idx) => idx !== index) }));
+  }
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     setSubmitError("");
+    setSubmitting(true);
     try {
-      const payload = {
-        orderNo: form.orderNo,
-        customerName: form.customerName,
-        reason: form.reason,
-        quantity: form.quantity || undefined,
-        notes: form.notes || undefined,
-      };
-      const data = await apiFetch("/returns", { method: "POST", body: payload });
-      setReturns((prev) => [data.claim, ...prev]);
-      setForm({ orderNo: "", customerName: "", reason: "", quantity: "", notes: "" });
-    } catch (e) {
-      setSubmitError(e.message || "Failed to create return claim");
-    }
-  };
+      const toWarehouse = warehouses.find((w) => w._id === form.toWarehouseId);
+      const region = regions.find((r) => r._id === form.regionId);
+      const zone = zones.find((z) => z._id === form.zoneId);
 
-  const updateStatus = async (claimId, status) => {
-    setUpdatingId(claimId);
-    try {
-      const data = await apiFetch(`/returns/${claimId}/status`, { method: "PATCH", body: { status } });
-      setReturns((prev) => prev.map((item) => (item._id === claimId ? data.claim : item)));
+      const rows = form.items
+        .map((line) => ({ line, product: products.find((p) => p._id === line.productId) }))
+        .filter((row) => row.product && toNum(row.line.qty) > 0);
+
+      if (!toWarehouse || !rows.length || !form.fromEntityName.trim()) {
+        throw new Error("Please select warehouse, source name, and at least one valid product row.");
+      }
+
+      const hasMissingDates = rows.some((row) => !row.line.manufactureDate || !row.line.expiryDate);
+      if (hasMissingDates) {
+        throw new Error("Manufacture date and expiry date are required for return stock items");
+      }
+
+      const items = rows.map(({ line, product }) => {
+        const qty = toNum(line.qty);
+        const unitPrice = toNum(product.wholesalePrice || 0);
+        return {
+          productId: product.productId,
+          productName: product.name,
+          cartonSize: `1x${qty}`,
+          cartons: 1,
+          totalPacks: qty,
+          packsPerCarton: qty,
+          onePackPrice: unitPrice,
+          oneCartonPrice: unitPrice,
+          totalPrice: unitPrice * qty,
+          unitPrice,
+          manufactureDate: line.manufactureDate,
+          expiryDate: line.expiryDate,
+        };
+      });
+
+      const fromType = String(form.fromEntityType || "BRAND").toUpperCase();
+      const fromName = form.fromEntityName.trim();
+      await apiFetch("/inventory/transactions", {
+        method: "POST",
+        body: {
+          transactionType: "RETURN_STOCK",
+          warehouseId: toWarehouse.warehouseId,
+          warehouseName: toWarehouse.name,
+          fromEntityType: fromType,
+          fromEntityName: fromName,
+          distributorName: fromType === "DISTRIBUTOR" ? fromName : "",
+          brandName: fromType === "BRAND" ? fromName : "",
+          toEntityName: toWarehouse.name,
+          regionId: region?.regionId || "",
+          regionName: region?.name || "",
+          zoneId: zone?.zoneId || "",
+          zoneName: zone?.name || "",
+          territory: form.territory || "",
+          note: form.note || "",
+          requestSourceRole: "Order Management",
+          items,
+        },
+      });
+
+      setForm({
+        toWarehouseId: "",
+        fromEntityType: "BRAND",
+        fromEntityName: "",
+        regionId: "",
+        zoneId: "",
+        territory: "",
+        note: "",
+        items: [{ ...emptyLine }],
+      });
+      await loadData();
     } catch (e) {
-      setErr(e.message || "Failed to update return claim");
+      setSubmitError(e.message || "Failed to submit return request");
     } finally {
-      setUpdatingId("");
+      setSubmitting(false);
     }
   };
 
@@ -65,69 +178,86 @@ export default function OrderReturnsPage() {
     <AdminShell title="Returns & Claims" user={null}>
       <div className="space-y-6">
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
-          <div className="text-xl font-semibold text-zinc-900">Returns & Claims</div>
-          <div className="text-sm text-zinc-500 mt-1">
-            Track returns, claims, replacements, and credit notes for sales orders.
-          </div>
+          <div className="text-xl font-semibold text-zinc-900">Return Stock Request</div>
+          <div className="text-sm text-zinc-500 mt-1">This module now submits to the warehouse/inventory return stock backend.</div>
 
-          {submitError ? (
-            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {submitError}
-            </div>
-          ) : null}
+          {submitError ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{submitError}</div> : null}
 
           <form className="mt-6 grid gap-4 md:grid-cols-2" onSubmit={handleSubmit}>
-            <div>
-              <label className="text-xs font-semibold text-zinc-600">Order No</label>
-              <input
-                className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
-                value={form.orderNo}
-                onChange={(event) => setForm((prev) => ({ ...prev, orderNo: event.target.value }))}
-                required
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-zinc-600">Customer Name</label>
-              <input
-                className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
-                value={form.customerName}
-                onChange={(event) => setForm((prev) => ({ ...prev, customerName: event.target.value }))}
-                required
-              />
-            </div>
+            <FieldSelect
+              label="To Warehouse"
+              value={form.toWarehouseId}
+              onChange={(value) => setField("toWarehouseId", value)}
+              options={warehouses.map((w) => ({ value: w._id, label: w.name }))}
+              required
+            />
+            <FieldSelect
+              label="Source Type"
+              value={form.fromEntityType}
+              onChange={(value) => setField("fromEntityType", value)}
+              options={[{ value: "BRAND", label: "Brand" }, { value: "DISTRIBUTOR", label: "Distributor" }]}
+            />
+            <FieldInput label="Source Name" value={form.fromEntityName} onChange={(value) => setField("fromEntityName", value)} required />
+            <FieldSelect
+              label="Region"
+              value={form.regionId}
+              onChange={(value) => {
+                setField("regionId", value);
+                setField("zoneId", "");
+              }}
+              options={regions.map((r) => ({ value: r._id, label: r.name }))}
+            />
+            <FieldSelect
+              label="Zone"
+              value={form.zoneId}
+              onChange={(value) => setField("zoneId", value)}
+              options={zonesForRegion.map((z) => ({ value: z._id, label: z.name }))}
+            />
+            <FieldInput label="Territory" value={form.territory} onChange={(value) => setField("territory", value)} />
             <div className="md:col-span-2">
-              <label className="text-xs font-semibold text-zinc-600">Reason</label>
-              <input
-                className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
-                value={form.reason}
-                onChange={(event) => setForm((prev) => ({ ...prev, reason: event.target.value }))}
-                required
-              />
+              <FieldInput label="Note" value={form.note} onChange={(value) => setField("note", value)} />
             </div>
-            <div>
-              <label className="text-xs font-semibold text-zinc-600">Quantity</label>
-              <input
-                type="number"
-                min="0"
-                className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
-                value={form.quantity}
-                onChange={(event) => setForm((prev) => ({ ...prev, quantity: event.target.value }))}
-              />
+
+            <div className="md:col-span-2 overflow-auto rounded-xl border">
+              <table className="min-w-[780px] w-full text-sm">
+                <thead className="bg-zinc-50">
+                  <tr>
+                    <th className="px-3 py-2 border-b text-left">Product</th>
+                    <th className="px-3 py-2 border-b text-left">Qty</th>
+                    <th className="px-3 py-2 border-b text-left">MFG Date</th>
+                    <th className="px-3 py-2 border-b text-left">EXP Date</th>
+                    <th className="px-3 py-2 border-b text-left">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {form.items.map((line, idx) => (
+                    <tr key={idx}>
+                      <td className="px-3 py-2 border-b">
+                        <select
+                          className="w-full rounded-lg border px-2 py-1"
+                          value={line.productId}
+                          onChange={(event) => setItem(idx, "productId", event.target.value)}
+                        >
+                          <option value="">Select</option>
+                          {products.map((p) => (
+                            <option key={p._id} value={p._id}>{`${p.productId} - ${p.name}`}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-3 py-2 border-b"><input type="number" min="0" className="w-full rounded-lg border px-2 py-1" value={line.qty} onChange={(event) => setItem(idx, "qty", event.target.value)} /></td>
+                      <td className="px-3 py-2 border-b"><input type="date" className="w-full rounded-lg border px-2 py-1" value={line.manufactureDate} onChange={(event) => setItem(idx, "manufactureDate", event.target.value)} /></td>
+                      <td className="px-3 py-2 border-b"><input type="date" className="w-full rounded-lg border px-2 py-1" value={line.expiryDate} onChange={(event) => setItem(idx, "expiryDate", event.target.value)} /></td>
+                      <td className="px-3 py-2 border-b"><button type="button" className="rounded border px-2 py-1" onClick={() => removeItem(idx)}>Remove</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="p-3 border-t bg-zinc-50"><button type="button" className="rounded border px-3 py-1 text-sm" onClick={addItem}>+ Add Product</button></div>
             </div>
-            <div>
-              <label className="text-xs font-semibold text-zinc-600">Notes</label>
-              <input
-                className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
-                value={form.notes}
-                onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))}
-              />
-            </div>
+
             <div className="md:col-span-2 flex justify-end">
-              <button
-                type="submit"
-                className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
-              >
-                Submit Return
+              <button type="submit" disabled={submitting} className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60">
+                {submitting ? "Submitting..." : "Submit Return"}
               </button>
             </div>
           </form>
@@ -135,74 +265,40 @@ export default function OrderReturnsPage() {
 
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
           <div className="text-lg font-semibold text-zinc-900">Return Requests</div>
-          <div className="text-sm text-zinc-500 mt-1">
-            Review and resolve return claims from distributors and customers.
-          </div>
+          <div className="text-sm text-zinc-500 mt-1">Shows requests from both warehouse/inventory and order management flows (shared backend).</div>
 
-          {err ? (
-            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {err}
-            </div>
-          ) : null}
+          {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
 
           <div className="mt-4 overflow-auto rounded-xl border">
             <table className="min-w-[760px] w-full text-sm">
               <thead className="bg-zinc-50">
                 <tr>
-                  <th className="text-left px-3 py-2 border-b">Order No</th>
-                  <th className="text-left px-3 py-2 border-b">Customer</th>
-                  <th className="text-left px-3 py-2 border-b">Reason</th>
-                  <th className="text-left px-3 py-2 border-b">Qty</th>
+                  <th className="text-left px-3 py-2 border-b">Code</th>
+                  <th className="text-left px-3 py-2 border-b">From</th>
+                  <th className="text-left px-3 py-2 border-b">Type</th>
+                  <th className="text-left px-3 py-2 border-b">Warehouse</th>
                   <th className="text-left px-3 py-2 border-b">Status</th>
-                  <th className="text-left px-3 py-2 border-b">Actions</th>
+                  <th className="text-left px-3 py-2 border-b">Date</th>
                 </tr>
               </thead>
               <tbody>
                 {returns.length ? (
-                  returns.map((claim) => (
-                    <tr key={claim._id} className="hover:bg-zinc-50">
-                      <td className="px-3 py-2 border-b font-medium text-zinc-900">{claim.orderNo}</td>
-                      <td className="px-3 py-2 border-b">{claim.customerName}</td>
-                      <td className="px-3 py-2 border-b">{claim.reason}</td>
-                      <td className="px-3 py-2 border-b">{claim.quantity || "—"}</td>
-                      <td className="px-3 py-2 border-b capitalize">{claim.status}</td>
-                      <td className="px-3 py-2 border-b">
-                        <div className="flex flex-wrap gap-2">
-                          {claim.status === "requested" ? (
-                            <>
-                              <button
-                                className="rounded-full bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-                                onClick={() => updateStatus(claim._id, "approved")}
-                                disabled={updatingId === claim._id}
-                              >
-                                Approve
-                              </button>
-                              <button
-                                className="rounded-full border px-3 py-1 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 disabled:opacity-60"
-                                onClick={() => updateStatus(claim._id, "rejected")}
-                                disabled={updatingId === claim._id}
-                              >
-                                Reject
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              className="rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-                              onClick={() => updateStatus(claim._id, "resolved")}
-                              disabled={updatingId === claim._id}
-                            >
-                              Mark Resolved
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                  returns.map((claim) => {
+                    const status = String(claim.requestStatus || "PENDING").toUpperCase();
+                    return (
+                      <tr key={claim._id} className={statusTone(status)}>
+                        <td className="px-3 py-2 border-b font-medium text-zinc-900">{claim.transactionCode}</td>
+                        <td className="px-3 py-2 border-b">{claim.fromEntityName || "-"}</td>
+                        <td className="px-3 py-2 border-b">{claim.fromEntityType || "-"}</td>
+                        <td className="px-3 py-2 border-b">{claim.warehouseName || "-"}</td>
+                        <td className="px-3 py-2 border-b">{status}</td>
+                        <td className="px-3 py-2 border-b">{claim.transactionAt ? new Date(claim.transactionAt).toLocaleString() : "-"}</td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr>
-                    <td colSpan={6} className="px-3 py-6 text-center text-zinc-500">
-                      No return requests yet.
-                    </td>
+                    <td colSpan={6} className="px-3 py-6 text-center text-zinc-500">No return requests yet.</td>
                   </tr>
                 )}
               </tbody>
@@ -211,5 +307,28 @@ export default function OrderReturnsPage() {
         </div>
       </div>
     </AdminShell>
+  );
+}
+
+function FieldInput({ label, value, onChange, required = false }) {
+  return (
+    <div>
+      <label className="text-xs font-semibold text-zinc-600">{label}</label>
+      <input className="mt-2 w-full rounded-xl border px-3 py-2 text-sm" value={value} onChange={(event) => onChange(event.target.value)} required={required} />
+    </div>
+  );
+}
+
+function FieldSelect({ label, value, onChange, options, required = false }) {
+  return (
+    <div>
+      <label className="text-xs font-semibold text-zinc-600">{label}</label>
+      <select className="mt-2 w-full rounded-xl border px-3 py-2 text-sm" value={value} onChange={(event) => onChange(event.target.value)} required={required}>
+        <option value="">Select</option>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </div>
   );
 }
