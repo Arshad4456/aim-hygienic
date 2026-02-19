@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -322,6 +323,15 @@ export default function WarehouseInventoryModulePage() {
       setField("distributorName", name);
     }
   }, [saleMode, selectedBrandManager, selectedDistributor]);
+
+  useEffect(() => {
+    if (selectedCard !== "RETURN_STOCK") return;
+    if (returnStockMode === "brand") {
+      setField("address", selectedBrandManager?.address || "");
+    } else if (returnStockMode === "distributor") {
+      setField("address", selectedDistributor?.address || "");
+    }
+  }, [selectedCard, returnStockMode, selectedBrandManager, selectedDistributor]);
 
   const cardTx = useMemo(() => {
     if (["W2W_TRANSFER", "STOCK_SUMMARY", "LOW_STOCK", "INVENTORY_LEDGER"].includes(selectedCard)) return [];
@@ -1141,7 +1151,7 @@ export default function WarehouseInventoryModulePage() {
                         <th className="p-2">V4GST</th>
                         <th className="p-2">GST</th>
                         <th className="p-2">Net Amt</th>
-                        {["PURCHASING_STOCK", "DAMAGE_STOCK"].includes(selectedCard) ? <th className="p-2">MFG Date</th> : null}
+                        {["PURCHASING_STOCK", "DAMAGE_STOCK", "RETURN_STOCK"].includes(selectedCard) ? <th className="p-2">MFG Date</th> : null}
                         {["PURCHASING_STOCK", "DAMAGE_STOCK", "RETURN_STOCK"].includes(selectedCard) ? <th className="p-2">EXP Date</th> : null}
                         <th className="p-2">-</th>
                       </tr>
@@ -1162,7 +1172,7 @@ export default function WarehouseInventoryModulePage() {
                           <td className="p-1"><InputBare type="number" value={calc.v4gst.toFixed(2)} readOnly /></td>
                           <td className="p-1"><InputBare type="number" value={line.gstPer} onChange={(v) => setItem(idx, "gstPer", v)} /></td>
                           <td className="p-1"><InputBare type="number" value={calc.netAmt.toFixed(2)} readOnly /></td>
-                          {["PURCHASING_STOCK", "DAMAGE_STOCK"].includes(selectedCard) ? (
+                          {["PURCHASING_STOCK", "DAMAGE_STOCK", "RETURN_STOCK"].includes(selectedCard) ? (
                             <td className="p-1"><InputBare type="date" value={line.manufactureDate} onChange={(v) => setItem(idx, "manufactureDate", v)} /></td>
                           ) : null}
                           {["PURCHASING_STOCK", "DAMAGE_STOCK", "RETURN_STOCK"].includes(selectedCard) ? (
@@ -1397,7 +1407,8 @@ function LedgerTable({ type, rows, onDelete, onInvoice }) {
           {rows.map((r) => {
             const requestStatus = normalizeRequestStatus(r.requestStatus || "");
             const fromRequester = isSaleOrderRequest(r) || ["Brand Manager", "Distributor"].includes(String(r.requestSourceRole || ""));
-            const rowClass = (sale || returnStock) && fromRequester ? requestRowClass(requestStatus) : "border-b";
+            const shouldColorByStatus = returnStock || (sale && fromRequester);
+            const rowClass = shouldColorByStatus ? requestRowClass(requestStatus) : "border-b";
             return (
             <tr key={r._id} className={rowClass}>
               <td className="p-2">{r.transactionCode}</td>
