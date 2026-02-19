@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -680,6 +679,17 @@ export default function OrderManagementModulePage() {
     const invoiceStatus = normalizeRequestStatus(order.requestStatus || order.status || "");
     const stamp = shouldShowDecisionStamp(invoiceStatus) ? decisionStampStyle(invoiceStatus) : null;
 
+
+    const requestSource = normalizeRequestSource(order.requestSourceRole || order.fromEntityType || "");
+    const isIncomingPrimaryRequest = order.transactionType === "SALE_STOCK"
+      && (requestSource.includes("brandmanager") || requestSource.includes("distributor") || requestSource === "brand");
+    const invoiceFrom = isIncomingPrimaryRequest
+      ? (order.warehouseName || order.toEntityName || "-")
+      : (order.fromEntityName || order.warehouseName || "-");
+    const billTo = isIncomingPrimaryRequest
+      ? (order.fromEntityName || order.distributorName || order.brandName || order.customerName || "-")
+      : (order.toEntityName || order.distributorName || order.customerName || "-");
+
     const html = `
       <html>
       <body style="font-family: Arial; padding: 16px; position:relative;">
@@ -689,8 +699,8 @@ export default function OrderManagementModulePage() {
           <div>Date: ${new Date(order.transactionAt || order.createdAt || Date.now()).toLocaleDateString()}</div>
           <div>Invoice #: ${order.transactionCode || order.orderNo || "-"}</div>
         </div>
-        <div style="margin-top:8px;font-size:12px;">Invoice From: ${order.fromEntityName || order.warehouseName || "-"}</div>
-        <div style="font-size:12px;">Bill To: ${order.toEntityName || order.distributorName || order.customerName || "-"}</div>
+        <div style="margin-top:8px;font-size:12px;">Invoice From: ${invoiceFrom}</div>
+        <div style="font-size:12px;">Bill To: ${billTo}</div>
         <div style="font-size:12px;">Address: ${extractedAddress || "-"}</div>
         <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; width:100%; margin-top:10px; font-size:12px;">
           <thead><tr><th>#</th><th>Product Name</th><th>Qty</th><th>Rate</th><th>Gross</th><th>TO</th><th>Disc</th><th>Extra</th><th>Bons</th><th>V4GST</th><th>GST</th><th>Net Amt</th></tr></thead>
