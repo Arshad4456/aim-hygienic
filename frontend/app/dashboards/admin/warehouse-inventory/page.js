@@ -118,7 +118,9 @@ function isSaleOrderRequest(row) {
   if (!row || row.transactionType !== "SALE_STOCK") return false;
   const source = normalizeRequestSource(row.requestSourceRole || row.fromEntityType || "");
   const hasKnownSource = source.includes("brandmanager") || source.includes("distributor") || source === "brand";
-  return hasKnownSource || Boolean(row.requestStatus) || Boolean(row.requestReadAt);
+  const status = normalizeRequestStatus(row.requestStatus || "");
+  const isPendingNonAdmin = status === "PENDING" && normalizeRequestSource(row.requestSourceRole) !== "admin";
+  return hasKnownSource || isPendingNonAdmin;
 }
 
 function sourceRoleLabel(row) {

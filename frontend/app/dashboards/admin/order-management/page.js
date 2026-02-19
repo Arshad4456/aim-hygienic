@@ -99,7 +99,9 @@ function isSaleOrderRequest(row) {
   if (!row || row.transactionType !== "SALE_STOCK") return false;
   const source = normalizeRequestSource(row.requestSourceRole || row.fromEntityType || "");
   const hasKnownSource = source.includes("brandmanager") || source.includes("distributor") || source === "brand";
-  return hasKnownSource || Boolean(row.requestStatus) || Boolean(row.requestReadAt);
+  const status = normalizeRequestStatus(row.requestStatus || "");
+  const isPendingNonAdmin = status === "PENDING" && normalizeRequestSource(row.requestSourceRole) !== "admin";
+  return hasKnownSource || isPendingNonAdmin;
 }
 
 function sourceRoleLabel(row) {
@@ -746,7 +748,7 @@ export default function OrderManagementModulePage() {
               </div>
 
               <div className="md:col-span-2">
-                <button type="submit" className="rounded-xl bg-emerald-600 px-4 py-2 text-white disabled:opacity-60" disabled={saving}>
+                <button type="submit" className="rounded-xl bg-emerald-600 px-4 py-2 text-white disabled:opacity-60" disabled={saving || !canEditPending}>
                   {saving ? "Submitting..." : activeMode === "primary" ? "Create Sale Order" : "Submit Request"}
                 </button>
               </div>
@@ -917,6 +919,8 @@ function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
 
   if (!row || !draft) return null;
 
+  const canEditPending = normalizeRequestStatus(row.requestStatus || "PENDING") === "PENDING";
+
   function setDraftField(key, value) {
     setDraft((prev) => ({ ...prev, [key]: value }));
   }
@@ -934,6 +938,10 @@ function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
   }
 
   async function updateRequest() {
+    if (!canEditPending) {
+      notify("info", "Only pending requests can be updated.");
+      return;
+    }
     setSaving(true);
     try {
       const normalizedItems = lineRows
@@ -1043,7 +1051,7 @@ function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
           </div>
 
           <div className="flex justify-end">
-            <button type="button" onClick={updateRequest} disabled={saving} className="rounded-xl bg-emerald-600 text-white px-4 py-2">{saving ? "Updating..." : "Update"}</button>
+            <button type="button" onClick={updateRequest} disabled={saving || !canEditPending} className="rounded-xl bg-emerald-600 text-white px-4 py-2">{canEditPending ? (saving ? "Updating..." : "Update") : "Update disabled (not pending)"}</button>
           </div>
         </div>
       </div>
