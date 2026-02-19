@@ -370,8 +370,7 @@ export default function WarehouseInventoryModulePage() {
     () =>
       transactions
         .filter((t) => t.transactionType === "RETURN_STOCK")
-        .filter((t) => ["Brand Manager", "Distributor"].includes(String(t.requestSourceRole || "")))
-        .sort((a, b) => new Date(b.transactionAt).getTime() - new Date(a.transactionAt).getTime()),
+                .sort((a, b) => new Date(b.transactionAt).getTime() - new Date(a.transactionAt).getTime()),
     [transactions],
   );
 
@@ -447,10 +446,10 @@ export default function WarehouseInventoryModulePage() {
           oneCartonPrice: r.calc.rate * r.calc.sizeMultiplier,
           totalPrice: r.calc.netAmt,
           unitPrice: r.calc.rate,
-          manufactureDate: ["PURCHASING_STOCK", "DAMAGE_STOCK"].includes(selectedCard)
+          manufactureDate: ["PURCHASING_STOCK", "DAMAGE_STOCK", "RETURN_STOCK"].includes(selectedCard)
             ? r.line.manufactureDate || undefined
             : undefined,
-          expiryDate: ["PURCHASING_STOCK", "DAMAGE_STOCK"].includes(selectedCard)
+          expiryDate: ["PURCHASING_STOCK", "DAMAGE_STOCK", "RETURN_STOCK"].includes(selectedCard)
             ? r.line.expiryDate || undefined
             : undefined,
           returnDate: selectedCard === "RETURN_STOCK" ? r.line.returnDate || undefined : undefined,
@@ -473,6 +472,17 @@ export default function WarehouseInventoryModulePage() {
       const zone = zones.find((z) => z._id === form.zoneId);
 
       const movementWarehouse = ["PURCHASING_STOCK", "RETURN_STOCK"].includes(selectedCard) ? toWarehouse : fromWarehouse;
+
+
+      if (selectedCard === "RETURN_STOCK") {
+        const missingDates = lineRows
+          .filter((row) => row.product && toNum(row.line.qty) > 0)
+          .some((row) => !row.line.manufactureDate || !row.line.expiryDate);
+        if (missingDates) {
+          toast.error("Manufacture date and expiry date are required for return stock items");
+          return;
+        }
+      }
 
       const body = {
         transactionType: selectedCard,
@@ -1465,7 +1475,7 @@ function RequestReturnStocksTable({ rows, onOpen, onApprove, onReject, onPreview
         </thead>
         <tbody>
           {rows.map((r) => {
-            const status = normalizeRequestStatus(r.requestStatus || "APPROVED");
+            const status = normalizeRequestStatus(r.requestStatus || "PENDING");
             const unread = !r.requestReadAt;
             return (
               <tr key={r._id} className="border-b">
