@@ -748,7 +748,7 @@ export default function OrderManagementModulePage() {
               </div>
 
               <div className="md:col-span-2">
-                <button type="submit" className="rounded-xl bg-emerald-600 px-4 py-2 text-white disabled:opacity-60" disabled={saving || !canEditPending}>
+                <button type="submit" className="rounded-xl bg-emerald-600 px-4 py-2 text-white disabled:opacity-60" disabled={saving}>
                   {saving ? "Submitting..." : activeMode === "primary" ? "Create Sale Order" : "Submit Request"}
                 </button>
               </div>
