@@ -83,6 +83,10 @@ const modeConfig = {
       { value: "customer", label: "Customer" },
     ],
   },
+  returnStock: {
+    title: "Return Stock",
+    saleType: "returnStock",
+  },
 };
 
 const primarySaleModes = [
@@ -90,6 +94,13 @@ const primarySaleModes = [
   { key: "distributor", label: "Distributor" },
   { key: "subDistributor", label: "Sub-Distributor" },
 ];
+
+const returnStockModes = [
+  { key: "brand", label: "Brand" },
+  { key: "distributor", label: "Distributor" },
+];
+
+const businessTypes = ["Private Limited", "Sole Proprietorship"];
 
 function normalizeRequestSource(value) {
   return String(value || "").toLowerCase().replace(/[^a-z]/g, "");
@@ -153,6 +164,7 @@ export default function OrderManagementModulePage() {
   const [saving, setSaving] = useState(false);
   const [toastState, setToastState] = useState(null);
   const [previewRequest, setPreviewRequest] = useState(null);
+  const [returnStockMode, setReturnStockMode] = useState("brand");
   const [form, setForm] = useState({
     sourceType: "brand",
     primarySaleMode: "brand",
@@ -173,7 +185,7 @@ export default function OrderManagementModulePage() {
     advTaxPer: "0",
     whTaxPer: "0",
     expense: "0",
-    items: [{ ...emptyItem }],
+    items: [{ ...emptyItem, expiryDate: "", returnDate: "" }],
   });
 
   const selectedRegion = useMemo(() => regions.find((item) => item._id === form.regionId), [regions, form.regionId]);
@@ -264,6 +276,7 @@ export default function OrderManagementModulePage() {
       ...prev,
       sourceType: defaults.sourceOptions?.[0]?.value || "brand",
       primarySaleMode: "brand",
+      businessType: prev.businessType || businessTypes[0],
     }));
   }, [activeMode]);
 
@@ -294,6 +307,17 @@ export default function OrderManagementModulePage() {
     }
   }, [form.primarySaleMode, selectedBrandManager, selectedDistributor]);
 
+  useEffect(() => {
+    if (activeMode !== "returnStock") return;
+    if (returnStockMode === "brand") {
+      setField("address", selectedBrandManager?.address || "");
+      setField("businessName", selectedBrandManager?.businessName || selectedBrandManager?.fullName || "");
+    } else {
+      const name = selectedDistributor?.businessName || selectedDistributor?.fullName || "";
+      setField("address", selectedDistributor?.address || "");
+      setField("distributorName", name);
+    }
+  }, [activeMode, returnStockMode, selectedBrandManager, selectedDistributor]);
 
   const saleOrderRequests = useMemo(
     () =>
@@ -303,10 +327,22 @@ export default function OrderManagementModulePage() {
     [transactions],
   );
 
+  const returnStockRequests = useMemo(
+    () =>
+      transactions
+        .filter((t) => t.transactionType === "RETURN_STOCK")
+        .filter((t) => ["Brand Manager", "Distributor"].includes(String(t.requestSourceRole || "")))
+        .sort((a, b) => new Date(b.transactionAt || 0).getTime() - new Date(a.transactionAt || 0).getTime()),
+    [transactions],
+  );
+
   const filteredOrders = useMemo(() => {
     if (!activeMode) return [];
     if (activeMode === "primary") {
       return transactions.filter((t) => t.transactionType === "SALE_STOCK");
+    }
+    if (activeMode === "returnStock") {
+      return transactions.filter((t) => t.transactionType === "RETURN_STOCK");
     }
     return orders.filter((order) => order.saleType === modeConfig[activeMode].saleType);
   }, [activeMode, orders, transactions]);
@@ -345,7 +381,7 @@ export default function OrderManagementModulePage() {
             : form.subDistributorName;
       const customerName = activeMode === "primary" ? primaryCustomerName : form.customerName;
 
-      if (!targetWarehouse || !customerName?.trim()) {
+      if ((activeMode === "primary" || activeMode === "secondary") && (!targetWarehouse || !customerName?.trim())) {
         throw new Error("Customer/source name and warehouse are required");
       }
 
@@ -404,6 +440,67 @@ export default function OrderManagementModulePage() {
           body.toEntityType = "SUB_DISTRIBUTOR";
           body.subDistributorName = form.subDistributorName;
           body.toEntityName = form.subDistributorName;
+        }
+
+        await apiFetch("/inventory/transactions", { method: "POST", body });
+      } else if (activeMode === "returnStock") {
+        const toWarehouse = warehouses.find((item) => item._id === form.toWarehouseId);
+        const region = regions.find((r) => r._id === form.regionId);
+        const zone = zones.find((z) => z._id === form.zoneId);
+        const selectedFieldLocal = fieldsForTerritory.find((f) => f._id === form.fieldId);
+
+        const normalizedItems = lineRows
+          .filter((r) => r.product && r.calc.qty > 0)
+          .map((r) => ({
+            productId: r.product.productId,
+            productName: r.product.name,
+            cartonSize: `1x${r.calc.qty || 0}`,
+            cartons: 1,
+            totalPacks: r.calc.qty || 0,
+            packsPerCarton: r.calc.qty || 0,
+            onePackPrice: r.calc.rate,
+            oneCartonPrice: r.calc.rate * getSizeMultiplier(r.product),
+            totalPrice: r.calc.netAmt,
+            unitPrice: r.calc.rate,
+            returnDate: r.line.returnDate || undefined,
+            expiryDate: r.line.expiryDate || undefined,
+            notes: `gross:${r.calc.gross},to:${toNum(r.line.toValue)},disc:${toNum(r.line.discValue)},extra:${toNum(r.line.extraValue)},bons:${toNum(r.line.bonsValue)},v4gst:${r.calc.v4gst},gst:${r.calc.gstAmount},net:${r.calc.netAmt}`,
+          }));
+
+        if (!toWarehouse || !normalizedItems.length) {
+          throw new Error("Warehouse and product rows are required");
+        }
+
+        const body = {
+          transactionType: "RETURN_STOCK",
+          warehouseId: toWarehouse.warehouseId || "",
+          warehouseName: toWarehouse.name || "",
+          toEntityName: toWarehouse.name || "",
+          regionId: region?.regionId || "",
+          regionName: region?.name || "",
+          zoneId: zone?.zoneId || "",
+          zoneName: zone?.name || "",
+          territory: form.territoryName,
+          note: form.address,
+          extraDiscPer: Number(form.extraDiscPer || 0),
+          advTaxPer: Number(form.advTaxPer || 0),
+          whTaxPer: Number(form.whTaxPer || 0),
+          expense: Number(form.expense || 0),
+          items: normalizedItems,
+          subtotal: totalAmount,
+          grandTotal,
+        };
+
+        if (returnStockMode === "distributor") {
+          body.fromEntityType = "DISTRIBUTOR";
+          body.distributorName = selectedDistributor?.businessName || selectedDistributor?.fullName || "";
+          body.fromEntityName = body.distributorName;
+        } else {
+          body.fromEntityType = "BRAND";
+          body.fieldId = form.fieldId;
+          body.fieldName = selectedFieldLocal?.name || "";
+          body.brandName = selectedBrandManager?.businessName || selectedBrandManager?.fullName || form.businessName;
+          body.fromEntityName = body.brandName;
         }
 
         await apiFetch("/inventory/transactions", { method: "POST", body });
@@ -635,7 +732,7 @@ export default function OrderManagementModulePage() {
         {activeMode ? (
           <>
           <section className="rounded-2xl border bg-white p-6 shadow-sm space-y-5">
-            <div className="text-lg font-semibold text-zinc-900">{activeMode === "primary" ? "Create Sale Order" : "Secondary Order Request"}</div>
+            <div className="text-lg font-semibold text-zinc-900">{activeMode === "primary" ? "Create Sale Order" : activeMode === "returnStock" ? "Return Stock" : "Secondary Order Request"}</div>
             {activeMode === "primary" ? <div className="text-sm text-zinc-500">Sale Stock functionality with Sale Order Ledger.</div> : null}
             <form className="grid grid-cols-1 md:grid-cols-2 gap-3" onSubmit={submitOrder}>
               {activeMode === "primary" ? (
@@ -707,7 +804,7 @@ export default function OrderManagementModulePage() {
                   <table className="min-w-full text-xs">
                     <thead>
                       <tr className="border-b bg-zinc-50">
-                        <th className="p-2">S.No</th><th className="p-2">Product Name</th><th className="p-2">Size</th><th className="p-2">Qty</th><th className="p-2">Rate</th><th className="p-2">Gross</th><th className="p-2">TO</th><th className="p-2">Disc</th><th className="p-2">Extra</th><th className="p-2">Bons</th><th className="p-2">V4GST</th><th className="p-2">GST</th><th className="p-2">Net Amt</th><th className="p-2">-</th>
+                        <th className="p-2">S.No</th><th className="p-2">Product Name</th><th className="p-2">Size</th><th className="p-2">Qty</th><th className="p-2">Rate</th><th className="p-2">Gross</th><th className="p-2">TO</th><th className="p-2">Disc</th><th className="p-2">Extra</th><th className="p-2">Bons</th><th className="p-2">V4GST</th><th className="p-2">GST</th><th className="p-2">Net Amt</th>{activeMode === "returnStock" ? <><th className="p-2">EXP Date</th><th className="p-2">Return Date</th></> : null}<th className="p-2">-</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -726,6 +823,7 @@ export default function OrderManagementModulePage() {
                           <td className="p-1"><InputBare type="number" value={calc.v4gst.toFixed(2)} readOnly /></td>
                           <td className="p-1"><InputBare type="number" value={line.gstPer} onChange={(v) => setItem(idx, "gstPer", v)} /></td>
                           <td className="p-1"><InputBare type="number" value={calc.netAmt.toFixed(2)} readOnly /></td>
+                          {activeMode === "returnStock" ? <><td className="p-1"><InputBare type="date" value={line.expiryDate || ""} onChange={(v) => setItem(idx, "expiryDate", v)} /></td><td className="p-1"><InputBare type="date" value={line.returnDate || ""} onChange={(v) => setItem(idx, "returnDate", v)} /></td></> : null}
                           <td className="p-1"><button type="button" className="rounded border px-2 py-1" onClick={() => removeItem(idx)}>X</button></td>
                         </tr>
                       ))}
@@ -758,6 +856,8 @@ export default function OrderManagementModulePage() {
               <div className="text-lg font-semibold text-zinc-900">{activeMode === "primary" ? "Sale Stock Ledger" : `${modeConfig[activeMode].title} Ledger`}</div>
               {activeMode === "primary" ? (
                 <SaleStockLedgerTable rows={filteredOrders} onInvoice={printOrderInvoice} onDelete={deleteOrder} />
+              ) : activeMode === "returnStock" ? (
+                <ReturnStockLedgerTable rows={filteredOrders} onInvoice={printOrderInvoice} onDelete={deleteOrder} />
               ) : (
                 <div className="overflow-x-auto mt-3 rounded border">
                   <table className="min-w-full text-sm">
@@ -791,6 +891,19 @@ export default function OrderManagementModulePage() {
                 onReject={(id) => updateSaleRequestStatus(id, "REJECTED")}
                 onDispatch={(id) => updateSaleRequestStatus(id, "DISPATCHED")}
                 onDelivered={(id) => updateSaleRequestStatus(id, "DELIVERED")}
+                onPreview={(row) => setPreviewRequest(row)}
+              />
+            </section>
+          ) : null}
+
+          {activeMode === "returnStock" ? (
+            <section className="rounded-2xl border bg-white p-6 shadow-sm">
+              <div className="text-lg font-semibold text-zinc-900">Requests Return Stocks</div>
+              <RequestReturnStocksTable
+                rows={returnStockRequests}
+                onOpen={markRequestRead}
+                onApprove={(id) => updateSaleRequestStatus(id, "APPROVED")}
+                onReject={(id) => updateSaleRequestStatus(id, "REJECTED")}
                 onPreview={(row) => setPreviewRequest(row)}
               />
             </section>
@@ -869,6 +982,58 @@ function RequestSaleStocksTable({ rows, onOpen, onApprove, onReject, onDispatch,
             );
           })}
           {!rows.length ? <tr><td colSpan={7} className="p-5 text-center text-zinc-500">No order requests.</td></tr> : null}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+
+function RequestReturnStocksTable({ rows, onOpen, onApprove, onReject, onPreview }) {
+  return (
+    <div className="overflow-x-auto mt-3 rounded border">
+      <table className="min-w-full text-sm">
+        <thead><tr className="border-b bg-zinc-50"><th className="p-2 text-left">Code</th><th className="p-2 text-left">From</th><th className="p-2 text-left">Source</th><th className="p-2 text-left">Date and Time</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Read/Unread</th><th className="p-2 text-left">Action</th></tr></thead>
+        <tbody>
+          {rows.map((r) => {
+            const status = normalizeRequestStatus(r.requestStatus || "PENDING");
+            const unread = !r.requestReadAt;
+            return (
+              <tr key={r._id} className="border-b">
+                <td className="p-2">{r.transactionCode}</td>
+                <td className="p-2">{r.fromEntityName || "-"}</td>
+                <td className="p-2">{sourceRoleLabel(r)}</td>
+                <td className="p-2">{r.transactionAt ? new Date(r.transactionAt).toLocaleString() : "-"}</td>
+                <td className="p-2">{status}</td>
+                <td className="p-2">{unread ? <span className="rounded bg-amber-100 px-2 py-1 text-xs text-amber-800">Unread</span> : "Read"}</td>
+                <td className="p-2"><div className="flex flex-wrap gap-2"><button className="rounded border px-2 py-1" onClick={() => onOpen(r._id)}>Open</button><button className="rounded border border-emerald-300 px-2 py-1 text-emerald-700" onClick={() => onPreview(r)}>Preview</button>{status === "PENDING" ? <><button className="rounded border border-blue-300 px-2 py-1 text-blue-700" onClick={() => onApprove(r._id)}>Approve</button><button className="rounded border border-red-300 px-2 py-1 text-red-700" onClick={() => onReject(r._id)}>Reject</button></> : null}</div></td>
+              </tr>
+            );
+          })}
+          {!rows.length ? <tr><td colSpan={7} className="p-5 text-center text-zinc-500">No return requests.</td></tr> : null}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ReturnStockLedgerTable({ rows, onInvoice, onDelete }) {
+  return (
+    <div className="overflow-x-auto mt-3 rounded border">
+      <table className="min-w-full text-sm">
+        <thead className="bg-zinc-50"><tr><th className="p-2 text-left">Code</th><th className="p-2 text-left">From</th><th className="p-2 text-left">Distributor Name</th><th className="p-2 text-left">Business Name</th><th className="p-2 text-left">Date and Time</th><th className="p-2 text-left">Action</th></tr></thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r._id} className={requestRowClass(normalizeRequestStatus(r.requestStatus || ""))}>
+              <td className="p-2">{r.transactionCode || "-"}</td>
+              <td className="p-2">{r.fromEntityName || "-"}</td>
+              <td className="p-2">{String(r.fromEntityType || "").toUpperCase() === "DISTRIBUTOR" ? (r.distributorName || r.fromEntityName || "-") : "-"}</td>
+              <td className="p-2">{String(r.fromEntityType || "").toUpperCase() === "BRAND" ? (r.brandName || r.fromEntityName || "-") : "-"}</td>
+              <td className="p-2">{r.transactionAt ? new Date(r.transactionAt).toLocaleString() : "-"}</td>
+              <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" type="button" onClick={() => onInvoice(r)}>Invoice/Receipt</button><button className="rounded border border-red-300 text-red-700 px-2 py-1" type="button" onClick={() => onDelete(r._id)}>Delete</button></div></td>
+            </tr>
+          ))}
+          {!rows.length ? <tr><td colSpan={6} className="p-5 text-center text-zinc-500">No records in this ledger.</td></tr> : null}
         </tbody>
       </table>
     </div>
@@ -1014,7 +1179,7 @@ function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
             <div className="font-semibold text-base">Product Detail</div>
             <div className="overflow-x-auto rounded border">
               <table className="min-w-full text-xs">
-                <thead><tr className="border-b bg-zinc-50"><th className="p-2">S.No</th><th className="p-2">Product Name</th><th className="p-2">Size</th><th className="p-2">Qty</th><th className="p-2">Rate</th><th className="p-2">Gross</th><th className="p-2">TO</th><th className="p-2">Disc</th><th className="p-2">Extra</th><th className="p-2">Bons</th><th className="p-2">V4GST</th><th className="p-2">GST</th><th className="p-2">Net Amt</th><th className="p-2">-</th></tr></thead>
+                <thead><tr className="border-b bg-zinc-50"><th className="p-2">S.No</th><th className="p-2">Product Name</th><th className="p-2">Size</th><th className="p-2">Qty</th><th className="p-2">Rate</th><th className="p-2">Gross</th><th className="p-2">TO</th><th className="p-2">Disc</th><th className="p-2">Extra</th><th className="p-2">Bons</th><th className="p-2">V4GST</th><th className="p-2">GST</th><th className="p-2">Net Amt</th>{activeMode === "returnStock" ? <><th className="p-2">EXP Date</th><th className="p-2">Return Date</th></> : null}<th className="p-2">-</th></tr></thead>
                 <tbody>
                   {lineRows.map(({ idx, line, product, calc }) => (
                     <tr key={idx} className="border-b">
