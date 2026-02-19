@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -1129,6 +1128,10 @@ export default function WarehouseInventoryModulePage() {
                       />
                     </>
                   )}
+
+                  <div className="md:col-span-2">
+                    <Input label="Address" value={form.address} onChange={(v) => setField("address", v)} />
+                  </div>
                 </>
               ) : null}
 
