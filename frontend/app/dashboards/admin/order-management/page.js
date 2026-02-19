@@ -781,13 +781,13 @@ export default function OrderManagementModulePage() {
                     ) : null}
                   </div>
                 </>
-              ) : (
+              ) : activeMode === "secondary" ? (
                 <>
                   <Select
                     label="Request Source"
                     value={form.sourceType}
                     onChange={(v) => setField("sourceType", v)}
-                    options={modeConfig[activeMode].sourceOptions}
+                    options={modeConfig[activeMode].sourceOptions || []}
                   />
                   <Input label="From" value={form.customerName} onChange={(v) => setField("customerName", v)} placeholder="Enter source name" />
                   <Select label="To Warehouse" value={form.toWarehouseId} onChange={(v) => setField("toWarehouseId", v)} options={warehouses.map((w) => ({ value: w._id, label: w.name }))} />
@@ -796,7 +796,7 @@ export default function OrderManagementModulePage() {
                   <Select label="Zone" value={form.zoneId} onChange={(v) => setField("zoneId", v)} options={zones.filter((z) => !form.regionId || z.regionId === selectedRegion?.regionId).map((z) => ({ value: z._id, label: z.name }))} />
                   <Input label="Territory" value={form.territoryName} onChange={(v) => setField("territoryName", v)} />
                 </>
-              )}
+              ) : null}
 
               <div className="md:col-span-2">
                 <div className="font-semibold mb-2">Product Detail</div>
