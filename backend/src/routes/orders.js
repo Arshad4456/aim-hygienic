@@ -36,6 +36,8 @@ function roleMatchQuery(user) {
   if (role === "Salesman") return { salesmanId: userId || "__none__" };
   if (role === "Delivery Boy") return { deliveryBoyId: userId || "__none__" };
   if (role === "customer") return { customerId: userId || "__none__" };
+  if (role === "Zone Sale Manager") return { zoneId: String(user?.zoneId || "").trim() || "__none__" };
+  if (role === "Territory Sale Manager") return { territoryName: String(user?.territoryName || user?.areaName || "").trim() || "__none__" };
 
   return { createdBy: user?._id };
 }
