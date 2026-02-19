@@ -127,10 +127,12 @@ function isSaleOrderRequest(row) {
 }
 
 function sourceRoleLabel(row) {
-  const source = normalizeRequestSource(row?.requestSourceRole || row?.fromEntityType || "");
+  const source = normalizeRequestSource(row?.requestSourceRole || row?.fromEntityType || row?.sourceType || "");
   if (source.includes("brandmanager") || source === "brand") return "Brand Manager";
   if (source.includes("distributor")) return "Distributor";
-  return row?.requestSourceRole || row?.fromEntityType || "-";
+  if (source.includes("orderbooker") || source === "orderbooker") return "Order Booker";
+  if (source.includes("customer")) return "customer";
+  return row?.requestSourceRole || row?.fromEntityType || row?.sourceType || "-";
 }
 
 
@@ -371,6 +373,15 @@ export default function OrderManagementModulePage() {
         .sort((a, b) => new Date(b.transactionAt || 0).getTime() - new Date(a.transactionAt || 0).getTime()),
     [transactions],
   );
+
+  const secondaryOrderRequests = useMemo(
+    () =>
+      orders
+        .filter((o) => o.saleType === "secondary")
+        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()),
+    [orders],
+  );
+
 
   const filteredOrders = useMemo(() => {
     if (!activeMode) return [];
@@ -753,6 +764,25 @@ export default function OrderManagementModulePage() {
     }
   }
 
+  async function markSecondaryRead(id) {
+    try {
+      await apiFetch(`/orders/${id}/mark-read`, { method: "PATCH", body: {} });
+      await loadData();
+    } catch (e) {
+      notify("error", e.message || "Failed to open request");
+    }
+  }
+
+  async function updateSecondaryStatus(id, status) {
+    try {
+      await apiFetch(`/orders/${id}/status`, { method: "PATCH", body: { status: String(status || "").toLowerCase() } });
+      notify("success", `Order ${String(status || "").toLowerCase()} successfully.`);
+      await loadData();
+    } catch (e) {
+      notify("error", e.message || "Failed to update order status");
+    }
+  }
+
   return (
     <AdminShell title="Order Management" user={null}>
       <div className="space-y-6">
@@ -966,24 +996,7 @@ export default function OrderManagementModulePage() {
               ) : activeMode === "returnStock" ? (
                 <ReturnStockLedgerTable rows={filteredOrders} onInvoice={printOrderInvoice} onDelete={deleteOrder} />
               ) : (
-                <div className="overflow-x-auto mt-3 rounded border">
-                  <table className="min-w-full text-sm">
-                    <thead className="bg-zinc-50"><tr><th className="p-2 text-left">Order Code</th><th className="p-2 text-left">From</th><th className="p-2 text-left">Warehouse</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Action</th><th className="p-2 text-left">Date</th></tr></thead>
-                    <tbody>
-                      {filteredOrders.map((order) => (
-                        <tr key={order._id} className={`border-t ${order.status === "rejected" ? "bg-red-50" : order.status === "delivered" ? "bg-emerald-50" : ""}`}>
-                          <td className="p-2">{order.orderNo || order.transactionCode}</td>
-                          <td className="p-2">{order.customerName || order.fromEntityName || "-"}</td>
-                          <td className="p-2">{order.toWarehouseName || order.warehouseName || "-"}</td>
-                          <td className="p-2 capitalize">{order.status}</td>
-                          <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" type="button" onClick={() => printOrderInvoice(order)}>Invoice/Receipt</button><button className="rounded border border-red-300 text-red-700 px-2 py-1" type="button" onClick={() => deleteOrder(order._id)}>Delete</button></div></td>
-                          <td className="p-2">{order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}</td>
-                        </tr>
-                      ))}
-                      {!filteredOrders.length ? <tr><td colSpan={6} className="p-5 text-center text-zinc-500">No records in this ledger.</td></tr> : null}
-                    </tbody>
-                  </table>
-                </div>
+                <SecondaryOrderLedgerTable rows={filteredOrders} onInvoice={printOrderInvoice} onDelete={deleteOrder} />
               )}
             </div>
           </section>
@@ -1012,6 +1025,21 @@ export default function OrderManagementModulePage() {
                 onApprove={(id) => updateSaleRequestStatus(id, "APPROVED")}
                 onReject={(id) => updateSaleRequestStatus(id, "REJECTED")}
                 onPreview={(row) => setPreviewRequest(row)}
+              />
+            </section>
+          ) : null}
+
+          {activeMode === "secondary" ? (
+            <section className="rounded-2xl border bg-white p-6 shadow-sm">
+              <div className="text-lg font-semibold text-zinc-900">Secondary Order Request list</div>
+              <SecondaryOrderRequestTable
+                rows={secondaryOrderRequests}
+                onOpen={markSecondaryRead}
+                onPreview={(row) => setPreviewRequest(row)}
+                onReject={(id) => updateSecondaryStatus(id, "rejected")}
+                onApprove={(id) => updateSecondaryStatus(id, "approved")}
+                onDispatched={(id) => updateSecondaryStatus(id, "dispatched")}
+                onDelivered={(id) => updateSecondaryStatus(id, "delivered")}
               />
             </section>
           ) : null}
@@ -1147,6 +1175,58 @@ function ReturnStockLedgerTable({ rows, onInvoice, onDelete }) {
   );
 }
 
+function SecondaryOrderRequestTable({ rows, onOpen, onPreview, onReject, onApprove, onDispatched, onDelivered }) {
+  return (
+    <div className="overflow-x-auto mt-3 rounded border">
+      <table className="min-w-full text-sm">
+        <thead><tr className="border-b bg-zinc-50"><th className="p-2 text-left">Order No</th><th className="p-2 text-left">Source</th><th className="p-2 text-left">From</th><th className="p-2 text-left">To</th><th className="p-2 text-left">Date/Time</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Read/Unread</th><th className="p-2 text-left">Action</th></tr></thead>
+        <tbody>
+          {rows.map((r) => {
+            const status = normalizeRequestStatus(r.status || "pending");
+            const unread = Boolean(r.unreadForAdmin);
+            return (
+              <tr key={r._id} className={requestRowClass(status)}>
+                <td className="p-2">{r.orderNo}</td>
+                <td className="p-2">{r.sourceType || "-"}</td>
+                <td className="p-2">{r.fromEntityName || r.customerName || "-"}</td>
+                <td className="p-2">{r.toWarehouseName || "-"}</td>
+                <td className="p-2">{r.createdAt ? new Date(r.createdAt).toLocaleString() : "-"}</td>
+                <td className="p-2">{status}</td>
+                <td className="p-2">{unread ? <span className="rounded bg-amber-100 px-2 py-1 text-xs text-amber-800">Unread</span> : "Read"}</td>
+                <td className="p-2"><div className="flex flex-wrap gap-2"><button className="rounded border px-2 py-1" onClick={() => onOpen(r._id)}>Open</button><button className="rounded border border-emerald-300 px-2 py-1 text-emerald-700" onClick={() => onPreview(r)}>Preview</button><button className="rounded border border-red-300 px-2 py-1 text-red-700" onClick={() => onReject(r._id)}>Reject</button><button className="rounded border border-blue-300 px-2 py-1 text-blue-700" onClick={() => onApprove(r._id)}>Approve</button><button className="rounded border border-indigo-300 px-2 py-1 text-indigo-700" onClick={() => onDispatched(r._id)}>Dispatched</button><button className="rounded border border-emerald-500 px-2 py-1 text-emerald-800" onClick={() => onDelivered(r._id)}>Delivered</button></div></td>
+              </tr>
+            );
+          })}
+          {!rows.length ? <tr><td colSpan={8} className="p-5 text-center text-zinc-500">No secondary order requests.</td></tr> : null}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function SecondaryOrderLedgerTable({ rows, onInvoice, onDelete }) {
+  return (
+    <div className="overflow-x-auto mt-3 rounded border">
+      <table className="min-w-full text-sm">
+        <thead><tr className="border-b bg-zinc-50"><th className="p-2 text-left">Order No</th><th className="p-2 text-left">Source</th><th className="p-2 text-left">From</th><th className="p-2 text-left">To</th><th className="p-2 text-left">Date/Time</th><th className="p-2 text-left">Action</th></tr></thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r._id} className="border-b">
+              <td className="p-2">{r.orderNo}</td>
+              <td className="p-2">{r.sourceType || "-"}</td>
+              <td className="p-2">{r.fromEntityName || r.customerName || "-"}</td>
+              <td className="p-2">{r.toWarehouseName || "-"}</td>
+              <td className="p-2">{r.createdAt ? new Date(r.createdAt).toLocaleString() : "-"}</td>
+              <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" type="button" onClick={() => onInvoice(r)}>Invoice/Receipt</button><button className="rounded border border-red-300 text-red-700 px-2 py-1" type="button" onClick={() => onDelete(r._id)}>Delete</button></div></td>
+            </tr>
+          ))}
+          {!rows.length ? <tr><td colSpan={6} className="p-5 text-center text-zinc-500">No records in this ledger.</td></tr> : null}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState(null);
@@ -1191,7 +1271,8 @@ function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
 
   if (!row || !draft) return null;
 
-  const canEditPending = normalizeRequestStatus(row.requestStatus || "PENDING") === "PENDING";
+  const isSecondaryOrderRow = row.saleType === "secondary";
+  const canEditPending = !isSecondaryOrderRow && normalizeRequestStatus(row.requestStatus || row.status || "PENDING") === "PENDING";
   const isReturnStockRow = row.transactionType === "RETURN_STOCK";
 
   function setDraftField(key, value) {
@@ -1211,6 +1292,10 @@ function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
   }
 
   async function updateRequest() {
+    if (isSecondaryOrderRow) {
+      notify("info", "Secondary order preview is read-only.");
+      return;
+    }
     if (!canEditPending) {
       notify("info", "Only pending requests can be updated.");
       return;
@@ -1274,7 +1359,7 @@ function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
         <div className="flex items-center justify-between border-b px-5 py-3"><div className="text-lg font-semibold">Order Request Preview</div><button type="button" className="rounded border px-3 py-1 text-sm" onClick={onClose}>Close</button></div>
         <div className="max-h-[78vh] overflow-y-auto p-5 space-y-4 text-sm">
           <div className="grid md:grid-cols-3 gap-3">
-            <PreviewField label="Code" value={row.transactionCode || "-"} />
+            <PreviewField label="Code" value={row.transactionCode || row.orderNo || "-"} />
             <Input label="From" value={draft.fromEntityName} onChange={(v) => setDraftField("fromEntityName", v)} />
             <Input label="To" value={draft.toEntityName} onChange={(v) => setDraftField("toEntityName", v)} />
             <Input label="Region" value={draft.regionName} onChange={(v) => setDraftField("regionName", v)} />
@@ -1282,7 +1367,7 @@ function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
             <Input label="Territory" value={draft.territory} onChange={(v) => setDraftField("territory", v)} />
             <Input label="Address" value={draft.note} onChange={(v) => setDraftField("note", v)} />
             <PreviewField label="Source" value={sourceRoleLabel(row)} />
-            <PreviewField label="Status" value={normalizeRequestStatus(row.requestStatus || "PENDING")} />
+            <PreviewField label="Status" value={normalizeRequestStatus(row.requestStatus || row.status || "PENDING")} />
           </div>
 
           <div className="space-y-2">
