@@ -168,7 +168,7 @@ function decisionStampStyle(status) {
 
 export default function OrderManagementModulePage() {
   const pathname = usePathname();
-  const isWarehouseManagerView = pathname?.startsWith("/warehouse-manager");
+  const isWarehouseManagerView = pathname?.startsWith("/dashboards/warehouseManager");
   const [activeMode, setActiveMode] = useState("");
   const [orders, setOrders] = useState([]);
   const [transactions, setTransactions] = useState([]);

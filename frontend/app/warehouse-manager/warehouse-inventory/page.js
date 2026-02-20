@@ -1,3 +1,3 @@
-import WarehouseInventoryModulePage from "../../dashboards/admin/warehouse-inventory/page";
+import WarehouseInventoryPage from "../../dashboards/warehouseManager/warehouse-inventory/page";
 
-export default WarehouseInventoryModulePage;
+export default WarehouseInventoryPage;

@@ -1,3 +1,3 @@
-import OrderManagementModulePage from "../../dashboards/admin/order-management/page";
+import OrderManagementPage from "../../dashboards/warehouseManager/order-management/page";
 
-export default OrderManagementModulePage;
+export default OrderManagementPage;

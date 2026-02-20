@@ -27,7 +27,7 @@ export default function LoginPage() {
       admin: "/dashboards/admin",
       CEO: "/dashboards/ceo",
       "Managing Director": "/dashboards/manageDirector",
-      "Warehouse Manager": "/warehouse-manager",
+      "Warehouse Manager": "/dashboards/warehouseManager",
       "Account Officer": "/dashboards/accountOfficer",
       "HR Assistant": "/dashboards/hrAssistant",
       Cashier: "/dashboards/cashier",

@@ -66,9 +66,9 @@ export const userDashboardSearchItems = {
   ceo: [{ title: "Dashboard", href: "/dashboards/ceo" }],
   manageDirector: [{ title: "Dashboard", href: "/dashboards/manageDirector" }],
   warehouseManager: [
-    { title: "Dashboard", href: "/warehouse-manager" },
-    { title: "Warehouse & Inventory", href: "/warehouse-manager/warehouse-inventory" },
-    { title: "Order Management", href: "/warehouse-manager/order-management" },
+    { title: "Dashboard", href: "/dashboards/warehouseManager" },
+    { title: "Warehouse & Inventory", href: "/dashboards/warehouseManager/warehouse-inventory" },
+    { title: "Order Management", href: "/dashboards/warehouseManager/order-management" },
   ],
   accountOfficer: [{ title: "Dashboard", href: "/dashboards/accountOfficer" }],
   cashier: [{ title: "Dashboard", href: "/dashboards/cashier" }],
