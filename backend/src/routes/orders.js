@@ -1,6 +1,7 @@
 const express = require("express");
 const { requireAuth } = require("../utils/auth");
 const SalesOrder = require("../models/SalesOrder");
+const User = require("../models/User");
 
 const router = express.Router();
 
@@ -26,6 +27,7 @@ function normalizeItems(items = []) {
 function roleMatchQuery(user) {
   const role = String(user?.role || "").trim();
   const userId = String(user?.userId || "").trim();
+  const authUid = String(user?.uid || user?._id || "").trim();
   const roleMappedIds = {
     "Brand Manager": String(user?.managerId || "").trim(),
     Distributor: String(user?.distributorId || "").trim(),
@@ -42,15 +44,22 @@ function roleMatchQuery(user) {
 
   if (role === "Brand Manager") return { brandManagerId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
   if (role === "Distributor") return { distributorId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
-  if (role === "Order Booker") return { orderBookerId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
+  if (role === "Order Booker") {
+    const roleQuery = { orderBookerId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
+    return authUid ? { $or: [roleQuery, { createdBy: authUid }] } : roleQuery;
+  }
   if (role === "Salesman") return { salesmanId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
   if (role === "Delivery Boy") return { deliveryBoyId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
-  if (role === "customer") return { customerId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
+  if (role === "customer") {
+    const roleQuery = { customerId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
+    return authUid ? { $or: [roleQuery, { createdBy: authUid }] } : roleQuery;
+  }
   if (role === "Zone Sale Manager") return { zoneId: String(user?.zoneId || "").trim() || "__none__" };
   if (role === "Territory Sale Manager") return { territoryName: String(user?.territoryName || user?.areaName || "").trim() || "__none__" };
 
-  return { createdBy: user?._id };
+  return authUid ? { createdBy: authUid } : { _id: null };
 }
+
 
 function addStatusHistory(order, status, userId, note) {
   order.statusHistory.push({ status, changedBy: userId, note: note || undefined, changedAt: new Date() });
@@ -293,7 +302,7 @@ router.patch("/:id/status", requireAuth, async (req, res) => {
       order.canRecoverFromRejected = false;
     }
 
-    addStatusHistory(order, status, req.user?._id);
+    addStatusHistory(order, status, req.user?.uid);
     await order.save();
 
     return res.json({ ok: true, order });
@@ -313,7 +322,8 @@ router.post("/", requireAuth, async (req, res) => {
 
     const totalAmount = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
     const role = String(req.user?.role || "").trim();
-    const ownUserId = req.user?.userId || "";
+    const authUser = await User.findById(req.user?.uid).lean();
+    const ownUserId = authUser?.userId || req.user?.uid || "";
     const isBrandManager = role === "Brand Manager";
     const isDistributor = role === "Distributor";
 
@@ -327,25 +337,25 @@ router.post("/", requireAuth, async (req, res) => {
       items,
       totalAmount,
       notes: notes ? String(notes).trim() : undefined,
-      createdBy: req.user?._id,
-      brandManagerId: req.body?.brandManagerId || (isBrandManager ? ownUserId : req.user?.managerId) || "",
-      distributorId: req.body?.distributorId || (isDistributor ? ownUserId : req.user?.distributorId) || "",
-      orderBookerId: req.body?.orderBookerId || req.user?.orderBookerId || req.user?.userId || "",
-      salesmanId: req.body?.salesmanId || req.user?.salesmanId || "",
-      customerId: req.body?.customerId || req.user?.customerId || req.user?.userId || "",
-      warehouseManagerId: req.body?.warehouseManagerId || req.user?.warehouseManagerId || "",
-      deliveryBoyId: req.body?.deliveryBoyId || req.user?.deliveryBoyId || "",
-      fromEntityName: req.body?.fromEntityName || req.user?.businessName || req.user?.fullName || "",
+      createdBy: req.user?.uid,
+      brandManagerId: req.body?.brandManagerId || (isBrandManager ? ownUserId : authUser?.managerId) || "",
+      distributorId: req.body?.distributorId || (isDistributor ? ownUserId : authUser?.distributorId) || "",
+      orderBookerId: req.body?.orderBookerId || authUser?.orderBookerId || authUser?.userId || req.user?.uid || "",
+      salesmanId: req.body?.salesmanId || authUser?.salesmanId || "",
+      customerId: req.body?.customerId || authUser?.customerId || authUser?.userId || req.user?.uid || "",
+      warehouseManagerId: req.body?.warehouseManagerId || authUser?.warehouseManagerId || "",
+      deliveryBoyId: req.body?.deliveryBoyId || authUser?.deliveryBoyId || "",
+      fromEntityName: req.body?.fromEntityName || authUser?.businessName || authUser?.fullName || "",
       fromEntityRole: req.body?.fromEntityRole || role,
       toWarehouseId: req.body?.toWarehouseId || "",
       toWarehouseName: req.body?.toWarehouseName || "",
-      regionId: req.body?.regionId || req.user?.regionId || "",
-      regionName: req.body?.regionName || req.user?.regionName || "",
-      zoneId: req.body?.zoneId || req.user?.zoneId || "",
-      zoneName: req.body?.zoneName || req.user?.zoneName || "",
-      territoryName: req.body?.territoryName || req.user?.territoryName || req.user?.areaName || "",
-      address: req.body?.address || req.user?.address || req.user?.shopAddress || "",
-      statusHistory: [{ status: "pending", changedBy: req.user?._id, changedAt: new Date(), note: "Order created" }],
+      regionId: req.body?.regionId || authUser?.regionId || "",
+      regionName: req.body?.regionName || authUser?.regionName || "",
+      zoneId: req.body?.zoneId || authUser?.zoneId || "",
+      zoneName: req.body?.zoneName || authUser?.zoneName || "",
+      territoryName: req.body?.territoryName || authUser?.territoryName || authUser?.areaName || "",
+      address: req.body?.address || authUser?.address || authUser?.shopAddress || "",
+      statusHistory: [{ status: "pending", changedBy: req.user?.uid, changedAt: new Date(), note: "Order created" }],
     });
 
     return res.status(201).json({ ok: true, order });

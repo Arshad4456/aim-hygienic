@@ -64,6 +64,7 @@ export default function SecondaryOrderRequestModule({ roleKey, links, title }) {
   const [orders, setOrders] = useState([]);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  const [toastState, setToastState] = useState(null);
   const [form, setForm] = useState({
     customerName: "",
     businessName: "",
@@ -86,11 +87,17 @@ export default function SecondaryOrderRequestModule({ roleKey, links, title }) {
     const myOrders = ordersResult.status === "fulfilled" ? (ordersResult.value?.orders || []) : [];
 
     if (meResult.status === "rejected") {
-      setErr(meResult.reason?.message || "Failed to load profile data");
+      const message = meResult.reason?.message || "Failed to load profile data";
+      setErr(message);
+      notify("error", message);
     } else if (productsResult.status === "rejected") {
-      setErr(productsResult.reason?.message || "Failed to load products");
+      const message = productsResult.reason?.message || "Failed to load products";
+      setErr(message);
+      notify("error", message);
     } else if (ordersResult.status === "rejected") {
-      setErr(ordersResult.reason?.message || "Failed to load orders");
+      const message = ordersResult.reason?.message || "Failed to load orders";
+      setErr(message);
+      notify("error", message);
     }
 
     const distributorOptions = buildDistributorOptions(me);
@@ -121,6 +128,11 @@ export default function SecondaryOrderRequestModule({ roleKey, links, title }) {
   function setItem(idx, key, value) { setForm((s) => ({ ...s, items: s.items.map((it, i) => i === idx ? { ...it, [key]: value } : it) })); }
   function addItem() { setForm((s) => ({ ...s, items: [...s.items, { ...emptyLine }] })); }
   function removeItem(idx) { setForm((s) => ({ ...s, items: s.items.filter((_, i) => i !== idx) })); }
+
+  function notify(type, message) {
+    setToastState({ type, message });
+    setTimeout(() => setToastState(null), 2500);
+  }
 
   async function submit(e) {
     e.preventDefault();
@@ -173,9 +185,12 @@ export default function SecondaryOrderRequestModule({ roleKey, links, title }) {
       });
 
       await loadData();
+      notify("success", "Order request submitted successfully.");
       setForm((s) => ({ ...s, customerName: roleKey === "customer" ? s.customerName : "", businessName: roleKey === "customer" ? s.businessName : "", address: roleKey === "customer" ? s.address : "", items: [{ ...emptyLine }] }));
     } catch (e2) {
-      setErr(e2.message || "Failed to submit request");
+      const message = e2.message || "Failed to submit request";
+      setErr(message);
+      notify("error", message);
     } finally {
       setSaving(false);
     }
@@ -189,6 +204,7 @@ export default function SecondaryOrderRequestModule({ roleKey, links, title }) {
         <section className="rounded-2xl border bg-white p-5 shadow-sm">
           <h3 className="text-lg font-semibold">Create Order</h3>
           {err ? <div className="mt-2 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{err}</div> : null}
+          {toastState ? <InlineToast type={toastState.type} message={toastState.message} /> : null}
           <form onSubmit={submit} className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 text-sm">
             <div className="font-semibold">From</div><div className="font-semibold">To</div>
             <Input label="Source" value={roleKey === "customer" ? "customer" : "Order Booker"} readOnly />
@@ -265,4 +281,11 @@ export default function SecondaryOrderRequestModule({ roleKey, links, title }) {
 
 function Input({ label, value, onChange, readOnly = false }) {
   return <label><div className="text-zinc-600">{label}</div><input className="mt-1 w-full rounded border px-3 py-2" value={value || ""} readOnly={readOnly} onChange={(e) => onChange?.(e.target.value)} /></label>;
+}
+
+function InlineToast({ type, message }) {
+  const tone = type === "success"
+    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+    : "border-red-200 bg-red-50 text-red-700";
+  return <div className={`mt-2 rounded border px-3 py-2 text-sm ${tone}`}>{message}</div>;
 }
