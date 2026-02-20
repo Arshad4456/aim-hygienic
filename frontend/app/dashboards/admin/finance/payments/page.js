@@ -66,10 +66,7 @@ export default function PaymentManagementPage() {
 
   async function loadLedgers() {
     try {
-      const [primaryData, secondaryData] = await Promise.all([
-        apiFetch("/payments/primary"),
-        apiFetch("/payments/secondary"),
-      ]);
+      const [primaryData, secondaryData] = await Promise.all([apiFetch("/payments/primary"), apiFetch("/payments/secondary")]);
       setPrimaryLedger(primaryData.primaryPayments || []);
       setSecondaryLedger(secondaryData.secondaryPayments || []);
     } catch (error) {
@@ -93,7 +90,10 @@ export default function PaymentManagementPage() {
     [territories, primaryForm.zoneId, zones]
   );
   const primaryDistributors = useMemo(
-    () => distributors.filter((d) => !primaryForm.territoryId || d.territoryId === findTerritoryCode(primaryForm.territoryId, territories)),
+    () =>
+      distributors.filter(
+        (d) => !primaryForm.territoryId || d.territoryId === findTerritoryCode(primaryForm.territoryId, territories)
+      ),
     [distributors, primaryForm.territoryId, territories]
   );
 
@@ -106,15 +106,18 @@ export default function PaymentManagementPage() {
     [territories, secondaryForm.zoneId, zones]
   );
   const secondaryDistributors = useMemo(
-    () => distributors.filter((d) => !secondaryForm.territoryId || d.territoryId === findTerritoryCode(secondaryForm.territoryId, territories)),
+    () =>
+      distributors.filter(
+        (d) => !secondaryForm.territoryId || d.territoryId === findTerritoryCode(secondaryForm.territoryId, territories)
+      ),
     [distributors, secondaryForm.territoryId, territories]
   );
   const matchingPrimaryInvoices = useMemo(
     () =>
       primaryLedger.filter(
         (item) =>
-          (!secondaryForm.distributorId || item.distributorId === secondaryForm.distributorId) &&
-          (!secondaryForm.warehouseId || item.warehouseId === secondaryForm.warehouseId)
+          (!secondaryForm.distributorId || String(item.distributorId) === String(secondaryForm.distributorId)) &&
+          (!secondaryForm.warehouseId || String(item.warehouseId) === String(secondaryForm.warehouseId))
       ),
     [primaryLedger, secondaryForm.distributorId, secondaryForm.warehouseId]
   );
@@ -130,9 +133,7 @@ export default function PaymentManagementPage() {
 
   function onSecondaryCascade(field, value) {
     setSecondaryForm((s) => {
-      if (field === "regionId") {
-        return { ...s, regionId: value, zoneId: "", territoryId: "", distributorId: "", primaryInvoiceNo: "" };
-      }
+      if (field === "regionId") return { ...s, regionId: value, zoneId: "", territoryId: "", distributorId: "", primaryInvoiceNo: "" };
       if (field === "zoneId") return { ...s, zoneId: value, territoryId: "", distributorId: "", primaryInvoiceNo: "" };
       if (field === "territoryId") return { ...s, territoryId: value, distributorId: "", primaryInvoiceNo: "" };
       if (field === "distributorId" || field === "warehouseId") return { ...s, [field]: value, primaryInvoiceNo: "" };
@@ -198,12 +199,28 @@ export default function PaymentManagementPage() {
       <div className="space-y-5">
         <div className="rounded-2xl border bg-white p-5 shadow-sm">
           <div className="text-xl font-semibold text-zinc-900">Payment Management</div>
-          <div className="text-sm text-zinc-500 mt-1">Manage primary (warehouse to distributor) and secondary (distributor settlements) payments.</div>
-          <div className="mt-4 flex gap-2">
-            <button className={`rounded-xl px-4 py-2 text-sm ${tab === "primary" ? "bg-emerald-600 text-white" : "border"}`} onClick={() => setTab("primary")}>Primary Payment</button>
-            <button className={`rounded-xl px-4 py-2 text-sm ${tab === "secondary" ? "bg-emerald-600 text-white" : "border"}`} onClick={() => setTab("secondary")}>Secondary Payment</button>
+          <div className="mt-1 text-sm text-zinc-500">
+            Manage primary (warehouse to distributor) and secondary (distributor settlements) payments.
           </div>
-          {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{err}</div> : null}
+          <div className="mt-4 flex gap-2">
+            <button
+              className={`rounded-xl px-4 py-2 text-sm ${tab === "primary" ? "bg-emerald-600 text-white" : "border"}`}
+              type="button"
+              onClick={() => setTab("primary")}
+            >
+              Primary Payment
+            </button>
+            <button
+              className={`rounded-xl px-4 py-2 text-sm ${tab === "secondary" ? "bg-emerald-600 text-white" : "border"}`}
+              type="button"
+              onClick={() => setTab("secondary")}
+            >
+              Secondary Payment
+            </button>
+          </div>
+          {err ? (
+            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{err}</div>
+          ) : null}
         </div>
 
         {tab === "primary" ? (
@@ -233,10 +250,17 @@ export default function PaymentManagementPage() {
               <Input label="Date of Paid" type="date" value={secondaryForm.paidDate} onChange={(v) => onSecondaryCascade("paidDate", v)} />
               <div>
                 <Label>Invoice-No of Primary Payment</Label>
-                <select className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" value={secondaryForm.primaryInvoiceNo} onChange={(e) => onSecondaryCascade("primaryInvoiceNo", e.target.value)} required>
+                <select
+                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+                  value={secondaryForm.primaryInvoiceNo}
+                  onChange={(e) => onSecondaryCascade("primaryInvoiceNo", e.target.value)}
+                  required
+                >
                   <option value="">Select invoice</option>
                   {matchingPrimaryInvoices.map((item) => (
-                    <option key={item._id} value={item.invoiceNo}>{item.invoiceNo} (Remaining: {formatCurrency(item.amountRemaining)})</option>
+                    <option key={item._id} value={item.invoiceNo}>
+                      {item.invoiceNo} (Remaining: {formatCurrency(item.amountRemaining)})
+                    </option>
                   ))}
                 </select>
               </div>
@@ -253,7 +277,13 @@ export default function PaymentManagementPage() {
 }
 
 function PaymentForm({ title, children, onSubmit, submitText }) {
-  return <form onSubmit={onSubmit} className="rounded-2xl border bg-white p-5 shadow-sm space-y-3"><div className="text-lg font-semibold text-zinc-900">{title}</div><div className="grid grid-cols-1 md:grid-cols-2 gap-3">{children}</div><button className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">{submitText}</button></form>;
+  return (
+    <form onSubmit={onSubmit} className="space-y-3 rounded-2xl border bg-white p-5 shadow-sm">
+      <div className="text-lg font-semibold text-zinc-900">{title}</div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{children}</div>
+      <button className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">{submitText}</button>
+    </form>
+  );
 }
 
 function CascadeSelect({ label, value, onChange, options, user, warehouse }) {
@@ -262,18 +292,32 @@ function CascadeSelect({ label, value, onChange, options, user, warehouse }) {
       <Label>{label}</Label>
       <select className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" value={value} onChange={(e) => onChange(e.target.value)} required>
         <option value="">Select {label}</option>
-        {options.map((item) => <option key={item._id} value={item._id}>{user ? item.fullName : warehouse ? item.name : item.name}</option>)}
+        {options.map((item) => (
+          <option key={item._id} value={item._id}>
+            {user ? item.fullName : warehouse ? item.name : item.name}
+          </option>
+        ))}
       </select>
     </div>
   );
 }
 
 function Input({ label, value, onChange, type }) {
-  return <div><Label>{label}</Label><input required className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" type={type} value={value} onChange={(e) => onChange(e.target.value)} /></div>;
+  return (
+    <div>
+      <Label>{label}</Label>
+      <input required className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" type={type} value={value} onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
 }
 
 function TextArea({ label, value, onChange }) {
-  return <div className="md:col-span-2"><Label>{label}</Label><textarea className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" rows={3} value={value} onChange={(e) => onChange(e.target.value)} /></div>;
+  return (
+    <div className="md:col-span-2">
+      <Label>{label}</Label>
+      <textarea className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" rows={3} value={value} onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
 }
 
 function Label({ children }) {
@@ -281,11 +325,50 @@ function Label({ children }) {
 }
 
 function PrimaryLedger({ rows, onDelete, onInvoice }) {
-  return <LedgerTable title="Primary Payment Ledger" headers={["Invoice-No", "Amount", "Pay Date", "Return Date", "Action"]} empty="No primary payments yet." rows={rows.map((row) => [row.invoiceNo, formatCurrency(row.amountTotal), formatDate(row.payDate), formatDate(row.returnDate), <div key={row._id} className="flex gap-2"><button onClick={() => onInvoice(row.invoiceNo)} className="rounded border px-2 py-1 text-xs">Invoice/Receipt</button><button onClick={() => onDelete(row._id)} className="rounded border border-red-300 px-2 py-1 text-xs text-red-600">Delete</button></div>])} />;
+  return (
+    <LedgerTable
+      title="Primary Payment Ledger"
+      headers={["Invoice-No", "Amount", "Pay Date", "Return Date", "Action"]}
+      empty="No primary payments yet."
+      rows={rows.map((row) => [
+        row.invoiceNo,
+        formatCurrency(row.amountTotal),
+        formatDate(row.payDate),
+        formatDate(row.returnDate),
+        <div key={row._id} className="flex gap-2">
+          <button type="button" onClick={() => onInvoice(row.invoiceNo)} className="rounded border px-2 py-1 text-xs">
+            Invoice/Receipt
+          </button>
+          <button type="button" onClick={() => onDelete(row._id)} className="rounded border border-red-300 px-2 py-1 text-xs text-red-600">
+            Delete
+          </button>
+        </div>,
+      ])}
+    />
+  );
 }
 
 function SecondaryLedger({ rows, onDelete, onInvoice }) {
-  return <LedgerTable title="Secondary Payment Ledger" headers={["Invoice-No", "Paid Amount", "Date", "Action"]} empty="No secondary settlements yet." rows={rows.map((row) => [row.primaryInvoiceNo, formatCurrency(row.amountPaid), formatDate(row.paidDate), <div key={row._id} className="flex gap-2"><button onClick={() => onInvoice(row.primaryInvoiceNo)} className="rounded border px-2 py-1 text-xs">Invoice/Receipt</button><button onClick={() => onDelete(row._id)} className="rounded border border-red-300 px-2 py-1 text-xs text-red-600">Delete</button></div>])} />;
+  return (
+    <LedgerTable
+      title="Secondary Payment Ledger"
+      headers={["Invoice-No", "Paid Amount", "Date", "Action"]}
+      empty="No secondary settlements yet."
+      rows={rows.map((row) => [
+        row.primaryInvoiceNo,
+        formatCurrency(row.amountPaid),
+        formatDate(row.paidDate),
+        <div key={row._id} className="flex gap-2">
+          <button type="button" onClick={() => onInvoice(row.primaryInvoiceNo)} className="rounded border px-2 py-1 text-xs">
+            Invoice/Receipt
+          </button>
+          <button type="button" onClick={() => onDelete(row._id)} className="rounded border border-red-300 px-2 py-1 text-xs text-red-600">
+            Delete
+          </button>
+        </div>,
+      ])}
+    />
+  );
 }
 
 function LedgerTable({ title, headers, rows, empty }) {
@@ -293,7 +376,36 @@ function LedgerTable({ title, headers, rows, empty }) {
     <div className="rounded-2xl border bg-white p-5 shadow-sm">
       <div className="text-lg font-semibold text-zinc-900">{title}</div>
       <div className="mt-3 overflow-auto rounded-xl border">
-        <table className="min-w-[760px] w-full text-sm"><thead className="bg-zinc-50"><tr>{headers.map((h) => <th key={h} className="px-3 py-2 text-left border-b">{h}</th>)}</tr></thead><tbody>{rows.length ? rows.map((cells, idx) => <tr key={idx}>{cells.map((cell, c) => <td key={c} className="px-3 py-2 border-b">{cell}</td>)}</tr>) : <tr><td className="px-3 py-6 text-center text-zinc-500" colSpan={headers.length}>{empty}</td></tr>}</tbody></table>
+        <table className="min-w-[760px] w-full text-sm">
+          <thead className="bg-zinc-50">
+            <tr>
+              {headers.map((h) => (
+                <th key={h} className="border-b px-3 py-2 text-left">
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length ? (
+              rows.map((cells, idx) => (
+                <tr key={idx}>
+                  {cells.map((cell, c) => (
+                    <td key={c} className="border-b px-3 py-2">
+                      {cell}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td className="px-3 py-6 text-center text-zinc-500" colSpan={headers.length}>
+                  {empty}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -302,17 +414,156 @@ function LedgerTable({ title, headers, rows, empty }) {
 function InvoiceModal({ data, onClose }) {
   const primary = data.primaryPayment;
   const settlements = data.settlements || [];
+
+  function onPrint() {
+    const popup = window.open("", "_blank", "width=1000,height=800");
+    if (!popup) {
+      alert("Please allow popups to print invoice/receipt.");
+      return;
+    }
+    popup.document.write(buildInvoiceHtml(primary, settlements));
+    popup.document.close();
+    popup.print();
+  }
+
+  function onDownload() {
+    const html = buildInvoiceHtml(primary, settlements);
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${primary.invoiceNo || "payment-invoice"}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-3xl rounded-2xl bg-white p-5 shadow-xl">
-        <div className="flex items-center justify-between"><div className="text-lg font-semibold">Invoice {primary.invoiceNo}</div><button onClick={onClose} className="rounded border px-3 py-1 text-sm">Close</button></div>
-        <div className="mt-3 grid grid-cols-2 gap-2 text-sm"><div>Distributor: {primary.distributorName}</div><div>Warehouse: {primary.warehouseName}</div><div>Region/Zone/Territory: {primary.regionName} / {primary.zoneName} / {primary.territoryName}</div><div>Pay Date: {formatDate(primary.payDate)}</div><div>Return Date: {formatDate(primary.returnDate)}</div><div>Amount Total: {formatCurrency(primary.amountTotal)}</div><div className="col-span-2">Details: {primary.details || "—"}</div></div>
+        <div className="flex items-center justify-between">
+          <div className="text-lg font-semibold">Invoice {primary.invoiceNo}</div>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={onDownload} className="rounded border px-3 py-1 text-sm">
+              Download
+            </button>
+            <button type="button" onClick={onPrint} className="rounded border px-3 py-1 text-sm">
+              Print
+            </button>
+            <button type="button" onClick={onClose} className="rounded border px-3 py-1 text-sm">
+              Close
+            </button>
+          </div>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+          <div>Distributor: {primary.distributorName}</div>
+          <div>Warehouse: {primary.warehouseName}</div>
+          <div className="col-span-2">Distributor Address: {primary.distributorAddress || "—"}</div>
+          <div>
+            Region/Zone/Territory: {primary.regionName} / {primary.zoneName} / {primary.territoryName}
+          </div>
+          <div>Pay Date: {formatDate(primary.payDate)}</div>
+          <div>Return Date: {formatDate(primary.returnDate)}</div>
+          <div>Amount Total: {formatCurrency(primary.amountTotal)}</div>
+          <div className="col-span-2">Details: {primary.details || "—"}</div>
+        </div>
         <div className="mt-4 text-sm font-medium">Settlement Details</div>
-        <div className="mt-2 overflow-auto rounded-xl border"><table className="w-full text-sm"><thead className="bg-zinc-50"><tr><th className="px-3 py-2 text-left border-b">Paid Amount</th><th className="px-3 py-2 text-left border-b">Paid Date</th><th className="px-3 py-2 text-left border-b">Detail</th></tr></thead><tbody>{settlements.length ? settlements.map((row) => <tr key={row._id}><td className="px-3 py-2 border-b">{formatCurrency(row.amountPaid)}</td><td className="px-3 py-2 border-b">{formatDate(row.paidDate)}</td><td className="px-3 py-2 border-b">{row.details || "—"}</td></tr>) : <tr><td colSpan={3} className="px-3 py-4 text-center text-zinc-500">No settlement payments yet.</td></tr>}</tbody></table></div>
-        <div className="mt-4 text-sm">Total Paid Back: <b>{formatCurrency(primary.amountPaidBack)}</b> • Remaining Amount: <b>{formatCurrency(primary.amountRemaining)}</b></div>
+        <div className="mt-2 overflow-auto rounded-xl border">
+          <table className="w-full text-sm">
+            <thead className="bg-zinc-50">
+              <tr>
+                <th className="border-b px-3 py-2 text-left">Paid Amount</th>
+                <th className="border-b px-3 py-2 text-left">Paid Date</th>
+                <th className="border-b px-3 py-2 text-left">Detail</th>
+              </tr>
+            </thead>
+            <tbody>
+              {settlements.length ? (
+                settlements.map((row) => (
+                  <tr key={row._id}>
+                    <td className="border-b px-3 py-2">{formatCurrency(row.amountPaid)}</td>
+                    <td className="border-b px-3 py-2">{formatDate(row.paidDate)}</td>
+                    <td className="border-b px-3 py-2">{row.details || "—"}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={3} className="px-3 py-4 text-center text-zinc-500">
+                    No settlement payments yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-4 text-sm">
+          Total Paid Back: <b>{formatCurrency(primary.amountPaidBack)}</b> • Remaining Amount: <b>{formatCurrency(primary.amountRemaining)}</b>
+        </div>
       </div>
     </div>
   );
+}
+
+function buildInvoiceHtml(primary, settlements) {
+  const settlementRows =
+    settlements.length > 0
+      ? settlements
+          .map(
+            (row, idx) =>
+              `<tr><td>${idx + 1}</td><td>${formatCurrency(row.amountPaid)}</td><td>${formatDate(row.paidDate)}</td><td>${escapeHtml(
+                row.details || "-"
+              )}</td></tr>`
+          )
+          .join("")
+      : '<tr><td colspan="4" style="text-align:center;">No settlement payments yet.</td></tr>';
+
+  return `
+  <html>
+    <body style="font-family:Arial,sans-serif;padding:16px;color:#111;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="width:54px;height:54px;border-radius:10px;background:linear-gradient(135deg,#065f46,#10b981);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;">AH</div>
+          <div>
+            <div style="font-weight:700;font-size:18px;">AIM Hygienic (Pvt) Limited</div>
+            <div style="font-size:11px;color:#555;">Payment Invoice / Receipt</div>
+          </div>
+        </div>
+        <div style="font-size:12px;text-align:right;">
+          <div><b>Invoice No:</b> ${escapeHtml(primary.invoiceNo || "-")}</div>
+          <div><b>Date:</b> ${formatDate(primary.payDate)}</div>
+        </div>
+      </div>
+
+      <div style="margin-top:12px;font-size:12px;"><b>Invoice From:</b> ${escapeHtml(primary.warehouseName || "-")}</div>
+      <div style="font-size:12px;"><b>Bill To:</b> ${escapeHtml(primary.distributorName || "-")}</div>
+      <div style="font-size:12px;"><b>Distributor Address:</b> ${escapeHtml(primary.distributorAddress || "-")}</div>
+      <div style="font-size:12px;"><b>Region/Zone/Territory:</b> ${escapeHtml(primary.regionName || "-")} / ${escapeHtml(primary.zoneName || "-")} / ${escapeHtml(primary.territoryName || "-")}</div>
+
+      <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin-top:12px;font-size:12px;">
+        <tbody>
+          <tr><td><b>Total Primary Amount</b></td><td>${formatCurrency(primary.amountTotal)}</td><td><b>Pay Date</b></td><td>${formatDate(primary.payDate)}</td></tr>
+          <tr><td><b>Return Date</b></td><td>${formatDate(primary.returnDate)}</td><td><b>Details</b></td><td>${escapeHtml(primary.details || "-")}</td></tr>
+          <tr><td><b>Total Paid Back</b></td><td>${formatCurrency(primary.amountPaidBack)}</td><td><b>Remaining Amount</b></td><td>${formatCurrency(primary.amountRemaining)}</td></tr>
+        </tbody>
+      </table>
+
+      <div style="margin-top:14px;font-weight:700;">Settlement Details</div>
+      <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin-top:8px;font-size:12px;">
+        <thead><tr><th>#</th><th>Paid Amount</th><th>Paid Date</th><th>Detail</th></tr></thead>
+        <tbody>${settlementRows}</tbody>
+      </table>
+
+      <div style="margin-top:20px;text-align:center;font-size:12px;">Thank you for business with AIM Hygienic (Pvt) Limited.</div>
+    </body>
+  </html>`;
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function formatCurrency(value) {
