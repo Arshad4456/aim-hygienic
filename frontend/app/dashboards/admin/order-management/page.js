@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import AdminShell from "../components/AdminShell";
+import UserDashboardShell from "../../components/userDashboardShell";
+import { userDashboardSearchItems } from "../../searchItems";
 import { apiFetch } from "../../../lib/api";
 import { getAuthItem } from "../../../lib/clientAuth";
 
@@ -817,8 +819,18 @@ export default function OrderManagementModulePage() {
     }
   }
 
+  const ShellComponent = isWarehouseManagerView ? UserDashboardShell : AdminShell;
+  const shellProps = isWarehouseManagerView
+    ? {
+        title: "Order Management",
+        subtitle: "Manage warehouse-scoped order workflows for your assigned warehouse.",
+        roleKey: "Warehouse Manager",
+        links: userDashboardSearchItems.warehouseManager || [],
+      }
+    : { title: "Order Management", user: null };
+
   return (
-    <AdminShell title="Order Management" user={null}>
+    <ShellComponent {...shellProps}>
       <div className="space-y-6">
         {toastState ? <InlineToast type={toastState.type} message={toastState.message} /> : null}
 
@@ -1083,7 +1095,7 @@ export default function OrderManagementModulePage() {
 
         <RequestPreviewModal row={previewRequest} products={products} onClose={() => setPreviewRequest(null)} onUpdated={loadData} notify={notify} />
       </div>
-    </AdminShell>
+    </ShellComponent>
   );
 }
 
