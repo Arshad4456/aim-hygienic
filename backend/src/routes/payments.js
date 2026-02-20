@@ -1,3 +1,4 @@
+
 const express = require("express");
 const mongoose = require("mongoose");
 const Region = require("../models/Region");
@@ -25,18 +26,31 @@ function isWarehouseManagerUser(user) {
   return role === "warehouse manager" || role === "warehouse_manager";
 }
 
-function getScopedWarehouseObjectId(req) {
+async function resolveScopedWarehouse(req) {
   if (!isWarehouseManagerUser(req.user)) return null;
-  return toObjectId(req.user?.warehouseId || req.user?.warehouse_id);
+
+  const rawWarehouseRef = String(req.user?.warehouseId || req.user?.warehouse_id || "").trim();
+  if (!rawWarehouseRef) return null;
+
+  const warehouseById = toObjectId(rawWarehouseRef)
+    ? await Warehouse.findById(rawWarehouseRef).lean()
+    : null;
+
+  if (warehouseById) return warehouseById;
+
+  const warehouseByCode = await Warehouse.findOne({ warehouseId: rawWarehouseRef }).lean();
+  if (warehouseByCode) return warehouseByCode;
+
+  return null;
 }
 
-function ensureWarehouseManagerHasWarehouse(req, res) {
-  const warehouseObjectId = getScopedWarehouseObjectId(req);
-  if (!warehouseObjectId) {
+async function ensureWarehouseManagerHasWarehouse(req, res) {
+  const warehouse = await resolveScopedWarehouse(req);
+  if (!warehouse) {
     res.status(403).json({ ok: false, message: "Warehouse manager is not mapped to a warehouse" });
     return null;
   }
-  return warehouseObjectId;
+  return warehouse;
 }
 
 async function generateInvoiceNo() {
@@ -60,8 +74,9 @@ router.post("/primary", requireAuth, async (req, res) => {
 
     let warehouseObjectId = toObjectId(body.warehouseId);
     if (isWarehouseManagerUser(req.user)) {
-      warehouseObjectId = ensureWarehouseManagerHasWarehouse(req, res);
-      if (!warehouseObjectId) return;
+      const scopedWarehouse = await ensureWarehouseManagerHasWarehouse(req, res);
+      if (!scopedWarehouse) return;
+      warehouseObjectId = scopedWarehouse._id;
     }
 
     const [region, zone, territory, distributor, warehouse] = await Promise.all([
@@ -129,9 +144,9 @@ router.get("/primary", requireAuth, async (req, res) => {
     }
 
     if (isWarehouseManagerUser(req.user)) {
-      const warehouseObjectId = ensureWarehouseManagerHasWarehouse(req, res);
-      if (!warehouseObjectId) return;
-      query.warehouseId = warehouseObjectId;
+      const scopedWarehouse = await ensureWarehouseManagerHasWarehouse(req, res);
+      if (!scopedWarehouse) return;
+      query.warehouseId = scopedWarehouse._id;
     } else if (req.query.warehouseId) {
       const warehouseId = toObjectId(req.query.warehouseId);
       if (warehouseId) query.warehouseId = warehouseId;
@@ -150,9 +165,9 @@ router.get("/primary/:invoiceNo", requireAuth, async (req, res) => {
     if (!primary) return res.status(404).json({ ok: false, message: "Primary invoice not found" });
 
     if (isWarehouseManagerUser(req.user)) {
-      const warehouseObjectId = ensureWarehouseManagerHasWarehouse(req, res);
-      if (!warehouseObjectId) return;
-      if (String(primary.warehouseId) !== String(warehouseObjectId)) {
+      const scopedWarehouse = await ensureWarehouseManagerHasWarehouse(req, res);
+      if (!scopedWarehouse) return;
+      if (String(primary.warehouseId) !== String(scopedWarehouse._id)) {
         return res.status(403).json({ ok: false, message: "Forbidden" });
       }
     }
@@ -170,9 +185,9 @@ router.delete("/primary/:id", requireAuth, async (req, res) => {
     if (!primary) return res.status(404).json({ ok: false, message: "Primary payment not found" });
 
     if (isWarehouseManagerUser(req.user)) {
-      const warehouseObjectId = ensureWarehouseManagerHasWarehouse(req, res);
-      if (!warehouseObjectId) return;
-      if (String(primary.warehouseId) !== String(warehouseObjectId)) {
+      const scopedWarehouse = await ensureWarehouseManagerHasWarehouse(req, res);
+      if (!scopedWarehouse) return;
+      if (String(primary.warehouseId) !== String(scopedWarehouse._id)) {
         return res.status(403).json({ ok: false, message: "Forbidden" });
       }
     }
@@ -200,8 +215,9 @@ router.post("/secondary", requireAuth, async (req, res) => {
 
     let scopedWarehouseObjectId = null;
     if (isWarehouseManagerUser(req.user)) {
-      scopedWarehouseObjectId = ensureWarehouseManagerHasWarehouse(req, res);
-      if (!scopedWarehouseObjectId) return;
+      const scopedWarehouse = await ensureWarehouseManagerHasWarehouse(req, res);
+      if (!scopedWarehouse) return;
+      scopedWarehouseObjectId = scopedWarehouse._id;
     }
 
     let createdSecondary = null;
@@ -256,9 +272,9 @@ router.get("/secondary", requireAuth, async (req, res) => {
   try {
     const query = {};
     if (isWarehouseManagerUser(req.user)) {
-      const warehouseObjectId = ensureWarehouseManagerHasWarehouse(req, res);
-      if (!warehouseObjectId) return;
-      query.warehouseId = warehouseObjectId;
+      const scopedWarehouse = await ensureWarehouseManagerHasWarehouse(req, res);
+      if (!scopedWarehouse) return;
+      query.warehouseId = scopedWarehouse._id;
     }
 
     const rows = await SecondaryPayment.find(query).sort({ createdAt: -1 }).lean();
@@ -271,7 +287,9 @@ router.get("/secondary", requireAuth, async (req, res) => {
 router.delete("/secondary/:id", requireAuth, async (req, res) => {
   const session = await mongoose.startSession();
   try {
-    const scopedWarehouseObjectId = isWarehouseManagerUser(req.user) ? ensureWarehouseManagerHasWarehouse(req, res) : null;
+    const scopedWarehouseObjectId = isWarehouseManagerUser(req.user)
+      ? (await ensureWarehouseManagerHasWarehouse(req, res))?._id
+      : null;
     if (isWarehouseManagerUser(req.user) && !scopedWarehouseObjectId) return;
 
     await session.withTransaction(async () => {
