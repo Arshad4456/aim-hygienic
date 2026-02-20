@@ -304,7 +304,7 @@ export default function OrderManagementModulePage() {
   const grandTotal = useMemo(() => totalAmount - extraDiscAmt + advTaxAmt + whTaxAmt + toNum(form.expense), [totalAmount, extraDiscAmt, advTaxAmt, whTaxAmt, form.expense]);
 
   async function loadData() {
-    const [oRes, txRes, wRes, pRes, rRes, zRes, uRes, fRes] = await Promise.all([
+    const settled = await Promise.allSettled([
       apiFetch("/orders"),
       apiFetch("/inventory/transactions"),
       apiFetch("/warehouses"),
@@ -314,19 +314,45 @@ export default function OrderManagementModulePage() {
       apiFetch("/users"),
       apiFetch("/fields?limit=500"),
     ]);
-    setOrders(oRes.orders || []);
-    setTransactions(txRes.transactions || []);
-    setWarehouses(wRes.warehouses || []);
-    setProducts(pRes.products || []);
-    setRegions(rRes.regions || []);
-    setZones(zRes.zones || []);
-    setUsers(uRes.users || []);
-    setFields(fRes.fields || []);
+
+    const [ordersRes, txRes, wRes, pRes, regRes, zRes, uRes, fRes] = settled;
+
+    if (ordersRes.status === "fulfilled") {
+      setOrders(Array.isArray(ordersRes.value?.orders) ? ordersRes.value.orders : []);
+    } else {
+      setOrders([]);
+    }
+
+    if (txRes.status === "fulfilled") {
+      setTransactions(Array.isArray(txRes.value?.transactions) ? txRes.value.transactions : []);
+    } else {
+      setTransactions([]);
+    }
+
+    setWarehouses(wRes.status === "fulfilled" ? (wRes.value?.warehouses || []) : []);
+    setProducts(pRes.status === "fulfilled" ? (pRes.value?.products || []) : []);
+    setRegions(regRes.status === "fulfilled" ? (regRes.value?.regions || []) : []);
+    setZones(zRes.status === "fulfilled" ? (zRes.value?.zones || []) : []);
+    setUsers(uRes.status === "fulfilled" ? (uRes.value?.users || []) : []);
+    setFields(fRes.status === "fulfilled" ? (fRes.value?.fields || []) : []);
+
+    if (activeMode) return;
+
+    const availableModes = Object.keys(modeConfig).filter((modeKey) => {
+      if (modeKey === "secondary") return (ordersRes.status === "fulfilled" ? (ordersRes.value?.orders || []) : []).some((o) => o.saleType === "secondary");
+      if (modeKey === "returnStock") {
+        return (txRes.status === "fulfilled" ? (txRes.value?.transactions || []) : []).some((t) => t.transactionType === "RETURN_STOCK")
+          || (ordersRes.status === "fulfilled" ? (ordersRes.value?.orders || []) : []).some((o) => o.saleType === "returnStock");
+      }
+      return true;
+    });
+    setActiveMode(availableModes[0] || "primary");
   }
+
 
   useEffect(() => {
     loadData().catch((e) => notify("error", e.message || "Failed to load order module"));
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!activeMode) return;
