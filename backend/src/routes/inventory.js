@@ -21,6 +21,21 @@ function isAdminRole(role) {
   return String(role || "").trim().toLowerCase() === "admin";
 }
 
+function isWarehouseManagerRole(role) {
+  return String(role || "").trim().toLowerCase() === "warehouse manager";
+}
+
+function getScopedWarehouseId(user) {
+  return toTrimmedString(user?.warehouse_id || user?.warehouseId || "");
+}
+
+function applyWarehouseScope(query, req) {
+  if (!isWarehouseManagerRole(req.user?.role)) return query;
+  const warehouseId = getScopedWarehouseId(req.user);
+  query.warehouseId = warehouseId || "__no_warehouse__";
+  return query;
+}
+
 function buildTransactionCode() {
   const now = new Date();
   const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
@@ -146,7 +161,9 @@ router.post("/transactions", requireAuth, async (req, res) => {
   try {
     const body = req.body || {};
     const transactionType = toTrimmedString(body.transactionType);
-    const scopeWarehouseId = toTrimmedString(body.warehouseId);
+    const scopeWarehouseId = isWarehouseManagerRole(req.user?.role)
+      ? getScopedWarehouseId(req.user)
+      : toTrimmedString(body.warehouseId);
     const scopeWarehouseName = toTrimmedString(body.warehouseName);
 
     const incomingItems = Array.isArray(body.items) ? body.items : [];
@@ -311,6 +328,7 @@ router.get("/transactions", requireAuth, async (req, res) => {
     const query = {};
     if (req.query.transactionType) query.transactionType = toTrimmedString(req.query.transactionType);
     if (req.query.warehouseId) query.warehouseId = toTrimmedString(req.query.warehouseId);
+    applyWarehouseScope(query, req);
     if (req.query.distributorId) query.distributorId = toTrimmedString(req.query.distributorId);
     if (req.query.requestStatus) query.requestStatus = toTrimmedString(req.query.requestStatus).toUpperCase();
     if (req.query.requestSourceRole) query.requestSourceRole = toTrimmedString(req.query.requestSourceRole);
@@ -336,6 +354,13 @@ router.put("/transactions/:id", requireAuth, requireRole("admin", "warehouse man
   try {
     const transaction = await WarehouseTransaction.findById(req.params.id);
     if (!transaction) return res.status(404).json({ ok: false, message: "Transaction not found" });
+
+    if (isWarehouseManagerRole(req.user?.role)) {
+      const scopedWarehouseId = getScopedWarehouseId(req.user);
+      if (!scopedWarehouseId || scopedWarehouseId !== toTrimmedString(transaction.warehouseId)) {
+        return res.status(403).json({ ok: false, message: "Forbidden" });
+      }
+    }
 
     if (String(transaction.requestStatus || "").toUpperCase() !== "PENDING" || transaction.requestApplied) {
       return res.status(400).json({ ok: false, message: "Only pending requests can be updated" });
@@ -425,6 +450,13 @@ router.put("/transactions/:id/mark-read", requireAuth, requireRole("admin", "war
       { new: true }
     );
     if (!transaction) return res.status(404).json({ ok: false, message: "Transaction not found" });
+
+    if (isWarehouseManagerRole(req.user?.role)) {
+      const scopedWarehouseId = getScopedWarehouseId(req.user);
+      if (!scopedWarehouseId || scopedWarehouseId !== toTrimmedString(transaction.warehouseId)) {
+        return res.status(403).json({ ok: false, message: "Forbidden" });
+      }
+    }
     return res.json({ ok: true, transaction });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to mark request as read" });
@@ -440,6 +472,13 @@ router.put("/transactions/:id/request-status", requireAuth, requireRole("admin",
 
     const transaction = await WarehouseTransaction.findById(req.params.id);
     if (!transaction) return res.status(404).json({ ok: false, message: "Transaction not found" });
+
+    if (isWarehouseManagerRole(req.user?.role)) {
+      const scopedWarehouseId = getScopedWarehouseId(req.user);
+      if (!scopedWarehouseId || scopedWarehouseId !== toTrimmedString(transaction.warehouseId)) {
+        return res.status(403).json({ ok: false, message: "Forbidden" });
+      }
+    }
 
     transaction.requestStatus = status;
     transaction.requestReadAt = transaction.requestReadAt || new Date();
@@ -485,6 +524,13 @@ router.put("/transactions/:id/return-payment", requireAuth, async (req, res) => 
       { new: true }
     );
     if (!transaction) return res.status(404).json({ ok: false, message: "Transaction not found" });
+
+    if (isWarehouseManagerRole(req.user?.role)) {
+      const scopedWarehouseId = getScopedWarehouseId(req.user);
+      if (!scopedWarehouseId || scopedWarehouseId !== toTrimmedString(transaction.warehouseId)) {
+        return res.status(403).json({ ok: false, message: "Forbidden" });
+      }
+    }
     return res.json({ ok: true, transaction });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to update payment status" });
@@ -493,7 +539,11 @@ router.put("/transactions/:id/return-payment", requireAuth, async (req, res) => 
 
 router.delete("/transactions/:id", requireAuth, async (req, res) => {
   try {
-    const deleted = await WarehouseTransaction.findByIdAndDelete(req.params.id);
+    const deleteFilter = { _id: req.params.id };
+    if (isWarehouseManagerRole(req.user?.role)) {
+      deleteFilter.warehouseId = getScopedWarehouseId(req.user) || "__no_warehouse__";
+    }
+    const deleted = await WarehouseTransaction.findOneAndDelete(deleteFilter);
     if (!deleted) return res.status(404).json({ ok: false, message: "Transaction not found" });
 
     await InventoryMovement.deleteMany({ referenceId: deleted.transactionCode });
@@ -521,6 +571,7 @@ router.get("/near-expiry-products", requireAuth, async (req, res) => {
     const rows = await InventoryMovement.aggregate([
       {
         $match: {
+          ...(isWarehouseManagerRole(req.user?.role) ? { warehouseId: getScopedWarehouseId(req.user) || "__no_warehouse__" } : {}),
           batchExpiryDate: { $gte: now, $lte: threeMonthsLater },
         },
       },
@@ -564,7 +615,7 @@ router.get("/analytics", requireAuth, async (req, res) => {
 
     async function totalsSince(date) {
       const rows = await WarehouseTransaction.aggregate([
-        { $match: { transactionAt: { $gte: date } } },
+        { $match: { ...(isWarehouseManagerRole(req.user?.role) ? { warehouseId: getScopedWarehouseId(req.user) || "__no_warehouse__" } : {}), transactionAt: { $gte: date } } },
         {
           $group: {
             _id: "$transactionType",
@@ -595,6 +646,7 @@ router.get("/analytics", requireAuth, async (req, res) => {
       { $unwind: "$items" },
       {
         $match: {
+          ...(isWarehouseManagerRole(req.user?.role) ? { warehouseId: getScopedWarehouseId(req.user) || "__no_warehouse__" } : {}),
           "items.expiryDate": {
             $lte: new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000),
             $gte: now,
@@ -616,6 +668,7 @@ router.get("/analytics", requireAuth, async (req, res) => {
     ]);
 
     const returnPayments = await WarehouseTransaction.find({
+      ...(isWarehouseManagerRole(req.user?.role) ? { warehouseId: getScopedWarehouseId(req.user) || "__no_warehouse__" } : {}),
       transactionType: "RETURN_STOCK",
       returnPaymentStatus: { $in: ["PENDING", "OVERDUE"] },
     })
@@ -643,7 +696,7 @@ router.post("/movements", requireAuth, async (req, res) => {
     const doc = await InventoryMovement.create({
       productId: String(body.productId || "").trim(),
       productName: String(body.productName || "").trim(),
-      warehouseId: String(body.warehouseId || "").trim(),
+      warehouseId: isWarehouseManagerRole(req.user?.role) ? getScopedWarehouseId(req.user) : String(body.warehouseId || "").trim(),
       warehouseName: String(body.warehouseName || "").trim(),
       regionId: String(body.regionId || "").trim(),
       regionName: String(body.regionName || "").trim(),
@@ -668,6 +721,7 @@ router.get("/movements", requireAuth, async (req, res) => {
     const query = {};
     if (req.query.productId) query.productId = String(req.query.productId);
     if (req.query.warehouseId) query.warehouseId = String(req.query.warehouseId);
+    applyWarehouseScope(query, req);
     if (req.query.regionId) query.regionId = String(req.query.regionId);
     if (req.query.zoneId) query.zoneId = String(req.query.zoneId);
     if (req.query.areaId) query.areaId = String(req.query.areaId);
@@ -687,7 +741,7 @@ router.put("/movements/:id", requireAuth, async (req, res) => {
       {
         productId: String(body.productId || "").trim(),
         productName: String(body.productName || "").trim(),
-        warehouseId: String(body.warehouseId || "").trim(),
+        warehouseId: isWarehouseManagerRole(req.user?.role) ? getScopedWarehouseId(req.user) : String(body.warehouseId || "").trim(),
         warehouseName: String(body.warehouseName || "").trim(),
         regionId: String(body.regionId || "").trim(),
         regionName: String(body.regionName || "").trim(),
@@ -724,7 +778,7 @@ router.post("/transfers", requireAuth, async (req, res) => {
     const doc = await StockTransfer.create({
       productId: String(body.productId || "").trim(),
       productName: String(body.productName || "").trim(),
-      fromWarehouseId: String(body.fromWarehouseId || "").trim(),
+      fromWarehouseId: isWarehouseManagerRole(req.user?.role) ? getScopedWarehouseId(req.user) : String(body.fromWarehouseId || "").trim(),
       fromWarehouseName: String(body.fromWarehouseName || "").trim(),
       toWarehouseId: String(body.toWarehouseId || "").trim(),
       toWarehouseName: String(body.toWarehouseName || "").trim(),
@@ -771,7 +825,12 @@ router.post("/transfers", requireAuth, async (req, res) => {
 
 router.get("/transfers", requireAuth, async (req, res) => {
   try {
-    const items = await StockTransfer.find().sort({ createdAt: -1 }).lean();
+    const transferQuery = {};
+    if (isWarehouseManagerRole(req.user?.role)) {
+      const warehouseId = getScopedWarehouseId(req.user);
+      transferQuery.$or = [{ fromWarehouseId: warehouseId || "__no_warehouse__" }, { toWarehouseId: warehouseId || "__no_warehouse__" }];
+    }
+    const items = await StockTransfer.find(transferQuery).sort({ createdAt: -1 }).lean();
     return res.json({ ok: true, transfers: items });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to load transfers" });
@@ -781,7 +840,12 @@ router.get("/transfers", requireAuth, async (req, res) => {
 router.put("/transfers/:id", requireAuth, async (req, res) => {
   try {
     const body = req.body || {};
-    const existing = await StockTransfer.findById(req.params.id);
+    const transferScope = { _id: req.params.id };
+    if (isWarehouseManagerRole(req.user?.role)) {
+      const warehouseId = getScopedWarehouseId(req.user) || "__no_warehouse__";
+      transferScope.$or = [{ fromWarehouseId: warehouseId }, { toWarehouseId: warehouseId }];
+    }
+    const existing = await StockTransfer.findOne(transferScope);
     if (!existing) return res.status(404).json({ ok: false, message: "Not found" });
 
     const updatePayload = {
@@ -817,7 +881,7 @@ router.put("/transfers/:id", requireAuth, async (req, res) => {
       updatePayload.transferAppliedAt = new Date();
     }
 
-    const updated = await StockTransfer.findByIdAndUpdate(req.params.id, updatePayload, { new: true });
+    const updated = await StockTransfer.findByIdAndUpdate(existing._id, updatePayload, { new: true });
     if (updatePayload.status) {
       updated.statusHistory = [
         ...(updated.statusHistory || []),
@@ -833,7 +897,12 @@ router.put("/transfers/:id", requireAuth, async (req, res) => {
 
 router.delete("/transfers/:id", requireAuth, async (req, res) => {
   try {
-    const deleted = await StockTransfer.findByIdAndDelete(req.params.id);
+    const deleteScope = { _id: req.params.id };
+    if (isWarehouseManagerRole(req.user?.role)) {
+      const warehouseId = getScopedWarehouseId(req.user) || "__no_warehouse__";
+      deleteScope.$or = [{ fromWarehouseId: warehouseId }, { toWarehouseId: warehouseId }];
+    }
+    const deleted = await StockTransfer.findOneAndDelete(deleteScope);
     if (!deleted) return res.status(404).json({ ok: false, message: "Not found" });
     // Intentionally do not rollback applied transfer inventory movements.
     return res.json({ ok: true, deletedId: req.params.id });
@@ -846,6 +915,7 @@ router.get("/summary", requireAuth, async (req, res) => {
   try {
     const match = {};
     if (req.query.warehouseId) match.warehouseId = String(req.query.warehouseId);
+    applyWarehouseScope(match, req);
     const items = await InventoryMovement.aggregate([
       { $match: match },
       {
@@ -868,7 +938,10 @@ router.get("/summary", requireAuth, async (req, res) => {
 router.get("/summary-detail", requireAuth, async (req, res) => {
   try {
     const productId = toTrimmedString(req.query.productId);
-    const warehouseId = toTrimmedString(req.query.warehouseId);
+    let warehouseId = toTrimmedString(req.query.warehouseId);
+    if (isWarehouseManagerRole(req.user?.role)) {
+      warehouseId = getScopedWarehouseId(req.user);
+    }
     if (!productId || !warehouseId) {
       return res.status(400).json({ ok: false, message: "productId and warehouseId are required" });
     }
@@ -913,7 +986,10 @@ router.get("/summary-detail", requireAuth, async (req, res) => {
 
 router.get("/low-stock", requireAuth, async (req, res) => {
   try {
+    const lowStockMatch = {};
+    applyWarehouseScope(lowStockMatch, req);
     const summary = await InventoryMovement.aggregate([
+      { $match: lowStockMatch },
       {
         $group: {
           _id: { productId: "$productId", warehouseId: "$warehouseId" },

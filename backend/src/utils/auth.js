@@ -24,6 +24,9 @@ function signToken(user) {
     uid: user._id.toString(),
     role: user.role,
     username: user.username,
+    warehouse_id: String(user.warehouseId || "").trim(),
+    warehouseId: String(user.warehouseId || "").trim(),
+    userId: String(user.userId || "").trim(),
     exp: now + 7 * 24 * 60 * 60,
   };
 

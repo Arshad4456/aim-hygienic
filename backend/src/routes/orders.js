@@ -6,7 +6,15 @@ const User = require("../models/User");
 const router = express.Router();
 
 const ALLOWED_STATUSES = ["pending", "approved", "rejected", "dispatched", "delivered"];
-const ADMIN_ROLES = new Set(["admin", "Warehouse Manager"]);
+const ADMIN_ROLES = new Set(["admin"]);
+
+function isWarehouseManagerRole(role) {
+  return String(role || "").trim().toLowerCase() === "warehouse manager";
+}
+
+function getScopedWarehouseId(user) {
+  return String(user?.warehouse_id || user?.warehouseId || "").trim();
+}
 
 function normalizeItems(items = []) {
   return items
@@ -39,6 +47,10 @@ function roleMatchQuery(user) {
 
   if (!role) return { _id: null };
   if (ADMIN_ROLES.has(role)) return {};
+  if (isWarehouseManagerRole(role)) {
+    const warehouseId = getScopedWarehouseId(user);
+    return warehouseId ? { toWarehouseId: warehouseId } : { _id: null };
+  }
 
   const idsForRole = Array.from(new Set([userId, roleMappedIds[role]].filter(Boolean)));
 
