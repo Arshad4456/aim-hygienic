@@ -28,8 +28,8 @@ export default function DistributorSecondaryOrdersModule() {
   const loadOrders = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiFetch("/orders?limit=500");
-      setOrders((res?.orders || []).filter((row) => row.saleType === "secondary"));
+      const res = await apiFetch("/orders/secondary/distributor?limit=500");
+      setOrders(res?.orders || []);
     } catch (error) {
       notify("error", error?.message || "Failed to load secondary orders");
     } finally {

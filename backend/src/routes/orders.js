@@ -97,6 +97,36 @@ router.get("/my", requireAuth, async (req, res) => {
   }
 });
 
+router.get("/secondary/distributor", requireAuth, async (req, res) => {
+  try {
+    const role = String(req.user?.role || "").trim();
+    if (role !== "Distributor") return res.status(403).json({ ok: false, message: "Forbidden" });
+
+    const me = await User.findById(req.user?.uid).lean();
+    if (!me) return res.status(404).json({ ok: false, message: "User not found" });
+
+    const limit = Math.min(Number(req.query.limit) || 200, 500);
+    const territoryName = String(me.territoryName || me.areaName || "").trim();
+    const distributorIds = Array.from(new Set([String(me.userId || "").trim(), String(me.distributorId || "").trim()].filter(Boolean)));
+    const warehouseId = String(me.warehouseId || "").trim();
+    const warehouseNames = Array.from(new Set([String(me.businessName || "").trim(), String(me.fullName || "").trim(), String(me.warehouseName || "").trim()].filter(Boolean)));
+
+    const query = { saleType: "secondary" };
+    if (territoryName) query.territoryName = territoryName;
+
+    const ownershipFilters = [];
+    if (distributorIds.length) ownershipFilters.push({ distributorId: { $in: distributorIds } });
+    if (warehouseId) ownershipFilters.push({ toWarehouseId: warehouseId });
+    if (warehouseNames.length) ownershipFilters.push({ toWarehouseName: { $in: warehouseNames } });
+    if (ownershipFilters.length) query.$or = ownershipFilters;
+
+    const orders = await SalesOrder.find(query).sort({ createdAt: -1 }).limit(limit).lean();
+    return res.json({ ok: true, orders });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to load distributor secondary orders" });
+  }
+});
+
 router.get("/approvals", requireAuth, async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 50, 200);
