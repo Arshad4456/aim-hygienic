@@ -96,5 +96,10 @@ export const userDashboardSearchItems = {
   orderBooker: [{ title: "Dashboard", href: "/dashboards/orderBooker" }, { title: "Secondary Sale Requests", href: "/dashboards/orderBooker/orders" }],
   salesman: [{ title: "Dashboard", href: "/dashboards/salesman" }, { title: "Proof of Delivery", href: "/dashboards/salesman/orders" }],
   deliveryBoy: [{ title: "Dashboard", href: "/dashboards/deliveryBoy" }, { title: "Proof of Delivery", href: "/dashboards/deliveryBoy/orders" }],
-  customer: [{ title: "Dashboard", href: "/dashboards/customer" }, { title: "Order Requests", href: "/dashboards/customer/orders" }],
+  customer: [
+    { title: "Dashboard", href: "/dashboards/customer" },
+    { title: "Order Requests", href: "/dashboards/customer/orders" },
+    { title: "Account Settings", href: "/dashboards/customer/settings" },
+    { title: "Change Password", href: "/dashboards/customer/settings/change-password" },
+  ],
 };
