@@ -76,6 +76,42 @@ async function ensureWarehouseManagerHasWarehouse(req, res) {
   return warehouse;
 }
 
+
+router.get("/masters", requireAuth, async (req, res) => {
+  try {
+    const scopedWarehouse = isWarehouseManagerUser(req.user) ? await ensureWarehouseManagerHasWarehouse(req, res) : null;
+    if (isWarehouseManagerUser(req.user) && !scopedWarehouse) return;
+
+    const warehouseQuery = scopedWarehouse ? { _id: scopedWarehouse._id } : {};
+
+    const [regions, zones, areas, warehouses] = await Promise.all([
+      Region.find({}).lean(),
+      Zone.find({}).lean(),
+      Area.find({}).lean(),
+      Warehouse.find(warehouseQuery).lean(),
+    ]);
+
+    let distributorQuery = { role: "Distributor" };
+    if (scopedWarehouse) {
+      const scopedRefs = [String(scopedWarehouse._id || "").trim(), String(scopedWarehouse.warehouseId || "").trim(), String(scopedWarehouse.name || "").trim()].filter(Boolean);
+      distributorQuery = {
+        role: "Distributor",
+        $or: [{ warehouseId: { $in: scopedRefs } }, { warehouseName: { $in: scopedRefs } }],
+      };
+    }
+
+    let distributors = await User.find(distributorQuery).select("fullName role territoryId warehouseId warehouseName").sort({ fullName: 1 }).lean();
+
+    if (scopedWarehouse && distributors.length === 0) {
+      distributors = await User.find({ role: "Distributor" }).select("fullName role territoryId warehouseId warehouseName").sort({ fullName: 1 }).lean();
+    }
+
+    return res.json({ ok: true, regions, zones, areas, warehouses, users: distributors });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: "Failed to load payment master data" });
+  }
+});
+
 async function generateInvoiceNo() {
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const invoiceNo = `PP-${Date.now().toString().slice(-8)}-${Math.floor(Math.random() * 1000)

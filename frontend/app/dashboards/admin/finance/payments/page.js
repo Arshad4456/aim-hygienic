@@ -102,24 +102,19 @@ export default function PaymentManagementPage() {
   useEffect(() => {
     async function loadMasters() {
       try {
-        const [regionData, zoneData, territoryData, warehouseData, userData] = await Promise.all([
-          apiFetch("/regions"),
-          apiFetch("/zones"),
-          apiFetch("/areas"),
-          apiFetch("/warehouses"),
-          apiFetch("/users?role=Distributor"),
-        ]);
-        setRegions(regionData.regions || []);
-        setZones(zoneData.zones || []);
-        setTerritories(territoryData.areas || []);
-        setWarehouses(warehouseData.warehouses || []);
-        setDistributors((userData.users || []).filter((row) => row.role === "Distributor"));
+        const data = await apiFetch("/payments/masters");
+        setRegions(data.regions || []);
+        setZones(data.zones || []);
+        setTerritories(data.areas || []);
+        setWarehouses(data.warehouses || []);
+        setDistributors((data.users || []).filter((row) => row.role === "Distributor"));
+        setErr("");
       } catch (error) {
         setErr(formatDashboardError(error, isWarehouseManagerView) || "Failed to load master data");
       }
     }
     loadMasters();
-  }, []);
+  }, [isWarehouseManagerView]);
 
 
   async function loadLedgers() {
