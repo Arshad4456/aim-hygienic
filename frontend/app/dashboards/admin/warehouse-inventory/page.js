@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import AdminShell from "../components/AdminShell";
 import { apiFetch } from "../../../lib/api";
+import { getAuthItem } from "../../../lib/clientAuth";
 
 const cards = [
   { key: "PURCHASING_STOCK", title: "1 Purchasing Stock" },
@@ -147,6 +149,8 @@ function mapRequestStatusForApi(status) {
 }
 
 export default function WarehouseInventoryModulePage() {
+  const pathname = usePathname();
+  const isWarehouseManagerView = pathname?.startsWith("/warehouse-manager");
   const [selectedCard, setSelectedCard] = useState(cards[0].key);
   const [saleMode, setSaleMode] = useState("brand");
   const [saleLedgerFilter, setSaleLedgerFilter] = useState("all");
@@ -178,6 +182,7 @@ export default function WarehouseInventoryModulePage() {
   const [previewRequest, setPreviewRequest] = useState(null);
   const [transferSaving, setTransferSaving] = useState(false);
   const submitLockRef = useRef(false);
+  const [userWarehouseId, setUserWarehouseId] = useState("");
   const [form, setForm] = useState({
     warehouseId: "",
     fromEntityName: "",
@@ -205,6 +210,32 @@ export default function WarehouseInventoryModulePage() {
     status: "pending",
     note: "",
   });
+
+  useEffect(() => {
+    if (!isWarehouseManagerView) return;
+    const rawUser = getAuthItem("aim_user");
+    if (!rawUser) return;
+    try {
+      const parsed = JSON.parse(rawUser);
+      setUserWarehouseId(String(parsed?.warehouseId || "").trim());
+    } catch (_error) {
+      setUserWarehouseId("");
+    }
+  }, [isWarehouseManagerView]);
+
+  const scopedWarehouses = useMemo(() => {
+    if (!isWarehouseManagerView || !userWarehouseId) return warehouses;
+    return warehouses.filter((item) => item.warehouseId === userWarehouseId);
+  }, [isWarehouseManagerView, userWarehouseId, warehouses]);
+
+  useEffect(() => {
+    if (!isWarehouseManagerView || !userWarehouseId) return;
+    if (form.warehouseId) return;
+    const matched = warehouses.find((item) => item.warehouseId === userWarehouseId);
+    if (matched?._id) {
+      setForm((prev) => ({ ...prev, warehouseId: matched._id }));
+    }
+  }, [isWarehouseManagerView, userWarehouseId, warehouses, form.warehouseId]);
 
   async function loadAll() {
     const result = await Promise.allSettled([
@@ -949,7 +980,7 @@ export default function WarehouseInventoryModulePage() {
                     label="To (Warehouse)"
                     value={form.toWarehouseId}
                     onChange={(v) => setField("toWarehouseId", v)}
-                    options={warehouses.map((w) => ({ value: w._id, label: w.name }))}
+                    options={scopedWarehouses.map((w) => ({ value: w._id, label: w.name }))}
                   />
                 </>
               ) : null}
@@ -978,7 +1009,7 @@ export default function WarehouseInventoryModulePage() {
                         label="From (Warehouse)"
                         value={form.warehouseId}
                         onChange={(v) => setField("warehouseId", v)}
-                        options={warehouses.map((w) => ({ value: w._id, label: w.name }))}
+                        options={scopedWarehouses.map((w) => ({ value: w._id, label: w.name }))}
                       />
                     </div>
 
@@ -1048,7 +1079,7 @@ export default function WarehouseInventoryModulePage() {
                   label="Warehouse"
                   value={form.warehouseId}
                   onChange={(v) => setField("warehouseId", v)}
-                  options={warehouses.map((w) => ({ value: w._id, label: w.name }))}
+                  options={scopedWarehouses.map((w) => ({ value: w._id, label: w.name }))}
                 />
               ) : null}
 
@@ -1080,7 +1111,7 @@ export default function WarehouseInventoryModulePage() {
                     label="Warehouse"
                     value={form.toWarehouseId}
                     onChange={(v) => setField("toWarehouseId", v)}
-                    options={warehouses.map((w) => ({ value: w._id, label: w.name }))}
+                    options={scopedWarehouses.map((w) => ({ value: w._id, label: w.name }))}
                   />
 
                   <Select
@@ -1243,13 +1274,13 @@ export default function WarehouseInventoryModulePage() {
                 label="From Warehouse"
                 value={transferForm.fromWarehouseId}
                 onChange={(v) => setTransferField("fromWarehouseId", v)}
-                options={warehouses.map((w) => ({ value: w._id, label: w.name }))}
+                options={scopedWarehouses.map((w) => ({ value: w._id, label: w.name }))}
               />
               <Select
                 label="To Warehouse"
                 value={transferForm.toWarehouseId}
                 onChange={(v) => setTransferField("toWarehouseId", v)}
-                options={warehouses.map((w) => ({ value: w._id, label: w.name }))}
+                options={scopedWarehouses.map((w) => ({ value: w._id, label: w.name }))}
               />
               <Select
                 label="Status"
@@ -1260,34 +1291,38 @@ export default function WarehouseInventoryModulePage() {
               <Input label="Note" value={transferForm.note} onChange={(v) => setTransferField("note", v)} />
               <div className="md:col-span-2"><button disabled={transferSaving || loading} className="rounded bg-zinc-900 text-white px-4 py-2">{transferSaving ? "Saving..." : "Create Transfer"}</button></div>
             </form>
-            <TransferTable rows={transfers} onEditStatus={editTransferStatus} onDelete={deleteTransfer} onReceipt={printTransferReceipt} />
+            <TransferTable rows={transfers} onEditStatus={editTransferStatus} onDelete={deleteTransfer} onReceipt={printTransferReceipt} canManage={!isWarehouseManagerView} />
           </section>
         ) : null}
         {selectedCard === "STOCK_SUMMARY" ? (
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
             <h3 className="text-lg font-semibold">Stock Summary</h3>
-            <div className="mt-2 max-w-sm">
-              <Select
-                label="Warehouse Filter"
-                value={summaryWarehouseFilter}
-                onChange={setSummaryWarehouseFilter}
-                options={warehouses.map((w) => ({ value: w.warehouseId, label: w.name }))}
-              />
-            </div>
+            {!isWarehouseManagerView ? (
+              <div className="mt-2 max-w-sm">
+                <Select
+                  label="Warehouse Filter"
+                  value={summaryWarehouseFilter}
+                  onChange={setSummaryWarehouseFilter}
+                  options={scopedWarehouses.map((w) => ({ value: w.warehouseId, label: w.name }))}
+                />
+              </div>
+            ) : null}
             <SummaryTable rows={filteredSummary} products={products} onUpdateMin={updateMinStock} onDetail={openSummaryDetail} />
           </section>
         ) : null}
         {selectedCard === "LOW_STOCK" ? (
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
             <h3 className="text-lg font-semibold">Low Stock Alert</h3>
-            <div className="mt-2 max-w-sm">
-              <Select
-                label="Warehouse Filter"
-                value={lowStockWarehouseFilter}
-                onChange={setLowStockWarehouseFilter}
-                options={warehouses.map((w) => ({ value: w.warehouseId, label: w.name }))}
-              />
-            </div>
+            {!isWarehouseManagerView ? (
+              <div className="mt-2 max-w-sm">
+                <Select
+                  label="Warehouse Filter"
+                  value={lowStockWarehouseFilter}
+                  onChange={setLowStockWarehouseFilter}
+                  options={scopedWarehouses.map((w) => ({ value: w.warehouseId, label: w.name }))}
+                />
+              </div>
+            ) : null}
             <LowStockTable rows={filteredLowStock} />
           </section>
         ) : null}
@@ -1296,12 +1331,14 @@ export default function WarehouseInventoryModulePage() {
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
             <h3 className="text-lg font-semibold">Inventory Ledger</h3>
             <div className="mt-2 grid md:grid-cols-3 gap-3">
-              <Select
-                label="Warehouse Filter"
-                value={ledgerWarehouseFilter}
-                onChange={setLedgerWarehouseFilter}
-                options={warehouses.map((w) => ({ value: w.warehouseId, label: w.name }))}
-              />
+              {!isWarehouseManagerView ? (
+                <Select
+                  label="Warehouse Filter"
+                  value={ledgerWarehouseFilter}
+                  onChange={setLedgerWarehouseFilter}
+                  options={scopedWarehouses.map((w) => ({ value: w.warehouseId, label: w.name }))}
+                />
+              ) : null}
               <Select
                 label="Movement Type"
                 value={ledgerMovementTypeFilter}
@@ -1373,7 +1410,7 @@ export default function WarehouseInventoryModulePage() {
                 ))}
               </div>
             ) : null}
-            <LedgerTable type={selectedCard} rows={cardTx} onDelete={deleteRecord} onInvoice={printInvoice} />
+            <LedgerTable type={selectedCard} rows={cardTx} onDelete={deleteRecord} onInvoice={printInvoice} canDelete={!isWarehouseManagerView} />
           </section>
         ) : null}
         <RequestPreviewModal row={previewRequest} onClose={() => setPreviewRequest(null)} />
@@ -1390,7 +1427,7 @@ export default function WarehouseInventoryModulePage() {
   );
 }
 
-function LedgerTable({ type, rows, onDelete, onInvoice }) {
+function LedgerTable({ type, rows, onDelete, onInvoice, canDelete = true }) {
   const purchase = type === "PURCHASING_STOCK";
   const sale = type === "SALE_STOCK";
   const returnStock = type === "RETURN_STOCK";
@@ -1419,7 +1456,7 @@ function LedgerTable({ type, rows, onDelete, onInvoice }) {
               {sale ? <><td className="p-2">{r.fromEntityName || "-"}</td><td className="p-2">{r.distributorName || "-"}</td><td className="p-2">{r.brandName || r.toEntityName || "-"}</td></> : null}
               {returnStock ? <><td className="p-2">{r.fromEntityName || "-"}</td><td className="p-2">{String(r.fromEntityType || "").toUpperCase() === "DISTRIBUTOR" ? (r.distributorName || r.fromEntityName || "-") : "-"}</td><td className="p-2">{String(r.fromEntityType || "").toUpperCase() === "BRAND" ? (r.brandName || r.fromEntityName || "-") : "-"}</td></> : null}
               <td className="p-2">{new Date(r.transactionAt).toLocaleString()}</td>
-              <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" onClick={() => onInvoice(r)}>Invoice/Receipt</button><button className="rounded border border-red-300 text-red-700 px-2 py-1" onClick={() => onDelete(r._id)}>Delete</button></div></td>
+              <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" onClick={() => onInvoice(r)}>Invoice/Receipt</button>{canDelete ? <button className="rounded border border-red-300 text-red-700 px-2 py-1" onClick={() => onDelete(r._id)}>Delete</button> : null}</div></td>
             </tr>
             );
           })}
@@ -1579,8 +1616,8 @@ function PreviewField({ label, value }) {
   );
 }
 
-function TransferTable({ rows, onEditStatus, onDelete, onReceipt }) {
-  return <div className="overflow-x-auto mt-2"><table className="min-w-full text-sm"><thead><tr className="border-b"><th className="p-2 text-left">Product</th><th className="p-2 text-left">From</th><th className="p-2 text-left">To</th><th className="p-2 text-left">Qty</th><th className="p-2 text-left">Date and Time</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Action</th></tr></thead><tbody>{rows.map((r)=><tr key={r._id} className="border-b"><td className="p-2">{r.productName}</td><td className="p-2">{r.fromWarehouseName}</td><td className="p-2">{r.toWarehouseName}</td><td className="p-2">{r.quantity}</td><td className="p-2">{r.createdAt ? new Date(r.createdAt).toLocaleString() : "-"}</td><td className="p-2">{r.status}</td><td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" onClick={()=>onReceipt(r)}>Receipt</button><button className="rounded border px-2 py-1" onClick={()=>onEditStatus(r)}>Edit</button><button className="rounded border border-red-300 text-red-700 px-2 py-1" onClick={()=>onDelete(r._id)}>Delete</button></div></td></tr>)}</tbody></table></div>;
+function TransferTable({ rows, onEditStatus, onDelete, onReceipt, canManage = true }) {
+  return <div className="overflow-x-auto mt-2"><table className="min-w-full text-sm"><thead><tr className="border-b"><th className="p-2 text-left">Product</th><th className="p-2 text-left">From</th><th className="p-2 text-left">To</th><th className="p-2 text-left">Qty</th><th className="p-2 text-left">Date and Time</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Action</th></tr></thead><tbody>{rows.map((r)=><tr key={r._id} className="border-b"><td className="p-2">{r.productName}</td><td className="p-2">{r.fromWarehouseName}</td><td className="p-2">{r.toWarehouseName}</td><td className="p-2">{r.quantity}</td><td className="p-2">{r.createdAt ? new Date(r.createdAt).toLocaleString() : "-"}</td><td className="p-2">{r.status}</td><td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" onClick={()=>onReceipt(r)}>Receipt</button>{canManage ? <button className="rounded border px-2 py-1" onClick={()=>onEditStatus(r)}>Edit</button> : null}{canManage ? <button className="rounded border border-red-300 text-red-700 px-2 py-1" onClick={()=>onDelete(r._id)}>Delete</button> : null}</div></td></tr>)}</tbody></table></div>;
 }
 
 function InventoryMovementTable({ rows }) {

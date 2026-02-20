@@ -100,6 +100,7 @@ router.post("/login", async (req, res) => {
         companyName: user.companyName,
         mobile: user.mobile || user.mobileNumber,
         email: user.email,
+        warehouseId: user.warehouseId || "",
       },
     });
   } catch (error) {

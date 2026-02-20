@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
 import AdminShell from "../components/AdminShell";
 import { apiFetch } from "../../../lib/api";
+import { getAuthItem } from "../../../lib/clientAuth";
 
 const emptyItem = {
   productId: "",
@@ -165,6 +167,8 @@ function decisionStampStyle(status) {
 }
 
 export default function OrderManagementModulePage() {
+  const pathname = usePathname();
+  const isWarehouseManagerView = pathname?.startsWith("/warehouse-manager");
   const [activeMode, setActiveMode] = useState("");
   const [orders, setOrders] = useState([]);
   const [transactions, setTransactions] = useState([]);
@@ -178,6 +182,7 @@ export default function OrderManagementModulePage() {
   const [toastState, setToastState] = useState(null);
   const [previewRequest, setPreviewRequest] = useState(null);
   const [returnStockMode, setReturnStockMode] = useState("brand");
+  const [userWarehouseId, setUserWarehouseId] = useState("");
   const [form, setForm] = useState({
     sourceType: "brand",
     primarySaleMode: "brand",
@@ -200,6 +205,30 @@ export default function OrderManagementModulePage() {
     expense: "0",
     items: [{ ...emptyItem, expiryDate: "" }],
   });
+
+  useEffect(() => {
+    if (!isWarehouseManagerView) return;
+    const rawUser = getAuthItem("aim_user");
+    if (!rawUser) return;
+    try {
+      const parsed = JSON.parse(rawUser);
+      setUserWarehouseId(String(parsed?.warehouseId || "").trim());
+    } catch (_error) {
+      setUserWarehouseId("");
+    }
+  }, [isWarehouseManagerView]);
+
+  const scopedWarehouses = useMemo(() => {
+    if (!isWarehouseManagerView || !userWarehouseId) return warehouses;
+    return warehouses.filter((item) => item.warehouseId === userWarehouseId);
+  }, [isWarehouseManagerView, userWarehouseId, warehouses]);
+
+  useEffect(() => {
+    if (!isWarehouseManagerView || !userWarehouseId) return;
+    if (form.toWarehouseId) return;
+    const matched = warehouses.find((item) => item.warehouseId === userWarehouseId);
+    if (matched?._id) setForm((prev) => ({ ...prev, toWarehouseId: matched._id }));
+  }, [isWarehouseManagerView, userWarehouseId, warehouses, form.toWarehouseId]);
 
   const selectedRegion = useMemo(() => regions.find((item) => item._id === form.regionId), [regions, form.regionId]);
   const selectedZone = useMemo(() => zones.find((item) => item._id === form.zoneId), [zones, form.zoneId]);
@@ -835,7 +864,7 @@ export default function OrderManagementModulePage() {
 
                   <div className="text-sm font-semibold">From</div>
                   <div className="text-sm font-semibold">To</div>
-                  <Select label="Warehouse" value={form.toWarehouseId} onChange={(v) => setField("toWarehouseId", v)} options={warehouses.map((w) => ({ value: w._id, label: w.name }))} />
+                  <Select label="Warehouse" value={form.toWarehouseId} onChange={(v) => setField("toWarehouseId", v)} options={scopedWarehouses.map((w) => ({ value: w._id, label: w.name }))} />
                   <div className="grid grid-cols-1 gap-3">
                     <Select label="Region" value={form.regionId} onChange={(v) => setField("regionId", v)} options={regions.map((r) => ({ value: r._id, label: r.name }))} />
                     <Select label="Zone" value={form.zoneId} onChange={(v) => setField("zoneId", v)} options={zonesForRegion.map((z) => ({ value: z._id, label: z.name }))} />
@@ -883,7 +912,7 @@ export default function OrderManagementModulePage() {
                   <div className="text-sm font-semibold">To</div>
 
                   <Select label="Region" value={form.regionId} onChange={(v) => setField("regionId", v)} options={regions.map((r) => ({ value: r._id, label: r.name }))} />
-                  <Select label="Warehouse" value={form.toWarehouseId} onChange={(v) => setField("toWarehouseId", v)} options={warehouses.map((w) => ({ value: w._id, label: w.name }))} />
+                  <Select label="Warehouse" value={form.toWarehouseId} onChange={(v) => setField("toWarehouseId", v)} options={scopedWarehouses.map((w) => ({ value: w._id, label: w.name }))} />
 
                   <Select label="Zone" value={form.zoneId} onChange={(v) => setField("zoneId", v)} options={zonesForRegion.map((z) => ({ value: z._id, label: z.name }))} />
                   <div />
@@ -932,7 +961,7 @@ export default function OrderManagementModulePage() {
                     options={modeConfig[activeMode].sourceOptions || []}
                   />
                   <Input label="From" value={form.customerName} onChange={(v) => setField("customerName", v)} placeholder="Enter source name" />
-                  <Select label="To Warehouse" value={form.toWarehouseId} onChange={(v) => setField("toWarehouseId", v)} options={warehouses.map((w) => ({ value: w._id, label: w.name }))} />
+                  <Select label="To Warehouse" value={form.toWarehouseId} onChange={(v) => setField("toWarehouseId", v)} options={scopedWarehouses.map((w) => ({ value: w._id, label: w.name }))} />
                   <Input label="Address" value={form.address} onChange={(v) => setField("address", v)} />
                   <Select label="Region" value={form.regionId} onChange={(v) => setField("regionId", v)} options={regions.map((r) => ({ value: r._id, label: r.name }))} />
                   <Select label="Zone" value={form.zoneId} onChange={(v) => setField("zoneId", v)} options={zones.filter((z) => !form.regionId || z.regionId === selectedRegion?.regionId).map((z) => ({ value: z._id, label: z.name }))} />
@@ -997,11 +1026,11 @@ export default function OrderManagementModulePage() {
             <div className="pt-2">
               <div className="text-lg font-semibold text-zinc-900">{activeMode === "primary" ? "Sale Stock Ledger" : `${modeConfig[activeMode].title} Ledger`}</div>
               {activeMode === "primary" ? (
-                <SaleStockLedgerTable rows={filteredOrders} onInvoice={printOrderInvoice} onDelete={deleteOrder} />
+                <SaleStockLedgerTable rows={filteredOrders} onInvoice={printOrderInvoice} onDelete={deleteOrder} canDelete={!isWarehouseManagerView} />
               ) : activeMode === "returnStock" ? (
-                <ReturnStockLedgerTable rows={filteredOrders} onInvoice={printOrderInvoice} onDelete={deleteOrder} />
+                <ReturnStockLedgerTable rows={filteredOrders} onInvoice={printOrderInvoice} onDelete={deleteOrder} canDelete={!isWarehouseManagerView} />
               ) : (
-                <SecondaryOrderLedgerTable rows={filteredOrders} onInvoice={printOrderInvoice} onDelete={deleteOrder} />
+                <SecondaryOrderLedgerTable rows={filteredOrders} onInvoice={printOrderInvoice} onDelete={deleteOrder} canDelete={!isWarehouseManagerView} />
               )}
             </div>
           </section>
@@ -1076,7 +1105,7 @@ function InputBare({ type = "text", value, onChange = () => {}, readOnly = false
 
 
 
-function SaleStockLedgerTable({ rows, onInvoice, onDelete }) {
+function SaleStockLedgerTable({ rows, onInvoice, onDelete, canDelete = true }) {
   return (
     <div className="overflow-x-auto mt-3 rounded border">
       <table className="min-w-full text-sm">
@@ -1089,7 +1118,7 @@ function SaleStockLedgerTable({ rows, onInvoice, onDelete }) {
               <td className="p-2">{order.distributorName || (String(order.toEntityType || "").toUpperCase() === "DISTRIBUTOR" ? (order.toEntityName || "-") : "-")}</td>
               <td className="p-2">{order.brandName || (String(order.toEntityType || "").toUpperCase() === "BRAND" ? (order.toEntityName || "-") : "-")}</td>
               <td className="p-2">{(order.createdAt || order.transactionAt) ? new Date(order.createdAt || order.transactionAt).toLocaleString() : "-"}</td>
-              <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" type="button" onClick={() => onInvoice(order)}>Invoice/Receipt</button><button className="rounded border border-red-300 text-red-700 px-2 py-1" type="button" onClick={() => onDelete(order._id)}>Delete</button></div></td>
+              <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" type="button" onClick={() => onInvoice(order)}>Invoice/Receipt</button>{canDelete ? <button className="rounded border border-red-300 text-red-700 px-2 py-1" type="button" onClick={() => onDelete(order._id)}>Delete</button> : null}</div></td>
             </tr>
           ))}
           {!rows.length ? <tr><td colSpan={6} className="p-5 text-center text-zinc-500">No records in this ledger.</td></tr> : null}
@@ -1157,7 +1186,7 @@ function RequestReturnStocksTable({ rows, onOpen, onApprove, onReject, onPreview
   );
 }
 
-function ReturnStockLedgerTable({ rows, onInvoice, onDelete }) {
+function ReturnStockLedgerTable({ rows, onInvoice, onDelete, canDelete = true }) {
   return (
     <div className="overflow-x-auto mt-3 rounded border">
       <table className="min-w-full text-sm">
@@ -1170,7 +1199,7 @@ function ReturnStockLedgerTable({ rows, onInvoice, onDelete }) {
               <td className="p-2">{String(r.fromEntityType || "").toUpperCase() === "DISTRIBUTOR" ? (r.distributorName || r.fromEntityName || "-") : "-"}</td>
               <td className="p-2">{String(r.fromEntityType || "").toUpperCase() === "BRAND" ? (r.brandName || r.fromEntityName || "-") : "-"}</td>
               <td className="p-2">{r.transactionAt ? new Date(r.transactionAt).toLocaleString() : "-"}</td>
-              <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" type="button" onClick={() => onInvoice(r)}>Invoice/Receipt</button><button className="rounded border border-red-300 text-red-700 px-2 py-1" type="button" onClick={() => onDelete(r._id)}>Delete</button></div></td>
+              <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" type="button" onClick={() => onInvoice(r)}>Invoice/Receipt</button>{canDelete ? <button className="rounded border border-red-300 text-red-700 px-2 py-1" type="button" onClick={() => onDelete(r._id)}>Delete</button> : null}</div></td>
             </tr>
           ))}
           {!rows.length ? <tr><td colSpan={6} className="p-5 text-center text-zinc-500">No records in this ledger.</td></tr> : null}
@@ -1209,7 +1238,7 @@ function SecondaryOrderRequestTable({ rows, onOpen, onPreview, onReject, onAppro
   );
 }
 
-function SecondaryOrderLedgerTable({ rows, onInvoice, onDelete }) {
+function SecondaryOrderLedgerTable({ rows, onInvoice, onDelete, canDelete = true }) {
   return (
     <div className="overflow-x-auto mt-3 rounded border">
       <table className="min-w-full text-sm">
@@ -1222,7 +1251,7 @@ function SecondaryOrderLedgerTable({ rows, onInvoice, onDelete }) {
               <td className="p-2">{r.fromEntityName || r.customerName || "-"}</td>
               <td className="p-2">{r.toWarehouseName || "-"}</td>
               <td className="p-2">{r.createdAt ? new Date(r.createdAt).toLocaleString() : "-"}</td>
-              <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" type="button" onClick={() => onInvoice(r)}>Invoice/Receipt</button><button className="rounded border border-red-300 text-red-700 px-2 py-1" type="button" onClick={() => onDelete(r._id)}>Delete</button></div></td>
+              <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" type="button" onClick={() => onInvoice(r)}>Invoice/Receipt</button>{canDelete ? <button className="rounded border border-red-300 text-red-700 px-2 py-1" type="button" onClick={() => onDelete(r._id)}>Delete</button> : null}</div></td>
             </tr>
           ))}
           {!rows.length ? <tr><td colSpan={6} className="p-5 text-center text-zinc-500">No records in this ledger.</td></tr> : null}
