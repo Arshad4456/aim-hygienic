@@ -191,6 +191,7 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
           { title: "Invoices", href: "/dashboards/admin/finance/invoices" },
           { title: "Receipts", href: "/dashboards/admin/finance/receipts" },
           { title: "Aging Report", href: "/dashboards/admin/finance/aging" },
+          { title: "Payment Management", href: "/dashboards/admin/finance/payments" },
         ],
       },
 
