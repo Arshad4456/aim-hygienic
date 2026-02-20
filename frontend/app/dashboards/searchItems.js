@@ -86,7 +86,7 @@ export const userDashboardSearchItems = {
   distributor: [
     { title: "Dashboard", href: "/dashboards/distributor" },
     { title: "Primary Order Request", href: "/dashboards/distributor/primary-order-request" },
-    { title: "Primary & Secondary Orders", href: "/dashboards/distributor/orders" },
+    { title: "Secondary Orders", href: "/dashboards/distributor/orders" },
     { title: "Return Stock", href: "/dashboards/distributor/return-stock" },
     { title: "Messages", href: "/dashboards/distributor/messages" },
     { title: "Account Settings", href: "/dashboards/distributor/settings" },
