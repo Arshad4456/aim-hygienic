@@ -1,4 +1,5 @@
 import PrimaryOrderRequestModule from "../../components/PrimaryOrderRequestModule";
+import DistributorSecondaryOrdersModule from "../../components/DistributorSecondaryOrdersModule";
 import UserDashboardShell from "../../components/userDashboardShell";
 import { userDashboardSearchItems } from "../../searchItems";
 
@@ -12,6 +13,7 @@ export default function Page() {
       showAccountCards
     >
       <PrimaryOrderRequestModule role="Distributor" />
+      <DistributorSecondaryOrdersModule />
     </UserDashboardShell>
   );
 }
