@@ -62,6 +62,45 @@ function humanize(segment = "") {
     .replace(/\b\w/g, (s) => s.toUpperCase());
 }
 
+
+function normalizeRoleKey(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function expectedRoleValues(roleKey) {
+  const key = normalizeRoleKey(roleKey);
+  if (key === "customer") return ["customer"];
+  if (key === "order booker" || key === "orderbooker") return ["order booker"];
+  if (key === "distributor") return ["distributor"];
+  if (key === "brand manager") return ["brand manager"];
+  return key ? [key] : [];
+}
+
+function routeForRole(role) {
+  const map = {
+    admin: "/dashboards/admin",
+    ceo: "/dashboards/ceo",
+    "managing director": "/dashboards/manageDirector",
+    "warehouse manager": "/dashboards/warehouseManager",
+    "account officer": "/dashboards/accountOfficer",
+    "hr assistant": "/dashboards/hrAssistant",
+    cashier: "/dashboards/cashier",
+    kpo: "/dashboards/kpo",
+    "brand manager": "/dashboards/brandManager",
+    "national sale manager": "/dashboards/nationalSM",
+    "regional sale manager": "/dashboards/regionalSM",
+    "zone sale manager": "/dashboards/zoneSM",
+    "territory sale manager": "/dashboards/territorySM",
+    distributor: "/dashboards/distributor",
+    "field sale manager": "/dashboards/fieldSM",
+    "order booker": "/dashboards/orderBooker",
+    salesman: "/dashboards/salesman",
+    "delivery boy": "/dashboards/deliveryBoy",
+    customer: "/dashboards/customer",
+  };
+  return map[normalizeRoleKey(role)] || "/dashboards/admin";
+}
+
 function deriveRoleSlug(links, roleKey) {
   const roleLink = links.find((item) => item.href?.startsWith("/dashboards/") && item.href !== "/dashboards");
   if (roleLink) {
@@ -120,6 +159,15 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
     const raw = getAuthItem("aim_user");
     return raw ? JSON.parse(raw) : null;
   }, []);
+
+  useEffect(() => {
+    const userRole = normalizeRoleKey(user?.role);
+    const expected = expectedRoleValues(roleKey);
+    if (!userRole || !expected.length) return;
+    if (expected.includes(userRole)) return;
+    router.replace(routeForRole(userRole));
+  }, [user?.role, roleKey, router]);
+
 
   function logout() {
     if (typeof window !== "undefined") {

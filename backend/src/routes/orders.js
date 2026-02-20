@@ -112,13 +112,13 @@ router.get("/secondary/distributor", requireAuth, async (req, res) => {
     const warehouseNames = Array.from(new Set([String(me.businessName || "").trim(), String(me.fullName || "").trim(), String(me.warehouseName || "").trim()].filter(Boolean)));
 
     const query = { saleType: "secondary" };
-    if (territoryName) query.territoryName = territoryName;
 
-    const ownershipFilters = [];
-    if (distributorIds.length) ownershipFilters.push({ distributorId: { $in: distributorIds } });
-    if (warehouseId) ownershipFilters.push({ toWarehouseId: warehouseId });
-    if (warehouseNames.length) ownershipFilters.push({ toWarehouseName: { $in: warehouseNames } });
-    if (ownershipFilters.length) query.$or = ownershipFilters;
+    const relatedFilters = [];
+    if (territoryName) relatedFilters.push({ territoryName });
+    if (distributorIds.length) relatedFilters.push({ distributorId: { $in: distributorIds } });
+    if (warehouseId) relatedFilters.push({ toWarehouseId: warehouseId });
+    if (warehouseNames.length) relatedFilters.push({ toWarehouseName: { $in: warehouseNames } });
+    if (relatedFilters.length) query.$or = relatedFilters;
 
     const orders = await SalesOrder.find(query).sort({ createdAt: -1 }).limit(limit).lean();
     return res.json({ ok: true, orders });
