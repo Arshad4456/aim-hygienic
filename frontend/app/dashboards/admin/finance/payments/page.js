@@ -32,6 +32,21 @@ const initialSecondaryForm = {
   details: "",
 };
 
+
+function formatDashboardError(error, isWarehouseManagerView) {
+  const raw = String(error?.message || "").trim();
+  if (!raw) return "Something went wrong. Please try again.";
+
+  if (/forbidden/i.test(raw)) {
+    if (isWarehouseManagerView) {
+      return "Forbidden: You can only access payment records for your assigned warehouse.";
+    }
+    return "Forbidden";
+  }
+
+  return raw;
+}
+
 export default function PaymentManagementPage() {
   const pathname = usePathname();
   const isWarehouseManagerView = pathname?.startsWith("/dashboards/warehouseManager");
@@ -82,7 +97,7 @@ export default function PaymentManagementPage() {
         setWarehouses(warehouseData.warehouses || []);
         setDistributors((userData.users || []).filter((row) => row.role === "Distributor"));
       } catch (error) {
-        setErr(error.message || "Failed to load master data");
+        setErr(formatDashboardError(error, isWarehouseManagerView) || "Failed to load master data");
       }
     }
     loadMasters();
@@ -95,7 +110,7 @@ export default function PaymentManagementPage() {
       setPrimaryLedger(primaryData.primaryPayments || []);
       setSecondaryLedger(secondaryData.secondaryPayments || []);
     } catch (error) {
-      setErr(error.message || "Failed to load payment ledgers");
+      setErr(formatDashboardError(error, isWarehouseManagerView) || "Failed to load payment ledgers");
     }
   }
 
@@ -169,7 +184,7 @@ export default function PaymentManagementPage() {
       setPrimaryForm({ ...initialPrimaryForm, warehouseId: isWarehouseManagerView ? userWarehouseId : "" });
       await loadLedgers();
     } catch (error) {
-      setErr(error.message || "Failed to save primary payment");
+      setErr(formatDashboardError(error, isWarehouseManagerView) || "Failed to save primary payment");
     }
   }
 
@@ -182,7 +197,7 @@ export default function PaymentManagementPage() {
       setSecondaryForm({ ...initialSecondaryForm, warehouseId: isWarehouseManagerView ? userWarehouseId : "" });
       await loadLedgers();
     } catch (error) {
-      setErr(error.message || "Failed to save secondary payment");
+      setErr(formatDashboardError(error, isWarehouseManagerView) || "Failed to save secondary payment");
     }
   }
 
@@ -192,7 +207,7 @@ export default function PaymentManagementPage() {
       await apiFetch(`/payments/primary/${id}`, { method: "DELETE" });
       await loadLedgers();
     } catch (error) {
-      alert(error.message || "Failed to delete primary payment");
+      setErr(formatDashboardError(error, isWarehouseManagerView) || "Failed to delete primary payment");
     }
   }
 
@@ -202,7 +217,7 @@ export default function PaymentManagementPage() {
       await apiFetch(`/payments/secondary/${id}`, { method: "DELETE" });
       await loadLedgers();
     } catch (error) {
-      alert(error.message || "Failed to delete secondary payment");
+      setErr(formatDashboardError(error, isWarehouseManagerView) || "Failed to delete secondary payment");
     }
   }
 
@@ -211,7 +226,7 @@ export default function PaymentManagementPage() {
       const data = await apiFetch(`/payments/primary/${invoiceNo}`);
       setInvoiceDetail(data);
     } catch (error) {
-      alert(error.message || "Failed to load invoice");
+      setErr(formatDashboardError(error, isWarehouseManagerView) || "Failed to load invoice");
     }
   }
 
