@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -203,6 +202,77 @@ export default function SecondaryOrderRequestModule({ roleKey, links, title }) {
 
   const distributor = distributors.find((d) => d._id === form.distributorId);
 
+
+  function printOrderInvoice(order) {
+    const rows = (order.items || []).map((item, idx) => {
+      const qty = toNum(item.quantity || item.totalPacks || 0);
+      const rate = toNum(item.unitPrice || item.onePackPrice || 0);
+      const gross = qty * rate;
+      const toValue = toNum(item.toValue || 0);
+      const disc = toNum(item.discValue || 0);
+      const extra = toNum(item.extraValue || 0);
+      const bons = toNum(item.bonsValue || 0);
+      const v4gst = gross - toValue - disc - extra - bons;
+      const gst = (v4gst * toNum(item.gstPer || 0)) / 100;
+      const net = v4gst + gst;
+      return `<tr><td>${idx + 1}</td><td>${item.productName || "-"}</td><td>${qty}</td><td>${rate.toFixed(2)}</td><td>${gross.toFixed(2)}</td><td>${toValue.toFixed(2)}</td><td>${disc.toFixed(2)}</td><td>${extra.toFixed(2)}</td><td>${bons.toFixed(2)}</td><td>${v4gst.toFixed(2)}</td><td>${gst.toFixed(2)}</td><td>${net.toFixed(2)}</td></tr>`;
+    });
+
+    const totalAmount = (order.items || []).reduce((sum, item) => sum + (toNum(item.quantity) * toNum(item.unitPrice)), 0);
+    const extraDiscPer = toNum(order.extraDiscPer || 0);
+    const advTaxPer = toNum(order.advTaxPer || 0);
+    const whTaxPer = toNum(order.whTaxPer || 0);
+    const expense = toNum(order.expense || 0);
+    const extraDiscAmt = (totalAmount * extraDiscPer) / 100;
+    const advTaxAmt = (totalAmount * advTaxPer) / 100;
+    const whTaxAmt = (totalAmount * whTaxPer) / 100;
+    const grandTotal = totalAmount - extraDiscAmt + advTaxAmt + whTaxAmt + expense;
+
+    const invoiceFrom = order.toWarehouseName || order.distributorName || "-";
+    const billTo = order.customerName || order.fromEntityName || "-";
+    const address = String(order.address || "-").trim() || "-";
+
+    const html = `
+      <html>
+      <body style="font-family: Arial; padding: 16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div><div style="font-weight:700;font-size:18px;">AIM-HYGIENICS</div><div style="font-size:12px;color:#555;">PVT LIMITED</div></div>
+          <div style="text-align:right;"><div style="font-size:13px;font-weight:700;">Sales Tax Invoice</div></div>
+        </div>
+        <div style="margin-top:8px; display:flex; justify-content:space-between; font-size:12px;">
+          <div>Date: ${new Date(order.createdAt || Date.now()).toLocaleDateString()}</div>
+          <div>Invoice #: ${order.orderNo || "-"}</div>
+        </div>
+        <div style="margin-top:8px;font-size:12px;">Invoice From: ${invoiceFrom}</div>
+        <div style="font-size:12px;">Bill To: ${billTo}</div>
+        <div style="font-size:12px;">Address: ${address}</div>
+
+        <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%; margin-top:10px; font-size:12px;">
+          <thead><tr><th>#</th><th>Product Name</th><th>Qty</th><th>Rate</th><th>Gross</th><th>TO</th><th>Disc</th><th>Extra</th><th>Bons</th><th>V4GST</th><th>GST</th><th>Net Amt</th></tr></thead>
+          <tbody>${rows.join("") || '<tr><td colspan="12">No items</td></tr>'}</tbody>
+        </table>
+
+        <div style="margin-top:12px; font-size:12px; display:flex; justify-content:flex-end;">
+          <div style="min-width:280px;">
+            <div style="display:flex; justify-content:space-between;"><span>Total Amount:</span><strong>${totalAmount.toFixed(2)}</strong></div>
+            <div style="display:flex; justify-content:space-between;"><span>Extra Disc (${extraDiscPer}%):</span><span>${extraDiscAmt.toFixed(2)}</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>Adv Tax (${advTaxPer}%):</span><span>${advTaxAmt.toFixed(2)}</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>W.H Tax (${whTaxPer}%):</span><span>${whTaxAmt.toFixed(2)}</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>Expense:</span><span>${expense.toFixed(2)}</span></div>
+            <div style="display:flex; justify-content:space-between; margin-top:4px; border-top:1px solid #ccc; padding-top:4px;"><span><strong>Grand Total:</strong></span><strong>${grandTotal.toFixed(2)}</strong></div>
+          </div>
+        </div>
+      </body>
+      </html>`;
+
+    const popup = window.open("", "_blank", "width=1100,height=800");
+    if (!popup) return;
+    popup.document.open();
+    popup.document.write(html);
+    popup.document.close();
+    popup.focus();
+    popup.print();
+  }
   return (
     <UserDashboardShell title={title} subtitle="Order Management" roleKey={roleKey === "customer" ? "customer" : "Order Booker"} links={links} showAccountCards>
       <div className="space-y-6">
@@ -271,7 +341,7 @@ export default function SecondaryOrderRequestModule({ roleKey, links, title }) {
                     {roleKey === "customer" ? <td className="p-2">{o.toWarehouseName || "-"}</td> : <><td className="p-2">{o.sourceType}</td><td className="p-2">{o.customerName}</td></>}
                     <td className="p-2">{o.createdAt ? new Date(o.createdAt).toLocaleString() : "-"}</td>
                     <td className="p-2 capitalize">{o.status}</td>
-                    {roleKey === "customer" ? null : <td className="p-2"><button type="button" className="rounded border px-2 py-1" onClick={() => window.print()}>Receipt/Invoice</button></td>}
+                    {roleKey === "customer" ? null : <td className="p-2"><button type="button" className="rounded border px-2 py-1" onClick={() => printOrderInvoice(o)}>Receipt/Invoice</button></td>}
                   </tr>
                 ))}
                 {!orders.length ? <tr><td colSpan={roleKey === "customer" ? 4 : 6} className="p-4 text-center text-zinc-500">No orders found.</td></tr> : null}
