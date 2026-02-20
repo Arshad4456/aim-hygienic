@@ -645,6 +645,8 @@ export default function OrderManagementModulePage() {
             zoneId: selectedZone?.zoneId || "",
             zoneName: selectedZone?.name || "",
             territoryName: form.territoryName,
+            fieldId: selectedField?.fieldId || "",
+            fieldName: selectedField?.name || "",
             address: form.address,
             items,
             subtotal: totalAmount,
