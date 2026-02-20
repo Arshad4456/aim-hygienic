@@ -25,6 +25,68 @@ function isWarehouseManagerUser(user) {
   return role === "warehouse manager" || role === "warehouse_manager";
 }
 
+function isDistributorUser(user) {
+  return normalizeRole(user?.role) === "distributor";
+}
+
+function startOfDay(value) {
+  const d = new Date(value);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function endOfDay(value) {
+  const d = new Date(value);
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
+function parseOptionalDate(value) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getDeadlineMeta(primary, dueSoonDays = 7) {
+  const remaining = Number(primary?.amountRemaining || 0);
+  if (remaining <= 0) {
+    return { deadlineStatus: "settled", daysToDeadline: null };
+  }
+
+  const returnDate = parseOptionalDate(primary?.returnDate);
+  if (!returnDate) {
+    return { deadlineStatus: "on_track", daysToDeadline: null };
+  }
+
+  const today = startOfDay(new Date());
+  const deadline = startOfDay(returnDate);
+  const daysToDeadline = Math.ceil((deadline.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+
+  if (daysToDeadline < 0) return { deadlineStatus: "overdue", daysToDeadline };
+  if (daysToDeadline <= dueSoonDays) return { deadlineStatus: "due_soon", daysToDeadline };
+  return { deadlineStatus: "on_track", daysToDeadline };
+}
+
+async function resolveDistributorScope(req) {
+  const tokenDistributorId = String(req.user?.distributorId || "").trim();
+  if (toObjectId(tokenDistributorId)) {
+    return { distributorObjectId: toObjectId(tokenDistributorId), distributorId: tokenDistributorId };
+  }
+
+  const lookupOr = [];
+  if (req.user?.uid && toObjectId(req.user.uid)) lookupOr.push({ _id: req.user.uid });
+  const tokenUserId = String(req.user?.userId || "").trim();
+  if (tokenUserId) lookupOr.push({ userId: tokenUserId });
+  const tokenUsername = String(req.user?.username || "").trim();
+  if (tokenUsername) lookupOr.push({ username: tokenUsername.toLowerCase() });
+
+  if (!lookupOr.length) return { distributorObjectId: null, distributorId: tokenDistributorId };
+
+  const dbUser = await User.findOne({ $or: lookupOr }).select("_id role").lean();
+  const distributorObjectId = dbUser?._id && normalizeRole(dbUser.role) === "distributor" ? toObjectId(dbUser._id) : null;
+  return { distributorObjectId, distributorId: distributorObjectId ? String(distributorObjectId) : tokenDistributorId };
+}
+
 async function resolveScopedWarehouse(req) {
   if (!isWarehouseManagerUser(req.user)) return null;
 
@@ -197,7 +259,15 @@ router.post("/primary", requireAuth, async (req, res) => {
 router.get("/primary", requireAuth, async (req, res) => {
   try {
     const query = {};
-    if (req.query.distributorId) {
+    const isDistributor = isDistributorUser(req.user);
+
+    if (isDistributor) {
+      const scope = await resolveDistributorScope(req);
+      if (!scope.distributorObjectId) {
+        return res.status(403).json({ ok: false, message: "Forbidden: distributor mapping missing" });
+      }
+      query.distributorId = scope.distributorObjectId;
+    } else if (req.query.distributorId) {
       const distributorId = toObjectId(req.query.distributorId);
       if (distributorId) query.distributorId = distributorId;
     }
@@ -206,13 +276,28 @@ router.get("/primary", requireAuth, async (req, res) => {
       const scopedWarehouse = await ensureWarehouseManagerHasWarehouse(req, res);
       if (!scopedWarehouse) return;
       query.warehouseId = scopedWarehouse._id;
-    } else if (req.query.warehouseId) {
-      const warehouseId = toObjectId(req.query.warehouseId);
+    } else if (req.query.warehouseId || req.query.warehouse_id) {
+      const warehouseId = toObjectId(req.query.warehouseId || req.query.warehouse_id);
       if (warehouseId) query.warehouseId = warehouseId;
     }
 
+    const startDate = parseOptionalDate(req.query.start_date);
+    const endDate = parseOptionalDate(req.query.end_date);
+    if (startDate || endDate) {
+      query.payDate = {};
+      if (startDate) query.payDate.$gte = startOfDay(startDate);
+      if (endDate) query.payDate.$lte = endOfDay(endDate);
+    }
+
+    const status = String(req.query.status || "all").trim().toLowerCase();
+    if (status === "open") query.amountRemaining = { $gt: 0 };
+    if (status === "closed") query.amountRemaining = 0;
+
     const items = await PrimaryPayment.find(query).sort({ createdAt: -1 }).lean();
-    return res.json({ ok: true, primaryPayments: items });
+    const dueSoonDays = Number(process.env.PAYMENT_DUE_SOON_DAYS || 7);
+    const primaryPayments = items.map((item) => ({ ...item, ...getDeadlineMeta(item, dueSoonDays) }));
+
+    return res.json({ ok: true, primaryPayments, dueSoonDays });
   } catch (error) {
     return res.status(500).json({ ok: false, message: "Failed to load primary payments" });
   }
@@ -223,6 +308,13 @@ router.get("/primary/:invoiceNo", requireAuth, async (req, res) => {
     const primary = await PrimaryPayment.findOne({ invoiceNo: req.params.invoiceNo }).lean();
     if (!primary) return res.status(404).json({ ok: false, message: "Primary invoice not found" });
 
+    if (isDistributorUser(req.user)) {
+      const scope = await resolveDistributorScope(req);
+      if (!scope.distributorObjectId || String(primary.distributorId) !== String(scope.distributorObjectId)) {
+        return res.status(403).json({ ok: false, message: "Forbidden" });
+      }
+    }
+
     if (isWarehouseManagerUser(req.user)) {
       const scopedWarehouse = await ensureWarehouseManagerHasWarehouse(req, res);
       if (!scopedWarehouse) return;
@@ -232,7 +324,8 @@ router.get("/primary/:invoiceNo", requireAuth, async (req, res) => {
     }
 
     const settlements = await SecondaryPayment.find({ primaryPaymentId: primary._id }).sort({ createdAt: -1 }).lean();
-    return res.json({ ok: true, primaryPayment: primary, settlements });
+    const dueSoonDays = Number(process.env.PAYMENT_DUE_SOON_DAYS || 7);
+    return res.json({ ok: true, primaryPayment: { ...primary, ...getDeadlineMeta(primary, dueSoonDays) }, settlements, dueSoonDays });
   } catch (error) {
     return res.status(500).json({ ok: false, message: "Failed to load invoice details" });
   }
@@ -242,6 +335,13 @@ router.delete("/primary/:id", requireAuth, async (req, res) => {
   try {
     const primary = await PrimaryPayment.findById(req.params.id).lean();
     if (!primary) return res.status(404).json({ ok: false, message: "Primary payment not found" });
+
+    if (isDistributorUser(req.user)) {
+      const scope = await resolveDistributorScope(req);
+      if (!scope.distributorObjectId || String(primary.distributorId) !== String(scope.distributorObjectId)) {
+        return res.status(403).json({ ok: false, message: "Forbidden" });
+      }
+    }
 
     if (isWarehouseManagerUser(req.user)) {
       const scopedWarehouse = await ensureWarehouseManagerHasWarehouse(req, res);
@@ -273,10 +373,18 @@ router.post("/secondary", requireAuth, async (req, res) => {
     }
 
     let scopedWarehouseObjectId = null;
+    let scopedDistributorObjectId = null;
     if (isWarehouseManagerUser(req.user)) {
       const scopedWarehouse = await ensureWarehouseManagerHasWarehouse(req, res);
       if (!scopedWarehouse) return;
       scopedWarehouseObjectId = scopedWarehouse._id;
+    }
+    if (isDistributorUser(req.user)) {
+      const scope = await resolveDistributorScope(req);
+      if (!scope.distributorObjectId) {
+        return res.status(403).json({ ok: false, message: "Forbidden: distributor mapping missing" });
+      }
+      scopedDistributorObjectId = scope.distributorObjectId;
     }
 
     let createdSecondary = null;
@@ -287,7 +395,8 @@ router.post("/secondary", requireAuth, async (req, res) => {
       const expectedWarehouseId = scopedWarehouseObjectId || toObjectId(body.warehouseId);
       if (!expectedWarehouseId) throw new Error("Warehouse is required");
 
-      if (String(primary.distributorId) !== String(body.distributorId) || String(primary.warehouseId) !== String(expectedWarehouseId)) {
+      const expectedDistributorId = scopedDistributorObjectId || body.distributorId;
+      if (String(primary.distributorId) !== String(expectedDistributorId) || String(primary.warehouseId) !== String(expectedWarehouseId)) {
         throw new Error("Distributor and warehouse must match the selected primary invoice");
       }
 
@@ -330,10 +439,31 @@ router.post("/secondary", requireAuth, async (req, res) => {
 router.get("/secondary", requireAuth, async (req, res) => {
   try {
     const query = {};
+    const isDistributor = isDistributorUser(req.user);
+
+    if (isDistributor) {
+      const scope = await resolveDistributorScope(req);
+      if (!scope.distributorObjectId) {
+        return res.status(403).json({ ok: false, message: "Forbidden: distributor mapping missing" });
+      }
+      query.distributorId = scope.distributorObjectId;
+    }
+
     if (isWarehouseManagerUser(req.user)) {
       const scopedWarehouse = await ensureWarehouseManagerHasWarehouse(req, res);
       if (!scopedWarehouse) return;
       query.warehouseId = scopedWarehouse._id;
+    } else if (req.query.warehouseId || req.query.warehouse_id) {
+      const warehouseId = toObjectId(req.query.warehouseId || req.query.warehouse_id);
+      if (warehouseId) query.warehouseId = warehouseId;
+    }
+
+    const startDate = parseOptionalDate(req.query.start_date);
+    const endDate = parseOptionalDate(req.query.end_date);
+    if (startDate || endDate) {
+      query.paidDate = {};
+      if (startDate) query.paidDate.$gte = startOfDay(startDate);
+      if (endDate) query.paidDate.$lte = endOfDay(endDate);
     }
 
     const rows = await SecondaryPayment.find(query).sort({ createdAt: -1 }).lean();
@@ -349,7 +479,13 @@ router.delete("/secondary/:id", requireAuth, async (req, res) => {
     const scopedWarehouseObjectId = isWarehouseManagerUser(req.user)
       ? (await ensureWarehouseManagerHasWarehouse(req, res))?._id
       : null;
+    const scopedDistributorObjectId = isDistributorUser(req.user)
+      ? (await resolveDistributorScope(req))?.distributorObjectId
+      : null;
     if (isWarehouseManagerUser(req.user) && !scopedWarehouseObjectId) return;
+    if (isDistributorUser(req.user) && !scopedDistributorObjectId) {
+      return res.status(403).json({ ok: false, message: "Forbidden: distributor mapping missing" });
+    }
 
     await session.withTransaction(async () => {
       const secondary = await SecondaryPayment.findById(req.params.id).session(session);
@@ -358,11 +494,17 @@ router.delete("/secondary/:id", requireAuth, async (req, res) => {
       if (scopedWarehouseObjectId && String(secondary.warehouseId) !== String(scopedWarehouseObjectId)) {
         throw new Error("Forbidden");
       }
+      if (scopedDistributorObjectId && String(secondary.distributorId) !== String(scopedDistributorObjectId)) {
+        throw new Error("Forbidden");
+      }
 
       const primary = await PrimaryPayment.findById(secondary.primaryPaymentId).session(session);
       if (!primary) throw new Error("Linked primary payment not found");
 
       if (scopedWarehouseObjectId && String(primary.warehouseId) !== String(scopedWarehouseObjectId)) {
+        throw new Error("Forbidden");
+      }
+      if (scopedDistributorObjectId && String(primary.distributorId) !== String(scopedDistributorObjectId)) {
         throw new Error("Forbidden");
       }
 

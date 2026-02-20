@@ -92,6 +92,9 @@ export const userDashboardSearchItems = {
   territorySM: [{ title: "Dashboard", href: "/dashboards/territorySM" }],
   distributor: [
     { title: "Dashboard", href: "/dashboards/distributor" },
+    { title: "Payments", href: "/dashboards/distributor/payments" },
+    { title: "Primary Payments (Received)", href: "/dashboards/distributor/payments/primary" },
+    { title: "Secondary Payments (Paid Back)", href: "/dashboards/distributor/payments/secondary" },
     { title: "Primary Order Request", href: "/dashboards/distributor/primary-order-request" },
     { title: "Secondary Orders", href: "/dashboards/distributor/orders" },
     { title: "Return Stock", href: "/dashboards/distributor/return-stock" },
