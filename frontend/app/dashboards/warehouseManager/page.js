@@ -5,7 +5,7 @@ export default function Page() {
   return (
     <UserDashboardShell
       title="Warehouse Manager Dashboard"
-      subtitle="Use quick search to navigate all available items for your dashboard."
+      subtitle="Access warehouse-scoped inventory and order management modules."
       roleKey="Warehouse Manager"
       links={userDashboardSearchItems.warehouseManager || []}
     />

@@ -150,7 +150,7 @@ function mapRequestStatusForApi(status) {
 
 export default function WarehouseInventoryModulePage() {
   const pathname = usePathname();
-  const isWarehouseManagerView = pathname?.startsWith("/warehouse-manager");
+  const isWarehouseManagerView = pathname?.startsWith("/dashboards/warehouseManager");
   const [selectedCard, setSelectedCard] = useState(cards[0].key);
   const [saleMode, setSaleMode] = useState("brand");
   const [saleLedgerFilter, setSaleLedgerFilter] = useState("all");
