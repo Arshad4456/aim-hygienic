@@ -26,16 +26,26 @@ function normalizeItems(items = []) {
 function roleMatchQuery(user) {
   const role = String(user?.role || "").trim();
   const userId = String(user?.userId || "").trim();
+  const roleMappedIds = {
+    "Brand Manager": String(user?.managerId || "").trim(),
+    Distributor: String(user?.distributorId || "").trim(),
+    "Order Booker": String(user?.orderBookerId || "").trim(),
+    Salesman: String(user?.salesmanId || "").trim(),
+    "Delivery Boy": String(user?.deliveryBoyId || "").trim(),
+    customer: String(user?.customerId || "").trim(),
+  };
 
   if (!role) return { _id: null };
   if (ADMIN_ROLES.has(role)) return {};
 
-  if (role === "Brand Manager") return { brandManagerId: userId || "__none__" };
-  if (role === "Distributor") return { distributorId: userId || "__none__" };
-  if (role === "Order Booker") return { orderBookerId: userId || "__none__" };
-  if (role === "Salesman") return { salesmanId: userId || "__none__" };
-  if (role === "Delivery Boy") return { deliveryBoyId: userId || "__none__" };
-  if (role === "customer") return { customerId: userId || "__none__" };
+  const idsForRole = Array.from(new Set([userId, roleMappedIds[role]].filter(Boolean)));
+
+  if (role === "Brand Manager") return { brandManagerId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
+  if (role === "Distributor") return { distributorId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
+  if (role === "Order Booker") return { orderBookerId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
+  if (role === "Salesman") return { salesmanId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
+  if (role === "Delivery Boy") return { deliveryBoyId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
+  if (role === "customer") return { customerId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
   if (role === "Zone Sale Manager") return { zoneId: String(user?.zoneId || "").trim() || "__none__" };
   if (role === "Territory Sale Manager") return { territoryName: String(user?.territoryName || user?.areaName || "").trim() || "__none__" };
 
@@ -216,6 +226,16 @@ router.patch("/:id/proof-of-delivery", requireAuth, async (req, res) => {
     return res.json({ ok: true, order });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to upload proof of delivery" });
+  }
+});
+
+router.delete("/:id", requireAuth, async (req, res) => {
+  try {
+    const removed = await SalesOrder.findOneAndDelete({ _id: req.params.id, ...roleMatchQuery(req.user) });
+    if (!removed) return res.status(404).json({ ok: false, message: "Order not found" });
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to delete order" });
   }
 });
 

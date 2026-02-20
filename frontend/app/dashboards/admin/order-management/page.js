@@ -1211,7 +1211,7 @@ function SecondaryOrderLedgerTable({ rows, onInvoice, onDelete }) {
         <thead><tr className="border-b bg-zinc-50"><th className="p-2 text-left">Order No</th><th className="p-2 text-left">Source</th><th className="p-2 text-left">From</th><th className="p-2 text-left">To</th><th className="p-2 text-left">Date/Time</th><th className="p-2 text-left">Action</th></tr></thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r._id} className="border-b">
+            <tr key={r._id} className={requestRowClass(normalizeRequestStatus(r.status || "pending"))}>
               <td className="p-2">{r.orderNo}</td>
               <td className="p-2">{r.sourceType || "-"}</td>
               <td className="p-2">{r.fromEntityName || r.customerName || "-"}</td>
