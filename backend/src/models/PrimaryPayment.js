@@ -11,6 +11,7 @@ const PrimaryPaymentSchema = new mongoose.Schema(
     territoryName: { type: String, required: true, trim: true },
     distributorId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
     distributorName: { type: String, required: true, trim: true },
+    distributorAddress: { type: String, trim: true },
     warehouseId: { type: mongoose.Schema.Types.ObjectId, ref: "Warehouse", required: true, index: true },
     warehouseName: { type: String, required: true, trim: true },
     amountTotal: { type: Number, required: true, min: 0 },
