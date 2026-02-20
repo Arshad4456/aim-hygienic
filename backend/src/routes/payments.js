@@ -32,7 +32,22 @@ async function resolveScopedWarehouse(req) {
   const tokenWarehouseId = String(req.user?.warehouseId || req.user?.warehouse_id || "").trim();
   if (tokenWarehouseId) refs.add(tokenWarehouseId);
 
-  const dbUser = req.user?.uid ? await User.findById(req.user.uid).select("warehouseId warehouseName").lean() : null;
+  const dbUserQuery = [];
+  if (req.user?.uid && toObjectId(req.user.uid)) {
+    dbUserQuery.push({ _id: req.user.uid });
+  }
+
+  const tokenUserId = String(req.user?.userId || "").trim();
+  if (tokenUserId) {
+    dbUserQuery.push({ userId: tokenUserId });
+  }
+
+  const tokenUsername = String(req.user?.username || "").trim();
+  if (tokenUsername) {
+    dbUserQuery.push({ username: tokenUsername.toLowerCase() });
+  }
+
+  const dbUser = dbUserQuery.length > 0 ? await User.findOne({ $or: dbUserQuery }).select("warehouseId warehouseName").lean() : null;
   const dbWarehouseId = String(dbUser?.warehouseId || "").trim();
   const dbWarehouseName = String(dbUser?.warehouseName || "").trim();
   if (dbWarehouseId) refs.add(dbWarehouseId);
