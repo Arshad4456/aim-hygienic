@@ -1,4 +1,3 @@
-
 const express = require("express");
 const mongoose = require("mongoose");
 const Region = require("../models/Region");
@@ -29,17 +28,26 @@ function isWarehouseManagerUser(user) {
 async function resolveScopedWarehouse(req) {
   if (!isWarehouseManagerUser(req.user)) return null;
 
-  const rawWarehouseRef = String(req.user?.warehouseId || req.user?.warehouse_id || "").trim();
-  if (!rawWarehouseRef) return null;
+  const refs = new Set();
+  const tokenWarehouseId = String(req.user?.warehouseId || req.user?.warehouse_id || "").trim();
+  if (tokenWarehouseId) refs.add(tokenWarehouseId);
 
-  const warehouseById = toObjectId(rawWarehouseRef)
-    ? await Warehouse.findById(rawWarehouseRef).lean()
-    : null;
+  const dbUser = req.user?.uid ? await User.findById(req.user.uid).select("warehouseId warehouseName").lean() : null;
+  const dbWarehouseId = String(dbUser?.warehouseId || "").trim();
+  const dbWarehouseName = String(dbUser?.warehouseName || "").trim();
+  if (dbWarehouseId) refs.add(dbWarehouseId);
+  if (dbWarehouseName) refs.add(dbWarehouseName);
 
-  if (warehouseById) return warehouseById;
+  for (const ref of refs) {
+    const warehouseById = toObjectId(ref) ? await Warehouse.findById(ref).lean() : null;
+    if (warehouseById) return warehouseById;
 
-  const warehouseByCode = await Warehouse.findOne({ warehouseId: rawWarehouseRef }).lean();
-  if (warehouseByCode) return warehouseByCode;
+    const warehouseByCode = await Warehouse.findOne({ warehouseId: ref }).lean();
+    if (warehouseByCode) return warehouseByCode;
+
+    const warehouseByName = await Warehouse.findOne({ name: ref }).lean();
+    if (warehouseByName) return warehouseByName;
+  }
 
   return null;
 }
