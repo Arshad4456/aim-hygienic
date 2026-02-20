@@ -63,44 +63,6 @@ function humanize(segment = "") {
 }
 
 
-function normalizeRoleKey(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
-function expectedRoleValues(roleKey) {
-  const key = normalizeRoleKey(roleKey);
-  if (key === "customer") return ["customer"];
-  if (key === "order booker" || key === "orderbooker") return ["order booker"];
-  if (key === "distributor") return ["distributor"];
-  if (key === "brand manager") return ["brand manager"];
-  return key ? [key] : [];
-}
-
-function routeForRole(role) {
-  const map = {
-    admin: "/dashboards/admin",
-    ceo: "/dashboards/ceo",
-    "managing director": "/dashboards/manageDirector",
-    "warehouse manager": "/dashboards/warehouseManager",
-    "account officer": "/dashboards/accountOfficer",
-    "hr assistant": "/dashboards/hrAssistant",
-    cashier: "/dashboards/cashier",
-    kpo: "/dashboards/kpo",
-    "brand manager": "/dashboards/brandManager",
-    "national sale manager": "/dashboards/nationalSM",
-    "regional sale manager": "/dashboards/regionalSM",
-    "zone sale manager": "/dashboards/zoneSM",
-    "territory sale manager": "/dashboards/territorySM",
-    distributor: "/dashboards/distributor",
-    "field sale manager": "/dashboards/fieldSM",
-    "order booker": "/dashboards/orderBooker",
-    salesman: "/dashboards/salesman",
-    "delivery boy": "/dashboards/deliveryBoy",
-    customer: "/dashboards/customer",
-  };
-  return map[normalizeRoleKey(role)] || "/dashboards/admin";
-}
-
 function deriveRoleSlug(links, roleKey) {
   const roleLink = links.find((item) => item.href?.startsWith("/dashboards/") && item.href !== "/dashboards");
   if (roleLink) {
@@ -159,14 +121,6 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
     const raw = getAuthItem("aim_user");
     return raw ? JSON.parse(raw) : null;
   }, []);
-
-  useEffect(() => {
-    const userRole = normalizeRoleKey(user?.role);
-    const expected = expectedRoleValues(roleKey);
-    if (!userRole || !expected.length) return;
-    if (expected.includes(userRole)) return;
-    router.replace(routeForRole(userRole));
-  }, [user?.role, roleKey, router]);
 
 
   function logout() {
@@ -443,23 +397,22 @@ function UserSidebar({ title, roleKey, groups, pathname, openGroups, setOpenGrou
         {groups.map((group) => {
           const active = group.items.some((item) => pathname === item.href);
           const isOpen = openGroups[group.key] ?? false;
-          const singleItem = group.items.length === 1;
           return (
             <div key={group.key} className="rounded-xl border border-zinc-200 bg-zinc-50">
               <button
                 type="button"
                 onClick={() => {
-                  if (collapsed || singleItem) {
+                  if (collapsed) {
                     go(group.items[0].href);
-                    return;
+                  } else {
+                    setOpenGroups((prev) => {
+                      const isCurrentlyOpen = prev[group.key] ?? false;
+                      return {
+                        ...prev,
+                        [group.key]: !isCurrentlyOpen,
+                      };
+                    });
                   }
-                  setOpenGroups((prev) => {
-                    const isCurrentlyOpen = prev[group.key] ?? false;
-                    return {
-                      ...prev,
-                      [group.key]: !isCurrentlyOpen,
-                    };
-                  });
                 }}
                 className={[
                   "w-full flex items-center gap-2 px-3 py-2 text-sm",
@@ -472,10 +425,10 @@ function UserSidebar({ title, roleKey, groups, pathname, openGroups, setOpenGrou
                   <ModuleIcon name={group.iconName} />
                   {!collapsed ? <span className="truncate text-center">{group.title}</span> : null}
                 </div>
-                {!collapsed && !singleItem ? <span className="text-xs text-zinc-500 ml-1">{isOpen ? "▾" : "▸"}</span> : null}
+                {!collapsed ? <span className="text-xs text-zinc-500 ml-1">{isOpen ? "▾" : "▸"}</span> : null}
               </button>
 
-              {!collapsed && !singleItem && isOpen ? (
+              {!collapsed && isOpen ? (
                 <div className="px-2 pb-2 space-y-1">
                   {group.items.map((item) => {
                     const itemActive = pathname === item.href;
