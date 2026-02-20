@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import AdminShell from "../components/AdminShell";
+import UserDashboardShell from "../../components/userDashboardShell";
+import { userDashboardSearchItems } from "../../searchItems";
 import { apiFetch } from "../../../lib/api";
 import { getAuthItem } from "../../../lib/clientAuth";
 
@@ -949,8 +951,18 @@ export default function WarehouseInventoryModulePage() {
     }
   }
 
+  const ShellComponent = isWarehouseManagerView ? UserDashboardShell : AdminShell;
+  const shellProps = isWarehouseManagerView
+    ? {
+        title: "Warehouse & Inventory",
+        subtitle: "Manage warehouse-scoped inventory workflows for your assigned warehouse.",
+        roleKey: "Warehouse Manager",
+        links: userDashboardSearchItems.warehouseManager || [],
+      }
+    : { title: "Warehouse & Inventory", user: null };
+
   return (
-    <AdminShell title="Warehouse & Inventory" user={null}>
+    <ShellComponent {...shellProps}>
       <ToastContainer position="top-right" autoClose={2500} />
       <div className="space-y-6">
         <section className="rounded-2xl border bg-white p-5 shadow-sm">
@@ -1423,7 +1435,7 @@ export default function WarehouseInventoryModulePage() {
           onRemove={removeSummaryBatch}
         />
       </div>
-    </AdminShell>
+    </ShellComponent>
   );
 }
 
