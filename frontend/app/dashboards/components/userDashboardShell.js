@@ -443,22 +443,23 @@ function UserSidebar({ title, roleKey, groups, pathname, openGroups, setOpenGrou
         {groups.map((group) => {
           const active = group.items.some((item) => pathname === item.href);
           const isOpen = openGroups[group.key] ?? false;
+          const singleItem = group.items.length === 1;
           return (
             <div key={group.key} className="rounded-xl border border-zinc-200 bg-zinc-50">
               <button
                 type="button"
                 onClick={() => {
-                  if (collapsed) {
+                  if (collapsed || singleItem) {
                     go(group.items[0].href);
-                  } else {
-                    setOpenGroups((prev) => {
-                      const isCurrentlyOpen = prev[group.key] ?? false;
-                      return {
-                        ...prev,
-                        [group.key]: !isCurrentlyOpen,
-                      };
-                    });
+                    return;
                   }
+                  setOpenGroups((prev) => {
+                    const isCurrentlyOpen = prev[group.key] ?? false;
+                    return {
+                      ...prev,
+                      [group.key]: !isCurrentlyOpen,
+                    };
+                  });
                 }}
                 className={[
                   "w-full flex items-center gap-2 px-3 py-2 text-sm",
@@ -471,10 +472,10 @@ function UserSidebar({ title, roleKey, groups, pathname, openGroups, setOpenGrou
                   <ModuleIcon name={group.iconName} />
                   {!collapsed ? <span className="truncate text-center">{group.title}</span> : null}
                 </div>
-                {!collapsed ? <span className="text-xs text-zinc-500 ml-1">{isOpen ? "▾" : "▸"}</span> : null}
+                {!collapsed && !singleItem ? <span className="text-xs text-zinc-500 ml-1">{isOpen ? "▾" : "▸"}</span> : null}
               </button>
 
-              {!collapsed && isOpen ? (
+              {!collapsed && !singleItem && isOpen ? (
                 <div className="px-2 pb-2 space-y-1">
                   {group.items.map((item) => {
                     const itemActive = pathname === item.href;
