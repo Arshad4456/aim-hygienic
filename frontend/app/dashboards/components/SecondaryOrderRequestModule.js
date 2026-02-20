@@ -18,44 +18,36 @@ function computeLine(line, product) {
   return { qty, rate, gross, toValue: 0, discValue: 0, extraValue: 0, bonsValue: 0, v4gst: gross, gstPer: 0, gst: 0, net: gross };
 }
 
-function buildDistributorOptions(user) {
-  if (!user) return [];
+function buildDistributorOptions(user, distributorUsers = []) {
+  const fromDirectory = (distributorUsers || []).map((item) => ({
+    _id: String(item.userId || item._id || "").trim(),
+    userId: String(item.userId || item._id || "").trim(),
+    businessName: String(item.businessName || "").trim(),
+    fullName: String(item.fullName || "").trim(),
+    warehouseId: String(item.warehouseId || "").trim(),
+    territoryName: String(item.territoryName || item.areaName || "").trim(),
+  })).filter((item) => item._id);
 
-  const candidates = [
+  const fallbackCandidates = user ? [
     {
-      id: user.distributorId,
-      name: user.distributorName,
-      warehouseId: user.warehouseId,
+      _id: String(user.distributorId || user.distributorName || "").trim(),
+      userId: String(user.distributorId || "").trim(),
+      businessName: String(user.distributorName || "").trim(),
+      fullName: String(user.distributorName || "").trim(),
+      warehouseId: String(user.warehouseId || "").trim(),
+      territoryName: String(user.territoryName || user.areaName || "").trim(),
     },
-    {
-      id: user.managerId,
-      name: user.managerName,
-      warehouseId: user.warehouseId,
-    },
-    {
-      id: user.warehouseId,
-      name: user.warehouseName,
-      warehouseId: user.warehouseId,
-    },
-  ].filter((entry) => entry.id || entry.name);
+  ] : [];
 
+  const options = [...fromDirectory, ...fallbackCandidates].filter((item) => item && item._id);
   const seen = new Set();
-  return candidates
-    .map((entry) => {
-      const optionId = String(entry.id || entry.name || "").trim();
-      const optionName = String(entry.name || "").trim();
-      if (!optionId || seen.has(optionId)) return null;
-      seen.add(optionId);
-      return {
-        _id: optionId,
-        userId: String(entry.id || "").trim(),
-        businessName: optionName,
-        fullName: optionName,
-        warehouseId: String(entry.warehouseId || "").trim(),
-      };
-    })
-    .filter(Boolean);
+  return options.filter((item) => {
+    if (seen.has(item._id)) return false;
+    seen.add(item._id);
+    return true;
+  });
 }
+
 
 export default function SecondaryOrderRequestModule({ roleKey, links, title }) {
   const [user, setUser] = useState(null);
@@ -76,21 +68,29 @@ export default function SecondaryOrderRequestModule({ roleKey, links, title }) {
   const loadData = useCallback(async () => {
     setErr("");
 
-    const [meResult, productsResult, ordersResult] = await Promise.allSettled([
-      apiFetch("/users/me"),
-      apiFetch("/products"),
-      apiFetch("/orders/my?limit=200"),
-    ]);
-
-    const me = meResult.status === "fulfilled" ? (meResult.value?.user || null) : null;
-    const productsData = productsResult.status === "fulfilled" ? (productsResult.value?.products || []) : [];
-    const myOrders = ordersResult.status === "fulfilled" ? (ordersResult.value?.orders || []) : [];
-
-    if (meResult.status === "rejected") {
-      const message = meResult.reason?.message || "Failed to load profile data";
+    let me = null;
+    try {
+      const meRes = await apiFetch("/users/me");
+      me = meRes?.user || null;
+    } catch (error) {
+      const message = error?.message || "Failed to load profile data";
       setErr(message);
       notify("error", message);
-    } else if (productsResult.status === "rejected") {
+      return;
+    }
+
+    const territoryName = String(me?.territoryName || me?.areaName || "").trim();
+    const [productsResult, ordersResult, distributorsResult] = await Promise.allSettled([
+      apiFetch("/products"),
+      apiFetch("/orders/my?limit=200"),
+      apiFetch(`/users/distributors?territoryName=${encodeURIComponent(territoryName)}&limit=200`),
+    ]);
+
+    const productsData = productsResult.status === "fulfilled" ? (productsResult.value?.products || []) : [];
+    const myOrders = ordersResult.status === "fulfilled" ? (ordersResult.value?.orders || []) : [];
+    const distributorUsers = distributorsResult.status === "fulfilled" ? (distributorsResult.value?.users || []) : [];
+
+    if (productsResult.status === "rejected") {
       const message = productsResult.reason?.message || "Failed to load products";
       setErr(message);
       notify("error", message);
@@ -98,9 +98,13 @@ export default function SecondaryOrderRequestModule({ roleKey, links, title }) {
       const message = ordersResult.reason?.message || "Failed to load orders";
       setErr(message);
       notify("error", message);
+    } else if (distributorsResult.status === "rejected") {
+      const message = distributorsResult.reason?.message || "Failed to load distributors";
+      setErr(message);
+      notify("error", message);
     }
 
-    const distributorOptions = buildDistributorOptions(me);
+    const distributorOptions = buildDistributorOptions(me, distributorUsers);
 
     setUser(me);
     setProducts(productsData);

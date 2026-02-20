@@ -270,6 +270,30 @@ router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
   return res.json({ ok: true, users });
 });
 
+router.get("/distributors", requireAuth, async (req, res) => {
+  try {
+    const territoryName = normalize(req.query.territoryName || req.user?.territoryName || req.user?.areaName);
+    const limit = Math.min(Number(req.query.limit) || 100, 300);
+    const query = { role: "Distributor" };
+    if (territoryName) {
+      query.$or = [
+        { territoryName },
+        { areaName: territoryName },
+      ];
+    }
+
+    const users = await User.find(query)
+      .select("userId fullName businessName warehouseId warehouseName territoryName areaName address shopAddress")
+      .sort({ fullName: 1 })
+      .limit(limit)
+      .lean();
+
+    return res.json({ ok: true, users });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to load distributors" });
+  }
+});
+
 router.get("/:id", requireAuth, requireRole("admin"), async (req, res) => {
   const user = await User.findById(req.params.id).select("-passwordHash").lean();
   if (!user) return res.status(404).json({ ok: false, message: "User not found" });
