@@ -76,10 +76,28 @@ export default function PaymentManagementPage() {
   const [invoiceDetail, setInvoiceDetail] = useState(null);
   const [err, setErr] = useState("");
 
+  const resolvedUserWarehouseId = useMemo(() => {
+    if (!userWarehouseId) return "";
+    const match = warehouses.find(
+      (w) => String(w._id) === String(userWarehouseId) || String(w.warehouseId || "") === String(userWarehouseId)
+    );
+    return match?._id ? String(match._id) : "";
+  }, [userWarehouseId, warehouses]);
+
   const scopedWarehouses = useMemo(() => {
     if (!isWarehouseManagerView || !userWarehouseId) return warehouses;
-    return warehouses.filter((w) => String(w._id) === String(userWarehouseId));
+    return warehouses.filter(
+      (w) => String(w._id) === String(userWarehouseId) || String(w.warehouseId || "") === String(userWarehouseId)
+    );
   }, [isWarehouseManagerView, userWarehouseId, warehouses]);
+
+  const effectivePrimaryWarehouseId = isWarehouseManagerView
+    ? resolvedUserWarehouseId || primaryForm.warehouseId || userWarehouseId
+    : primaryForm.warehouseId;
+  const effectiveSecondaryWarehouseId = isWarehouseManagerView
+    ? resolvedUserWarehouseId || secondaryForm.warehouseId || userWarehouseId
+    : secondaryForm.warehouseId;
+
 
   useEffect(() => {
     async function loadMasters() {
@@ -151,9 +169,9 @@ export default function PaymentManagementPage() {
       primaryLedger.filter(
         (item) =>
           (!secondaryForm.distributorId || String(item.distributorId) === String(secondaryForm.distributorId)) &&
-          (!secondaryForm.warehouseId || String(item.warehouseId) === String(secondaryForm.warehouseId))
+          (!effectiveSecondaryWarehouseId || String(item.warehouseId) === String(effectiveSecondaryWarehouseId))
       ),
-    [primaryLedger, secondaryForm.distributorId, secondaryForm.warehouseId]
+    [primaryLedger, secondaryForm.distributorId, effectiveSecondaryWarehouseId]
   );
 
   function onPrimaryCascade(field, value) {
@@ -179,9 +197,9 @@ export default function PaymentManagementPage() {
     e.preventDefault();
     try {
       setErr("");
-      const payload = isWarehouseManagerView ? { ...primaryForm, warehouseId: userWarehouseId } : primaryForm;
+      const payload = isWarehouseManagerView ? { ...primaryForm, warehouseId: effectivePrimaryWarehouseId } : primaryForm;
       await apiFetch("/payments/primary", { method: "POST", body: payload });
-      setPrimaryForm({ ...initialPrimaryForm, warehouseId: isWarehouseManagerView ? userWarehouseId : "" });
+      setPrimaryForm({ ...initialPrimaryForm, warehouseId: isWarehouseManagerView ? effectivePrimaryWarehouseId : "" });
       await loadLedgers();
     } catch (error) {
       setErr(formatDashboardError(error, isWarehouseManagerView) || "Failed to save primary payment");
@@ -192,9 +210,9 @@ export default function PaymentManagementPage() {
     e.preventDefault();
     try {
       setErr("");
-      const payload = isWarehouseManagerView ? { ...secondaryForm, warehouseId: userWarehouseId } : secondaryForm;
+      const payload = isWarehouseManagerView ? { ...secondaryForm, warehouseId: effectiveSecondaryWarehouseId } : secondaryForm;
       await apiFetch("/payments/secondary", { method: "POST", body: payload });
-      setSecondaryForm({ ...initialSecondaryForm, warehouseId: isWarehouseManagerView ? userWarehouseId : "" });
+      setSecondaryForm({ ...initialSecondaryForm, warehouseId: isWarehouseManagerView ? effectiveSecondaryWarehouseId : "" });
       await loadLedgers();
     } catch (error) {
       setErr(formatDashboardError(error, isWarehouseManagerView) || "Failed to save secondary payment");
@@ -260,7 +278,7 @@ export default function PaymentManagementPage() {
               <CascadeSelect label="Zone" value={primaryForm.zoneId} onChange={(v) => onPrimaryCascade("zoneId", v)} options={primaryZones} />
               <CascadeSelect label="Territory" value={primaryForm.territoryId} onChange={(v) => onPrimaryCascade("territoryId", v)} options={primaryTerritories} />
               <CascadeSelect label="Distributor Name" value={primaryForm.distributorId} onChange={(v) => onPrimaryCascade("distributorId", v)} options={primaryDistributors} user />
-              <CascadeSelect label="Warehouse Name" value={primaryForm.warehouseId} onChange={(v) => onPrimaryCascade("warehouseId", v)} options={scopedWarehouses} warehouse disabled={isWarehouseManagerView} />
+              <CascadeSelect label="Warehouse Name" value={effectivePrimaryWarehouseId} onChange={(v) => onPrimaryCascade("warehouseId", v)} options={scopedWarehouses} warehouse disabled={isWarehouseManagerView} />
               <Input label="Amount" type="number" value={primaryForm.amount} onChange={(v) => onPrimaryCascade("amount", v)} />
               <Input label="Pay Date" type="date" value={primaryForm.payDate} onChange={(v) => onPrimaryCascade("payDate", v)} />
               <Input label="Return Date" type="date" value={primaryForm.returnDate} onChange={(v) => onPrimaryCascade("returnDate", v)} />
@@ -275,7 +293,7 @@ export default function PaymentManagementPage() {
               <CascadeSelect label="Zone" value={secondaryForm.zoneId} onChange={(v) => onSecondaryCascade("zoneId", v)} options={secondaryZones} />
               <CascadeSelect label="Territory" value={secondaryForm.territoryId} onChange={(v) => onSecondaryCascade("territoryId", v)} options={secondaryTerritories} />
               <CascadeSelect label="Distributor Name" value={secondaryForm.distributorId} onChange={(v) => onSecondaryCascade("distributorId", v)} options={secondaryDistributors} user />
-              <CascadeSelect label="Warehouse Name" value={secondaryForm.warehouseId} onChange={(v) => onSecondaryCascade("warehouseId", v)} options={scopedWarehouses} warehouse disabled={isWarehouseManagerView} />
+              <CascadeSelect label="Warehouse Name" value={effectiveSecondaryWarehouseId} onChange={(v) => onSecondaryCascade("warehouseId", v)} options={scopedWarehouses} warehouse disabled={isWarehouseManagerView} />
               <Input label="Amount Paid" type="number" value={secondaryForm.amountPaid} onChange={(v) => onSecondaryCascade("amountPaid", v)} />
               <Input label="Date of Paid" type="date" value={secondaryForm.paidDate} onChange={(v) => onSecondaryCascade("paidDate", v)} />
               <div>
