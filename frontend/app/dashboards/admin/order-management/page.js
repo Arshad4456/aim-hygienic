@@ -694,12 +694,17 @@ export default function OrderManagementModulePage() {
     const requestSource = normalizeRequestSource(order.requestSourceRole || order.fromEntityType || "");
     const isIncomingPrimaryRequest = order.transactionType === "SALE_STOCK"
       && (requestSource.includes("brandmanager") || requestSource.includes("distributor") || requestSource === "brand");
-    const invoiceFrom = isIncomingPrimaryRequest
-      ? (order.warehouseName || order.toEntityName || "-")
-      : (order.fromEntityName || order.warehouseName || "-");
-    const billTo = isIncomingPrimaryRequest
-      ? (order.fromEntityName || order.distributorName || order.brandName || order.customerName || "-")
-      : (order.toEntityName || order.distributorName || order.customerName || "-");
+    const isSecondaryOrder = order.saleType === "secondary";
+    const invoiceFrom = isSecondaryOrder
+      ? (order.toWarehouseName || order.distributorName || order.toEntityName || "-")
+      : isIncomingPrimaryRequest
+        ? (order.warehouseName || order.toEntityName || "-")
+        : (order.fromEntityName || order.warehouseName || "-");
+    const billTo = isSecondaryOrder
+      ? (order.customerName || order.fromEntityName || "-")
+      : isIncomingPrimaryRequest
+        ? (order.fromEntityName || order.distributorName || order.brandName || order.customerName || "-")
+        : (order.toEntityName || order.distributorName || order.customerName || "-");
 
     const html = `
       <html>
