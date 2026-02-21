@@ -135,6 +135,11 @@ export default function SalesmanDeliveriesModule() {
       let publicUrl = presigned.publicUrl;
 
       try {
+        const uploadHost = new URL(presigned.uploadUrl).hostname.toLowerCase();
+        if (!uploadHost.endsWith(".r2.cloudflarestorage.com")) {
+          throw new Error("Invalid upload endpoint returned by server");
+        }
+
         const putRes = await fetch(presigned.uploadUrl, {
           method: "PUT",
           headers: { "Content-Type": uploadFile.type || "image/jpeg" },
