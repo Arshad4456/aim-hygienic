@@ -1,4 +1,6 @@
 const crypto = require("crypto");
+const http = require("http");
+const https = require("https");
 const express = require("express");
 const { requireAuth } = require("../utils/auth");
 const User = require("../models/User");
@@ -143,9 +145,57 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function uploadBufferWithHttp(putUrl, { contentType, body, timeoutMs = 15000, family } = {}) {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(putUrl);
+    const isHttps = parsedUrl.protocol === "https:";
+    const transport = isHttps ? https : http;
+
+    const req = transport.request(
+      {
+        protocol: parsedUrl.protocol,
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port || (isHttps ? 443 : 80),
+        path: `${parsedUrl.pathname}${parsedUrl.search}`,
+        method: "PUT",
+        headers: {
+          "Content-Type": contentType,
+          "Content-Length": body.length,
+          Host: parsedUrl.host,
+        },
+        ...(isHttps
+          ? {
+              servername: parsedUrl.hostname,
+              minVersion: "TLSv1.2",
+            }
+          : {}),
+        ...(family ? { family } : {}),
+      },
+      (response) => {
+        response.resume();
+        response.on("end", () => {
+          resolve({ ok: response.statusCode >= 200 && response.statusCode < 300, status: response.statusCode || 0 });
+        });
+      }
+    );
+
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(new Error("Upload request timed out"));
+    });
+    req.on("error", reject);
+    req.end(body);
+  });
+}
+
+function parseUploadError(error) {
+  const primary = String(error?.message || "").trim();
+  const nested = String(error?.cause?.message || "").trim();
+  return nested && nested !== primary ? `${primary} (${nested})` : primary;
+}
+
 async function uploadBufferToPresignedUrl(putUrl, { contentType, body }) {
   let lastError = null;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
       const response = await fetch(putUrl, {
         method: "PUT",
@@ -155,11 +205,24 @@ async function uploadBufferToPresignedUrl(putUrl, { contentType, body }) {
       return { ok: response.ok, status: response.status || 0 };
     } catch (error) {
       lastError = error;
-      if (attempt < 3) await sleep(250 * attempt);
+      if (attempt < 2) await sleep(250 * attempt);
     }
   }
 
-  throw lastError || new Error("Upload failed");
+  const fallbackAttempts = [
+    () => uploadBufferWithHttp(putUrl, { contentType, body, family: 4 }),
+    () => uploadBufferWithHttp(putUrl, { contentType, body }),
+  ];
+
+  for (const attempt of fallbackAttempts) {
+    try {
+      return await attempt();
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw new Error(parseUploadError(lastError) || "Upload failed");
 }
 
 router.post("/pod-url", requireAuth, async (req, res) => {
