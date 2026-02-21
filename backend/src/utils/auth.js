@@ -30,10 +30,6 @@ function signToken(user) {
     warehouseId: String(user.warehouseId || "").trim(),
     userId: String(user.userId || "").trim(),
     distributorId,
-    territoryName: String(user.territoryName || user.areaName || "").trim(),
-    areaName: String(user.areaName || user.territoryName || "").trim(),
-    fieldId: String(user.fieldId || "").trim(),
-    fieldName: String(user.fieldName || "").trim(),
     exp: now + 7 * 24 * 60 * 60,
   };
 

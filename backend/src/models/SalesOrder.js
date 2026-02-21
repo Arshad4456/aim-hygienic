@@ -93,8 +93,6 @@ const SalesOrderSchema = new mongoose.Schema(
     zoneId: { type: String, trim: true },
     zoneName: { type: String, trim: true },
     territoryName: { type: String, trim: true },
-    fieldId: { type: String, trim: true },
-    fieldName: { type: String, trim: true },
     address: { type: String, trim: true },
     invoiceNo: { type: String, trim: true },
     invoiceGeneratedAt: { type: Date },
