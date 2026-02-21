@@ -7,6 +7,47 @@ const SalesOrder = require("../models/SalesOrder");
 const router = express.Router();
 const PUBLIC_BASE_URL = "https://files.aimhygienics.com";
 
+function firstNonEmpty(...values) {
+  for (const value of values) {
+    if (String(value || "").trim()) return String(value).trim();
+  }
+  return "";
+}
+
+function readR2Config() {
+  const bucket = firstNonEmpty(
+    process.env.CLOUDFLARE_R2_BUCKET,
+    process.env.CLOUDFLARE_R2_BUCKET_NAME,
+    process.env.R2_BUCKET,
+    process.env.R2_BUCKET_NAME
+  );
+  const accountId = firstNonEmpty(
+    process.env.CLOUDFLARE_R2_ACCOUNT_ID,
+    process.env.CF_ACCOUNT_ID,
+    process.env.R2_ACCOUNT_ID
+  );
+  const accessKeyId = firstNonEmpty(
+    process.env.CLOUDFLARE_R2_ACCESS_KEY_ID,
+    process.env.CLOUDFLARE_ACCESS_KEY_ID,
+    process.env.R2_ACCESS_KEY_ID,
+    process.env.AWS_ACCESS_KEY_ID
+  );
+  const secretAccessKey = firstNonEmpty(
+    process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY,
+    process.env.CLOUDFLARE_SECRET_ACCESS_KEY,
+    process.env.R2_SECRET_ACCESS_KEY,
+    process.env.AWS_SECRET_ACCESS_KEY
+  );
+
+  const missing = [];
+  if (!bucket) missing.push("bucket");
+  if (!accountId) missing.push("accountId");
+  if (!accessKeyId) missing.push("accessKeyId");
+  if (!secretAccessKey) missing.push("secretAccessKey");
+
+  return { bucket, accountId, accessKeyId, secretAccessKey, missing };
+}
+
 function sha256Hex(data) {
   return crypto.createHash("sha256").update(data).digest("hex");
 }
@@ -79,13 +120,13 @@ router.post("/pod-url", requireAuth, async (req, res) => {
       return res.status(400).json({ ok: false, message: "POD upload is allowed only for dispatched orders" });
     }
 
-    const bucket = process.env.CLOUDFLARE_R2_BUCKET;
-    const accountId = process.env.CLOUDFLARE_R2_ACCOUNT_ID;
-    const accessKeyId = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID;
-    const secretAccessKey = process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY;
+    const { bucket, accountId, accessKeyId, secretAccessKey, missing } = readR2Config();
 
-    if (!bucket || !accountId || !accessKeyId || !secretAccessKey) {
-      return res.status(500).json({ ok: false, message: "R2 storage is not configured" });
+    if (missing.length) {
+      return res.status(500).json({
+        ok: false,
+        message: `R2 storage is not configured (${missing.join(", ")}). Configure CLOUDFLARE_R2_* or compatible R2 env aliases.`,
+      });
     }
 
     const objectKey = `pod/${order._id}/${crypto.randomUUID()}.jpg`;
