@@ -5,7 +5,11 @@ const User = require("../models/User");
 const SalesOrder = require("../models/SalesOrder");
 
 const router = express.Router();
-const PUBLIC_BASE_URL = "https://files.aimhygienics.com";
+const DEFAULT_PUBLIC_BASE_URL = "https://files.aimhygienics.com";
+
+function resolvePublicBaseUrl() {
+  return firstNonEmpty(process.env.CLOUDFLARE_R2_PUBLIC_BASE_URL, process.env.R2_PUBLIC_BASE_URL, DEFAULT_PUBLIC_BASE_URL).replace(/\/$/, "");
+}
 
 function firstNonEmpty(...values) {
   for (const value of values) {
@@ -28,14 +32,18 @@ function readR2Config() {
   );
   const accessKeyId = firstNonEmpty(
     process.env.CLOUDFLARE_R2_ACCESS_KEY_ID,
+    process.env.CLOUDFLARE_R2_ACCESS_KEY,
     process.env.CLOUDFLARE_ACCESS_KEY_ID,
     process.env.R2_ACCESS_KEY_ID,
+    process.env.R2_ACCESS_KEY,
     process.env.AWS_ACCESS_KEY_ID
   );
   const secretAccessKey = firstNonEmpty(
     process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY,
+    process.env.CLOUDFLARE_R2_SECRET_KEY,
     process.env.CLOUDFLARE_SECRET_ACCESS_KEY,
     process.env.R2_SECRET_ACCESS_KEY,
+    process.env.R2_SECRET_KEY,
     process.env.AWS_SECRET_ACCESS_KEY
   );
 
@@ -125,12 +133,12 @@ router.post("/pod-url", requireAuth, async (req, res) => {
     if (missing.length) {
       return res.status(500).json({
         ok: false,
-        message: `R2 storage is not configured (${missing.join(", ")}). Configure CLOUDFLARE_R2_* or compatible R2 env aliases.`,
+        message: `R2 storage is not configured (${missing.join(", ")}). Configure S3-compatible Access Key + Secret (API token is not used for presigned S3 uploads).`,
       });
     }
 
     const objectKey = `pod/${order._id}/${crypto.randomUUID()}.jpg`;
-    const publicUrl = `${PUBLIC_BASE_URL}/${objectKey}`;
+    const publicUrl = `${resolvePublicBaseUrl()}/${objectKey}`;
     const uploadUrl = getPresignedPutUrl({ accountId, accessKeyId, secretAccessKey, bucket, key: objectKey, contentType: String(contentType).trim() });
 
     return res.json({ ok: true, uploadUrl, objectKey, publicUrl });
