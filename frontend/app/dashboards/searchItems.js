@@ -104,7 +104,7 @@ export const userDashboardSearchItems = {
   ],
   fieldSM: [{ title: "Dashboard", href: "/dashboards/fieldSM" }],
   orderBooker: [{ title: "Dashboard", href: "/dashboards/orderBooker" }, { title: "Secondary Sale Requests", href: "/dashboards/orderBooker/orders" }],
-  salesman: [{ title: "Dashboard", href: "/dashboards/salesman" }, { title: "Proof of Delivery", href: "/dashboards/salesman/orders" }],
+  salesman: [{ title: "Dashboard", href: "/dashboards/salesman" }, { title: "Deliveries", href: "/dashboards/salesman/orders" }],
   deliveryBoy: [{ title: "Dashboard", href: "/dashboards/deliveryBoy" }, { title: "Proof of Delivery", href: "/dashboards/deliveryBoy/orders" }],
   customer: [
     { title: "Dashboard", href: "/dashboards/customer" },
