@@ -109,31 +109,35 @@ export default function SalesmanDeliveriesModule() {
                   <td className="px-3 py-2 border-b">{order.distributorName || order.toWarehouseName || "-"}</td>
                   <td className="px-3 py-2 border-b">{order.fieldName || "-"}</td>
                   <td className="px-3 py-2 border-b uppercase">{order.status}</td>
-                  <td className="px-3 py-2 border-b">{order.podUrl ? <span className="text-emerald-700">Uploaded</span> : <span className="text-amber-700">Not Uploaded</span>}</td>
+                  <td className="px-3 py-2 border-b">
+                    {order.podUrl ? (
+                      <span className="text-emerald-700">Uploaded</span>
+                    ) : isDispatched ? (
+                      <label className="rounded-full bg-blue-600 px-3 py-1 text-xs text-white cursor-pointer inline-block">
+                        {uploadingFor === order._id ? "Uploading..." : "Upload POD"}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          className="hidden"
+                          disabled={uploadingFor === order._id}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = "";
+                            uploadPod(order._id, file);
+                          }}
+                        />
+                      </label>
+                    ) : (
+                      <span className="text-amber-700">Not Uploaded (Dispatch first)</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 border-b">
                     <div className="flex flex-wrap gap-2 items-center">
                       {isApproved ? (
                         <button className="rounded-full bg-indigo-600 px-3 py-1 text-xs text-white disabled:opacity-50" disabled={dispatchingFor === order._id} onClick={() => dispatchOrder(order._id)}>
                           {dispatchingFor === order._id ? "Dispatching..." : "Dispatch"}
                         </button>
-                      ) : null}
-
-                      {isDispatched ? (
-                        <label className="rounded-full bg-blue-600 px-3 py-1 text-xs text-white cursor-pointer">
-                          {uploadingFor === order._id ? "Uploading..." : "Proof of Delivery"}
-                          <input
-                            type="file"
-                            accept="image/*"
-                            capture="environment"
-                            className="hidden"
-                            disabled={uploadingFor === order._id}
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              e.target.value = "";
-                              uploadPod(order._id, file);
-                            }}
-                          />
-                        </label>
                       ) : null}
                     </div>
                   </td>
