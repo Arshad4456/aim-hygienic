@@ -382,11 +382,18 @@ router.patch("/:id/status", requireAuth, async (req, res) => {
       return res.status(400).json({ ok: false, message: "Invalid status" });
     }
 
-    const order = await SalesOrder.findOne({ _id: req.params.id, ...roleMatchQuery(req.user) });
+    const requestRole = normalizeRole(req.user?.role);
+    let order;
+
+    if (requestRole === "salesman" && status === "dispatched") {
+      order = await SalesOrder.findById(req.params.id);
+    } else {
+      order = await SalesOrder.findOne({ _id: req.params.id, ...roleMatchQuery(req.user) });
+    }
+
     if (!order) {
       return res.status(404).json({ ok: false, message: "Order not found" });
     }
-    const requestRole = normalizeRole(req.user?.role);
     if (status === "delivered" && !DELIVERY_APPROVER_ROLES.has(requestRole)) {
       return res.status(403).json({ ok: false, message: "Only Admin, Warehouse Manager or Distributor can mark delivered" });
     }
