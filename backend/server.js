@@ -32,7 +32,7 @@ const uploadsRoutes = require("./src/routes/uploads");
 
 const app = express();
 
-app.use(express.json());
+app.use(express.json({ limit: "25mb" }));
 
 // CORS for your live domain
 const allowedOrigins = process.env.CORS_ORIGIN
