@@ -1442,6 +1442,24 @@ function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
             <PreviewField label="Status" value={normalizeRequestStatus(row.requestStatus || row.status || "PENDING")} />
           </div>
 
+          {isSecondaryOrderRow ? (
+            <div className="rounded-xl border p-3">
+              <div className="text-sm font-semibold">Proof of Delivery</div>
+              {row.podUrl || row.proofOfDeliveryImageUrl ? (
+                <div className="mt-2 grid gap-3 md:grid-cols-2 text-xs text-zinc-600">
+                  <img src={row.podUrl || row.proofOfDeliveryImageUrl} alt="Proof of delivery" className="w-full max-h-64 rounded border object-contain bg-zinc-50" />
+                  <div className="space-y-2">
+                    <div><span className="font-medium text-zinc-700">Uploaded At:</span> {row.podUploadedAt || row.proofOfDeliveryAt ? new Date(row.podUploadedAt || row.proofOfDeliveryAt).toLocaleString() : "-"}</div>
+                    <div><span className="font-medium text-zinc-700">Uploaded By:</span> {row.podUploadedBy || row.proofOfDeliveryBy || "-"}</div>
+                    <a className="text-blue-600 underline" href={row.podUrl || row.proofOfDeliveryImageUrl} target="_blank" rel="noreferrer">Open original image</a>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-2 text-xs text-zinc-500">POD not uploaded yet.</div>
+              )}
+            </div>
+          ) : null}
+
           <div className="space-y-2">
             <div className="font-semibold text-base">Product Detail</div>
             <div className="overflow-x-auto rounded border">
