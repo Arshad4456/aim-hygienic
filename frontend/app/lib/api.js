@@ -80,7 +80,8 @@ export async function apiFetch(path, { method = "GET", body, token, credentials 
   const candidates = resolveApiCandidates();
   let lastError = null;
   const normalizedMethod = String(method || "GET").toUpperCase();
-  const canRetryAcrossBases = ["GET", "HEAD", "OPTIONS"].includes(normalizedMethod);
+  const hasMultipleCandidates = candidates.length > 1;
+  const canRetryAcrossBases = hasMultipleCandidates && ["GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"].includes(normalizedMethod);
 
   for (const baseUrl of candidates) {
     try {
