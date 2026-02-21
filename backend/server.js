@@ -25,6 +25,7 @@ const salesKpiRoutes = require("./src/routes/salesKpi");
 const ordersRoutes = require("./src/routes/orders");
 const returnsRoutes = require("./src/routes/returns");
 const paymentsRoutes = require("./src/routes/payments");
+const uploadsRoutes = require("./src/routes/uploads");
 
 const app = express();
 
@@ -69,6 +70,7 @@ app.use("/api/sales-kpi", salesKpiRoutes);
 app.use("/api/orders", ordersRoutes);
 app.use("/api/returns", returnsRoutes);
 app.use("/api/payments", paymentsRoutes);
+app.use("/api/uploads", uploadsRoutes);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true, service: "aim-api", time: new Date().toISOString() });

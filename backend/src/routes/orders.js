@@ -7,6 +7,11 @@ const router = express.Router();
 
 const ALLOWED_STATUSES = ["pending", "approved", "rejected", "dispatched", "delivered"];
 const ADMIN_ROLES = new Set(["admin"]);
+const DELIVERY_APPROVER_ROLES = new Set(["admin", "warehouse manager", "distributor"]);
+
+function normalizeRole(role) {
+  return String(role || "").trim().toLowerCase();
+}
 
 function isWarehouseManagerRole(role) {
   return String(role || "").trim().toLowerCase() === "warehouse manager";
@@ -14,6 +19,22 @@ function isWarehouseManagerRole(role) {
 
 function getScopedWarehouseId(user) {
   return String(user?.warehouse_id || user?.warehouseId || "").trim();
+}
+
+async function getAuthenticatedUser(req) {
+  if (!req.user?.uid) return null;
+  return User.findById(req.user.uid).lean();
+}
+
+function getFieldScope(user) {
+  return String(user?.fieldId || user?.field_id || "").trim();
+}
+
+async function getSalesmanFieldScope(req) {
+  const authUser = await getAuthenticatedUser(req);
+  const fieldId = getFieldScope(authUser);
+  if (!fieldId) return { error: "Salesman field not configured" };
+  return { authUser, fieldId };
 }
 
 function normalizeItems(items = []) {
@@ -165,6 +186,31 @@ router.get("/dispatch", requireAuth, async (req, res) => {
   }
 });
 
+router.get("/salesman-deliveries", requireAuth, async (req, res) => {
+  try {
+    if (String(req.user?.role || "") !== "Salesman") {
+      return res.status(403).json({ ok: false, message: "Only Salesman can access deliveries" });
+    }
+
+    const scope = await getSalesmanFieldScope(req);
+    if (scope.error) return res.status(400).json({ ok: false, message: scope.error });
+
+    const limit = Math.min(Number(req.query.limit) || 200, 500);
+    const orders = await SalesOrder.find({
+      saleType: "secondary",
+      fieldId: scope.fieldId,
+      status: { $in: ["approved", "dispatched"] },
+    })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    return res.json({ ok: true, orders });
+  } catch (_error) {
+    return res.status(500).json({ ok: false, message: "Failed to load salesman deliveries" });
+  }
+});
+
 router.get("/summary", requireAuth, async (req, res) => {
   try {
     const match = roleMatchQuery(req.user);
@@ -280,6 +326,45 @@ router.patch("/:id/proof-of-delivery", requireAuth, async (req, res) => {
   }
 });
 
+router.post("/:orderId/pod", requireAuth, async (req, res) => {
+  try {
+    if (String(req.user?.role || "") !== "Salesman") {
+      return res.status(403).json({ ok: false, message: "Only Salesman can upload POD" });
+    }
+
+    const objectKey = String(req.body?.objectKey || "").trim();
+    const publicUrl = String(req.body?.publicUrl || "").trim();
+    if (!objectKey || !publicUrl) {
+      return res.status(400).json({ ok: false, message: "objectKey and publicUrl are required" });
+    }
+
+    const scope = await getSalesmanFieldScope(req);
+    if (scope.error) return res.status(400).json({ ok: false, message: scope.error });
+
+    const order = await SalesOrder.findById(req.params.orderId);
+    if (!order) return res.status(404).json({ ok: false, message: "Order not found" });
+    if (String(order.fieldId || "").trim() !== scope.fieldId) {
+      return res.status(403).json({ ok: false, message: "Order is outside your field" });
+    }
+    if (order.status !== "dispatched") {
+      return res.status(400).json({ ok: false, message: "POD upload is allowed only for dispatched orders" });
+    }
+
+    order.podObjectKey = objectKey;
+    order.podUrl = publicUrl;
+    order.podUploadedAt = new Date();
+    order.podUploadedBy = req.user?.uid;
+    order.proofOfDeliveryImageUrl = publicUrl;
+    order.proofOfDeliveryAt = order.podUploadedAt;
+    order.proofOfDeliveryBy = req.user?.uid;
+    await order.save();
+
+    return res.json({ ok: true, order });
+  } catch (_error) {
+    return res.status(500).json({ ok: false, message: "Failed to save POD" });
+  }
+});
+
 router.delete("/:id", requireAuth, async (req, res) => {
   try {
     const removed = await SalesOrder.findOneAndDelete({ _id: req.params.id, ...roleMatchQuery(req.user) });
@@ -300,6 +385,17 @@ router.patch("/:id/status", requireAuth, async (req, res) => {
     const order = await SalesOrder.findOne({ _id: req.params.id, ...roleMatchQuery(req.user) });
     if (!order) {
       return res.status(404).json({ ok: false, message: "Order not found" });
+    }
+    const requestRole = normalizeRole(req.user?.role);
+    if (status === "delivered" && !DELIVERY_APPROVER_ROLES.has(requestRole)) {
+      return res.status(403).json({ ok: false, message: "Only Admin, Warehouse Manager or Distributor can mark delivered" });
+    }
+    if (requestRole === "salesman" && status === "dispatched") {
+      const scope = await getSalesmanFieldScope(req);
+      if (scope.error) return res.status(400).json({ ok: false, message: scope.error });
+      if (String(order.fieldId || "").trim() !== scope.fieldId) {
+        return res.status(403).json({ ok: false, message: "Order is outside your field" });
+      }
     }
     if (!canTransition(order, status)) {
       return res.status(400).json({ ok: false, message: "Invalid status transition" });
@@ -396,6 +492,8 @@ router.post("/", requireAuth, async (req, res) => {
       zoneId: req.body?.zoneId || authUser?.zoneId || "",
       zoneName: req.body?.zoneName || authUser?.zoneName || "",
       territoryName: req.body?.territoryName || authUser?.territoryName || authUser?.areaName || "",
+      fieldId: req.body?.fieldId || authUser?.fieldId || "",
+      fieldName: req.body?.fieldName || authUser?.fieldName || "",
       address: req.body?.address || authUser?.address || authUser?.shopAddress || "",
       statusHistory: [{ status: "pending", changedBy: req.user?.uid, changedAt: new Date(), note: "Order created" }],
     });

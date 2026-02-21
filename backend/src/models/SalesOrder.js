@@ -1,3 +1,4 @@
+
 const mongoose = require("mongoose");
 
 const SalesOrderItemSchema = new mongoose.Schema(
@@ -77,6 +78,10 @@ const SalesOrderSchema = new mongoose.Schema(
     proofOfDeliveryImageUrl: { type: String, trim: true },
     proofOfDeliveryAt: { type: Date },
     proofOfDeliveryBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    podUrl: { type: String, trim: true },
+    podObjectKey: { type: String, trim: true },
+    podUploadedAt: { type: Date },
+    podUploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     brandManagerId: { type: String, trim: true },
     distributorId: { type: String, trim: true },
     orderBookerId: { type: String, trim: true },
@@ -93,6 +98,8 @@ const SalesOrderSchema = new mongoose.Schema(
     zoneId: { type: String, trim: true },
     zoneName: { type: String, trim: true },
     territoryName: { type: String, trim: true },
+    fieldId: { type: String, trim: true },
+    fieldName: { type: String, trim: true },
     address: { type: String, trim: true },
     invoiceNo: { type: String, trim: true },
     invoiceGeneratedAt: { type: Date },
