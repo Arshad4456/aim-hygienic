@@ -3,6 +3,76 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "../../lib/api";
 
+const MAX_PROXY_UPLOAD_BYTES = 6 * 1024 * 1024;
+
+function readImageDimensions(file) {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      resolve({
+        width: image.naturalWidth || image.width || 0,
+        height: image.naturalHeight || image.height || 0,
+        cleanup: () => URL.revokeObjectURL(objectUrl),
+      });
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Failed to load image"));
+    };
+    image.src = objectUrl;
+  });
+}
+
+function canvasToFile(canvas, { fileName, contentType, quality }) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          reject(new Error("Failed to process image"));
+          return;
+        }
+        resolve(new File([blob], fileName, { type: contentType }));
+      },
+      contentType,
+      quality
+    );
+  });
+}
+
+async function optimizePodImage(file) {
+  if (!file || !String(file.type || "").startsWith("image/")) return file;
+
+  const { width, height, cleanup } = await readImageDimensions(file);
+  try {
+    const maxDimension = 1600;
+    const longestSide = Math.max(width, height);
+    const shouldResize = longestSide > maxDimension;
+    const shouldCompress = file.size > MAX_PROXY_UPLOAD_BYTES;
+    if (!shouldResize && !shouldCompress) return file;
+
+    const ratio = shouldResize ? maxDimension / longestSide : 1;
+    const targetWidth = Math.max(1, Math.round(width * ratio));
+    const targetHeight = Math.max(1, Math.round(height * ratio));
+
+    const bitmap = await createImageBitmap(file);
+    const canvas = document.createElement("canvas");
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    const context = canvas.getContext("2d");
+    context.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
+    bitmap.close();
+
+    return canvasToFile(canvas, {
+      fileName: file.name || `pod-${Date.now()}.jpg`,
+      contentType: "image/jpeg",
+      quality: 0.78,
+    });
+  } finally {
+    cleanup();
+  }
+}
+
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -55,9 +125,10 @@ export default function SalesmanDeliveriesModule() {
     setUploadingFor(orderId);
     setError("");
     try {
+      const uploadFile = await optimizePodImage(file);
       const presigned = await apiFetch("/uploads/pod-url", {
         method: "POST",
-        body: { orderId, contentType: file.type || "image/jpeg" },
+        body: { orderId, contentType: uploadFile.type || "image/jpeg" },
       });
 
       let objectKey = presigned.objectKey;
@@ -66,17 +137,20 @@ export default function SalesmanDeliveriesModule() {
       try {
         const putRes = await fetch(presigned.uploadUrl, {
           method: "PUT",
-          headers: { "Content-Type": file.type || "image/jpeg" },
-          body: file,
+          headers: { "Content-Type": uploadFile.type || "image/jpeg" },
+          body: uploadFile,
         });
         if (!putRes.ok) {
           throw new Error(`Cloud upload failed (${putRes.status})`);
         }
       } catch (_directUploadError) {
-        const fileBase64 = await fileToBase64(file);
+        if (uploadFile.size > MAX_PROXY_UPLOAD_BYTES) {
+          throw new Error("Image is too large to upload. Please retake the photo from closer distance.");
+        }
+        const fileBase64 = await fileToBase64(uploadFile);
         const proxyRes = await apiFetch("/uploads/pod-proxy", {
           method: "POST",
-          body: { orderId, contentType: file.type || "image/jpeg", fileBase64 },
+          body: { orderId, contentType: uploadFile.type || "image/jpeg", fileBase64 },
         });
         objectKey = proxyRes.objectKey;
         publicUrl = proxyRes.publicUrl;

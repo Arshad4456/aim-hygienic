@@ -168,12 +168,16 @@ function uploadBufferWithHttp(putUrl, { contentType, body, timeoutMs = 15000 }) 
 
 async function uploadBufferToPresignedUrl(putUrl, { contentType, body }) {
   if (typeof fetch === "function") {
-    const response = await fetch(putUrl, {
-      method: "PUT",
-      headers: { "Content-Type": contentType },
-      body,
-    });
-    return { ok: response.ok, status: response.status || 0 };
+    try {
+      const response = await fetch(putUrl, {
+        method: "PUT",
+        headers: { "Content-Type": contentType },
+        body,
+      });
+      return { ok: response.ok, status: response.status || 0 };
+    } catch (_fetchError) {
+      return uploadBufferWithHttp(putUrl, { contentType, body });
+    }
   }
 
   return uploadBufferWithHttp(putUrl, { contentType, body });
