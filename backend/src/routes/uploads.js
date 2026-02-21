@@ -1,4 +1,6 @@
 const crypto = require("crypto");
+const http = require("http");
+const https = require("https");
 const express = require("express");
 const { requireAuth } = require("../utils/auth");
 const User = require("../models/User");
@@ -134,6 +136,33 @@ function getPresignedPutUrl({ accountId, accessKeyId, secretAccessKey, bucket, k
   return `https://${host}${canonicalUri}?${canonicalQueryString}&X-Amz-Signature=${signature}`;
 }
 
+function uploadBufferWithHttp(putUrl, { contentType, body }) {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(putUrl);
+    const transport = parsedUrl.protocol === "https:" ? https : http;
+
+    const req = transport.request(
+      parsedUrl,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": contentType,
+          "Content-Length": body.length,
+        },
+      },
+      (response) => {
+        response.resume();
+        response.on("end", () => {
+          resolve({ ok: response.statusCode >= 200 && response.statusCode < 300, status: response.statusCode || 0 });
+        });
+      }
+    );
+
+    req.on("error", reject);
+    req.end(body);
+  });
+}
+
 router.post("/pod-url", requireAuth, async (req, res) => {
   try {
     const { orderId, contentType } = req.body || {};
@@ -198,9 +227,8 @@ router.post("/pod-proxy", requireAuth, async (req, res) => {
     const publicUrl = `${resolvePublicBaseUrl()}/${objectKey}`;
     const uploadUrl = getPresignedPutUrl({ accountId, accessKeyId, secretAccessKey, bucket, key: objectKey, contentType: String(contentType).trim() });
 
-    const cloudRes = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: { "Content-Type": String(contentType).trim() || "image/jpeg" },
+    const cloudRes = await uploadBufferWithHttp(uploadUrl, {
+      contentType: String(contentType).trim() || "image/jpeg",
       body: fileBuffer,
     });
 
