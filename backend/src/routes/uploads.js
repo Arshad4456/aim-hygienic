@@ -139,16 +139,28 @@ function getPresignedPutUrl({ accountId, accessKeyId, secretAccessKey, bucket, k
 function uploadBufferWithHttp(putUrl, { contentType, body, timeoutMs = 15000 }) {
   return new Promise((resolve, reject) => {
     const parsedUrl = new URL(putUrl);
-    const transport = parsedUrl.protocol === "https:" ? https : http;
+    const isHttps = parsedUrl.protocol === "https:";
+    const transport = isHttps ? https : http;
 
     const req = transport.request(
-      parsedUrl,
       {
+        protocol: parsedUrl.protocol,
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port || (isHttps ? 443 : 80),
+        path: `${parsedUrl.pathname}${parsedUrl.search}`,
         method: "PUT",
         headers: {
           "Content-Type": contentType,
           "Content-Length": body.length,
+          Host: parsedUrl.host,
         },
+        ...(isHttps
+          ? {
+              servername: parsedUrl.hostname,
+              minVersion: "TLSv1.2",
+              ALPNProtocols: ["http/1.1"],
+            }
+          : {}),
       },
       (response) => {
         response.resume();
@@ -166,8 +178,13 @@ function uploadBufferWithHttp(putUrl, { contentType, body, timeoutMs = 15000 }) 
   });
 }
 
-async function uploadBufferToPresignedUrl(putUrl, { contentType, body }) {
-  if (typeof fetch === "function") {
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function putWithFetchRetry(putUrl, { contentType, body }) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
       const response = await fetch(putUrl, {
         method: "PUT",
@@ -175,6 +192,18 @@ async function uploadBufferToPresignedUrl(putUrl, { contentType, body }) {
         body,
       });
       return { ok: response.ok, status: response.status || 0 };
+    } catch (error) {
+      lastError = error;
+      if (attempt < 2) await sleep(250 * attempt);
+    }
+  }
+  throw lastError || new Error("Upload failed");
+}
+
+async function uploadBufferToPresignedUrl(putUrl, { contentType, body }) {
+  if (typeof fetch === "function") {
+    try {
+      return await putWithFetchRetry(putUrl, { contentType, body });
     } catch (_fetchError) {
       return uploadBufferWithHttp(putUrl, { contentType, body });
     }
