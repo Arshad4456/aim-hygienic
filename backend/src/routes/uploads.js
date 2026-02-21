@@ -136,7 +136,7 @@ function getPresignedPutUrl({ accountId, accessKeyId, secretAccessKey, bucket, k
   return `https://${host}${canonicalUri}?${canonicalQueryString}&X-Amz-Signature=${signature}`;
 }
 
-function uploadBufferWithHttp(putUrl, { contentType, body, timeoutMs = 15000 }) {
+function uploadBufferWithHttp(putUrl, { contentType, body, timeoutMs = 15000, family } = {}) {
   return new Promise((resolve, reject) => {
     const parsedUrl = new URL(putUrl);
     const isHttps = parsedUrl.protocol === "https:";
@@ -158,9 +158,9 @@ function uploadBufferWithHttp(putUrl, { contentType, body, timeoutMs = 15000 }) 
           ? {
               servername: parsedUrl.hostname,
               minVersion: "TLSv1.2",
-              ALPNProtocols: ["http/1.1"],
             }
           : {}),
+        ...(family ? { family } : {}),
       },
       (response) => {
         response.resume();
@@ -201,15 +201,38 @@ async function putWithFetchRetry(putUrl, { contentType, body }) {
 }
 
 async function uploadBufferToPresignedUrl(putUrl, { contentType, body }) {
+  const uploadAttempts = [
+    () => uploadBufferWithHttp(putUrl, { contentType, body, family: 4 }),
+    () => uploadBufferWithHttp(putUrl, { contentType, body }),
+  ];
+
   if (typeof fetch === "function") {
     try {
       return await putWithFetchRetry(putUrl, { contentType, body });
     } catch (_fetchError) {
-      return uploadBufferWithHttp(putUrl, { contentType, body });
+      let lastError = null;
+      for (const attempt of uploadAttempts) {
+        try {
+          return await attempt();
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      throw lastError || new Error("Upload failed");
     }
   }
 
-  return uploadBufferWithHttp(putUrl, { contentType, body });
+  let lastError = null;
+  for (const attempt of uploadAttempts) {
+    try {
+      return await attempt();
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error("Upload failed");
 }
 
 router.post("/pod-url", requireAuth, async (req, res) => {
