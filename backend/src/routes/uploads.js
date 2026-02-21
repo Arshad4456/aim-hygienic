@@ -56,6 +56,36 @@ function readR2Config() {
   return { bucket, accountId, accessKeyId, secretAccessKey, missing };
 }
 
+
+function normalizeBase64Payload(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const idx = raw.indexOf(",");
+  if (raw.startsWith("data:") && idx >= 0) return raw.slice(idx + 1);
+  return raw;
+}
+
+async function validateSalesmanPodRequest(req, orderId) {
+  if (String(req.user?.role || "") !== "Salesman") {
+    return { status: 403, body: { ok: false, message: "Only Salesman can request POD upload URLs" } };
+  }
+
+  const me = await User.findById(req.user.uid).lean();
+  const fieldId = String(me?.fieldId || "").trim();
+  if (!fieldId) return { status: 400, body: { ok: false, message: "Salesman field not configured" } };
+
+  const order = await SalesOrder.findById(orderId).lean();
+  if (!order) return { status: 404, body: { ok: false, message: "Order not found" } };
+  if (String(order.fieldId || "").trim() !== fieldId) {
+    return { status: 403, body: { ok: false, message: "Order is outside your field" } };
+  }
+  if (order.status !== "dispatched") {
+    return { status: 400, body: { ok: false, message: "POD upload is allowed only for dispatched orders" } };
+  }
+
+  return { order };
+}
+
 function sha256Hex(data) {
   return crypto.createHash("sha256").update(data).digest("hex");
 }
@@ -106,27 +136,16 @@ function getPresignedPutUrl({ accountId, accessKeyId, secretAccessKey, bucket, k
 
 router.post("/pod-url", requireAuth, async (req, res) => {
   try {
-    if (String(req.user?.role || "") !== "Salesman") {
-      return res.status(403).json({ ok: false, message: "Only Salesman can request POD upload URLs" });
-    }
-
     const { orderId, contentType } = req.body || {};
     if (!orderId || !contentType) {
       return res.status(400).json({ ok: false, message: "orderId and contentType are required" });
     }
 
-    const me = await User.findById(req.user.uid).lean();
-    const fieldId = String(me?.fieldId || "").trim();
-    if (!fieldId) return res.status(400).json({ ok: false, message: "Salesman field not configured" });
-
-    const order = await SalesOrder.findById(orderId).lean();
-    if (!order) return res.status(404).json({ ok: false, message: "Order not found" });
-    if (String(order.fieldId || "").trim() !== fieldId) {
-      return res.status(403).json({ ok: false, message: "Order is outside your field" });
+    const validation = await validateSalesmanPodRequest(req, orderId);
+    if (validation.status) {
+      return res.status(validation.status).json(validation.body);
     }
-    if (order.status !== "dispatched") {
-      return res.status(400).json({ ok: false, message: "POD upload is allowed only for dispatched orders" });
-    }
+    const { order } = validation;
 
     const { bucket, accountId, accessKeyId, secretAccessKey, missing } = readR2Config();
 
@@ -144,6 +163,54 @@ router.post("/pod-url", requireAuth, async (req, res) => {
     return res.json({ ok: true, uploadUrl, objectKey, publicUrl });
   } catch (_error) {
     return res.status(500).json({ ok: false, message: "Failed to generate POD upload URL" });
+  }
+});
+
+
+router.post("/pod-proxy", requireAuth, async (req, res) => {
+  try {
+    const { orderId, contentType, fileBase64 } = req.body || {};
+    if (!orderId || !contentType || !fileBase64) {
+      return res.status(400).json({ ok: false, message: "orderId, contentType and fileBase64 are required" });
+    }
+
+    const validation = await validateSalesmanPodRequest(req, orderId);
+    if (validation.status) {
+      return res.status(validation.status).json(validation.body);
+    }
+    const { order } = validation;
+
+    const { bucket, accountId, accessKeyId, secretAccessKey, missing } = readR2Config();
+    if (missing.length) {
+      return res.status(500).json({
+        ok: false,
+        message: `R2 storage is not configured (${missing.join(", ")}). Configure S3-compatible Access Key + Secret (API token is not used for presigned S3 uploads).`,
+      });
+    }
+
+    const base64Payload = normalizeBase64Payload(fileBase64);
+    const fileBuffer = Buffer.from(base64Payload, "base64");
+    if (!fileBuffer.length) {
+      return res.status(400).json({ ok: false, message: "Invalid base64 file payload" });
+    }
+
+    const objectKey = `pod/${order._id}/${crypto.randomUUID()}.jpg`;
+    const publicUrl = `${resolvePublicBaseUrl()}/${objectKey}`;
+    const uploadUrl = getPresignedPutUrl({ accountId, accessKeyId, secretAccessKey, bucket, key: objectKey, contentType: String(contentType).trim() });
+
+    const cloudRes = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": String(contentType).trim() || "image/jpeg" },
+      body: fileBuffer,
+    });
+
+    if (!cloudRes.ok) {
+      return res.status(502).json({ ok: false, message: `R2 upload failed (${cloudRes.status})` });
+    }
+
+    return res.json({ ok: true, objectKey, publicUrl });
+  } catch (_error) {
+    return res.status(500).json({ ok: false, message: "Failed to upload POD to storage" });
   }
 });
 

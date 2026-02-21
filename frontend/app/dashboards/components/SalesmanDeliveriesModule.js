@@ -3,6 +3,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "../../lib/api";
 
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
+
 export default function SalesmanDeliveriesModule() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -50,18 +60,31 @@ export default function SalesmanDeliveriesModule() {
         body: { orderId, contentType: file.type || "image/jpeg" },
       });
 
-      const putRes = await fetch(presigned.uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": file.type || "image/jpeg" },
-        body: file,
-      });
-      if (!putRes.ok) {
-        throw new Error(`Cloud upload failed (${putRes.status})`);
+      let objectKey = presigned.objectKey;
+      let publicUrl = presigned.publicUrl;
+
+      try {
+        const putRes = await fetch(presigned.uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": file.type || "image/jpeg" },
+          body: file,
+        });
+        if (!putRes.ok) {
+          throw new Error(`Cloud upload failed (${putRes.status})`);
+        }
+      } catch (_directUploadError) {
+        const fileBase64 = await fileToBase64(file);
+        const proxyRes = await apiFetch("/uploads/pod-proxy", {
+          method: "POST",
+          body: { orderId, contentType: file.type || "image/jpeg", fileBase64 },
+        });
+        objectKey = proxyRes.objectKey;
+        publicUrl = proxyRes.publicUrl;
       }
 
       await apiFetch(`/orders/${orderId}/pod`, {
         method: "POST",
-        body: { objectKey: presigned.objectKey, publicUrl: presigned.publicUrl },
+        body: { objectKey, publicUrl },
       });
 
       await loadOrders();
