@@ -49,13 +49,22 @@ function readR2Config() {
     process.env.AWS_SECRET_ACCESS_KEY
   );
 
+  const endpoint = firstNonEmpty(process.env.CLOUDFLARE_R2_S3_ENDPOINT, process.env.R2_S3_ENDPOINT);
+  const jurisdiction = firstNonEmpty(process.env.CLOUDFLARE_R2_JURISDICTION, process.env.R2_JURISDICTION);
+
   const missing = [];
   if (!bucket) missing.push("bucket");
   if (!accountId) missing.push("accountId");
   if (!accessKeyId) missing.push("accessKeyId");
   if (!secretAccessKey) missing.push("secretAccessKey");
 
-  return { bucket, accountId, accessKeyId, secretAccessKey, missing };
+  return { bucket, accountId, accessKeyId, secretAccessKey, endpoint, jurisdiction, missing };
+}
+
+function resolveR2ApiHost({ accountId, endpoint, jurisdiction }) {
+  if (endpoint) return new URL(endpoint).hostname;
+  if (jurisdiction) return `${accountId}.${jurisdiction}.r2.cloudflarestorage.com`;
+  return `${accountId}.r2.cloudflarestorage.com`;
 }
 
 function normalizeBase64Payload(value) {
@@ -102,11 +111,11 @@ function getSignatureKey(secretKey, dateStamp, regionName, serviceName) {
   return hmac(kService, "aws4_request");
 }
 
-function getPresignedPutUrl({ accountId, accessKeyId, secretAccessKey, bucket, key, expiresIn = 300 }) {
+function getPresignedPutUrl({ accountId, accessKeyId, secretAccessKey, bucket, key, endpoint, jurisdiction, expiresIn = 300 }) {
   const method = "PUT";
   const service = "s3";
   const region = "auto";
-  const host = `${accountId}.r2.cloudflarestorage.com`;
+  const host = resolveR2ApiHost({ accountId, endpoint, jurisdiction });
   const now = new Date();
   const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
   const dateStamp = amzDate.slice(0, 8);
@@ -161,14 +170,7 @@ function uploadBufferWithHttp(putUrl, { contentType, body, timeoutMs = 15000, fa
         headers: {
           "Content-Type": contentType,
           "Content-Length": body.length,
-          Host: parsedUrl.host,
         },
-        ...(isHttps
-          ? {
-              servername: parsedUrl.hostname,
-              minVersion: "TLSv1.2",
-            }
-          : {}),
         ...(family ? { family } : {}),
       },
       (response) => {
@@ -238,7 +240,7 @@ router.post("/pod-url", requireAuth, async (req, res) => {
     }
     const { order } = validation;
 
-    const { bucket, accountId, accessKeyId, secretAccessKey, missing } = readR2Config();
+    const { bucket, accountId, accessKeyId, secretAccessKey, endpoint, jurisdiction, missing } = readR2Config();
 
     if (missing.length) {
       return res.status(500).json({
@@ -249,7 +251,7 @@ router.post("/pod-url", requireAuth, async (req, res) => {
 
     const objectKey = `pod/${order._id}/${crypto.randomUUID()}.jpg`;
     const publicUrl = `${resolvePublicBaseUrl()}/${objectKey}`;
-    const uploadUrl = getPresignedPutUrl({ accountId, accessKeyId, secretAccessKey, bucket, key: objectKey });
+    const uploadUrl = getPresignedPutUrl({ accountId, accessKeyId, secretAccessKey, bucket, key: objectKey, endpoint, jurisdiction });
     assertR2UploadHost(uploadUrl);
 
     return res.json({ ok: true, uploadUrl, objectKey, publicUrl });
@@ -271,7 +273,7 @@ router.post("/pod-proxy", requireAuth, async (req, res) => {
     }
     const { order } = validation;
 
-    const { bucket, accountId, accessKeyId, secretAccessKey, missing } = readR2Config();
+    const { bucket, accountId, accessKeyId, secretAccessKey, endpoint, jurisdiction, missing } = readR2Config();
     if (missing.length) {
       return res.status(500).json({
         ok: false,
@@ -287,7 +289,7 @@ router.post("/pod-proxy", requireAuth, async (req, res) => {
 
     const objectKey = `pod/${order._id}/${crypto.randomUUID()}.jpg`;
     const publicUrl = `${resolvePublicBaseUrl()}/${objectKey}`;
-    const uploadUrl = getPresignedPutUrl({ accountId, accessKeyId, secretAccessKey, bucket, key: objectKey });
+    const uploadUrl = getPresignedPutUrl({ accountId, accessKeyId, secretAccessKey, bucket, key: objectKey, endpoint, jurisdiction });
     assertR2UploadHost(uploadUrl);
 
     const cloudRes = await uploadBufferToPresignedUrl(uploadUrl, {
