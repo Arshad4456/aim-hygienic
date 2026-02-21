@@ -136,7 +136,7 @@ function getPresignedPutUrl({ accountId, accessKeyId, secretAccessKey, bucket, k
   return `https://${host}${canonicalUri}?${canonicalQueryString}&X-Amz-Signature=${signature}`;
 }
 
-function uploadBufferWithHttp(putUrl, { contentType, body }) {
+function uploadBufferWithHttp(putUrl, { contentType, body, timeoutMs = 15000 }) {
   return new Promise((resolve, reject) => {
     const parsedUrl = new URL(putUrl);
     const transport = parsedUrl.protocol === "https:" ? https : http;
@@ -158,9 +158,25 @@ function uploadBufferWithHttp(putUrl, { contentType, body }) {
       }
     );
 
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(new Error("Upload request timed out"));
+    });
     req.on("error", reject);
     req.end(body);
   });
+}
+
+async function uploadBufferToPresignedUrl(putUrl, { contentType, body }) {
+  if (typeof fetch === "function") {
+    const response = await fetch(putUrl, {
+      method: "PUT",
+      headers: { "Content-Type": contentType },
+      body,
+    });
+    return { ok: response.ok, status: response.status || 0 };
+  }
+
+  return uploadBufferWithHttp(putUrl, { contentType, body });
 }
 
 router.post("/pod-url", requireAuth, async (req, res) => {
@@ -227,7 +243,7 @@ router.post("/pod-proxy", requireAuth, async (req, res) => {
     const publicUrl = `${resolvePublicBaseUrl()}/${objectKey}`;
     const uploadUrl = getPresignedPutUrl({ accountId, accessKeyId, secretAccessKey, bucket, key: objectKey, contentType: String(contentType).trim() });
 
-    const cloudRes = await uploadBufferWithHttp(uploadUrl, {
+    const cloudRes = await uploadBufferToPresignedUrl(uploadUrl, {
       contentType: String(contentType).trim() || "image/jpeg",
       body: fileBuffer,
     });
@@ -237,8 +253,9 @@ router.post("/pod-proxy", requireAuth, async (req, res) => {
     }
 
     return res.json({ ok: true, objectKey, publicUrl });
-  } catch (_error) {
-    return res.status(500).json({ ok: false, message: "Failed to upload POD to storage" });
+  } catch (error) {
+    const message = String(error?.message || "").trim();
+    return res.status(500).json({ ok: false, message: message ? `Failed to upload POD to storage: ${message}` : "Failed to upload POD to storage" });
   }
 });
 
