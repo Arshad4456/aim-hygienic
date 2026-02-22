@@ -18,6 +18,15 @@ function podUploaderName(row) {
   return row?.podUploadedBy?.name || row?.pod_uploaded_by?.name || row?.podUploadedBy || row?.proofOfDeliveryBy || "-";
 }
 
+function parseNoteMap(value) {
+  return Object.fromEntries(
+    String(value || "")
+      .split(",")
+      .map((seg) => seg.split(":"))
+      .filter((parts) => parts.length >= 2),
+  );
+}
+
 export default function DistributorSecondaryOrdersModule() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -180,7 +189,9 @@ function PreviewModal({ row, onClose }) {
           <Field label="Status" value={toStatusLabel(row.status)} />
           <Field label="Source" value={row.sourceType || "-"} />
           <Field label="From" value={row.fromEntityName || row.customerName || "-"} />
-          <Field label="To" value={row.toWarehouseName || "-"} />
+          <Field label="To" value={row.toWarehouseName || row.toEntityName || row.distributorName || "-"} />
+          <Field label="Territory" value={row.territory || row.territoryName || row.areaName || "-"} />
+          <Field label="Address" value={row.note || row.address || row.deliveryAddress || "-"} />
           <Field label="Date/Time" value={row.createdAt ? new Date(row.createdAt).toLocaleString() : "-"} />
         </div>
         <div className="px-5 pb-5">
@@ -198,6 +209,33 @@ function PreviewModal({ row, onClose }) {
             ) : (
               <div className="mt-2 text-xs text-zinc-500">No proof of delivery uploaded yet.</div>
             )}
+          </div>
+          <div className="mt-4 rounded-xl border p-3">
+            <div className="text-sm font-semibold">Product Detail</div>
+            <div className="mt-2 overflow-x-auto rounded border">
+              <table className="min-w-full text-xs">
+                <thead className="bg-zinc-50"><tr><th className="p-2 text-left">S.No</th><th className="p-2 text-left">Product</th><th className="p-2 text-left">Qty</th><th className="p-2 text-left">Rate</th><th className="p-2 text-left">TO</th><th className="p-2 text-left">Disc</th><th className="p-2 text-left">Extra</th><th className="p-2 text-left">Bons</th><th className="p-2 text-left">GST%</th></tr></thead>
+                <tbody>
+                  {(row.items || row.orderItems || []).map((item, idx) => {
+                    const notes = parseNoteMap(item.notes || item.note || "");
+                    return (
+                      <tr key={`${idx}-${item.productId || item.productCode || item.productName || "item"}`} className="border-b">
+                        <td className="p-2">{idx + 1}</td>
+                        <td className="p-2">{item.productName || item.name || item.productCode || "-"}</td>
+                        <td className="p-2">{item.quantity || item.totalPacks || item.qty || 0}</td>
+                        <td className="p-2">{item.unitPrice || item.rate || 0}</td>
+                        <td className="p-2">{notes.to || item.toValue || 0}</td>
+                        <td className="p-2">{notes.disc || item.discValue || 0}</td>
+                        <td className="p-2">{notes.extra || item.extraValue || 0}</td>
+                        <td className="p-2">{notes.bons || item.bonsValue || 0}</td>
+                        <td className="p-2">{item.gstPer || notes.gstPer || 0}</td>
+                      </tr>
+                    );
+                  })}
+                  {!(row.items || row.orderItems || []).length ? <tr><td className="p-2 text-center text-zinc-500" colSpan={9}>No products found.</td></tr> : null}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>

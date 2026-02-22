@@ -11,6 +11,7 @@ import { getAuthItem } from "../../../lib/clientAuth";
 const emptyItem = {
   productId: "",
   qty: "",
+  unitPrice: "0",
   toValue: "0",
   discValue: "0",
   extraValue: "0",
@@ -37,7 +38,7 @@ function getSizeMultiplier(product) {
 function computeLine(line, product) {
   const sizeMultiplier = getSizeMultiplier(product);
   const qty = toNum(line.qty);
-  const rate = toNum(product?.wholesalePrice || 0);
+  const rate = toNum(product?.wholesalePrice || line.unitPrice || 0);
   const gross = sizeMultiplier * qty * rate;
   const toValue = toNum(line.toValue);
   const discValue = line.discValue === "" ? toNum(product?.discountPer || 0) : toNum(line.discValue);
@@ -60,7 +61,15 @@ function parseNoteMap(value) {
 }
 
 function findProductByLine(products, line) {
-  return products.find((p) => p._id === line.productId || p.productId === line.productId) || null;
+  const productId = String(line?.productId || "").trim();
+  const productCode = String(line?.productCode || "").trim();
+  const productName = String(line?.productName || "").trim().toLowerCase();
+  return products.find((p) => {
+    const pId = String(p?._id || p?.productId || "").trim();
+    const pCode = String(p?.productId || p?.code || p?.productCode || "").trim();
+    const pName = String(p?.name || p?.productName || "").trim().toLowerCase();
+    return (productId && pId === productId) || (productId && pCode === productId) || (productCode && pCode === productCode) || (productName && pName === productName);
+  }) || null;
 }
 
 function dateInputValue(value) {
@@ -73,8 +82,11 @@ function dateInputValue(value) {
 function itemToEditableLine(item) {
   const noteMap = parseNoteMap(item.notes || item.note || "");
   return {
-    productId: item.productId || "",
-    qty: String(item.totalPacks || item.quantity || 0),
+    productId: item.productId || item.productCode || item._id || "",
+    productCode: item.productCode || item.productId || "",
+    productName: item.productName || item.name || "",
+    qty: String(item.totalPacks || item.quantity || item.qty || 0),
+    unitPrice: String(item.unitPrice || item.rate || 0),
     toValue: String(noteMap.to || item.toValue || 0),
     discValue: String(noteMap.disc || item.discValue || 0),
     extraValue: String(noteMap.extra || item.extraValue || 0),
@@ -1316,13 +1328,13 @@ function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
     }
     setDraft({
       fromEntityName: row.fromEntityName || "",
-      toEntityName: row.toEntityName || row.warehouseName || "",
+      toEntityName: row.toEntityName || row.toWarehouseName || row.distributorName || row.warehouseName || "",
       regionId: row.regionId || "",
       regionName: row.regionName || "",
       zoneId: row.zoneId || "",
       zoneName: row.zoneName || "",
-      territory: row.territory || "",
-      note: row.note || "",
+      territory: row.territory || row.territoryName || row.areaName || "",
+      note: row.note || row.address || row.deliveryAddress || "",
       fieldId: row.fieldId || "",
       fieldName: row.fieldName || "",
       brandName: row.brandName || "",
@@ -1332,7 +1344,7 @@ function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
       advTaxPer: String(row.advTaxPer || 0),
       whTaxPer: String(row.whTaxPer || 0),
       expense: String(row.expense || 0),
-      items: (row.items || []).map(itemToEditableLine),
+      items: (row.items || row.orderItems || []).map(itemToEditableLine),
     });
   }, [row]);
 
