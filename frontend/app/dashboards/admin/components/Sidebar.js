@@ -48,6 +48,7 @@ const defaultOpenState = {
   territory: false,
   users: false,
   inventory: false,
+  accountManagement: false,
 };
 
 let adminSidebarOpenCache = { ...defaultOpenState };
@@ -220,7 +221,13 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
         ],
       },
 
-      { type: "link", title: "Account Management", href: "/dashboards/admin/account/manage", icon: "account" },
+            {
+        type: "group",
+        key: "accountManagement",
+        title: "Account Management",
+        icon: "account",
+        children: [{ title: "Account Detail", href: "/dashboards/admin/account/manage" }],
+      },
       { type: "link", title: "Messages", href: "/dashboards/admin/messages", icon: "messages" },
       { type: "link", title: "User Live Tracking", href: "/dashboards/admin/live-tracking", icon: "tracking" },
       { type: "link", title: "Reports", href: "/dashboards/admin/reports", icon: "reports" },
