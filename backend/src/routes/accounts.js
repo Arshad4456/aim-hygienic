@@ -371,4 +371,23 @@ router.patch("/:id/deactivate", requireAuth, requireRole("admin"), async (req, r
   }
 });
 
+
+router.delete("/:id", requireAuth, requireRole("admin"), async (req, res) => {
+  try {
+    const account = await Account.findById(req.params.id);
+    if (!account) return res.status(404).json({ ok: false, message: "Not found" });
+
+    await Promise.all([
+      AccountTransaction.deleteMany({ accountId: account._id }),
+      AccountAuditLog.deleteMany({ accountId: account._id }),
+    ]);
+
+    await Account.deleteOne({ _id: account._id });
+
+    return res.json({ ok: true });
+  } catch (_e) {
+    return res.status(500).json({ ok: false, message: "Failed to delete account" });
+  }
+});
+
 module.exports = router;
