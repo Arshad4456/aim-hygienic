@@ -226,7 +226,10 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
         key: "accountManagement",
         title: "Account Management",
         icon: "account",
-        children: [{ title: "Account Detail", href: "/dashboards/admin/account/manage" }],
+        children: [
+          { title: "Account Detail", href: "/dashboards/admin/account/manage" },
+          { title: "Loan Detail", href: "/dashboards/admin/account/loan-detail" },
+        ],
       },
       { type: "link", title: "Messages", href: "/dashboards/admin/messages", icon: "messages" },
       { type: "link", title: "User Live Tracking", href: "/dashboards/admin/live-tracking", icon: "tracking" },
