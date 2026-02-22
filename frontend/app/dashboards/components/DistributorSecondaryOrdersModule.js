@@ -14,6 +14,10 @@ function toStatusLabel(status) {
   return String(status || "pending").toUpperCase();
 }
 
+function podUploaderName(row) {
+  return row?.podUploadedBy?.name || row?.pod_uploaded_by?.name || row?.podUploadedBy || row?.proofOfDeliveryBy || "-";
+}
+
 export default function DistributorSecondaryOrdersModule() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -109,7 +113,7 @@ export default function DistributorSecondaryOrdersModule() {
         <h3 className="text-lg font-semibold">Secondary Order Request list</h3>
         <div className="overflow-x-auto mt-3 rounded border">
           <table className="min-w-full text-sm">
-            <thead><tr className="border-b bg-zinc-50"><th className="p-2 text-left">Order No</th><th className="p-2 text-left">Source</th><th className="p-2 text-left">From</th><th className="p-2 text-left">To</th><th className="p-2 text-left">Date/Time</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Read/Unread</th><th className="p-2 text-left">Action</th></tr></thead>
+            <thead><tr className="border-b bg-zinc-50"><th className="p-2 text-left">Order No</th><th className="p-2 text-left">Source</th><th className="p-2 text-left">From</th><th className="p-2 text-left">To</th><th className="p-2 text-left">Date/Time</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">POD</th><th className="p-2 text-left">Read/Unread</th><th className="p-2 text-left">Action</th></tr></thead>
             <tbody>
               {requestRows.map((row) => (
                 <tr key={row._id} className={rowClass(row.status)}>
@@ -119,11 +123,12 @@ export default function DistributorSecondaryOrdersModule() {
                   <td className="p-2">{row.toWarehouseName || "-"}</td>
                   <td className="p-2">{row.createdAt ? new Date(row.createdAt).toLocaleString() : "-"}</td>
                   <td className="p-2">{toStatusLabel(row.status)}</td>
+                  <td className="p-2">{row.podUrl ? <span className="rounded bg-emerald-100 px-2 py-1 text-xs text-emerald-700">Uploaded</span> : <span className="rounded bg-zinc-100 px-2 py-1 text-xs text-zinc-600">Not Uploaded</span>}</td>
                   <td className="p-2">{row.unreadForDistributor ? "Unread" : "Read"}</td>
-                  <td className="p-2"><div className="flex flex-wrap gap-2"><button className="rounded border px-2 py-1" onClick={() => openRequest(row._id)}>Open</button><button className="rounded border px-2 py-1" onClick={() => setPreviewRow(row)}>Preview</button><button className="rounded border border-red-300 px-2 py-1 text-red-700" onClick={() => updateStatus(row._id, "rejected")}>Reject</button><button className="rounded border border-blue-300 px-2 py-1 text-blue-700" onClick={() => updateStatus(row._id, "approved")}>Approve</button><button className="rounded border border-indigo-300 px-2 py-1 text-indigo-700" onClick={() => updateStatus(row._id, "dispatched")}>Dispatched</button><button className="rounded border border-emerald-400 px-2 py-1 text-emerald-700" onClick={() => updateStatus(row._id, "delivered")}>Delivered</button></div></td>
+                  <td className="p-2"><div className="flex flex-wrap gap-2"><button className="rounded border px-2 py-1" onClick={() => openRequest(row._id)}>Open</button><button className="rounded border px-2 py-1" onClick={() => setPreviewRow(row)}>Preview</button><button className="rounded border border-red-300 px-2 py-1 text-red-700" onClick={() => updateStatus(row._id, "rejected")}>Reject</button><button className="rounded border border-blue-300 px-2 py-1 text-blue-700" onClick={() => updateStatus(row._id, "approved")}>Approve</button><button className="rounded border border-indigo-300 px-2 py-1 text-indigo-700" onClick={() => updateStatus(row._id, "dispatched")}>Dispatched</button><button className="rounded border border-emerald-400 px-2 py-1 text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50" disabled={!row.podUrl} title={!row.podUrl ? "Upload POD required before marking delivered." : ""} onClick={() => updateStatus(row._id, "delivered")}>Delivered</button></div></td>
                 </tr>
               ))}
-              {!requestRows.length ? <tr><td colSpan={8} className="p-4 text-center text-zinc-500">{loading ? "Loading..." : "No secondary order requests."}</td></tr> : null}
+              {!requestRows.length ? <tr><td colSpan={9} className="p-4 text-center text-zinc-500">{loading ? "Loading..." : "No secondary order requests."}</td></tr> : null}
             </tbody>
           </table>
         </div>
@@ -133,7 +138,7 @@ export default function DistributorSecondaryOrdersModule() {
         <h3 className="text-lg font-semibold">Secondary Orders Ledger</h3>
         <div className="overflow-x-auto mt-3 rounded border">
           <table className="min-w-full text-sm">
-            <thead><tr className="border-b bg-zinc-50"><th className="p-2 text-left">Order No</th><th className="p-2 text-left">Source</th><th className="p-2 text-left">From</th><th className="p-2 text-left">To</th><th className="p-2 text-left">Date/Time</th><th className="p-2 text-left">Action</th></tr></thead>
+            <thead><tr className="border-b bg-zinc-50"><th className="p-2 text-left">Order No</th><th className="p-2 text-left">Source</th><th className="p-2 text-left">From</th><th className="p-2 text-left">To</th><th className="p-2 text-left">Date/Time</th><th className="p-2 text-left">POD</th><th className="p-2 text-left">Action</th></tr></thead>
             <tbody>
               {ledgerRows.map((row) => (
                 <tr key={row._id} className={rowClass(row.status)}>
@@ -142,10 +147,11 @@ export default function DistributorSecondaryOrdersModule() {
                   <td className="p-2">{row.fromEntityName || row.customerName || "-"}</td>
                   <td className="p-2">{row.toWarehouseName || "-"}</td>
                   <td className="p-2">{row.createdAt ? new Date(row.createdAt).toLocaleString() : "-"}</td>
+                  <td className="p-2">{row.podUrl ? <span className="rounded bg-emerald-100 px-2 py-1 text-xs text-emerald-700">Uploaded</span> : <span className="rounded bg-zinc-100 px-2 py-1 text-xs text-zinc-600">Not Uploaded</span>}</td>
                   <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" onClick={() => printInvoice(row)}>Invoice/Receipt</button><button className="rounded border border-red-300 px-2 py-1 text-red-700" onClick={() => deleteOrder(row._id)}>Delete</button></div></td>
                 </tr>
               ))}
-              {!ledgerRows.length ? <tr><td colSpan={6} className="p-4 text-center text-zinc-500">{loading ? "Loading..." : "No secondary order ledger records."}</td></tr> : null}
+              {!ledgerRows.length ? <tr><td colSpan={7} className="p-4 text-center text-zinc-500">{loading ? "Loading..." : "No secondary order ledger records."}</td></tr> : null}
             </tbody>
           </table>
         </div>
@@ -182,14 +188,15 @@ function PreviewModal({ row, onClose }) {
             <div className="text-sm font-semibold">Proof of Delivery</div>
             {row.podUrl || row.proofOfDeliveryImageUrl ? (
               <div className="mt-2 grid gap-3 md:grid-cols-2 text-xs text-zinc-600">
-                <img src={row.podUrl || row.proofOfDeliveryImageUrl} alt="Proof of delivery" className="w-full max-h-64 rounded border object-contain bg-zinc-50" />
+                <img src={row.podUrl || row.proofOfDeliveryImageUrl} alt="Proof of delivery" className="w-full max-h-64 rounded border object-contain bg-zinc-50" onError={(e) => { e.currentTarget.style.display = "none"; }} />
                 <div className="space-y-2">
                   <div><span className="font-medium text-zinc-700">Uploaded At:</span> {row.podUploadedAt || row.proofOfDeliveryAt ? new Date(row.podUploadedAt || row.proofOfDeliveryAt).toLocaleString() : "-"}</div>
-                  <div><span className="font-medium text-zinc-700">Uploaded By:</span> {row.podUploadedBy || row.proofOfDeliveryBy || "-"}</div>
+                  <div><span className="font-medium text-zinc-700">Uploaded By:</span> {podUploaderName(row)}</div>
+                  <a className="text-blue-600 underline" href={row.podUrl || row.proofOfDeliveryImageUrl} target="_blank" rel="noreferrer">Open Image</a>
                 </div>
               </div>
             ) : (
-              <div className="mt-2 text-xs text-zinc-500">POD not uploaded yet.</div>
+              <div className="mt-2 text-xs text-zinc-500">No proof of delivery uploaded yet.</div>
             )}
           </div>
         </div>
