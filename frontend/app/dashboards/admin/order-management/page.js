@@ -130,6 +130,10 @@ function isSaleOrderRequest(row) {
   return hasKnownSource || isPendingNonAdmin;
 }
 
+function podUploaderName(row) {
+  return row?.podUploadedBy?.name || row?.pod_uploaded_by?.name || row?.podUploadedBy || row?.proofOfDeliveryBy || "-";
+}
+
 function sourceRoleLabel(row) {
   const source = normalizeRequestSource(row?.requestSourceRole || row?.fromEntityType || row?.sourceType || "");
   if (source.includes("brandmanager") || source === "brand") return "Brand Manager";
@@ -1159,7 +1163,7 @@ function SaleStockLedgerTable({ rows, onInvoice, onDelete, canDelete = true }) {
               <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" type="button" onClick={() => onInvoice(order)}>Invoice/Receipt</button>{canDelete ? <button className="rounded border border-red-300 text-red-700 px-2 py-1" type="button" onClick={() => onDelete(order._id)}>Delete</button> : null}</div></td>
             </tr>
           ))}
-          {!rows.length ? <tr><td colSpan={6} className="p-5 text-center text-zinc-500">No records in this ledger.</td></tr> : null}
+          {!rows.length ? <tr><td colSpan={7} className="p-5 text-center text-zinc-500">No records in this ledger.</td></tr> : null}
         </tbody>
       </table>
     </div>
@@ -1240,7 +1244,7 @@ function ReturnStockLedgerTable({ rows, onInvoice, onDelete, canDelete = true })
               <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" type="button" onClick={() => onInvoice(r)}>Invoice/Receipt</button>{canDelete ? <button className="rounded border border-red-300 text-red-700 px-2 py-1" type="button" onClick={() => onDelete(r._id)}>Delete</button> : null}</div></td>
             </tr>
           ))}
-          {!rows.length ? <tr><td colSpan={6} className="p-5 text-center text-zinc-500">No records in this ledger.</td></tr> : null}
+          {!rows.length ? <tr><td colSpan={7} className="p-5 text-center text-zinc-500">No records in this ledger.</td></tr> : null}
         </tbody>
       </table>
     </div>
@@ -1251,7 +1255,7 @@ function SecondaryOrderRequestTable({ rows, onOpen, onPreview, onReject, onAppro
   return (
     <div className="overflow-x-auto mt-3 rounded border">
       <table className="min-w-full text-sm">
-        <thead><tr className="border-b bg-zinc-50"><th className="p-2 text-left">Order No</th><th className="p-2 text-left">Source</th><th className="p-2 text-left">From</th><th className="p-2 text-left">To</th><th className="p-2 text-left">Date/Time</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Read/Unread</th><th className="p-2 text-left">Action</th></tr></thead>
+        <thead><tr className="border-b bg-zinc-50"><th className="p-2 text-left">Order No</th><th className="p-2 text-left">Source</th><th className="p-2 text-left">From</th><th className="p-2 text-left">To</th><th className="p-2 text-left">Date/Time</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">POD</th><th className="p-2 text-left">Read/Unread</th><th className="p-2 text-left">Action</th></tr></thead>
         <tbody>
           {rows.map((r) => {
             const status = normalizeRequestStatus(r.status || "pending");
@@ -1264,12 +1268,13 @@ function SecondaryOrderRequestTable({ rows, onOpen, onPreview, onReject, onAppro
                 <td className="p-2">{r.toWarehouseName || "-"}</td>
                 <td className="p-2">{r.createdAt ? new Date(r.createdAt).toLocaleString() : "-"}</td>
                 <td className="p-2">{status}</td>
+                <td className="p-2">{r.podUrl ? <span className="rounded bg-emerald-100 px-2 py-1 text-xs text-emerald-700">Uploaded</span> : <span className="rounded bg-zinc-100 px-2 py-1 text-xs text-zinc-600">Not Uploaded</span>}</td>
                 <td className="p-2">{unread ? <span className="rounded bg-amber-100 px-2 py-1 text-xs text-amber-800">Unread</span> : "Read"}</td>
-                <td className="p-2"><div className="flex flex-wrap gap-2"><button className="rounded border px-2 py-1" onClick={() => onOpen(r._id)}>Open</button><button className="rounded border border-emerald-300 px-2 py-1 text-emerald-700" onClick={() => onPreview(r)}>Preview</button><button className="rounded border border-red-300 px-2 py-1 text-red-700" onClick={() => onReject(r._id)}>Reject</button><button className="rounded border border-blue-300 px-2 py-1 text-blue-700" onClick={() => onApprove(r._id)}>Approve</button><button className="rounded border border-indigo-300 px-2 py-1 text-indigo-700" onClick={() => onDispatched(r._id)}>Dispatched</button><button className="rounded border border-emerald-500 px-2 py-1 text-emerald-800" onClick={() => onDelivered(r._id)}>Delivered</button></div></td>
+                <td className="p-2"><div className="flex flex-wrap gap-2"><button className="rounded border px-2 py-1" onClick={() => onOpen(r._id)}>Open</button><button className="rounded border border-emerald-300 px-2 py-1 text-emerald-700" onClick={() => onPreview(r)}>Preview</button><button className="rounded border border-red-300 px-2 py-1 text-red-700" onClick={() => onReject(r._id)}>Reject</button><button className="rounded border border-blue-300 px-2 py-1 text-blue-700" onClick={() => onApprove(r._id)}>Approve</button><button className="rounded border border-indigo-300 px-2 py-1 text-indigo-700" onClick={() => onDispatched(r._id)}>Dispatched</button><button className="rounded border border-emerald-500 px-2 py-1 text-emerald-800 disabled:cursor-not-allowed disabled:opacity-50" disabled={!r.podUrl} title={!r.podUrl ? "Upload POD required before marking delivered." : ""} onClick={() => onDelivered(r._id)}>Delivered</button></div></td>
               </tr>
             );
           })}
-          {!rows.length ? <tr><td colSpan={8} className="p-5 text-center text-zinc-500">No secondary order requests.</td></tr> : null}
+          {!rows.length ? <tr><td colSpan={9} className="p-5 text-center text-zinc-500">No secondary order requests.</td></tr> : null}
         </tbody>
       </table>
     </div>
@@ -1280,7 +1285,7 @@ function SecondaryOrderLedgerTable({ rows, onInvoice, onDelete, canDelete = true
   return (
     <div className="overflow-x-auto mt-3 rounded border">
       <table className="min-w-full text-sm">
-        <thead><tr className="border-b bg-zinc-50"><th className="p-2 text-left">Order No</th><th className="p-2 text-left">Source</th><th className="p-2 text-left">From</th><th className="p-2 text-left">To</th><th className="p-2 text-left">Date/Time</th><th className="p-2 text-left">Action</th></tr></thead>
+        <thead><tr className="border-b bg-zinc-50"><th className="p-2 text-left">Order No</th><th className="p-2 text-left">Source</th><th className="p-2 text-left">From</th><th className="p-2 text-left">To</th><th className="p-2 text-left">Date/Time</th><th className="p-2 text-left">POD</th><th className="p-2 text-left">Action</th></tr></thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r._id} className={requestRowClass(normalizeRequestStatus(r.status || "pending"))}>
@@ -1289,10 +1294,11 @@ function SecondaryOrderLedgerTable({ rows, onInvoice, onDelete, canDelete = true
               <td className="p-2">{r.fromEntityName || r.customerName || "-"}</td>
               <td className="p-2">{r.toWarehouseName || "-"}</td>
               <td className="p-2">{r.createdAt ? new Date(r.createdAt).toLocaleString() : "-"}</td>
+              <td className="p-2">{r.podUrl ? <span className="rounded bg-emerald-100 px-2 py-1 text-xs text-emerald-700">Uploaded</span> : <span className="rounded bg-zinc-100 px-2 py-1 text-xs text-zinc-600">Not Uploaded</span>}</td>
               <td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" type="button" onClick={() => onInvoice(r)}>Invoice/Receipt</button>{canDelete ? <button className="rounded border border-red-300 text-red-700 px-2 py-1" type="button" onClick={() => onDelete(r._id)}>Delete</button> : null}</div></td>
             </tr>
           ))}
-          {!rows.length ? <tr><td colSpan={6} className="p-5 text-center text-zinc-500">No records in this ledger.</td></tr> : null}
+          {!rows.length ? <tr><td colSpan={7} className="p-5 text-center text-zinc-500">No records in this ledger.</td></tr> : null}
         </tbody>
       </table>
     </div>
@@ -1447,15 +1453,15 @@ function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
               <div className="text-sm font-semibold">Proof of Delivery</div>
               {row.podUrl || row.proofOfDeliveryImageUrl ? (
                 <div className="mt-2 grid gap-3 md:grid-cols-2 text-xs text-zinc-600">
-                  <img src={row.podUrl || row.proofOfDeliveryImageUrl} alt="Proof of delivery" className="w-full max-h-64 rounded border object-contain bg-zinc-50" />
+                  <img src={row.podUrl || row.proofOfDeliveryImageUrl} alt="Proof of delivery" className="w-full max-h-64 rounded border object-contain bg-zinc-50" onError={(e) => { e.currentTarget.style.display = "none"; }} />
                   <div className="space-y-2">
                     <div><span className="font-medium text-zinc-700">Uploaded At:</span> {row.podUploadedAt || row.proofOfDeliveryAt ? new Date(row.podUploadedAt || row.proofOfDeliveryAt).toLocaleString() : "-"}</div>
-                    <div><span className="font-medium text-zinc-700">Uploaded By:</span> {row.podUploadedBy || row.proofOfDeliveryBy || "-"}</div>
+                    <div><span className="font-medium text-zinc-700">Uploaded By:</span> {podUploaderName(row)}</div>
                     <a className="text-blue-600 underline" href={row.podUrl || row.proofOfDeliveryImageUrl} target="_blank" rel="noreferrer">Open original image</a>
                   </div>
                 </div>
               ) : (
-                <div className="mt-2 text-xs text-zinc-500">POD not uploaded yet.</div>
+                <div className="mt-2 text-xs text-zinc-500">No proof of delivery uploaded yet.</div>
               )}
             </div>
           ) : null}

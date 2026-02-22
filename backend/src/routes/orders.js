@@ -53,6 +53,54 @@ function normalizeItems(items = []) {
     }));
 }
 
+function serializePodUploader(user) {
+  if (!user) return null;
+  return {
+    id: String(user._id || ""),
+    name: String(user.fullName || user.name || user.userId || "").trim() || "Unknown",
+  };
+}
+
+function withPodFields(order, uploaderById = {}) {
+  if (!order) return order;
+  const podUploaderId = String(order.podUploadedBy || "").trim();
+  const podUploadedBy = podUploaderId ? (uploaderById[podUploaderId] || { id: podUploaderId, name: "Unknown" }) : null;
+  return {
+    ...order,
+    podUploadedBy,
+    pod_url: order.podUrl || null,
+    pod_uploaded_at: order.podUploadedAt || null,
+    pod_uploaded_by: podUploadedBy,
+  };
+}
+
+async function attachPodMetaToOrders(orders = []) {
+  const podUserIds = Array.from(
+    new Set(
+      orders
+        .map((order) => String(order?.podUploadedBy || "").trim())
+        .filter(Boolean)
+    )
+  );
+
+  let uploaderById = {};
+  if (podUserIds.length) {
+    const users = await User.find({ _id: { $in: podUserIds } }).select("fullName name userId").lean();
+    uploaderById = users.reduce((acc, user) => {
+      acc[String(user._id)] = serializePodUploader(user);
+      return acc;
+    }, {});
+  }
+
+  return orders.map((order) => withPodFields(order, uploaderById));
+}
+
+async function attachPodMetaToOrder(order) {
+  if (!order) return order;
+  const [mapped] = await attachPodMetaToOrders([order]);
+  return mapped;
+}
+
 function roleMatchQuery(user) {
   const role = String(user?.role || "").trim();
   const userId = String(user?.userId || "").trim();
@@ -114,7 +162,7 @@ router.get("/", requireAuth, async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 50, 200);
     const orders = await SalesOrder.find(roleMatchQuery(req.user)).sort({ createdAt: -1 }).limit(limit).lean();
-    return res.json({ ok: true, orders });
+    return res.json({ ok: true, orders: await attachPodMetaToOrders(orders) });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to load sales orders" });
   }
@@ -124,7 +172,7 @@ router.get("/my", requireAuth, async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 50, 200);
     const orders = await SalesOrder.find(roleMatchQuery(req.user)).sort({ createdAt: -1 }).limit(limit).lean();
-    return res.json({ ok: true, orders });
+    return res.json({ ok: true, orders: await attachPodMetaToOrders(orders) });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to load dashboard orders" });
   }
@@ -154,7 +202,7 @@ router.get("/secondary/distributor", requireAuth, async (req, res) => {
     if (relatedFilters.length) query.$or = relatedFilters;
 
     const orders = await SalesOrder.find(query).sort({ createdAt: -1 }).limit(limit).lean();
-    return res.json({ ok: true, orders });
+    return res.json({ ok: true, orders: await attachPodMetaToOrders(orders) });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to load distributor secondary orders" });
   }
@@ -167,7 +215,7 @@ router.get("/approvals", requireAuth, async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
-    return res.json({ ok: true, orders });
+    return res.json({ ok: true, orders: await attachPodMetaToOrders(orders) });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to load approval queue" });
   }
@@ -180,7 +228,7 @@ router.get("/dispatch", requireAuth, async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
-    return res.json({ ok: true, orders });
+    return res.json({ ok: true, orders: await attachPodMetaToOrders(orders) });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to load dispatch queue" });
   }
@@ -205,7 +253,7 @@ router.get("/salesman-deliveries", requireAuth, async (req, res) => {
       .limit(limit)
       .lean();
 
-    return res.json({ ok: true, orders });
+    return res.json({ ok: true, orders: await attachPodMetaToOrders(orders) });
   } catch (_error) {
     return res.status(500).json({ ok: false, message: "Failed to load salesman deliveries" });
   }
@@ -272,7 +320,7 @@ router.patch("/:id/mark-read", requireAuth, async (req, res) => {
     }
 
     await order.save();
-    return res.json({ ok: true, order });
+    return res.json({ ok: true, order: await attachPodMetaToOrder(order.toObject ? order.toObject() : order) });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to mark order as read" });
   }
@@ -296,7 +344,7 @@ router.patch("/:id/receipt-agreement", requireAuth, async (req, res) => {
     order.receiptAgreementBy = req.user?._id;
     await order.save();
 
-    return res.json({ ok: true, order });
+    return res.json({ ok: true, order: await attachPodMetaToOrder(order.toObject ? order.toObject() : order) });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to save receipt response" });
   }
@@ -320,7 +368,7 @@ router.patch("/:id/proof-of-delivery", requireAuth, async (req, res) => {
     order.proofOfDeliveryBy = req.user?._id;
     await order.save();
 
-    return res.json({ ok: true, order });
+    return res.json({ ok: true, order: await attachPodMetaToOrder(order.toObject ? order.toObject() : order) });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to upload proof of delivery" });
   }
@@ -359,7 +407,7 @@ router.post("/:orderId/pod", requireAuth, async (req, res) => {
     order.proofOfDeliveryBy = req.user?.uid;
     await order.save();
 
-    return res.json({ ok: true, order });
+    return res.json({ ok: true, order: await attachPodMetaToOrder(order.toObject ? order.toObject() : order) });
   } catch (_error) {
     return res.status(500).json({ ok: false, message: "Failed to save POD" });
   }
@@ -396,6 +444,9 @@ router.patch("/:id/status", requireAuth, async (req, res) => {
     }
     if (status === "delivered" && !DELIVERY_APPROVER_ROLES.has(requestRole)) {
       return res.status(403).json({ ok: false, message: "Only Admin, Warehouse Manager or Distributor can mark delivered" });
+    }
+    if (status === "delivered" && !String(order.podUrl || "").trim()) {
+      return res.status(400).json({ ok: false, message: "POD required" });
     }
     if (requestRole === "salesman" && status === "dispatched") {
       const scope = await getSalesmanFieldScope(req);
@@ -450,7 +501,7 @@ router.patch("/:id/status", requireAuth, async (req, res) => {
     addStatusHistory(order, status, req.user?.uid);
     await order.save();
 
-    return res.json({ ok: true, order });
+    return res.json({ ok: true, order: await attachPodMetaToOrder(order.toObject ? order.toObject() : order) });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to update order status" });
   }
