@@ -18,30 +18,59 @@ const types = [
 export default function DistributorExpenseSelfPage() {
   const [rows, setRows] = useState([]);
   const [preview, setPreview] = useState(null);
-
-  const me = useMemo(() => {
+  const [currentUser, setCurrentUser] = useState(() => {
     try {
       return JSON.parse(getAuthItem("aim_user") || "{}");
     } catch {
       return {};
     }
-  }, []);
-
-  const autoTerritory = useMemo(
-    () => me.territoryName || me.areaName || me.zoneName || me.regionName || "",
-    [me]
-  );
+  });
+  const [loadingUser, setLoadingUser] = useState(true);
 
   const [form, setForm] = useState({ subType: "builty", expenseDate: "", amount: "", paymentMethod: "cash", referenceNo: "", paidTo: "", description: "", attachmentUrl: "" });
 
   useEffect(() => {
-    const distributorId = me._id || me.id || "";
+    let ignore = false;
+    apiFetch("/users/me")
+      .then((res) => {
+        if (ignore) return;
+        if (res?.user) {
+          setCurrentUser((prev) => ({ ...prev, ...res.user }));
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (ignore) return;
+        setLoadingUser(false);
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const autoTerritory = useMemo(() => {
+    return (
+      currentUser.territoryName ||
+      currentUser.territory ||
+      currentUser.areaName ||
+      currentUser.zoneName ||
+      currentUser.regionName ||
+      currentUser.fieldName ||
+      ""
+    );
+  }, [currentUser]);
+
+  useEffect(() => {
+    const distributorId = currentUser._id || currentUser.id || "";
     if (!distributorId) return;
-    apiFetch(`/expenses?section=distributor`).then((d) => {
-      const mine = (d.expenses || []).filter((x) => String(x.distributorId || "") === String(distributorId));
-      setRows(mine);
-    }).catch(() => {});
-  }, [me]);
+    apiFetch(`/expenses?section=distributor`)
+      .then((d) => {
+        const mine = (d.expenses || []).filter((x) => String(x.distributorId || "") === String(distributorId));
+        setRows(mine);
+      })
+      .catch(() => {});
+  }, [currentUser]);
 
   const totalExpense = useMemo(() => rows.reduce((sum, r) => sum + Number(r.amount || 0), 0), [rows]);
 
@@ -57,12 +86,18 @@ export default function DistributorExpenseSelfPage() {
 
   async function submit(e) {
     e.preventDefault();
+    const territory = autoTerritory || "";
+    if (!territory) {
+      alert("Territory is not configured for this distributor. Please contact admin.");
+      return;
+    }
+
     const payload = {
       section: "distributor",
       subType: form.subType,
       category: form.subType,
-      distributorId: me._id || me.id,
-      territory: autoTerritory,
+      distributorId: currentUser._id || currentUser.id,
+      territory,
       expenseDate: form.expenseDate,
       amount: Number(form.amount || 0),
       paymentMethod: form.paymentMethod,
@@ -96,7 +131,7 @@ export default function DistributorExpenseSelfPage() {
           <h1 className="text-xl font-semibold">Submit Distributor Expense</h1>
           <p className="text-sm text-zinc-500">Every submitted expense remains pending until Admin approves or rejects it.</p>
           <form onSubmit={submit} className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-            <Input label="Territory/Region" value={autoTerritory || "-"} onChange={() => {}} disabled />
+            <Input label="Territory/Region" value={loadingUser ? "Loading..." : autoTerritory || "Not configured"} onChange={() => {}} disabled />
             <Select label="Expense Type" value={form.subType} onChange={(v) => setForm((s) => ({ ...s, subType: v }))} options={types} />
             <Input label="Date" type="date" value={form.expenseDate} onChange={(v) => setForm((s) => ({ ...s, expenseDate: v }))} required />
             <Input label="Amount" type="number" value={form.amount} onChange={(v) => setForm((s) => ({ ...s, amount: v }))} required />
