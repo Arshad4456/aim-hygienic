@@ -17,7 +17,7 @@ const types = [
 
 export default function DistributorExpenseSelfPage() {
   const [rows, setRows] = useState([]);
-  const [form, setForm] = useState({ territory: "", subType: "builty", expenseDate: "", amount: "", paymentMethod: "cash", referenceNo: "", paidTo: "", description: "", attachmentUrl: "" });
+  const [preview, setPreview] = useState(null);
 
   const me = useMemo(() => {
     try {
@@ -26,6 +26,13 @@ export default function DistributorExpenseSelfPage() {
       return {};
     }
   }, []);
+
+  const autoTerritory = useMemo(
+    () => me.territoryName || me.areaName || me.zoneName || me.regionName || "",
+    [me]
+  );
+
+  const [form, setForm] = useState({ subType: "builty", expenseDate: "", amount: "", paymentMethod: "cash", referenceNo: "", paidTo: "", description: "", attachmentUrl: "" });
 
   useEffect(() => {
     const distributorId = me._id || me.id || "";
@@ -36,6 +43,18 @@ export default function DistributorExpenseSelfPage() {
     }).catch(() => {});
   }, [me]);
 
+  const totalExpense = useMemo(() => rows.reduce((sum, r) => sum + Number(r.amount || 0), 0), [rows]);
+
+  const monthlyTotal = useMemo(() => {
+    const now = new Date();
+    return rows
+      .filter((r) => {
+        const d = new Date(r.expenseDate || r.createdAt);
+        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      })
+      .reduce((sum, r) => sum + Number(r.amount || 0), 0);
+  }, [rows]);
+
   async function submit(e) {
     e.preventDefault();
     const payload = {
@@ -43,7 +62,7 @@ export default function DistributorExpenseSelfPage() {
       subType: form.subType,
       category: form.subType,
       distributorId: me._id || me.id,
-      territory: form.territory || me.territoryName || me.areaName || "",
+      territory: autoTerritory,
       expenseDate: form.expenseDate,
       amount: Number(form.amount || 0),
       paymentMethod: form.paymentMethod,
@@ -77,7 +96,7 @@ export default function DistributorExpenseSelfPage() {
           <h1 className="text-xl font-semibold">Submit Distributor Expense</h1>
           <p className="text-sm text-zinc-500">Every submitted expense remains pending until Admin approves or rejects it.</p>
           <form onSubmit={submit} className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-            <Input label="Territory/Region" value={form.territory} onChange={(v) => setForm((s) => ({ ...s, territory: v }))} />
+            <Input label="Territory/Region" value={autoTerritory || "-"} onChange={() => {}} disabled />
             <Select label="Expense Type" value={form.subType} onChange={(v) => setForm((s) => ({ ...s, subType: v }))} options={types} />
             <Input label="Date" type="date" value={form.expenseDate} onChange={(v) => setForm((s) => ({ ...s, expenseDate: v }))} required />
             <Input label="Amount" type="number" value={form.amount} onChange={(v) => setForm((s) => ({ ...s, amount: v }))} required />
@@ -90,9 +109,14 @@ export default function DistributorExpenseSelfPage() {
           </form>
         </div>
 
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <Card label="Total Expense" value={`PKR ${totalExpense.toLocaleString()}`} />
+          <Card label="This Month Total Expense" value={`PKR ${monthlyTotal.toLocaleString()}`} />
+        </div>
+
         <div className="overflow-auto rounded-xl border bg-white">
           <table className="min-w-full text-sm">
-            <thead className="bg-zinc-50"><tr>{["Date", "Type", "Amount", "Territory", "Reference", "Status", "Admin Decision"].map((h) => <th key={h} className="border-b px-3 py-2 text-left">{h}</th>)}</tr></thead>
+            <thead className="bg-zinc-50"><tr>{["Date", "Type", "Amount", "Territory", "Reference", "Status", "Admin Decision", "Action"].map((h) => <th key={h} className="border-b px-3 py-2 text-left">{h}</th>)}</tr></thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r._id}>
@@ -103,21 +127,47 @@ export default function DistributorExpenseSelfPage() {
                   <td className="border-b px-3 py-2">{r.paymentReference || "-"}</td>
                   <td className="border-b px-3 py-2">{r.status || "pending"}</td>
                   <td className="border-b px-3 py-2">{r.status === "approved" ? `Approved by ${r.approvedBy || "Admin"}` : r.status === "rejected" ? "Rejected by Admin" : "Awaiting review"}</td>
+                  <td className="border-b px-3 py-2"><button type="button" onClick={() => setPreview(r)} className="rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100">Preview</button></td>
                 </tr>
               ))}
-              {rows.length === 0 ? <tr><td className="px-3 py-6 text-center text-zinc-500" colSpan={7}>No expenses submitted yet.</td></tr> : null}
+              {rows.length === 0 ? <tr><td className="px-3 py-6 text-center text-zinc-500" colSpan={8}>No expenses submitted yet.</td></tr> : null}
             </tbody>
           </table>
         </div>
       </div>
+
+      {preview ? (
+        <Modal title="Expense Preview" onClose={() => setPreview(null)}>
+          <div className="rounded-xl border bg-zinc-50 p-4 text-sm">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <PreviewRow k="Expense ID" v={preview.expenseId || preview._id} />
+              <PreviewRow k="Date" v={preview.expenseDate ? new Date(preview.expenseDate).toLocaleDateString() : "-"} />
+              <PreviewRow k="Type" v={preview.subType || "-"} />
+              <PreviewRow k="Amount" v={`PKR ${Number(preview.amount || 0).toLocaleString()}`} />
+              <PreviewRow k="Territory" v={preview.territory || "-"} />
+              <PreviewRow k="Payment Method" v={(preview.paymentMethod || "-").toUpperCase()} />
+              <PreviewRow k="Reference" v={preview.paymentReference || "-"} />
+              <PreviewRow k="Paid To" v={preview.paidTo || "-"} />
+              <PreviewRow k="Status" v={preview.status || "pending"} />
+              <PreviewRow k="Attachment" v={preview.attachmentUrl || "-"} />
+            </div>
+            <div className="mt-3 border-t pt-3"><div className="font-semibold">Description</div><div className="text-zinc-700">{preview.description || preview.notes || "-"}</div></div>
+          </div>
+          <div className="mt-4 flex justify-end"><button onClick={() => setPreview(null)} className="rounded-lg border px-4 py-2">Close</button></div>
+        </Modal>
+      ) : null}
     </UserDashboardShell>
   );
 }
 
-function Input({ label, value, onChange, type = "text", required = false }) {
-  return <div><div className="text-sm font-medium">{label}</div><input required={required} type={type} value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" /></div>;
+function Input({ label, value, onChange, type = "text", required = false, disabled = false }) {
+  return <div><div className="text-sm font-medium">{label}</div><input disabled={disabled} required={required} type={type} value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm disabled:bg-zinc-100" /></div>;
 }
 
 function Select({ label, value, onChange, options }) {
   return <div><div className="text-sm font-medium">{label}</div><select value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm">{options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>;
 }
+
+function Card({ label, value }) { return <div className="rounded-xl border bg-white p-4"><div className="text-xs text-zinc-500">{label}</div><div className="text-lg font-semibold">{value}</div></div>; }
+function Modal({ title, children, onClose }) { return <div className="fixed inset-0 z-[65]"><div className="absolute inset-0 bg-black/40" onClick={onClose} /><div className="absolute left-1/2 top-1/2 w-[95vw] max-w-3xl -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-5 shadow-2xl"><div className="mb-3 flex items-center justify-between"><div className="text-lg font-semibold">{title}</div><button onClick={onClose} className="rounded-md border px-2 py-1 text-sm">✕</button></div>{children}</div></div>; }
+function PreviewRow({ k, v }) { return <div className="flex justify-between border-b py-1"><span className="text-zinc-600">{k}</span><span className="font-medium text-right">{v}</span></div>; }

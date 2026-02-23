@@ -156,6 +156,7 @@ export default function DistributorExpensePage() {
           <ReceiptRow label="Reference" value={selectedReceipt.paymentReference || selectedReceipt.linkReference || "-"} />
           <ReceiptRow label="Status" value={selectedReceipt.status || "-"} />
         </div>
+        <div className="mt-3 border-t pt-3 text-sm"><div className="mb-1 font-semibold">Description / Notes</div><div className="text-zinc-700">{selectedReceipt.description || selectedReceipt.notes || "-"}</div></div>
       </div>
       <div className="mt-4 flex justify-end gap-2"><button type="button" onClick={()=>window.print()} className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-indigo-700">Print Receipt</button><button type="button" onClick={()=>setSelectedReceipt(null)} className="rounded-lg border px-4 py-2">Close</button></div>
     </Modal>
