@@ -1,317 +1,141 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import AdminShell from "../components/AdminShell";
 import { apiFetch } from "../../../lib/api";
 
-const statusLabels = {
-  pending: "Pending",
-  approved: "Approved",
-  rejected: "Rejected",
-  paid: "Paid",
-};
+const sections = [
+  { key: "all", label: "All" },
+  { key: "personal", label: "Personal" },
+  { key: "daily", label: "Daily" },
+  { key: "distributor", label: "Distributor" },
+];
 
-export default function ExpenseListPage() {
+export default function ExpenseOverviewPage() {
   const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState("");
-  const [filters, setFilters] = useState({ status: "all", paymentMode: "all", costCenter: "" });
-
-  async function load() {
-    setErr("");
-    setLoading(true);
-    try {
-      const data = await apiFetch("/expenses");
-      setRows(data.expenses || []);
-    } catch (e) {
-      setErr(e.message || "Failed to load expenses");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const [filters, setFilters] = useState({ section: "all", status: "all", paymentMethod: "all" });
 
   useEffect(() => {
-    load();
+    apiFetch("/expenses").then((d) => setRows(d.expenses || [])).catch(() => setRows([]));
   }, []);
 
-  const filtered = useMemo(() => {
-    return rows.filter((row) => {
-      if (filters.status !== "all" && row.status !== filters.status) return false;
-      if (filters.paymentMode !== "all" && row.paymentMode !== filters.paymentMode) return false;
-      if (filters.costCenter && !row.costCenter?.toLowerCase().includes(filters.costCenter.toLowerCase())) return false;
-      return true;
+  const currentMonth = useMemo(() => {
+    const now = new Date();
+    return rows.filter((r) => {
+      const d = new Date(r.expenseDate || r.createdAt);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     });
-  }, [rows, filters]);
+  }, [rows]);
 
-  async function updateStatus(row, nextStatus) {
-    try {
-      const data = await apiFetch(`/expenses/${row._id}`,
-        {
-          method: "PUT",
-          body: {
-            ...row,
-            status: nextStatus,
-            approvedBy: nextStatus === "approved" ? "System Admin" : row.approvedBy,
-          },
-        }
-      );
-      setRows((s) => s.map((item) => (item._id === row._id ? data.expense : item)));
-    } catch (e) {
-      alert(e.message || "Failed to update status");
-    }
-  }
+  const filtered = useMemo(() => currentMonth.filter((r) => {
+    if (filters.section !== "all" && r.section !== filters.section) return false;
+    if (filters.status !== "all" && r.status !== filters.status) return false;
+    if (filters.paymentMethod !== "all" && r.paymentMethod !== filters.paymentMethod) return false;
+    return true;
+  }), [currentMonth, filters]);
 
-  async function onDelete(id) {
-    if (!confirm("Delete this expense record?")) return;
-    try {
-      await apiFetch(`/expenses/${id}`, { method: "DELETE" });
-      setRows((s) => s.filter((item) => item._id !== id));
-    } catch (e) {
-      alert(e.message || "Delete failed");
-    }
-  }
+  const total = filtered.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+  const cashTotal = filtered.filter((r) => r.paymentMethod === "cash").reduce((sum, r) => sum + Number(r.amount || 0), 0);
+  const onlineTotal = filtered.filter((r) => r.paymentMethod === "online").reduce((sum, r) => sum + Number(r.amount || 0), 0);
+  const pendingCount = filtered.filter((r) => r.status === "pending").length;
 
-  function exportCsv() {
-    const headers = [
-      "Expense ID",
-      "Title",
-      "Category",
-      "Cost Center",
-      "Vendor",
-      "Amount",
-      "Currency",
-      "Payment Mode",
-      "Status",
-      "Requested By",
-      "Approved By",
-      "Expense Date",
-    ];
-    const lines = filtered.map((row) => [
-      row.expenseId,
-      row.title,
-      row.category,
-      row.costCenter,
-      row.vendorName,
-      row.amount,
-      row.currency,
-      row.paymentMode,
-      row.status,
-      row.requestedBy,
-      row.approvedBy,
-      row.expenseDate ? new Date(row.expenseDate).toLocaleDateString() : "",
-    ]);
-    const csv = [headers, ...lines]
-      .map((line) => line.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `expense-report-${Date.now()}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
+  const categorySummary = Object.entries(filtered.reduce((acc, row) => {
+    const key = row.category || "Uncategorized";
+    acc[key] = (acc[key] || 0) + Number(row.amount || 0);
+    return acc;
+  }, {})).sort((a, b) => b[1] - a[1]);
+
+  const topCategory = categorySummary[0]?.[0] || "-";
+  const biggestExpense = filtered.slice().sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0))[0];
 
   return (
     <AdminShell title="Expense Management" user={null}>
-      <div className="rounded-2xl bg-white border shadow-sm p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-xl font-semibold text-zinc-900">Expense Management</div>
-            <div className="text-sm text-zinc-500 mt-1">
-              Review, approve, and export expense requests by cost center and payment mode.
+      <div className="space-y-5">
+        <div className="rounded-2xl border bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h1 className="text-xl font-semibold text-zinc-900">Expense Management · Module Overview</h1>
+              <p className="mt-1 text-sm text-zinc-500">Executive dashboard for personal, daily, and distributor expenses with approvals and account impact.</p>
+            </div>
+            <div className="flex gap-2 text-sm">
+              <Link className="rounded-lg border px-3 py-2 hover:bg-zinc-50" href="/dashboards/admin/expense/personal">AIM – Personal Expense</Link>
+              <Link className="rounded-lg border px-3 py-2 hover:bg-zinc-50" href="/dashboards/admin/expense/daily">Daily Expense</Link>
+              <Link className="rounded-lg border px-3 py-2 hover:bg-zinc-50" href="/dashboards/admin/expense/distributor">Distributor Expense</Link>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={exportCsv}
-              className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50"
-            >
-              Export CSV
-            </button>
-            <a
-              href="/dashboards/admin/expense/add"
-              className="rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-700"
-            >
-              + Add Expense
-            </a>
+
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+            <Select label="Section" value={filters.section} onChange={(section) => setFilters((s) => ({ ...s, section }))} options={sections} />
+            <Select label="Status" value={filters.status} onChange={(status) => setFilters((s) => ({ ...s, status }))} options={[{ key: "all", label: "All" }, { key: "approved", label: "Approved" }, { key: "pending", label: "Pending" }, { key: "rejected", label: "Rejected" }]} />
+            <Select label="Payment Method" value={filters.paymentMethod} onChange={(paymentMethod) => setFilters((s) => ({ ...s, paymentMethod }))} options={[{ key: "all", label: "All" }, { key: "cash", label: "Cash" }, { key: "online", label: "Online" }, { key: "cheque", label: "Cheque" }]} />
           </div>
         </div>
 
-        {err ? (
-          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {err}
-          </div>
-        ) : null}
-
-        <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3">
-          <FilterSelect
-            label="Status"
-            value={filters.status}
-            onChange={(value) => setFilters((s) => ({ ...s, status: value }))}
-            options={[
-              { value: "all", label: "All statuses" },
-              { value: "pending", label: "Pending" },
-              { value: "approved", label: "Approved" },
-              { value: "rejected", label: "Rejected" },
-              { value: "paid", label: "Paid" },
-            ]}
-          />
-          <FilterSelect
-            label="Payment Mode"
-            value={filters.paymentMode}
-            onChange={(value) => setFilters((s) => ({ ...s, paymentMode: value }))}
-            options={[
-              { value: "all", label: "All payment modes" },
-              { value: "cash", label: "Cash" },
-              { value: "bank_transfer", label: "Bank Transfer" },
-              { value: "card", label: "Card" },
-              { value: "mobile_banking", label: "Mobile Banking" },
-              { value: "cheque", label: "Cheque" },
-            ]}
-          />
-          <div>
-            <Label>Cost Center</Label>
-            <input
-              value={filters.costCenter}
-              onChange={(e) => setFilters((s) => ({ ...s, costCenter: e.target.value }))}
-              placeholder="Search cost center"
-              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-            />
-          </div>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Card title="Total Expenses (MTD)" value={money(total)} />
+          <Card title="Cash Expenses (MTD)" value={money(cashTotal)} />
+          <Card title="Online Expenses (MTD)" value={money(onlineTotal)} />
+          <Card title="Pending Approvals" value={String(pendingCount)} />
+          <Card title="Top Category" value={topCategory} />
+          <Card title="Biggest Single Expense" value={biggestExpense ? `${money(biggestExpense.amount)} (${biggestExpense.category || "N/A"})` : "-"} />
+          <Card title="Expense Growth vs Last Month" value={growthText(rows)} />
+          <Card title="Accounting Impact" value="Auto cash-out posting on approval" />
         </div>
 
-        <div className="mt-5 overflow-auto rounded-xl border">
-          <table className="min-w-[980px] w-full text-sm">
-            <thead className="bg-zinc-50">
-              <tr>
-                <th className="text-left px-3 py-2 border-b">Expense ID</th>
-                <th className="text-left px-3 py-2 border-b">Title</th>
-                <th className="text-left px-3 py-2 border-b">Cost Center</th>
-                <th className="text-left px-3 py-2 border-b">Payment</th>
-                <th className="text-left px-3 py-2 border-b">Amount</th>
-                <th className="text-left px-3 py-2 border-b">Status</th>
-                <th className="text-left px-3 py-2 border-b">Requested By</th>
-                <th className="text-left px-3 py-2 border-b">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={8} className="px-3 py-6 text-center text-zinc-500">
-                    Loading...
-                  </td>
-                </tr>
-              ) : filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-3 py-6 text-center text-zinc-500">
-                    No expense records found
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((row) => (
-                  <tr key={row._id} className="hover:bg-zinc-50">
-                    <td className="px-3 py-2 border-b font-medium text-zinc-900">{row.expenseId}</td>
-                    <td className="px-3 py-2 border-b">
-                      <div className="text-zinc-900 font-medium">{row.title}</div>
-                      <div className="text-xs text-zinc-500">{row.vendorName || "Vendor n/a"}</div>
-                    </td>
-                    <td className="px-3 py-2 border-b">
-                      <div className="text-zinc-900">{row.costCenter || "-"}</div>
-                      <div className="text-xs text-zinc-500">{row.category || "-"}</div>
-                    </td>
-                    <td className="px-3 py-2 border-b">
-                      <div className="text-zinc-900">{row.paymentMode?.replace("_", " ") || "-"}</div>
-                      <div className="text-xs text-zinc-500">{row.paymentReference || "Ref n/a"}</div>
-                    </td>
-                    <td className="px-3 py-2 border-b">
-                      <div className="text-zinc-900 font-semibold">
-                        {row.currency || "BDT"} {Number(row.amount || 0).toLocaleString()}
-                      </div>
-                      <div className="text-xs text-zinc-500">
-                        {row.expenseDate ? new Date(row.expenseDate).toLocaleDateString() : "Date n/a"}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2 border-b">
-                      <StatusPill status={row.status} />
-                    </td>
-                    <td className="px-3 py-2 border-b">
-                      <div className="text-zinc-900">{row.requestedBy || "-"}</div>
-                      <div className="text-xs text-zinc-500">Approved by {row.approvedBy || "-"}</div>
-                    </td>
-                    <td className="px-3 py-2 border-b">
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => updateStatus(row, "approved")}
-                          className="rounded-lg border px-3 py-1.5 text-xs hover:bg-zinc-50"
-                        >
-                          Approve
-                        </button>
-                        <button
-                          onClick={() => updateStatus(row, "rejected")}
-                          className="rounded-lg border px-3 py-1.5 text-xs hover:bg-zinc-50 text-red-600"
-                        >
-                          Reject
-                        </button>
-                        <button
-                          onClick={() => updateStatus(row, "paid")}
-                          className="rounded-lg border px-3 py-1.5 text-xs hover:bg-zinc-50 text-emerald-600"
-                        >
-                          Mark Paid
-                        </button>
-                        <button
-                          onClick={() => onDelete(row._id)}
-                          className="rounded-lg border px-3 py-1.5 text-xs hover:bg-zinc-50 text-red-600"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <div className="rounded-2xl border bg-white p-4">
+            <h3 className="font-semibold text-zinc-900">Top Categories (Current Month)</h3>
+            <div className="mt-3 space-y-2">
+              {categorySummary.slice(0, 10).map(([name, amount]) => (
+                <Bar key={name} label={name} value={amount} max={categorySummary[0]?.[1] || 1} />
+              ))}
+            </div>
+          </div>
+          <div className="rounded-2xl border bg-white p-4">
+            <h3 className="font-semibold text-zinc-900">Automated Insights</h3>
+            <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-zinc-700">
+              <li>{topCategory === "-" ? "No category trend available yet." : `${topCategory} is the highest contributor this month.`}</li>
+              <li>{`Top 5 users spending this month: ${topUsers(filtered) || "No data"}.`}</li>
+              <li>{`Cash burn rate (avg/day): ${money(total / Math.max(new Date().getDate(), 1))}.`}</li>
+              <li>Upcoming recurring expenses to track: rent, utilities, salaries, and support reimbursements.</li>
+            </ul>
+          </div>
         </div>
       </div>
     </AdminShell>
   );
 }
 
-function Label({ children }) {
-  return <div className="text-sm font-medium text-zinc-800">{children}</div>;
+function Card({ title, value }) {
+  return <div className="rounded-xl border bg-white p-4"><div className="text-xs text-zinc-500">{title}</div><div className="mt-1 text-lg font-semibold text-zinc-900">{value}</div></div>;
 }
 
-function FilterSelect({ label, value, onChange, options }) {
-  return (
-    <div>
-      <Label>{label}</Label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-      >
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
+function Select({ label, value, onChange, options }) {
+  return <div><div className="text-sm font-medium text-zinc-800">{label}</div><select value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm">{options.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}</select></div>;
 }
 
-function StatusPill({ status }) {
-  const label = statusLabels[status] || "Unknown";
-  const styles = {
-    pending: "bg-amber-50 text-amber-700 border-amber-200",
-    approved: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    rejected: "bg-red-50 text-red-700 border-red-200",
-    paid: "bg-blue-50 text-blue-700 border-blue-200",
-  };
-  return (
-    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs ${styles[status] || "bg-zinc-50 text-zinc-600 border-zinc-200"}`}>
-      {label}
-    </span>
-  );
+function money(v) { return `PKR ${Number(v || 0).toLocaleString()}`; }
+
+function growthText(rows) {
+  const now = new Date();
+  const m = now.getMonth();
+  const y = now.getFullYear();
+  const prevM = m === 0 ? 11 : m - 1;
+  const prevY = m === 0 ? y - 1 : y;
+  const cur = rows.filter((r) => { const d = new Date(r.expenseDate || r.createdAt); return d.getMonth() === m && d.getFullYear() === y; }).reduce((s, r) => s + Number(r.amount || 0), 0);
+  const prev = rows.filter((r) => { const d = new Date(r.expenseDate || r.createdAt); return d.getMonth() === prevM && d.getFullYear() === prevY; }).reduce((s, r) => s + Number(r.amount || 0), 0);
+  if (!prev) return "New baseline";
+  return `${(((cur - prev) / prev) * 100).toFixed(1)}%`;
+}
+
+function topUsers(rows) {
+  const m = {};
+  rows.forEach((r) => { const k = r.spenderName || r.requestedBy || "Unknown"; m[k] = (m[k] || 0) + Number(r.amount || 0); });
+  return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k]) => k).join(", ");
+}
+
+function Bar({ label, value, max }) {
+  const width = Math.max(8, Math.round((value / max) * 100));
+  return <div><div className="mb-1 flex items-center justify-between text-xs"><span className="text-zinc-700">{label}</span><span className="font-medium">{money(value)}</span></div><div className="h-2 rounded-full bg-zinc-100"><div className="h-2 rounded-full bg-emerald-500" style={{ width: `${width}%` }} /></div></div>;
 }

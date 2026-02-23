@@ -216,8 +216,10 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
         title: "Expense Management",
         icon: "expense",
         children: [
-          { title: "Add Expense", href: "/dashboards/admin/expense/add" },
-          { title: "View Expense List", href: "/dashboards/admin/expense" },
+          { title: "Module Overview", href: "/dashboards/admin/expense" },
+          { title: "AIM – Personal Expense", href: "/dashboards/admin/expense/personal" },
+          { title: "Daily Expense", href: "/dashboards/admin/expense/daily" },
+          { title: "Distributor Expense", href: "/dashboards/admin/expense/distributor" },
         ],
       },
 
