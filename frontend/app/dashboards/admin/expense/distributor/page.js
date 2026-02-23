@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import AdminShell from "../../components/AdminShell";
 import { apiFetch } from "../../../../lib/api";
+import { getAuthItem } from "../../../../lib/clientAuth";
 
 const tabs = [
   { key: "builty", label: "Builty Expense" },
@@ -47,6 +48,11 @@ export default function DistributorExpensePage() {
     return m;
   }, [distributors]);
 
+  const approvedRows = useMemo(
+    () => rows.filter((r) => ["approved", "posted", "paid"].includes(String(r.status || "").toLowerCase())),
+    [rows]
+  );
+
   async function save(e) {
     e.preventDefault();
     const status = active === "support" || active.startsWith("claim") ? "pending" : "posted";
@@ -87,11 +93,23 @@ export default function DistributorExpensePage() {
     setRows((s) => s.filter((r) => r._id !== id));
   }
 
-  const monthly = useMemo(() => rows.reduce((m, r) => {
+  async function updateStatus(row, nextStatus) {
+    const me = JSON.parse(getAuthItem("aim_user") || "{}");
+    const payload = {
+      ...row,
+      status: nextStatus,
+      approvedBy: nextStatus === "approved" ? (me.fullName || me.name || me.username || "Admin") : row.approvedBy,
+      approvedAt: nextStatus === "approved" ? new Date().toISOString() : row.approvedAt,
+    };
+    const res = await apiFetch(`/expenses/${row._id}`, { method: "PUT", body: payload });
+    setRows((state) => state.map((item) => (item._id === row._id ? res.expense : item)));
+  }
+
+  const monthly = useMemo(() => approvedRows.reduce((m, r) => {
     const key = distributorMap[r.distributorId] || "Unknown";
     m[key] = (m[key] || 0) + Number(r.amount || 0);
     return m;
-  }, {}), [rows, distributorMap]);
+  }, {}), [approvedRows, distributorMap]);
 
   return <AdminShell title="Distributor Expense" user={null}><div className="space-y-5">
     <div className="rounded-2xl border bg-white p-5"><h1 className="text-xl font-semibold">Distributor Expense</h1><p className="text-sm text-zinc-500">Monthly reimbursement, structured claims, and approval-driven support entries.</p>
@@ -115,9 +133,9 @@ export default function DistributorExpensePage() {
       </form>
     </div>
 
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">{Object.entries(monthly).slice(0,3).map(([dist, amount])=> <div key={dist} className="rounded-xl border bg-white p-4"><div className="text-xs text-zinc-500">Monthly total by distributor</div><div className="font-semibold">{dist}</div><div>PKR {Number(amount).toLocaleString()}</div></div>)}</div>
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">{Object.entries(monthly).slice(0,3).map(([dist, amount])=> <div key={dist} className="rounded-xl border bg-white p-4"><div className="text-xs text-zinc-500">Approved total by distributor</div><div className="font-semibold">{dist}</div><div>PKR {Number(amount).toLocaleString()}</div></div>)}</div>
 
-    <div className="overflow-auto rounded-xl border bg-white"><table className="min-w-full text-sm"><thead className="bg-zinc-50"><tr>{["Date","Distributor","Territory","Type","Reference","Amount","Status","Approved By","Attachment","Actions"].map((h)=><th key={h} className="border-b px-3 py-2 text-left">{h}</th>)}</tr></thead><tbody>{rows.map((r)=><tr key={r._id}><td className="border-b px-3 py-2">{fmtDate(r.expenseDate)}</td><td className="border-b px-3 py-2">{distributorMap[r.distributorId] || "-"}</td><td className="border-b px-3 py-2">{r.territory||"-"}</td><td className="border-b px-3 py-2">{r.subType}</td><td className="border-b px-3 py-2">{r.paymentReference||r.linkReference||"-"}</td><td className="border-b px-3 py-2">PKR {Number(r.amount||0).toLocaleString()}</td><td className="border-b px-3 py-2">{r.status}</td><td className="border-b px-3 py-2">{r.approvedBy||"-"}</td><td className="border-b px-3 py-2">{r.attachmentUrl?<a href={r.attachmentUrl} target="_blank" rel="noreferrer" className="text-indigo-600 underline">View</a>:"-"}</td><td className="border-b px-3 py-2"><div className="flex gap-2"><button type="button" onClick={()=>setSelectedReceipt(r)} className="rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100">Receipt</button><button type="button" onClick={()=>onDelete(r._id)} className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100">Delete</button></div></td></tr>)}{rows.length===0?<tr><td colSpan={10} className="px-3 py-6 text-center text-zinc-500">No distributor expenses</td></tr>:null}</tbody></table></div>
+    <div className="overflow-auto rounded-xl border bg-white"><table className="min-w-full text-sm"><thead className="bg-zinc-50"><tr>{["Date","Distributor","Territory","Type","Reference","Amount","Status","Approved By","Attachment","Actions"].map((h)=><th key={h} className="border-b px-3 py-2 text-left">{h}</th>)}</tr></thead><tbody>{rows.map((r)=><tr key={r._id}><td className="border-b px-3 py-2">{fmtDate(r.expenseDate)}</td><td className="border-b px-3 py-2">{distributorMap[r.distributorId] || "-"}</td><td className="border-b px-3 py-2">{r.territory||"-"}</td><td className="border-b px-3 py-2">{r.subType}</td><td className="border-b px-3 py-2">{r.paymentReference||r.linkReference||"-"}</td><td className="border-b px-3 py-2">PKR {Number(r.amount||0).toLocaleString()}</td><td className="border-b px-3 py-2">{r.status}</td><td className="border-b px-3 py-2">{r.approvedBy||"-"}</td><td className="border-b px-3 py-2">{r.attachmentUrl?<a href={r.attachmentUrl} target="_blank" rel="noreferrer" className="text-indigo-600 underline">View</a>:"-"}</td><td className="border-b px-3 py-2"><div className="flex flex-wrap gap-2"><button type="button" onClick={()=>setSelectedReceipt(r)} className="rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100">Receipt</button><button type="button" onClick={()=>updateStatus(r,"approved")} className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">Approve</button><button type="button" onClick={()=>updateStatus(r,"rejected")} className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100">Reject</button><button type="button" onClick={()=>onDelete(r._id)} className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100">Delete</button></div></td></tr>)}{rows.length===0?<tr><td colSpan={10} className="px-3 py-6 text-center text-zinc-500">No distributor expenses</td></tr>:null}</tbody></table></div>
   </div>
 
   {selectedReceipt ? (
