@@ -192,8 +192,7 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
           { title: "Invoices", href: "/dashboards/admin/finance/invoices" },
           { title: "Receipts", href: "/dashboards/admin/finance/receipts" },
           { title: "Aging Report", href: "/dashboards/admin/finance/aging" },
-          { title: "Payment Management", href: "/dashboards/admin/finance/payments" },
-        ],
+                  ],
       },
 
       {
@@ -231,6 +230,7 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
         children: [
           { title: "Account Detail", href: "/dashboards/admin/account/manage" },
           { title: "Loan Detail", href: "/dashboards/admin/account/loan-detail" },
+          { title: "Payment Management", href: "/dashboards/admin/finance/payments" },
         ],
       },
       { type: "link", title: "Messages", href: "/dashboards/admin/messages", icon: "messages" },
