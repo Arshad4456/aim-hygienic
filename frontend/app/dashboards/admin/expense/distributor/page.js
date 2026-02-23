@@ -16,25 +16,49 @@ export default function DistributorExpensePage() {
   const [rows, setRows] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [distributors, setDistributors] = useState([]);
+  const [selectedReceipt, setSelectedReceipt] = useState(null);
   const [form, setForm] = useState({ distributorId: "", territory: "", expenseDate: "", amount: "", paidTo: "", paymentMethod: "cash", fromAccountId: "", description: "", referenceNo: "", attachmentUrl: "", reason: "", employeeType: "Promoter", supportPeriod: "", claimType: "Discount Claim" });
 
   useEffect(() => {
     Promise.all([apiFetch("/expenses?section=distributor"), apiFetch("/accounts"), apiFetch("/users")]).then(([a, b, c]) => {
-      setRows(a.expenses || []); setAccounts(b.accounts || []); setDistributors((c.users || []).filter((u) => String(u.role || "").toLowerCase().includes("distributor")));
+      setRows(a.expenses || []);
+      setAccounts(b.accounts || []);
+      setDistributors((c.users || []).filter((u) => String(u.role || "").toLowerCase().includes("distributor")));
     }).catch(() => {});
   }, []);
+
+  const territoryOptions = useMemo(() => {
+    const names = new Set();
+    distributors.forEach((d) => {
+      const name = getDistributorTerritory(d);
+      if (name) names.add(name);
+    });
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [distributors]);
+
+  const filteredDistributors = useMemo(() => {
+    if (!form.territory) return [];
+    return distributors.filter((d) => getDistributorTerritory(d) === form.territory);
+  }, [distributors, form.territory]);
+
+  const distributorMap = useMemo(() => {
+    const m = {};
+    distributors.forEach((d) => { m[d._id] = distributorName(d); });
+    return m;
+  }, [distributors]);
 
   async function save(e) {
     e.preventDefault();
     const status = active === "support" || active.startsWith("claim") ? "pending" : "posted";
     const subType = active === "claim_discount" ? claimSubType(form.claimType) : active;
     const dist = distributors.find((d) => d._id === form.distributorId);
+
     const payload = {
       section: "distributor",
       subType,
       category: active,
       distributorId: form.distributorId,
-      territory: form.territory || dist?.territory || "",
+      territory: form.territory || getDistributorTerritory(dist) || "",
       expenseDate: form.expenseDate,
       amount: Number(form.amount || 0),
       paymentMethod: form.paymentMethod,
@@ -50,33 +74,35 @@ export default function DistributorExpensePage() {
       status,
       title: `Distributor ${tabs.find((t) => t.key === active)?.label || "expense"}`,
       expenseId: `DST-${Date.now()}`,
-      metadata: {
-        reason: form.reason,
-        employeeType: form.employeeType,
-        supportPeriod: form.supportPeriod,
-        claimType: form.claimType,
-      },
+      metadata: { reason: form.reason, employeeType: form.employeeType, supportPeriod: form.supportPeriod, claimType: form.claimType },
     };
+
     const r = await apiFetch("/expenses", { method: "POST", body: payload });
     setRows((s) => [r.expense, ...s]);
   }
 
+  async function onDelete(id) {
+    if (!confirm("Delete this distributor expense record?")) return;
+    await apiFetch(`/expenses/${id}`, { method: "DELETE" });
+    setRows((s) => s.filter((r) => r._id !== id));
+  }
+
   const monthly = useMemo(() => rows.reduce((m, r) => {
-    const key = r.distributorId || "unknown";
+    const key = distributorMap[r.distributorId] || "Unknown";
     m[key] = (m[key] || 0) + Number(r.amount || 0);
     return m;
-  }, {}), [rows]);
+  }, {}), [rows, distributorMap]);
 
   return <AdminShell title="Distributor Expense" user={null}><div className="space-y-5">
     <div className="rounded-2xl border bg-white p-5"><h1 className="text-xl font-semibold">Distributor Expense</h1><p className="text-sm text-zinc-500">Monthly reimbursement, structured claims, and approval-driven support entries.</p>
-      <div className="mt-4 flex flex-wrap gap-2">{tabs.map((t) => <button key={t.key} onClick={() => setActive(t.key)} className={`rounded-lg px-3 py-2 text-sm ${active===t.key?"bg-emerald-600 text-white":"border hover:bg-zinc-50"}`}>{t.label}</button>)}</div>
+      <div className="mt-4 flex flex-wrap gap-2">{tabs.map((t) => <button type="button" key={t.key} onClick={() => setActive(t.key)} className={`rounded-lg px-3 py-2 text-sm ${active===t.key?"bg-emerald-600 text-white":"border hover:bg-zinc-50"}`}>{t.label}</button>)}</div>
       <form onSubmit={save} className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-        <Select label="Distributor" value={form.distributorId} onChange={(v)=>setForm((s)=>({...s, distributorId:v}))} options={[{value:"",label:"Select distributor"}, ...distributors.map((d)=>({value:d._id,label:d.name}))]} />
-        <Input label="Territory/Region" value={form.territory} onChange={(v)=>setForm((s)=>({...s, territory:v}))} />
+        <Select label="Territory/Region" value={form.territory} onChange={(v)=>setForm((s)=>({ ...s, territory: v, distributorId: "" }))} options={[{value:"",label:"Select territory"}, ...territoryOptions.map((t)=>({ value:t, label:t }))]} required />
+        <Select label="Distributor" value={form.distributorId} onChange={(v)=>setForm((s)=>({...s, distributorId:v}))} disabled={!form.territory} options={[{value:"",label: form.territory ? "Select distributor" : "Select territory first"}, ...filteredDistributors.map((d)=>({value:d._id,label:distributorName(d)}))]} required />
         <Input label="Date" type="date" value={form.expenseDate} onChange={(v)=>setForm((s)=>({...s, expenseDate:v}))} required />
         <Input label="Amount" type="number" value={form.amount} onChange={(v)=>setForm((s)=>({...s, amount:v}))} required />
         <Select label="Payment Method" value={form.paymentMethod} onChange={(v)=>setForm((s)=>({...s, paymentMethod:v}))} options={[{value:"cash",label:"Cash"},{value:"online",label:"Online"},{value:"cheque",label:"Cheque"}]} />
-        <Select label="Paid From Account" value={form.fromAccountId} onChange={(v)=>setForm((s)=>({...s, fromAccountId:v}))} options={[{value:"",label:"Select account"}, ...accounts.map((a)=>({value:a._id,label:a.accountName}))]} />
+        <Select label="Paid From Account" value={form.fromAccountId} onChange={(v)=>setForm((s)=>({...s, fromAccountId:v}))} options={[{value:"",label:"Select account"}, ...accounts.map((a)=>({value:a._id,label:`${a.accountName} (${a.accountType})`}))]} />
         <Input label={active==="builty"?"Builty No / LR No":active==="credit_note"?"Credit Note No":"Reference"} value={form.referenceNo} onChange={(v)=>setForm((s)=>({...s, referenceNo:v}))} />
         <Input label="Paid To / Transporter / Payee" value={form.paidTo} onChange={(v)=>setForm((s)=>({...s, paidTo:v}))} />
         <Input label="Reason" value={form.reason} onChange={(v)=>setForm((s)=>({...s, reason:v}))} />
@@ -91,10 +117,40 @@ export default function DistributorExpensePage() {
 
     <div className="grid grid-cols-1 gap-3 md:grid-cols-3">{Object.entries(monthly).slice(0,3).map(([dist, amount])=> <div key={dist} className="rounded-xl border bg-white p-4"><div className="text-xs text-zinc-500">Monthly total by distributor</div><div className="font-semibold">{dist}</div><div>PKR {Number(amount).toLocaleString()}</div></div>)}</div>
 
-    <div className="overflow-auto rounded-xl border bg-white"><table className="min-w-full text-sm"><thead className="bg-zinc-50"><tr>{["Date","Distributor","Territory","Type","Reference","Amount","Status","Approved By","Attachment"].map((h)=><th key={h} className="border-b px-3 py-2 text-left">{h}</th>)}</tr></thead><tbody>{rows.map((r)=><tr key={r._id}><td className="border-b px-3 py-2">{new Date(r.expenseDate).toLocaleDateString()}</td><td className="border-b px-3 py-2">{r.distributorId||"-"}</td><td className="border-b px-3 py-2">{r.territory||"-"}</td><td className="border-b px-3 py-2">{r.subType}</td><td className="border-b px-3 py-2">{r.paymentReference||r.linkReference||"-"}</td><td className="border-b px-3 py-2">PKR {Number(r.amount||0).toLocaleString()}</td><td className="border-b px-3 py-2">{r.status}</td><td className="border-b px-3 py-2">{r.approvedBy||"-"}</td><td className="border-b px-3 py-2">{r.attachmentUrl?"View":"-"}</td></tr>)}{rows.length===0?<tr><td colSpan={9} className="px-3 py-6 text-center text-zinc-500">No distributor expenses</td></tr>:null}</tbody></table></div>
-  </div></AdminShell>;
+    <div className="overflow-auto rounded-xl border bg-white"><table className="min-w-full text-sm"><thead className="bg-zinc-50"><tr>{["Date","Distributor","Territory","Type","Reference","Amount","Status","Approved By","Attachment","Actions"].map((h)=><th key={h} className="border-b px-3 py-2 text-left">{h}</th>)}</tr></thead><tbody>{rows.map((r)=><tr key={r._id}><td className="border-b px-3 py-2">{fmtDate(r.expenseDate)}</td><td className="border-b px-3 py-2">{distributorMap[r.distributorId] || "-"}</td><td className="border-b px-3 py-2">{r.territory||"-"}</td><td className="border-b px-3 py-2">{r.subType}</td><td className="border-b px-3 py-2">{r.paymentReference||r.linkReference||"-"}</td><td className="border-b px-3 py-2">PKR {Number(r.amount||0).toLocaleString()}</td><td className="border-b px-3 py-2">{r.status}</td><td className="border-b px-3 py-2">{r.approvedBy||"-"}</td><td className="border-b px-3 py-2">{r.attachmentUrl?<a href={r.attachmentUrl} target="_blank" rel="noreferrer" className="text-indigo-600 underline">View</a>:"-"}</td><td className="border-b px-3 py-2"><div className="flex gap-2"><button type="button" onClick={()=>setSelectedReceipt(r)} className="rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100">Receipt</button><button type="button" onClick={()=>onDelete(r._id)} className="rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100">Delete</button></div></td></tr>)}{rows.length===0?<tr><td colSpan={10} className="px-3 py-6 text-center text-zinc-500">No distributor expenses</td></tr>:null}</tbody></table></div>
+  </div>
+
+  {selectedReceipt ? (
+    <Modal title="AIM Hygienic Distributor Expense Receipt" onClose={() => setSelectedReceipt(null)}>
+      <div className="rounded-xl border-2 border-dashed border-zinc-300 bg-zinc-50 p-4">
+        <div className="mb-3 flex items-center justify-between border-b pb-3">
+          <div className="flex items-center gap-3"><div className="flex h-12 w-12 items-center justify-center rounded-lg bg-emerald-600 text-lg font-bold text-white">AH</div><div><div className="text-lg font-bold">AIM Hygienic (Pvt) Limited</div><div className="text-xs text-zinc-500">Distributor Expense Receipt</div></div></div>
+          <div className="text-right text-xs text-zinc-600"><div><b>Receipt #:</b> {selectedReceipt.expenseId || selectedReceipt._id}</div><div><b>Generated:</b> {new Date().toLocaleString()}</div></div>
+        </div>
+        <div className="grid grid-cols-1 gap-x-8 gap-y-1 text-sm sm:grid-cols-2">
+          <ReceiptRow label="Date" value={fmtDate(selectedReceipt.expenseDate)} />
+          <ReceiptRow label="Distributor" value={distributorMap[selectedReceipt.distributorId] || "-"} />
+          <ReceiptRow label="Territory" value={selectedReceipt.territory || "-"} />
+          <ReceiptRow label="Type" value={selectedReceipt.subType || "-"} />
+          <ReceiptRow label="Amount" value={`PKR ${Number(selectedReceipt.amount || 0).toLocaleString()}`} />
+          <ReceiptRow label="Payment Method" value={(selectedReceipt.paymentMethod || "-").toUpperCase()} />
+          <ReceiptRow label="Paid To" value={selectedReceipt.paidTo || "-"} />
+          <ReceiptRow label="Reference" value={selectedReceipt.paymentReference || selectedReceipt.linkReference || "-"} />
+          <ReceiptRow label="Status" value={selectedReceipt.status || "-"} />
+        </div>
+      </div>
+      <div className="mt-4 flex justify-end gap-2"><button type="button" onClick={()=>window.print()} className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-indigo-700">Print Receipt</button><button type="button" onClick={()=>setSelectedReceipt(null)} className="rounded-lg border px-4 py-2">Close</button></div>
+    </Modal>
+  ) : null}
+
+  </AdminShell>;
 }
 
 function claimSubType(claimType) { if (claimType === "Offer Claim") return "claim_offer"; if (claimType === "Coupon Claim") return "claim_coupon"; return "claim_discount"; }
-function Input({ label, value, onChange, type="text", required }) { return <div><div className="text-sm font-medium">{label}</div><input required={required} type={type} value={value} onChange={(e)=>onChange(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" /></div>; }
-function Select({ label, value, onChange, options }) { return <div><div className="text-sm font-medium">{label}</div><select value={value} onChange={(e)=>onChange(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm">{options.map((o)=><option key={o.value} value={o.value}>{o.label}</option>)}</select></div>; }
+function distributorName(d) { return d?.fullName || d?.name || d?.businessName || d?.username || d?.mobile || "Distributor"; }
+function getDistributorTerritory(d) { return d?.territoryName || d?.areaName || d?.zoneName || d?.regionName || ""; }
+function fmtDate(v) { return v ? new Date(v).toLocaleDateString() : "-"; }
+function Input({ label, value, onChange, type="text", required=false }) { return <div><div className="text-sm font-medium">{label}</div><input required={required} type={type} value={value} onChange={(e)=>onChange(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" /></div>; }
+function Select({ label, value, onChange, options, required=false, disabled=false }) { return <div><div className="text-sm font-medium">{label}</div><select required={required} disabled={disabled} value={value} onChange={(e)=>onChange(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm disabled:bg-zinc-100">{options.map((o)=><option key={o.value} value={o.value}>{o.label}</option>)}</select></div>; }
+function Modal({ title, children, onClose }) { return <div className="fixed inset-0 z-[65]"><div className="absolute inset-0 bg-black/40" onClick={onClose} /><div className="absolute left-1/2 top-1/2 w-[95vw] max-w-4xl -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-5 shadow-2xl"><div className="mb-3 flex items-center justify-between"><div className="text-lg font-semibold">{title}</div><button onClick={onClose} className="rounded-md border px-2 py-1 text-sm">✕</button></div>{children}</div></div>; }
+function ReceiptRow({ label, value }) { return <div className="flex justify-between border-b py-1"><span className="text-zinc-600">{label}</span><span className="text-right font-medium">{value}</span></div>; }
