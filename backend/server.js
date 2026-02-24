@@ -31,6 +31,7 @@ const paymentsRoutes = require("./src/routes/payments");
 const uploadsRoutes = require("./src/routes/uploads");
 const loansRoutes = require("./src/routes/loans");
 const receiptsRoutes = require("./src/routes/receipts");
+const vehicleManagementRoutes = require("./src/routes/vehicleManagement");
 
 const app = express();
 
@@ -78,6 +79,7 @@ app.use("/api/payments", paymentsRoutes);
 app.use("/api/uploads", uploadsRoutes);
 app.use("/api/loans", loansRoutes);
 app.use("/api/receipts", receiptsRoutes);
+app.use("/api/vehicle-management", vehicleManagementRoutes);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true, service: "aim-api", time: new Date().toISOString() });
