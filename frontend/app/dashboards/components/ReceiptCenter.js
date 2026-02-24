@@ -5,68 +5,58 @@ import UserDashboardShell from "./userDashboardShell";
 import { apiFetch } from "../../lib/api";
 
 export default function ReceiptCenter({ title, subtitle, roleKey, links = [] }) {
-  const [form, setForm] = useState({ receiptType: "invoice_payment", amount: "", paymentMethod: "online", paidToAccountId: "", receivedByUserId: "", receivedByName: "", paymentDate: "", referenceNo: "", linkedInvoiceNo: "", notes: "", attachmentUrl: "" });
-  const [uploading, setUploading] = useState(false);
+  const [form, setForm] = useState({ receiptType: "invoice_payment", amount: "", paymentMethod: "online", paidToAccountId: "", receivedByUserId: "", receivedByName: "", paymentDate: "", referenceNo: "", linkedInvoiceNo: "", notes: "" });
   const [rows, setRows] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [collectors, setCollectors] = useState([]);
   const [invoices, setInvoices] = useState([]);
+  const [attachmentFile, setAttachmentFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+
+  async function readFileAsBase64(file) {
+    const reader = new FileReader();
+    return new Promise((resolve, reject) => {
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
 
   async function load() {
-    const [r, a, u, o] = await Promise.all([
+    const [receiptsRes, accountsRes, usersRes, ordersRes] = await Promise.allSettled([
       apiFetch("/receipts"),
       apiFetch("/accounts"),
       apiFetch("/users"),
       apiFetch("/orders?limit=300"),
     ]);
-    setRows(r.receipts || []);
-    setAccounts((a.accounts || []).filter((x) => String(x.status || "active") === "active"));
-    setCollectors((u.users || []).filter((x) => ["salesman", "cashier", "order booker", "orderbooker"].includes(String(x.role || "").toLowerCase())));
-    setInvoices((o.orders || []).filter((x) => ["approved", "dispatched", "delivered"].includes(String(x.status || "").toLowerCase())));
+
+    setRows(receiptsRes.status === "fulfilled" ? (receiptsRes.value.receipts || []) : []);
+    setAccounts(
+      accountsRes.status === "fulfilled"
+        ? (accountsRes.value.accounts || []).filter((x) => String(x.status || "active") === "active")
+        : [],
+    );
+    setCollectors(
+      usersRes.status === "fulfilled"
+        ? (usersRes.value.users || []).filter((x) => ["salesman", "cashier", "order booker", "orderbooker"].includes(String(x.role || "").toLowerCase()))
+        : [],
+    );
+    setInvoices(
+      ordersRes.status === "fulfilled"
+        ? (ordersRes.value.orders || []).filter((x) => ["approved", "dispatched", "delivered"].includes(String(x.status || "").toLowerCase()))
+        : [],
+    );
   }
 
   useEffect(() => {
-    let ignore = false;
-    Promise.all([apiFetch("/receipts"), apiFetch("/accounts"), apiFetch("/users"), apiFetch("/orders?limit=300")])
-      .then(([r, a, u, o]) => {
-        if (ignore) return;
-        setRows(r.receipts || []);
-        setAccounts((a.accounts || []).filter((x) => String(x.status || "active") === "active"));
-        setCollectors((u.users || []).filter((x) => ["salesman", "cashier", "order booker", "orderbooker"].includes(String(x.role || "").toLowerCase())));
-        setInvoices((o.orders || []).filter((x) => ["approved", "dispatched", "delivered"].includes(String(x.status || "").toLowerCase())));
-      })
-      .catch(() => {});
-    return () => {
-      ignore = true;
-    };
+    load().catch(() => {});
   }, []);
 
   const total = useMemo(() => rows.reduce((s, r) => s + Number(r.amount || 0), 0), [rows]);
 
-  async function handleFileUpload(file) {
-    if (!file) return;
-    try {
-      setUploading(true);
-      const reader = new FileReader();
-      const base64 = await new Promise((resolve, reject) => {
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      const up = await apiFetch("/uploads/payment-proof", {
-        method: "POST",
-        body: { contentType: file.type || "image/jpeg", fileBase64: base64 },
-      });
-      setForm((s) => ({ ...s, attachmentUrl: up.publicUrl || "" }));
-    } catch (e) {
-      alert(e.message || "Failed to upload attachment");
-    } finally {
-      setUploading(false);
-    }
-  }
-
   async function submit(e) {
     e.preventDefault();
+
     const payload = {
       receiptType: form.receiptType,
       amount: Number(form.amount || 0),
@@ -76,39 +66,67 @@ export default function ReceiptCenter({ title, subtitle, roleKey, links = [] }) 
       receivedByName: form.paymentMethod === "cash" ? form.receivedByName : undefined,
       paymentDate: form.paymentDate,
       referenceNo: form.referenceNo,
-      linkedInvoiceNo: form.linkedInvoiceNo,
+      linkedInvoiceNo: form.receiptType === "invoice_payment" ? form.linkedInvoiceNo : "",
       notes: form.notes,
-      attachmentUrl: form.attachmentUrl,
     };
-    await apiFetch("/receipts", { method: "POST", body: payload });
-    setForm((s) => ({ ...s, amount: "", paymentDate: "", referenceNo: "", linkedInvoiceNo: "", notes: "", attachmentUrl: "", receivedByName: "" }));
+
+    const created = await apiFetch("/receipts", { method: "POST", body: payload });
+
+    if (attachmentFile && created?.receipt?._id) {
+      try {
+        setUploading(true);
+        const base64 = await readFileAsBase64(attachmentFile);
+        const uploadRes = await apiFetch("/uploads/payment-proof", {
+          method: "POST",
+          body: { contentType: attachmentFile.type || "image/jpeg", fileBase64: base64 },
+        });
+
+        if (uploadRes?.publicUrl) {
+          await apiFetch(`/receipts/${created.receipt._id}/attachment`, {
+            method: "PATCH",
+            body: { attachmentUrl: uploadRes.publicUrl },
+          });
+        }
+      } catch (err) {
+        alert(err.message || "Receipt submitted, but attachment upload failed.");
+      } finally {
+        setUploading(false);
+      }
+    }
+
+    setForm((s) => ({ ...s, amount: "", paymentDate: "", referenceNo: "", linkedInvoiceNo: "", notes: "", receivedByName: "" }));
+    setAttachmentFile(null);
     await load();
   }
+
+  const accountOptions = [{ value: "", label: accounts.length ? "Select Account" : "No accounts available" }, ...accounts.map((x) => ({ value: x._id, label: x.accountName || [x.bankName, x.accountNumber].filter(Boolean).join(" - ") || x._id }))];
+  const collectorOptions = [{ value: "", label: collectors.length ? "Select Collector" : "No collectors available" }, ...collectors.map((x) => ({ value: x._id, label: `${x.fullName || x.username || x.mobile} (${x.role || ""})` }))];
+  const invoiceOptions = [{ value: "", label: invoices.length ? "Select Invoice" : "No approved/dispatched/delivered invoice" }, ...invoices.map((x) => ({ value: x.invoiceNo || x.orderNo || x._id, label: `${x.invoiceNo || x.orderNo} [${x.status || "-"}] (${x.saleType || "-"})` }))];
 
   return (
     <UserDashboardShell title={title} subtitle={subtitle} roleKey={roleKey} links={links} showAccountCards>
       <div className="space-y-4">
         <div className="rounded-2xl border bg-white p-5 shadow-sm">
           <h1 className="text-xl font-semibold">Generate Receipt</h1>
-          <p className="text-sm text-zinc-500">Receipt will remain pending until approved by admin.</p>
+          <p className="text-sm text-zinc-500">Select file first, submit receipt first, then proof uploads automatically.</p>
           <form onSubmit={submit} className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
             <Select label="Receipt Type" value={form.receiptType} onChange={(v) => setForm((s) => ({ ...s, receiptType: v }))} options={[{ value: "invoice_payment", label: "Payment Against Invoice" }, { value: "advance_payment", label: "Advance Payment" }, { value: "general_deposit", label: "General Deposit" }]} />
             <Input label="Amount" type="number" required value={form.amount} onChange={(v) => setForm((s) => ({ ...s, amount: v }))} />
             <Select label="Payment Method" value={form.paymentMethod} onChange={(v) => setForm((s) => ({ ...s, paymentMethod: v }))} options={[{ value: "online", label: "Online (Bank Transfer)" }, { value: "cash", label: "Cash" }]} />
-            {form.paymentMethod === "online" ? <Select label="Company Account" value={form.paidToAccountId} onChange={(v) => setForm((s) => ({ ...s, paidToAccountId: v }))} required options={[{ value: "", label: "Select Account" }, ...accounts.map((x) => ({ value: x._id, label: x.accountName || [x.bankName, x.accountNumber].filter(Boolean).join(" - ") || x._id }))]} /> : null}
-            {form.paymentMethod === "cash" ? <Select label="Received By Person" value={form.receivedByUserId} onChange={(v) => setForm((s) => ({ ...s, receivedByUserId: v }))} options={[{ value: "", label: "Select Collector" }, ...collectors.map((x) => ({ value: x._id, label: `${x.fullName || x.username || x.mobile} (${x.role || ""})` }))]} /> : null}
+            {form.paymentMethod === "online" ? <Select label="Company Account" value={form.paidToAccountId} onChange={(v) => setForm((s) => ({ ...s, paidToAccountId: v }))} required options={accountOptions} /> : null}
+            {form.paymentMethod === "cash" ? <Select label="Received By Person" value={form.receivedByUserId} onChange={(v) => setForm((s) => ({ ...s, receivedByUserId: v }))} options={collectorOptions} /> : null}
             {form.paymentMethod === "cash" ? <Input label="Receiver Name (optional)" value={form.receivedByName} onChange={(v) => setForm((s) => ({ ...s, receivedByName: v }))} /> : null}
             <Input label="Payment Date" type="date" required value={form.paymentDate} onChange={(v) => setForm((s) => ({ ...s, paymentDate: v }))} />
             <Input label="Reference No" value={form.referenceNo} required={form.paymentMethod === "online"} onChange={(v) => setForm((s) => ({ ...s, referenceNo: v }))} />
-            {form.receiptType === "invoice_payment" ? <Select label="Linked Invoice (optional)" value={form.linkedInvoiceNo} onChange={(v) => setForm((s) => ({ ...s, linkedInvoiceNo: v }))} options={[{ value: "", label: "Select Invoice" }, ...invoices.map((x) => ({ value: x.invoiceNo || x.orderNo || x._id, label: `${x.invoiceNo || x.orderNo} [${x.status || "-"}] (${x.saleType || "-"})` }))]} /> : <div />}
+            {form.receiptType === "invoice_payment" ? <Select label="Linked Invoice (optional)" value={form.linkedInvoiceNo} onChange={(v) => setForm((s) => ({ ...s, linkedInvoiceNo: v }))} options={invoiceOptions} /> : <div />}
             <div className="md:col-span-2">
               <label className="block">
                 <div className="text-sm font-medium">Attachment Proof {form.paymentMethod === "online" ? "*" : ""}</div>
-                <input type="file" accept="image/*,.pdf" onChange={(e) => handleFileUpload(e.target.files?.[0])} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" />
+                <input type="file" accept="image/*,.pdf" onChange={(e) => setAttachmentFile(e.target.files?.[0] || null)} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" />
               </label>
               <div className="mt-1 flex items-center gap-2 text-xs">
-                {uploading ? <span className="text-indigo-600">Uploading proof...</span> : null}
-                {form.attachmentUrl ? <a href={form.attachmentUrl} target="_blank" rel="noreferrer" className="text-emerald-700 underline">{form.attachmentUrl}</a> : <span className="text-zinc-500">No file uploaded</span>}
+                {uploading ? <span className="text-indigo-600">Uploading proof after receipt submit...</span> : null}
+                {attachmentFile ? <span className="text-emerald-700">Selected: {attachmentFile.name}</span> : <span className="text-zinc-500">No file selected</span>}
               </div>
             </div>
             <div className="md:col-span-3"><Input label="Notes" value={form.notes} onChange={(v) => setForm((s) => ({ ...s, notes: v }))} /></div>
