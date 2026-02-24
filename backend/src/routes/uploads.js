@@ -308,4 +308,56 @@ router.post("/pod-proxy", requireAuth, async (req, res) => {
   }
 });
 
+
+function extensionFromContentType(contentType = "") {
+  const normalized = String(contentType || "").toLowerCase();
+  if (normalized.includes("png")) return "png";
+  if (normalized.includes("webp")) return "webp";
+  if (normalized.includes("pdf")) return "pdf";
+  return "jpg";
+}
+
+router.post("/payment-proof", requireAuth, async (req, res) => {
+  try {
+    const { contentType, fileBase64 } = req.body || {};
+    if (!contentType || !fileBase64) {
+      return res.status(400).json({ ok: false, message: "contentType and fileBase64 are required" });
+    }
+
+    const { bucket, accountId, accessKeyId, secretAccessKey, endpoint, jurisdiction, missing } = readR2Config();
+    if (missing.length) {
+      return res.status(500).json({
+        ok: false,
+        message: `R2 storage is not configured (${missing.join(", ")}). Configure S3-compatible Access Key + Secret (API token is not used for presigned S3 uploads).`,
+      });
+    }
+
+    const base64Payload = normalizeBase64Payload(fileBase64);
+    const fileBuffer = Buffer.from(base64Payload, "base64");
+    if (!fileBuffer.length) {
+      return res.status(400).json({ ok: false, message: "Invalid base64 file payload" });
+    }
+
+    const ext = extensionFromContentType(contentType);
+    const objectKey = `payment-proof/${req.user.uid}/${crypto.randomUUID()}.${ext}`;
+    const publicUrl = `${resolvePublicBaseUrl()}/${objectKey}`;
+    const uploadUrl = getPresignedPutUrl({ accountId, accessKeyId, secretAccessKey, bucket, key: objectKey, endpoint, jurisdiction });
+    assertR2UploadHost(uploadUrl);
+
+    const cloudRes = await uploadBufferToPresignedUrl(uploadUrl, {
+      contentType: String(contentType).trim() || "image/jpeg",
+      body: fileBuffer,
+    });
+
+    if (!cloudRes.ok) {
+      return res.status(502).json({ ok: false, message: `R2 upload failed (${cloudRes.status})` });
+    }
+
+    return res.json({ ok: true, objectKey, publicUrl });
+  } catch (error) {
+    const message = String(error?.message || "").trim();
+    return res.status(500).json({ ok: false, message: message ? `Failed to upload payment proof: ${message}` : "Failed to upload payment proof" });
+  }
+});
+
 module.exports = router;
