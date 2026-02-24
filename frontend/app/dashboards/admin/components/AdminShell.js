@@ -17,6 +17,7 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const menuRef = useRef(null);
   const searchRef = useRef(null);
@@ -47,6 +48,15 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
     }
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  useEffect(() => {
+    function onFullscreenChange() {
+      if (typeof document === "undefined") return;
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    }
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
   }, []);
 
   useEffect(() => {
@@ -82,6 +92,19 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
     if (!value) return adminDashboardSearchItems;
     return adminDashboardSearchItems.filter((item) => item.title.toLowerCase().includes(value));
   }, [searchTerm]);
+
+  async function toggleFullscreen() {
+    if (typeof document === "undefined") return;
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch (_e) {
+      // ignore browser limitations
+    }
+  }
 
   function onSearchSelect(item) {
     setSearchTerm(item.title);
@@ -137,6 +160,15 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
             </div>
 
             <div className="flex w-full md:w-auto md:min-w-[620px] md:justify-end md:flex-nowrap items-center gap-3">
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                className="rounded-xl border px-3 py-2 text-sm hover:bg-zinc-50 whitespace-nowrap"
+                title={isFullscreen ? "Exit full screen" : "Enter full screen"}
+              >
+                {isFullscreen ? "🗗" : "🗖"}
+              </button>
+
               <div className="relative w-full md:flex-1 md:min-w-[280px] md:max-w-[300px]" ref={searchRef}>
                 <input
                   type="text"
