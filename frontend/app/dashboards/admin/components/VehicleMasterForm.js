@@ -25,20 +25,40 @@ export default function VehicleMasterForm({ onSaved }) {
     }).catch((e) => setErr(e.message || "Failed to load form lookups"));
   }, []);
 
-  const zones = lookups.zones.filter((z) => !form.regionId || String(z.regionId) === form.regionId);
-  const areas = lookups.areas.filter((a) => !form.zoneId || String(a.zoneId) === form.zoneId);
+  const selectedRegion = lookups.regions.find((r) => r._id === form.regionId);
+  const selectedZone = lookups.zones.find((z) => z._id === form.zoneId);
 
-  function setField(key, value) { setForm((s) => ({ ...s, [key]: value })); }
+  const zones = lookups.zones.filter((z) => {
+    if (!selectedRegion) return true;
+    return String(z.regionId || "") === String(selectedRegion.regionId || "") || String(z.regionId || "") === String(selectedRegion._id || "");
+  });
+  const areas = lookups.areas.filter((a) => {
+    if (!selectedZone) return true;
+    return String(a.zoneId || "") === String(selectedZone.zoneId || "") || String(a.zoneId || "") === String(selectedZone._id || "");
+  });
+  const users = lookups.users.filter((u) => String(u.role || "").toLowerCase() !== "customer");
+
+  function setField(key, value) {
+    setForm((s) => {
+      if (key === "regionId") {
+        return { ...s, regionId: value, zoneId: "", areaId: "" };
+      }
+      if (key === "zoneId") {
+        return { ...s, zoneId: value, areaId: "" };
+      }
+      return { ...s, [key]: value };
+    });
+  }
 
   async function submit(e) {
     e.preventDefault();
     setErr(""); setMsg("");
     try {
-      const region = lookups.regions.find((r) => r._id === form.regionId);
-      const zone = lookups.zones.find((z) => z._id === form.zoneId);
+      const region = selectedRegion;
+      const zone = selectedZone;
       const area = lookups.areas.find((a) => a._id === form.areaId);
       const field = lookups.fields.find((f) => f._id === form.fieldId);
-      const user = lookups.users.find((u) => u._id === form.assignedUserId);
+      const user = users.find((u) => u._id === form.assignedUserId);
       const payload = {
         ...form,
         year: Number(form.year || 0),
@@ -78,7 +98,7 @@ export default function VehicleMasterForm({ onSaved }) {
     <Select label="Region" value={form.regionId} onChange={(v)=>setField("regionId",v)} options={lookups.regions.map((r)=>({label:r.name,value:r._id}))} required />
     <Select label="Zone" value={form.zoneId} onChange={(v)=>setField("zoneId",v)} options={zones.map((z)=>({label:z.name,value:z._id}))} required />
     <Select label="Territory" value={form.areaId} onChange={(v)=>setField("areaId",v)} options={areas.map((a)=>({label:a.name,value:a._id}))} required />
-    <Select label="Assigned User" value={form.assignedUserId} onChange={(v)=>setField("assignedUserId",v)} options={lookups.users.map((u)=>({label:u.name||u.username,value:u._id}))} />
+    <Select label="Assigned User" value={form.assignedUserId} onChange={(v)=>setField("assignedUserId",v)} options={users.map((u)=>({label:`${u.fullName || u.name || u.username} (${u.role || "User"})`,value:u._id}))} />
     <Select label="Fuel Type" value={form.fuelType} onChange={(v)=>setField("fuelType",v)} options={FUEL_OPTIONS} required />
     <Field label="Current Odometer" type="number" value={form.currentOdometer} onChange={(v)=>setField("currentOdometer",v)} required />
     <Field label="Expected KM/L" type="number" value={form.expectedKmPerLiter} onChange={(v)=>setField("expectedKmPerLiter",v)} />
