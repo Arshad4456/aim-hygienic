@@ -43,6 +43,8 @@ export default function FinanceInvoicesPage() {
     () => orders.filter((o) => String(o.status || "").toLowerCase() === "delivered"),
     [orders]
   );
+  const primaryInvoices = useMemo(() => deliveredInvoices.filter((o) => String(o.saleType || "").toLowerCase() === "primary"), [deliveredInvoices]);
+  const secondaryInvoices = useMemo(() => deliveredInvoices.filter((o) => String(o.saleType || "").toLowerCase() === "secondary"), [deliveredInvoices]);
 
   return (
     <AdminShell title="Invoices" user={null}>
@@ -58,52 +60,56 @@ export default function FinanceInvoicesPage() {
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
           <StatCard label="Delivered Invoices" value={String(deliveredInvoices.length)} />
           <StatCard label="Total Delivered Amount" value={`PKR ${deliveredInvoices.reduce((s, o) => s + Number(o.totalAmount || 0), 0).toLocaleString()}`} />
-          <StatCard label="Latest Delivered" value={deliveredInvoices[0]?.createdAt ? new Date(deliveredInvoices[0].createdAt).toLocaleDateString() : "-"} />
+          <StatCard label="Primary Invoices" value={String(primaryInvoices.length)} />
+          <StatCard label="Secondary Invoices" value={String(secondaryInvoices.length)} />
         </div>
 
         {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
 
-        <div className="mt-5 overflow-auto rounded-xl border">
-          <table className="min-w-[1080px] w-full text-sm">
-            <thead className="bg-zinc-50">
-              <tr>
-                {["Invoice/Order #", "Sale Type", "Distributor", "Territory", "Total Amount", "Delivered Date", "Status", "Action"].map((h) => (
-                  <th key={h} className="text-left px-3 py-2 border-b">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={8} className="px-3 py-6 text-center text-zinc-500">Loading delivered invoices...</td></tr>
-              ) : deliveredInvoices.length === 0 ? (
-                <tr><td colSpan={8} className="px-3 py-6 text-center text-zinc-500">No delivered invoices found.</td></tr>
-              ) : (
-                deliveredInvoices.map((o) => (
-                  <tr key={o._id}>
-                    <td className="px-3 py-2 border-b font-medium text-zinc-900">{o.orderNo || o.invoiceNo || o._id}</td>
-                    <td className="px-3 py-2 border-b">{o.saleType || "-"}</td>
-                    <td className="px-3 py-2 border-b">{o.distributorName || o.customerName || o.distributorId || "-"}</td>
-                    <td className="px-3 py-2 border-b">{o.territoryName || o.areaName || "-"}</td>
-                    <td className="px-3 py-2 border-b">PKR {Number(o.totalAmount || 0).toLocaleString()}</td>
-                    <td className="px-3 py-2 border-b">{o.updatedAt ? new Date(o.updatedAt).toLocaleDateString() : "-"}</td>
-                    <td className="px-3 py-2 border-b"><span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700">Delivered</span></td>
-                    <td className="px-3 py-2 border-b">
-                      <button
-                        type="button"
-                        onClick={() => printOrderInvoice(o)}
-                        className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
-                      >
-                        Invoice
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <div className="mt-5 space-y-5">
+          <InvoiceTable title="Primary Order Invoices" rows={primaryInvoices} loading={loading} />
+          <InvoiceTable title="Secondary Order Invoices" rows={secondaryInvoices} loading={loading} />
         </div>
       </div>
     </AdminShell>
+  );
+}
+
+
+function InvoiceTable({ title, rows, loading }) {
+  return (
+    <div className="overflow-auto rounded-xl border">
+      <div className="border-b bg-zinc-50 px-3 py-2 text-sm font-semibold">{title}</div>
+      <table className="min-w-[1080px] w-full text-sm">
+        <thead className="bg-zinc-50">
+          <tr>
+            {["Invoice/Order #", "Sale Type", "Distributor", "Territory", "Total Amount", "Delivered Date", "Status", "Action"].map((h) => (
+              <th key={h} className="text-left px-3 py-2 border-b">{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {loading ? (
+            <tr><td colSpan={8} className="px-3 py-6 text-center text-zinc-500">Loading delivered invoices...</td></tr>
+          ) : rows.length === 0 ? (
+            <tr><td colSpan={8} className="px-3 py-6 text-center text-zinc-500">No invoices found.</td></tr>
+          ) : (
+            rows.map((o) => (
+              <tr key={o._id}>
+                <td className="px-3 py-2 border-b font-medium text-zinc-900">{o.orderNo || o.invoiceNo || o._id}</td>
+                <td className="px-3 py-2 border-b">{o.saleType || "-"}</td>
+                <td className="px-3 py-2 border-b">{o.distributorName || o.customerName || o.distributorId || "-"}</td>
+                <td className="px-3 py-2 border-b">{o.territoryName || o.areaName || "-"}</td>
+                <td className="px-3 py-2 border-b">PKR {Number(o.totalAmount || 0).toLocaleString()}</td>
+                <td className="px-3 py-2 border-b">{o.updatedAt ? new Date(o.updatedAt).toLocaleDateString() : "-"}</td>
+                <td className="px-3 py-2 border-b"><span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700">Delivered</span></td>
+                <td className="px-3 py-2 border-b"><button type="button" onClick={() => printOrderInvoice(o)} className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100">Invoice</button></td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
