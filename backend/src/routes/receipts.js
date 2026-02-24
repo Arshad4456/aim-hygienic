@@ -1,4 +1,3 @@
-
 const express = require("express");
 const mongoose = require("mongoose");
 const Receipt = require("../models/Receipt");
@@ -121,6 +120,35 @@ router.get("/", requireAuth, async (req, res) => {
     return res.json({ ok: true, receipts });
   } catch {
     return res.status(500).json({ ok: false, message: "Failed to load receipts" });
+  }
+});
+
+
+router.patch("/:id/attachment", requireAuth, async (req, res) => {
+  try {
+    const attachmentUrl = asText(req.body?.attachmentUrl);
+    if (!attachmentUrl) return res.status(400).json({ ok: false, message: "attachmentUrl is required" });
+
+    const receipt = await Receipt.findById(req.params.id);
+    if (!receipt) return res.status(404).json({ ok: false, message: "Receipt not found" });
+
+    const role = String(req.user?.role || "").toLowerCase();
+    const isAdmin = role === "admin";
+    const isOwner = String(receipt.payerUserId || "") === String(req.user.uid || "");
+
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({ ok: false, message: "Forbidden" });
+    }
+
+    if (receipt.status !== "pending") {
+      return res.status(400).json({ ok: false, message: "Attachment can only be updated for pending receipts" });
+    }
+
+    receipt.attachmentUrl = attachmentUrl;
+    await receipt.save();
+    return res.json({ ok: true, receipt });
+  } catch {
+    return res.status(500).json({ ok: false, message: "Failed to update attachment" });
   }
 });
 
