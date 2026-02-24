@@ -57,6 +57,7 @@ export default function SecondaryOrderRequestModule({ roleKey, links, title }) {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [toastState, setToastState] = useState(null);
+  const [previewRow, setPreviewRow] = useState(null);
   const [form, setForm] = useState({
     customerName: "",
     businessName: "",
@@ -333,7 +334,7 @@ export default function SecondaryOrderRequestModule({ roleKey, links, title }) {
           <h3 className="text-lg font-semibold">{roleKey === "customer" ? "Order List" : "Booked Order list"}</h3>
           <div className="overflow-x-auto mt-2 rounded border">
             <table className="min-w-full text-sm">
-              <thead className="bg-zinc-50"><tr><th className="p-2 text-left">Order-No</th>{roleKey === "customer" ? <th className="p-2 text-left">To</th> : <><th className="p-2 text-left">Source</th><th className="p-2 text-left">Customer Name</th></>}<th className="p-2 text-left">Date/Time</th><th className="p-2 text-left">Status</th>{roleKey === "customer" ? null : <th className="p-2 text-left">Action</th>}</tr></thead>
+              <thead className="bg-zinc-50"><tr><th className="p-2 text-left">Order-No</th>{roleKey === "customer" ? <th className="p-2 text-left">To</th> : <><th className="p-2 text-left">Source</th><th className="p-2 text-left">Customer Name</th></>}<th className="p-2 text-left">Date/Time</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Action</th></tr></thead>
               <tbody>
                 {orders.map((o) => (
                   <tr key={o._id} className="border-b">
@@ -341,21 +342,73 @@ export default function SecondaryOrderRequestModule({ roleKey, links, title }) {
                     {roleKey === "customer" ? <td className="p-2">{o.toWarehouseName || "-"}</td> : <><td className="p-2">{o.sourceType}</td><td className="p-2">{o.customerName}</td></>}
                     <td className="p-2">{o.createdAt ? new Date(o.createdAt).toLocaleString() : "-"}</td>
                     <td className="p-2 capitalize">{o.status}</td>
-                    {roleKey === "customer" ? null : <td className="p-2"><button type="button" className="rounded border px-2 py-1" onClick={() => printOrderInvoice(o)}>Receipt/Invoice</button></td>}
+                    <td className="p-2"><div className="flex gap-2"><button type="button" className="rounded border px-2 py-1" onClick={() => setPreviewRow(o)}>Preview</button>{roleKey === "customer" ? null : <button type="button" className="rounded border px-2 py-1" onClick={() => printOrderInvoice(o)}>Receipt/Invoice</button>}</div></td>
                   </tr>
                 ))}
-                {!orders.length ? <tr><td colSpan={roleKey === "customer" ? 4 : 6} className="p-4 text-center text-zinc-500">No orders found.</td></tr> : null}
+                {!orders.length ? <tr><td colSpan={6} className="p-4 text-center text-zinc-500">No orders found.</td></tr> : null}
               </tbody>
             </table>
           </div>
         </section>
       </div>
+      {previewRow ? <SecondaryPreviewModal row={previewRow} onClose={() => setPreviewRow(null)} /> : null}
     </UserDashboardShell>
   );
 }
 
 function Input({ label, value, onChange, readOnly = false }) {
   return <label><div className="text-zinc-600">{label}</div><input className="mt-1 w-full rounded border px-3 py-2" value={value || ""} readOnly={readOnly} onChange={(e) => onChange?.(e.target.value)} /></label>;
+}
+
+
+
+function SecondaryPreviewModal({ row, onClose }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-3xl rounded-2xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b px-5 py-3">
+          <div className="text-lg font-semibold">Secondary Order Preview</div>
+          <button type="button" className="rounded border px-3 py-1 text-sm" onClick={onClose}>Close</button>
+        </div>
+        <div className="p-5 grid md:grid-cols-2 gap-3 text-sm">
+          <Field label="Order No" value={row.orderNo || "-"} />
+          <Field label="Status" value={String(row.status || "pending").toUpperCase()} />
+          <Field label="Source" value={row.sourceType || "-"} />
+          <Field label="Customer" value={row.customerName || row.fromEntityName || "-"} />
+          <Field label="To" value={row.toWarehouseName || "-"} />
+          <Field label="Date/Time (read-only)" value={row.createdAt ? new Date(row.createdAt).toLocaleString() : "-"} />
+          <div className="md:col-span-2"><Field label="Address" value={row.address || "-"} /></div>
+          <div className="md:col-span-2"><Field label="Notes" value={row.notes || "-"} /></div>
+        </div>
+        <div className="px-5 pb-5">
+          <div className="rounded-xl border p-3">
+            <div className="text-sm font-semibold">Product Detail</div>
+            <div className="mt-2 overflow-x-auto rounded border">
+              <table className="min-w-full text-xs">
+                <thead className="bg-zinc-50"><tr><th className="p-2 text-left">S.No</th><th className="p-2 text-left">Section</th><th className="p-2 text-left">Product</th><th className="p-2 text-left">Qty</th><th className="p-2 text-left">Rate</th></tr></thead>
+                <tbody>
+                  {(row.items || []).map((item, idx) => (
+                    <tr key={`${idx}-${item.productName || item.productCode || "item"}`} className="border-b">
+                      <td className="p-2">{idx + 1}</td>
+                      <td className="p-2">{item.section || row.saleType || "secondary"}</td>
+                      <td className="p-2">{item.productName || item.productCode || "-"}</td>
+                      <td className="p-2">{item.quantity || 0}</td>
+                      <td className="p-2">{item.unitPrice || 0}</td>
+                    </tr>
+                  ))}
+                  {!(row.items || []).length ? <tr><td className="p-2 text-center text-zinc-500" colSpan={5}>No products found.</td></tr> : null}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, value }) {
+  return <div><div className="text-zinc-500">{label}</div><div className="font-medium">{value}</div></div>;
 }
 
 function InlineToast({ type, message }) {
