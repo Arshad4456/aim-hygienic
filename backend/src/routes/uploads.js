@@ -360,4 +360,44 @@ router.post("/payment-proof", requireAuth, async (req, res) => {
   }
 });
 
+
+router.post("/vehicle-proof-url", requireAuth, async (req, res) => {
+  try {
+    const { vehicleId, entity, recordId, slot, contentType, date } = req.body || {};
+    if (!vehicleId || !entity || !recordId || !slot || !contentType) {
+      return res.status(400).json({ ok: false, message: "vehicleId, entity, recordId, slot and contentType are required" });
+    }
+
+    const { bucket, accountId, accessKeyId, secretAccessKey, endpoint, jurisdiction, missing } = readR2Config();
+    if (missing.length) {
+      return res.status(500).json({
+        ok: false,
+        message: `R2 storage is not configured (${missing.join(", ")}). Configure S3-compatible Access Key + Secret (API token is not used for presigned S3 uploads).`,
+      });
+    }
+
+    const d = date ? new Date(date) : new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const ext = extensionFromContentType(contentType);
+
+    let objectKey = "";
+    if (entity === "fuel") {
+      objectKey = `fuel/${vehicleId}/${year}/${month}/${recordId}/${slot}.${ext}`;
+    } else if (entity === "vehicle-maintenance") {
+      objectKey = `vehicle-maintenance/${vehicleId}/${year}/${month}/${recordId}/${slot}.${ext}`;
+    } else {
+      return res.status(400).json({ ok: false, message: "entity must be fuel or vehicle-maintenance" });
+    }
+
+    const publicUrl = `${resolvePublicBaseUrl()}/${objectKey}`;
+    const uploadUrl = getPresignedPutUrl({ accountId, accessKeyId, secretAccessKey, bucket, key: objectKey, endpoint, jurisdiction });
+    assertR2UploadHost(uploadUrl);
+
+    return res.json({ ok: true, uploadUrl, objectKey, publicUrl });
+  } catch (_error) {
+    return res.status(500).json({ ok: false, message: "Failed to generate vehicle proof upload URL" });
+  }
+});
+
 module.exports = router;
