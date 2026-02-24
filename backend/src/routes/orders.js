@@ -413,6 +413,41 @@ router.post("/:orderId/pod", requireAuth, async (req, res) => {
   }
 });
 
+
+router.patch("/:id", requireAuth, async (req, res) => {
+  try {
+    const query = { _id: req.params.id, ...roleMatchQuery(req.user) };
+    const order = await SalesOrder.findOne(query);
+    if (!order) return res.status(404).json({ ok: false, message: "Order not found" });
+
+    if (String(order.saleType || "") !== "secondary") {
+      return res.status(400).json({ ok: false, message: "Only secondary orders can be edited here" });
+    }
+
+    if (String(order.status || "") !== "pending") {
+      return res.status(400).json({ ok: false, message: "Only pending orders can be edited" });
+    }
+
+    const body = req.body || {};
+
+    if (body.customerName != null) order.customerName = String(body.customerName || "").trim() || order.customerName;
+    if (body.address != null) order.address = String(body.address || "").trim();
+    if (body.notes != null) order.notes = String(body.notes || "").trim();
+
+    if (Array.isArray(body.items)) {
+      const items = normalizeItems(body.items);
+      if (!items.length) return res.status(400).json({ ok: false, message: "At least one valid item is required" });
+      order.items = items;
+      order.totalAmount = items.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unitPrice || 0), 0);
+    }
+
+    await order.save();
+    return res.json({ ok: true, order: await attachPodMetaToOrder(order.toObject ? order.toObject() : order) });
+  } catch {
+    return res.status(500).json({ ok: false, message: "Failed to update order" });
+  }
+});
+
 router.delete("/:id", requireAuth, async (req, res) => {
   try {
     const removed = await SalesOrder.findOneAndDelete({ _id: req.params.id, ...roleMatchQuery(req.user) });
