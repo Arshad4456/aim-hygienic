@@ -51,7 +51,6 @@ router.post("/", requireAuth, async (req, res) => {
     if (paymentMethod === "online") {
       if (!paidToAccountId) return res.status(400).json({ ok: false, message: "Company account is required for online payment" });
       if (!asText(body.referenceNo)) return res.status(400).json({ ok: false, message: "Reference number is required for online payment" });
-      if (!asText(body.attachmentUrl)) return res.status(400).json({ ok: false, message: "Attachment is required for online payment" });
     }
 
     if (paymentMethod === "cash" && !receivedByUserId && !asText(body.receivedByName)) {
