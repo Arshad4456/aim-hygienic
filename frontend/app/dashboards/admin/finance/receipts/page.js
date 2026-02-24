@@ -14,7 +14,7 @@ export default function FinanceReceiptsPage() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [filters, setFilters] = useState({ status: "pending", paymentMethod: "all", fromDate: "", toDate: "" });
+  const [filters, setFilters] = useState({ status: "all", paymentMethod: "all", fromDate: "", toDate: "" });
   const [rejecting, setRejecting] = useState(null);
   const [receiptView, setReceiptView] = useState(null);
   const [reason, setReason] = useState("");
