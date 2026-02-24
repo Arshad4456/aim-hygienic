@@ -1077,16 +1077,6 @@ export default function OrderManagementModulePage() {
               </div>
             </form>
 
-            <div className="pt-2">
-              <div className="text-lg font-semibold text-zinc-900">{activeMode === "primary" ? "Sale Stock Ledger" : `${modeConfig[activeMode].title} Ledger`}</div>
-              {activeMode === "primary" ? (
-                <SaleStockLedgerTable rows={filteredOrders} onInvoice={printOrderInvoice} onDelete={deleteOrder} canDelete={!isWarehouseManagerView} />
-              ) : activeMode === "returnStock" ? (
-                <ReturnStockLedgerTable rows={filteredOrders} onInvoice={printOrderInvoice} onDelete={deleteOrder} canDelete={!isWarehouseManagerView} />
-              ) : (
-                <SecondaryOrderLedgerTable rows={filteredOrders} onInvoice={printOrderInvoice} onDelete={deleteOrder} canDelete={!isWarehouseManagerView} />
-              )}
-            </div>
           </section>
 
           {activeMode === "primary" ? (
@@ -1131,6 +1121,17 @@ export default function OrderManagementModulePage() {
               />
             </section>
           ) : null}
+
+          <section className="rounded-2xl border bg-white p-6 shadow-sm">
+            <div className="text-lg font-semibold text-zinc-900">{activeMode === "primary" ? "Sale Stock Ledger" : `${modeConfig[activeMode].title} Ledger`}</div>
+            {activeMode === "primary" ? (
+              <SaleStockLedgerTable rows={filteredOrders} onInvoice={printOrderInvoice} onDelete={deleteOrder} canDelete={!isWarehouseManagerView} />
+            ) : activeMode === "returnStock" ? (
+              <ReturnStockLedgerTable rows={filteredOrders} onInvoice={printOrderInvoice} onDelete={deleteOrder} canDelete={!isWarehouseManagerView} />
+            ) : (
+              <SecondaryOrderLedgerTable rows={filteredOrders} onInvoice={printOrderInvoice} onDelete={deleteOrder} canDelete={!isWarehouseManagerView} />
+            )}
+          </section>
 
           </>
         ) : null}

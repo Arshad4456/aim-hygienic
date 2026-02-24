@@ -184,6 +184,18 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
 
       {
         type: "group",
+        key: "accountManagement",
+        title: "Account Management",
+        icon: "account",
+        children: [
+          { title: "Account Detail", href: "/dashboards/admin/account/manage" },
+          { title: "Loan Detail", href: "/dashboards/admin/account/loan-detail" },
+          { title: "Payment Management", href: "/dashboards/admin/finance/payments" },
+        ],
+      },
+
+      {
+        type: "group",
         key: "finance",
         title: "Finance & Accounts",
         icon: "finance",
@@ -192,20 +204,6 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
           { title: "Invoices", href: "/dashboards/admin/finance/invoices" },
           { title: "Receipts", href: "/dashboards/admin/finance/receipts" },
           { title: "Aging Report", href: "/dashboards/admin/finance/aging" },
-                  ],
-      },
-
-      {
-        type: "group",
-        key: "qc",
-        title: "Quality & Compliance",
-        icon: "qc",
-        children: [
-          { title: "Module Overview", href: "/dashboards/admin/quality" },
-          { title: "Raw Material QC", href: "/dashboards/admin/quality/raw-material" },
-          { title: "Production QC", href: "/dashboards/admin/quality/production" },
-          { title: "Finished Goods QC", href: "/dashboards/admin/quality/finished-goods" },
-          { title: "Final Release QC", href: "/dashboards/admin/quality/final-release" },
         ],
       },
 
@@ -222,15 +220,17 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
         ],
       },
 
-            {
+      {
         type: "group",
-        key: "accountManagement",
-        title: "Account Management",
-        icon: "account",
+        key: "qc",
+        title: "Quality & Compliance",
+        icon: "qc",
         children: [
-          { title: "Account Detail", href: "/dashboards/admin/account/manage" },
-          { title: "Loan Detail", href: "/dashboards/admin/account/loan-detail" },
-          { title: "Payment Management", href: "/dashboards/admin/finance/payments" },
+          { title: "Module Overview", href: "/dashboards/admin/quality" },
+          { title: "Raw Material QC", href: "/dashboards/admin/quality/raw-material" },
+          { title: "Production QC", href: "/dashboards/admin/quality/production" },
+          { title: "Finished Goods QC", href: "/dashboards/admin/quality/finished-goods" },
+          { title: "Final Release QC", href: "/dashboards/admin/quality/final-release" },
         ],
       },
       { type: "link", title: "Messages", href: "/dashboards/admin/messages", icon: "messages" },
