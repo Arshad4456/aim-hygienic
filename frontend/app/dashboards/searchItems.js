@@ -93,6 +93,7 @@ export const userDashboardSearchItems = {
   distributor: [
     { title: "Dashboard", href: "/dashboards/distributor" },
     { title: "Expense", href: "/dashboards/distributor/expense" },
+    { title: "Receipts", href: "/dashboards/distributor/receipts" },
     { title: "Payments", href: "/dashboards/distributor/payments" },
     { title: "Primary Payments (Received)", href: "/dashboards/distributor/payments/primary" },
     { title: "Secondary Payments (Paid Back)", href: "/dashboards/distributor/payments/secondary" },
@@ -104,12 +105,13 @@ export const userDashboardSearchItems = {
     { title: "Change Password", href: "/dashboards/distributor/settings/change-password" },
   ],
   fieldSM: [{ title: "Dashboard", href: "/dashboards/fieldSM" }],
-  orderBooker: [{ title: "Dashboard", href: "/dashboards/orderBooker" }, { title: "Secondary Sale Requests", href: "/dashboards/orderBooker/orders" }],
+  orderBooker: [{ title: "Dashboard", href: "/dashboards/orderBooker" }, { title: "Secondary Sale Requests", href: "/dashboards/orderBooker/orders" }, { title: "Receipts", href: "/dashboards/orderBooker/receipts" }],
   salesman: [{ title: "Dashboard", href: "/dashboards/salesman" }, { title: "Deliveries", href: "/dashboards/salesman/orders" }],
   deliveryBoy: [{ title: "Dashboard", href: "/dashboards/deliveryBoy" }, { title: "Proof of Delivery", href: "/dashboards/deliveryBoy/orders" }],
   customer: [
     { title: "Dashboard", href: "/dashboards/customer" },
     { title: "Order Requests", href: "/dashboards/customer/orders" },
+    { title: "Receipts", href: "/dashboards/customer/receipts" },
     { title: "Account Settings", href: "/dashboards/customer/settings" },
     { title: "Change Password", href: "/dashboards/customer/settings/change-password" },
   ],
