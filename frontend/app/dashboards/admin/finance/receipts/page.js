@@ -131,7 +131,7 @@ export default function FinanceReceiptsPage() {
                   <td className="border-b px-3 py-2">
                     <div className="flex flex-wrap gap-2">
                       <button onClick={() => setReceiptView(r)} className="rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700">View Receipt</button>
-                      {r.attachmentUrl ? <a target="_blank" rel="noreferrer" href={r.attachmentUrl} className="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs font-semibold">Attachment</a> : null}
+                      {r.attachmentUrl ? <a target="_blank" rel="noreferrer" href={r.attachmentUrl} className="rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs font-semibold">URL</a> : null}
                       {r.status === "pending" ? <button onClick={() => approve(r._id)} className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">Approve</button> : null}
                       {r.status === "pending" ? <button onClick={() => setRejecting(r)} className="rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700">Reject</button> : null}
                     </div>

@@ -6,6 +6,7 @@ import { apiFetch } from "../../lib/api";
 
 export default function ReceiptCenter({ title, subtitle, roleKey, links = [] }) {
   const [form, setForm] = useState({ receiptType: "invoice_payment", amount: "", paymentMethod: "online", paidToAccountId: "", receivedByUserId: "", receivedByName: "", paymentDate: "", referenceNo: "", linkedInvoiceNo: "", notes: "", attachmentUrl: "" });
+  const [uploading, setUploading] = useState(false);
   const [rows, setRows] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [collectors, setCollectors] = useState([]);
@@ -16,23 +17,23 @@ export default function ReceiptCenter({ title, subtitle, roleKey, links = [] }) 
       apiFetch("/receipts"),
       apiFetch("/accounts"),
       apiFetch("/users"),
-      apiFetch("/orders?status=delivered&limit=200"),
+      apiFetch("/orders?limit=300"),
     ]);
     setRows(r.receipts || []);
     setAccounts((a.accounts || []).filter((x) => String(x.status || "active") === "active"));
     setCollectors((u.users || []).filter((x) => ["salesman", "cashier", "order booker", "orderbooker"].includes(String(x.role || "").toLowerCase())));
-    setInvoices((o.orders || []).filter((x) => String(x.status || "").toLowerCase() === "delivered"));
+    setInvoices((o.orders || []).filter((x) => ["approved", "dispatched", "delivered"].includes(String(x.status || "").toLowerCase())));
   }
 
   useEffect(() => {
     let ignore = false;
-    Promise.all([apiFetch("/receipts"), apiFetch("/accounts"), apiFetch("/users"), apiFetch("/orders?status=delivered&limit=200")])
+    Promise.all([apiFetch("/receipts"), apiFetch("/accounts"), apiFetch("/users"), apiFetch("/orders?limit=300")])
       .then(([r, a, u, o]) => {
         if (ignore) return;
         setRows(r.receipts || []);
         setAccounts((a.accounts || []).filter((x) => String(x.status || "active") === "active"));
         setCollectors((u.users || []).filter((x) => ["salesman", "cashier", "order booker", "orderbooker"].includes(String(x.role || "").toLowerCase())));
-        setInvoices((o.orders || []).filter((x) => String(x.status || "").toLowerCase() === "delivered"));
+        setInvoices((o.orders || []).filter((x) => ["approved", "dispatched", "delivered"].includes(String(x.status || "").toLowerCase())));
       })
       .catch(() => {});
     return () => {
@@ -41,6 +42,28 @@ export default function ReceiptCenter({ title, subtitle, roleKey, links = [] }) 
   }, []);
 
   const total = useMemo(() => rows.reduce((s, r) => s + Number(r.amount || 0), 0), [rows]);
+
+  async function handleFileUpload(file) {
+    if (!file) return;
+    try {
+      setUploading(true);
+      const reader = new FileReader();
+      const base64 = await new Promise((resolve, reject) => {
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const up = await apiFetch("/uploads/payment-proof", {
+        method: "POST",
+        body: { contentType: file.type || "image/jpeg", fileBase64: base64 },
+      });
+      setForm((s) => ({ ...s, attachmentUrl: up.publicUrl || "" }));
+    } catch (e) {
+      alert(e.message || "Failed to upload attachment");
+    } finally {
+      setUploading(false);
+    }
+  }
 
   async function submit(e) {
     e.preventDefault();
@@ -72,13 +95,22 @@ export default function ReceiptCenter({ title, subtitle, roleKey, links = [] }) 
             <Select label="Receipt Type" value={form.receiptType} onChange={(v) => setForm((s) => ({ ...s, receiptType: v }))} options={[{ value: "invoice_payment", label: "Payment Against Invoice" }, { value: "advance_payment", label: "Advance Payment" }, { value: "general_deposit", label: "General Deposit" }]} />
             <Input label="Amount" type="number" required value={form.amount} onChange={(v) => setForm((s) => ({ ...s, amount: v }))} />
             <Select label="Payment Method" value={form.paymentMethod} onChange={(v) => setForm((s) => ({ ...s, paymentMethod: v }))} options={[{ value: "online", label: "Online (Bank Transfer)" }, { value: "cash", label: "Cash" }]} />
-            {form.paymentMethod === "online" ? <Select label="Company Account" value={form.paidToAccountId} onChange={(v) => setForm((s) => ({ ...s, paidToAccountId: v }))} required options={[{ value: "", label: "Select Account" }, ...accounts.map((x) => ({ value: x._id, label: x.accountName || x.bankName || x.accountNumber || x._id }))]} /> : null}
+            {form.paymentMethod === "online" ? <Select label="Company Account" value={form.paidToAccountId} onChange={(v) => setForm((s) => ({ ...s, paidToAccountId: v }))} required options={[{ value: "", label: "Select Account" }, ...accounts.map((x) => ({ value: x._id, label: x.accountName || [x.bankName, x.accountNumber].filter(Boolean).join(" - ") || x._id }))]} /> : null}
             {form.paymentMethod === "cash" ? <Select label="Received By Person" value={form.receivedByUserId} onChange={(v) => setForm((s) => ({ ...s, receivedByUserId: v }))} options={[{ value: "", label: "Select Collector" }, ...collectors.map((x) => ({ value: x._id, label: `${x.fullName || x.username || x.mobile} (${x.role || ""})` }))]} /> : null}
             {form.paymentMethod === "cash" ? <Input label="Receiver Name (optional)" value={form.receivedByName} onChange={(v) => setForm((s) => ({ ...s, receivedByName: v }))} /> : null}
             <Input label="Payment Date" type="date" required value={form.paymentDate} onChange={(v) => setForm((s) => ({ ...s, paymentDate: v }))} />
             <Input label="Reference No" value={form.referenceNo} required={form.paymentMethod === "online"} onChange={(v) => setForm((s) => ({ ...s, referenceNo: v }))} />
-            <Select label="Linked Invoice (optional)" value={form.linkedInvoiceNo} onChange={(v) => setForm((s) => ({ ...s, linkedInvoiceNo: v }))} options={[{ value: "", label: "Select Invoice" }, ...invoices.map((x) => ({ value: x.invoiceNo || x.orderNo || x._id, label: `${x.invoiceNo || x.orderNo} (${x.saleType || "-"})` }))]} />
-            <div className="md:col-span-2"><Input label="Attachment URL" value={form.attachmentUrl} required={form.paymentMethod === "online"} onChange={(v) => setForm((s) => ({ ...s, attachmentUrl: v }))} /></div>
+            {form.receiptType === "invoice_payment" ? <Select label="Linked Invoice (optional)" value={form.linkedInvoiceNo} onChange={(v) => setForm((s) => ({ ...s, linkedInvoiceNo: v }))} options={[{ value: "", label: "Select Invoice" }, ...invoices.map((x) => ({ value: x.invoiceNo || x.orderNo || x._id, label: `${x.invoiceNo || x.orderNo} [${x.status || "-"}] (${x.saleType || "-"})` }))]} /> : <div />}
+            <div className="md:col-span-2">
+              <label className="block">
+                <div className="text-sm font-medium">Attachment Proof {form.paymentMethod === "online" ? "*" : ""}</div>
+                <input type="file" accept="image/*,.pdf" onChange={(e) => handleFileUpload(e.target.files?.[0])} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" />
+              </label>
+              <div className="mt-1 flex items-center gap-2 text-xs">
+                {uploading ? <span className="text-indigo-600">Uploading proof...</span> : null}
+                {form.attachmentUrl ? <a href={form.attachmentUrl} target="_blank" rel="noreferrer" className="text-emerald-700 underline">{form.attachmentUrl}</a> : <span className="text-zinc-500">No file uploaded</span>}
+              </div>
+            </div>
             <div className="md:col-span-3"><Input label="Notes" value={form.notes} onChange={(v) => setForm((s) => ({ ...s, notes: v }))} /></div>
             <div className="md:col-span-3"><button className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white">Submit Receipt</button></div>
           </form>
@@ -104,7 +136,7 @@ export default function ReceiptCenter({ title, subtitle, roleKey, links = [] }) 
                   <td className="border-b px-3 py-2">{r.linkedInvoiceNo || "-"}</td>
                   <td className="border-b px-3 py-2">{r.status || "pending"}</td>
                   <td className="border-b px-3 py-2 text-rose-700">{r.rejectionReason || "-"}</td>
-                  <td className="border-b px-3 py-2">{r.attachmentUrl ? <a href={r.attachmentUrl} target="_blank" rel="noreferrer" className="rounded-lg border px-2 py-1 text-xs">Attachment</a> : "-"}</td>
+                  <td className="border-b px-3 py-2">{r.attachmentUrl ? <a href={r.attachmentUrl} target="_blank" rel="noreferrer" className="rounded-lg border px-2 py-1 text-xs">URL</a> : "-"}</td>
                 </tr>
               ))}
             </tbody>
