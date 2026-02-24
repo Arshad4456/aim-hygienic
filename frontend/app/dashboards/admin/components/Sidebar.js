@@ -30,6 +30,7 @@ function Icon({ name }) {
   if (name === "hr") return <span className={common}>👥</span>;
   if (name === "messages") return <span className={common}>💬</span>;
   if (name === "operations") return <span className={common}>🛰️</span>;
+  if (name === "vehicle") return <span className={common}>🚘</span>;
   return <span className={common}>•</span>;
 }
 
@@ -49,6 +50,7 @@ const defaultOpenState = {
   users: false,
   inventory: false,
   accountManagement: false,
+  vehicleManagement: false,
 };
 
 let adminSidebarOpenCache = { ...defaultOpenState };
@@ -117,6 +119,20 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
         children: [
           { title: "Module Overview", href: "/dashboards/admin/warehouse-inventory" },
           { title: "Warehouse Master", href: "/dashboards/admin/inventory/warehouses" },
+        ],
+      },
+
+      {
+        type: "group",
+        key: "vehicleManagement",
+        title: "Vehicle Management",
+        icon: "vehicle",
+        children: [
+          { title: "Module Overview", href: "/dashboards/admin/vehicle-management" },
+          { title: "Add Vehicle", href: "/dashboards/admin/vehicle-management/add" },
+          { title: "Vehicle List", href: "/dashboards/admin/vehicle-management/vehicles" },
+          { title: "Fuel Management", href: "/dashboards/admin/vehicle-management/fuel-management" },
+          { title: "Vehicle Maintenance", href: "/dashboards/admin/vehicle-management/maintenance" },
         ],
       },
 
