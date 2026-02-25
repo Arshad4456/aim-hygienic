@@ -185,7 +185,21 @@ export default function VehicleModuleOverviewPage() {
         <div className="mt-3 space-y-2 max-h-64 overflow-auto">
           {alerts.length === 0 ? <div className="text-sm text-emerald-700">No alerts in selected range.</div> : alerts.map((a, i) => (
             <div key={`${a.type}-${i}`} className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-              <span className="font-medium uppercase text-xs">{a.type.replaceAll("_", " ")}</span> · {a.message}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-medium uppercase text-xs">{a.type.replaceAll("_", " ")}</span>
+                {a.severity ? <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold uppercase">{a.severity}</span> : null}
+              </div>
+              <div className="mt-1">{a.message}</div>
+              {a.vehicleLabel ? <div className="mt-1 text-xs text-rose-800"><span className="font-medium">Vehicle:</span> {a.vehicleLabel}</div> : null}
+              {a.details && Object.keys(a.details).length > 0 ? (
+                <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-1 text-xs text-rose-900">
+                  {Object.entries(a.details).map(([label, value]) => (
+                    <div key={label} className="rounded bg-white/60 px-2 py-1">
+                      <span className="font-medium">{label.replaceAll("_", " ")}:</span> {String(value)}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ))}
         </div>
