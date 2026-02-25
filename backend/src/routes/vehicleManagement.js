@@ -18,6 +18,13 @@ function dayKey(value) {
   return new Date(value).toISOString().slice(0, 10);
 }
 
+function safeDate(value) {
+  if (!value) return "-";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toISOString().slice(0, 10);
+}
+
 router.get("/overview", requireAuth, async (req, res) => {
   try {
     const { start, end } = monthRange(req.query.from, req.query.to);
@@ -146,17 +153,89 @@ router.get("/overview", requireAuth, async (req, res) => {
       .sort((a, b) => b.personalKm - a.personalKm)
       .slice(0, 10);
 
+    const maxTripKmAlert = Number(process.env.VEHICLE_MAX_TRIP_KM || 600);
+    const personalRatioAlert = Number(process.env.VEHICLE_PERSONAL_KM_ALERT_RATIO || 30);
+    const minEfficiencyAlert = Number(process.env.VEHICLE_MIN_EFFICIENCY_ALERT || 5);
+
     const alerts = [];
     for (const trip of trips) {
-      if (trip.distance > 600) alerts.push({ type: "sudden_km_jump", tripId: trip._id, message: "Large KM jump detected" });
-      if (!trip.startMeterUrl || !trip.endMeterUrl) alerts.push({ type: "missing_meter_photo", tripId: trip._id, message: "Meter photo missing" });
-    }
-    for (const v of vehicleInsights) {
-      if (v.personalRatio > Number(process.env.VEHICLE_PERSONAL_KM_ALERT_RATIO || 30)) {
-        alerts.push({ type: "high_personal_usage", vehicleId: v.vehicleId, message: `${v.registrationNo}: personal KM ratio ${v.personalRatio.toFixed(1)}%` });
+      const vehicle = vehicleMap.get(String(trip.vehicleId)) || {};
+      const vehicleLabel = `${vehicle.registrationNo || "No-Reg"}${vehicle.make || vehicle.model ? ` · ${vehicle.make || ""} ${vehicle.model || ""}` : ""}`.trim();
+      const tripDate = safeDate(trip.tripDate);
+      const route = `${trip.fromPlace || "-"} → ${trip.toPlace || "-"}`;
+
+      if (Number(trip.distance || 0) > maxTripKmAlert) {
+        alerts.push({
+          type: "sudden_km_jump",
+          severity: "high",
+          tripId: trip._id,
+          vehicleId: trip.vehicleId,
+          vehicleLabel,
+          message: "Large KM jump detected",
+          details: {
+            date: tripDate,
+            distanceKm: Number(trip.distance || 0),
+            thresholdKm: maxTripKmAlert,
+            route,
+            tripType: trip.tripType || "company",
+            odometer: `${trip.startOdometer || 0} → ${trip.endOdometer || 0}`,
+          },
+        });
       }
-      if (v.refuelLiters > 0 && v.efficiency > 0 && v.efficiency < Number(process.env.VEHICLE_MIN_EFFICIENCY_ALERT || 5)) {
-        alerts.push({ type: "low_efficiency", vehicleId: v.vehicleId, message: `${v.registrationNo}: low fuel efficiency ${v.efficiency.toFixed(2)} km/l` });
+
+      if (!trip.startMeterUrl || !trip.endMeterUrl) {
+        alerts.push({
+          type: "missing_meter_photo",
+          severity: "medium",
+          tripId: trip._id,
+          vehicleId: trip.vehicleId,
+          vehicleLabel,
+          message: "Meter photo missing",
+          details: {
+            date: tripDate,
+            route,
+            startProof: trip.startMeterUrl ? "Present" : "Missing",
+            endProof: trip.endMeterUrl ? "Present" : "Missing",
+            tripType: trip.tripType || "company",
+          },
+        });
+      }
+    }
+
+    for (const v of vehicleInsights) {
+      if (v.personalRatio > personalRatioAlert) {
+        alerts.push({
+          type: "high_personal_usage",
+          severity: "medium",
+          vehicleId: v.vehicleId,
+          vehicleLabel: `${v.registrationNo || "No-Reg"} · ${v.assignedUserName || "Unassigned"}`,
+          message: `${v.registrationNo}: personal KM ratio ${v.personalRatio.toFixed(1)}%`,
+          details: {
+            personalKm: Number(v.personalKm || 0).toFixed(0),
+            companyKm: Number(v.companyKm || 0).toFixed(0),
+            totalKm: Number(v.distance || 0).toFixed(0),
+            personalRatio: `${Number(v.personalRatio || 0).toFixed(1)}%`,
+            threshold: `${personalRatioAlert}%`,
+          },
+        });
+      }
+
+      if (v.refuelLiters > 0 && v.efficiency > 0 && v.efficiency < minEfficiencyAlert) {
+        alerts.push({
+          type: "low_efficiency",
+          severity: "medium",
+          vehicleId: v.vehicleId,
+          vehicleLabel: `${v.registrationNo || "No-Reg"} · ${v.assignedUserName || "Unassigned"}`,
+          message: `${v.registrationNo}: low fuel efficiency ${v.efficiency.toFixed(2)} km/l`,
+          details: {
+            distanceKm: Number(v.distance || 0).toFixed(1),
+            liters: Number(v.refuelLiters || 0).toFixed(1),
+            efficiencyKmPerLiter: Number(v.efficiency || 0).toFixed(2),
+            thresholdKmPerLiter: Number(minEfficiencyAlert || 0).toFixed(2),
+            trips: Number(v.tripCount || 0),
+            refuels: Number(v.refuelCount || 0),
+          },
+        });
       }
     }
 
