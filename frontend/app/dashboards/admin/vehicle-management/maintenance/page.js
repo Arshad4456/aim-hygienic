@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ToastContainer, toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
 import AdminShell from "../../components/AdminShell";
 import { apiFetch } from "../../../../lib/api";
+import { ToastStack, useToastStack } from "../components/ToastStack";
 
 const types = ["oil_change", "oil_filter", "car_wash", "tyre", "brake", "battery", "routine", "accidental", "other"];
 
@@ -41,19 +40,11 @@ function renderProof(url, label) {
   );
 }
 
-function showError(message) {
-  toast.error(message, { icon: "❌", progressStyle: { background: "#ef4444" } });
-}
-
-
-function showInfo(message) {
-  toast.info(message, { icon: "ℹ️", progressStyle: { background: "#0ea5e9" } });
-}
-
 export default function MaintenancePage() {
   const [vehicles, setVehicles] = useState([]);
   const [rows, setRows] = useState([]);
   const [saving, setSaving] = useState(false);
+  const { toasts, addToast, closeToast } = useToastStack();
 
   const [form, setForm] = useState({ vehicleId: "", date: "", maintenanceType: "oil_change", cost: "", vendor: "", notes: "" });
   const [proof, setProof] = useState(null);
@@ -71,12 +62,12 @@ export default function MaintenancePage() {
   };
 
   useEffect(() => {
-    load().catch(() => showError("Failed to load maintenance data"));
+    load().catch(() => addToast("Failed to load maintenance data", "error"));
   }, []);
 
   async function save() {
     setSaving(true);
-    const toastId = toast.loading("Saving maintenance record...", { icon: "⏳", progressStyle: { background: "#f59e0b" } });
+    const pending = addToast("Promise is pending", "pending", true);
 
     try {
       if (!form.vehicleId || !form.date || !form.maintenanceType || !form.cost) throw new Error("Please fill required fields");
@@ -103,9 +94,11 @@ export default function MaintenancePage() {
       await load();
       setForm({ vehicleId: "", date: "", maintenanceType: "oil_change", cost: "", vendor: "", notes: "" });
       setProof(null);
-      toast.update(toastId, { render: "Maintenance saved successfully", type: "success", isLoading: false, autoClose: 2200, icon: "✅", progressStyle: { background: "#22c55e" } });
+      closeToast(pending);
+      addToast("Maintenance saved successfully", "success");
     } catch (e) {
-      toast.update(toastId, { render: e.message || "Failed to save maintenance", type: "error", isLoading: false, autoClose: 2800, icon: "❌", progressStyle: { background: "#ef4444" } });
+      closeToast(pending);
+      addToast(e.message || "Failed to save maintenance", "error");
     } finally {
       setSaving(false);
     }
@@ -128,7 +121,7 @@ export default function MaintenancePage() {
           <input placeholder="Notes" value={form.notes} onChange={(e) => setForm((s) => ({ ...s, notes: e.target.value }))} className="border rounded-xl px-2 py-2" />
           <input type="file" accept="image/*" onChange={(e) => {
             setProof(e.target.files?.[0] || null);
-            if (e.target.files?.[0]) showInfo("Proof file selected");
+            if (e.target.files?.[0]) addToast("Proof file selected", "info");
           }} />
           <button type="button" onClick={save} disabled={saving} className="bg-emerald-600 text-white rounded-xl px-3 py-2 disabled:opacity-70">{saving ? "Saving..." : "Save"}</button>
         </div>
@@ -173,18 +166,7 @@ export default function MaintenancePage() {
         </table>
       </div>
 
-      <ToastContainer
-        position="top-right"
-        autoClose={2600}
-        hideProgressBar={false}
-        newestOnTop
-        closeOnClick
-        pauseOnHover
-        draggable
-        theme="light"
-        toastClassName="!rounded-xl !shadow-md !border !border-zinc-200"
-        bodyClassName="text-sm"
-      />
+      <ToastStack items={toasts} onClose={closeToast} />
     </AdminShell>
   );
 }

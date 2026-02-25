@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { ToastStack, useToastStack } from "./components/ToastStack";
 import AdminShell from "../components/AdminShell";
 import { apiFetch } from "../../../lib/api";
 
@@ -21,12 +22,12 @@ function toRows(objectMap = {}) {
 
 export default function VehicleModuleOverviewPage() {
   const [data, setData] = useState(null);
-  const [error, setError] = useState("");
+  const { toasts, addToast, closeToast } = useToastStack();
 
   useEffect(() => {
     apiFetch("/vehicle-management/overview")
       .then(setData)
-      .catch((e) => setError(e.message || "Failed to load overview"));
+      .catch((e) => addToast(e.message || "Failed to load overview", "error"));
   }, []);
 
   const k = data?.kpis || {};
@@ -48,8 +49,6 @@ export default function VehicleModuleOverviewPage() {
 
   return (
     <AdminShell title="Vehicle Management" user={null}>
-      {error ? <div className="rounded-xl border border-red-200 bg-red-50 text-red-700 px-4 py-2 mb-3 text-sm">{error}</div> : null}
-
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
         <NumberCard
           title="Total Vehicles"
@@ -123,6 +122,7 @@ export default function VehicleModuleOverviewPage() {
           ))}
         </div>
       </div>
+      <ToastStack items={toasts} onClose={closeToast} />
     </AdminShell>
   );
 }
