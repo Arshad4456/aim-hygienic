@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 import AdminShell from "../../components/AdminShell";
 import { apiFetch } from "../../../../lib/api";
 
@@ -39,10 +41,18 @@ function renderProof(url, label) {
   );
 }
 
+function showError(message) {
+  toast.error(message, { icon: "❌", progressStyle: { background: "#ef4444" } });
+}
+
+
+function showInfo(message) {
+  toast.info(message, { icon: "ℹ️", progressStyle: { background: "#0ea5e9" } });
+}
+
 export default function MaintenancePage() {
   const [vehicles, setVehicles] = useState([]);
   const [rows, setRows] = useState([]);
-  const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState({ vehicleId: "", date: "", maintenanceType: "oil_change", cost: "", vendor: "", notes: "" });
@@ -61,12 +71,13 @@ export default function MaintenancePage() {
   };
 
   useEffect(() => {
-    load().catch(() => setError("Failed to load maintenance data"));
+    load().catch(() => showError("Failed to load maintenance data"));
   }, []);
 
   async function save() {
     setSaving(true);
-    setError("");
+    const toastId = toast.loading("Saving maintenance record...", { icon: "⏳", progressStyle: { background: "#f59e0b" } });
+
     try {
       if (!form.vehicleId || !form.date || !form.maintenanceType || !form.cost) throw new Error("Please fill required fields");
       const requiresProof = ["oil_change", "car_wash"].includes(form.maintenanceType);
@@ -92,8 +103,9 @@ export default function MaintenancePage() {
       await load();
       setForm({ vehicleId: "", date: "", maintenanceType: "oil_change", cost: "", vendor: "", notes: "" });
       setProof(null);
+      toast.update(toastId, { render: "Maintenance saved successfully", type: "success", isLoading: false, autoClose: 2200, icon: "✅", progressStyle: { background: "#22c55e" } });
     } catch (e) {
-      setError(e.message || "Failed to save maintenance");
+      toast.update(toastId, { render: e.message || "Failed to save maintenance", type: "error", isLoading: false, autoClose: 2800, icon: "❌", progressStyle: { background: "#ef4444" } });
     } finally {
       setSaving(false);
     }
@@ -101,7 +113,6 @@ export default function MaintenancePage() {
 
   return (
     <AdminShell title="Vehicle Maintenance" user={null}>
-      {error ? <div className="rounded-xl border border-red-200 bg-red-50 text-red-700 px-4 py-2 mb-3 text-sm">{error}</div> : null}
       <div className="rounded-2xl border bg-white p-4">
         <div className="grid grid-cols-2 gap-2 text-sm">
           <select value={form.vehicleId} onChange={(e) => setForm((s) => ({ ...s, vehicleId: e.target.value }))} className="border rounded-xl px-2 py-2">
@@ -115,7 +126,10 @@ export default function MaintenancePage() {
           <input type="number" placeholder="Cost" value={form.cost} onChange={(e) => setForm((s) => ({ ...s, cost: e.target.value }))} className="border rounded-xl px-2 py-2" />
           <input placeholder="Vendor" value={form.vendor} onChange={(e) => setForm((s) => ({ ...s, vendor: e.target.value }))} className="border rounded-xl px-2 py-2" />
           <input placeholder="Notes" value={form.notes} onChange={(e) => setForm((s) => ({ ...s, notes: e.target.value }))} className="border rounded-xl px-2 py-2" />
-          <input type="file" accept="image/*" onChange={(e) => setProof(e.target.files?.[0] || null)} />
+          <input type="file" accept="image/*" onChange={(e) => {
+            setProof(e.target.files?.[0] || null);
+            if (e.target.files?.[0]) showInfo("Proof file selected");
+          }} />
           <button type="button" onClick={save} disabled={saving} className="bg-emerald-600 text-white rounded-xl px-3 py-2 disabled:opacity-70">{saving ? "Saving..." : "Save"}</button>
         </div>
       </div>
@@ -158,6 +172,19 @@ export default function MaintenancePage() {
           </tbody>
         </table>
       </div>
+
+      <ToastContainer
+        position="top-right"
+        autoClose={2600}
+        hideProgressBar={false}
+        newestOnTop
+        closeOnClick
+        pauseOnHover
+        draggable
+        theme="light"
+        toastClassName="!rounded-xl !shadow-md !border !border-zinc-200"
+        bodyClassName="text-sm"
+      />
     </AdminShell>
   );
 }
