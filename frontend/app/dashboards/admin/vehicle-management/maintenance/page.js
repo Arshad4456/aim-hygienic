@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import AdminShell from "../../components/AdminShell";
 import { apiFetch } from "../../../../lib/api";
-import { ToastStack, useToastStack } from "../components/ToastStack";
+import { ToastStack, useToastStack } from "../components/ToastStick";
 
 const types = ["oil_change", "oil_filter", "car_wash", "tyre", "brake", "battery", "routine", "accidental", "other"];
 

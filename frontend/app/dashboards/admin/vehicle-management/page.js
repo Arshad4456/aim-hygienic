@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ToastStack, useToastStack } from "./components/ToastStack";
+import { ToastStack, useToastStack } from "./components/ToastStick";
 import AdminShell from "../components/AdminShell";
 import { apiFetch } from "../../../lib/api";
 

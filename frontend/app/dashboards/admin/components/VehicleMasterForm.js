@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "../../../lib/api";
-import { ToastStack, useToastStack } from "../vehicle-management/components/ToastStack";
+import { ToastStack, useToastStack } from "../vehicle-management/components/ToastStick";
 
 const TYPE_OPTIONS = ["Car", "Suzuki", "Shahzor", "Truck", "Container", "Pickup", "Van", "Bike", "Other"];
 const FUEL_OPTIONS = ["Petrol", "Diesel", "CNG", "Hybrid", "Electric"];
