@@ -144,16 +144,13 @@ router.get("/overview", requireAuth, async (req, res) => {
     });
 
     const topFuelVehicles = [...vehicleInsights]
-      .sort((a, b) => b.refuelLiters - a.refuelLiters)
-      .slice(0, 10);
+      .sort((a, b) => b.refuelLiters - a.refuelLiters);
     const lowEfficiencyVehicles = [...vehicleInsights]
       .filter((v) => v.refuelLiters > 0)
-      .sort((a, b) => a.efficiency - b.efficiency)
-      .slice(0, 10);
+      .sort((a, b) => a.efficiency - b.efficiency);
     const topPersonalUsageVehicles = [...vehicleInsights]
       .filter((v) => v.personalKm > 0)
-      .sort((a, b) => b.personalKm - a.personalKm)
-      .slice(0, 10);
+      .sort((a, b) => b.personalKm - a.personalKm);
 
     const maxTripKmAlert = Number(process.env.VEHICLE_MAX_TRIP_KM || 600);
     const personalRatioAlert = Number(process.env.VEHICLE_PERSONAL_KM_ALERT_RATIO || 30);
