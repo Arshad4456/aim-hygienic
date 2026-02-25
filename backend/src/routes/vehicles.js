@@ -20,7 +20,7 @@ function parseNum(value, fallback = 0) {
 
 function parseVehiclePayload(body = {}) {
   return {
-    vehicleId: sanitizeString(body.vehicleId),
+    vehicleId: sanitizeString(body.vehicleId) || undefined,
     type: sanitizeString(body.type),
     make: sanitizeString(body.make),
     model: sanitizeString(body.model),
