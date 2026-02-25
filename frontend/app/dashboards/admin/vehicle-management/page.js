@@ -23,12 +23,23 @@ function toRows(objectMap = {}) {
 export default function VehicleModuleOverviewPage() {
   const [data, setData] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [fromDate, setFromDate] = useState(() => {
+    const d = new Date();
+    d.setDate(1);
+    return d.toISOString().slice(0, 10);
+  });
+  const [toDate, setToDate] = useState(() => new Date().toISOString().slice(0, 10));
   const { toasts, addToast, closeToast } = useToastStack();
 
-  async function loadOverview(silent = false) {
+  async function loadOverview(silent = false, overrides = {}) {
     if (!silent) setRefreshing(true);
     try {
-      const result = await apiFetch("/vehicle-management/overview");
+      const from = overrides.from ?? fromDate;
+      const to = overrides.to ?? toDate;
+      const query = new URLSearchParams();
+      if (from) query.set("from", from);
+      if (to) query.set("to", to);
+      const result = await apiFetch(`/vehicle-management/overview${query.toString() ? `?${query.toString()}` : ""}`);
       setData(result);
     } catch (e) {
       addToast(e.message || "Failed to load overview", "error");
@@ -54,7 +65,7 @@ export default function VehicleModuleOverviewPage() {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, []);
+  }, [fromDate, toDate]);
 
   const k = data?.kpis || {};
   const b = data?.breakdowns || {};
@@ -75,7 +86,27 @@ export default function VehicleModuleOverviewPage() {
 
   return (
     <AdminShell title="Vehicle Management" user={null}>
-      <div className="flex items-center justify-end mb-2">
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+        <div className="flex flex-wrap items-end gap-2">
+          <div>
+            <label className="mb-1 block text-xs text-zinc-500">From</label>
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="rounded-lg border px-3 py-1.5 text-sm"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-zinc-500">To</label>
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              className="rounded-lg border px-3 py-1.5 text-sm"
+            />
+          </div>
+        </div>
         <button
           type="button"
           onClick={() => loadOverview()}
