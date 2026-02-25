@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ToastStack, useToastStack } from "./components/ToastStick";
+import { ToastStack, useToastStack } from "./components/ToastStack";
 import AdminShell from "../components/AdminShell";
 import { apiFetch } from "../../../lib/api";
 
@@ -22,12 +22,38 @@ function toRows(objectMap = {}) {
 
 export default function VehicleModuleOverviewPage() {
   const [data, setData] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
   const { toasts, addToast, closeToast } = useToastStack();
 
+  async function loadOverview(silent = false) {
+    if (!silent) setRefreshing(true);
+    try {
+      const result = await apiFetch("/vehicle-management/overview");
+      setData(result);
+    } catch (e) {
+      addToast(e.message || "Failed to load overview", "error");
+    } finally {
+      if (!silent) setRefreshing(false);
+    }
+  }
+
   useEffect(() => {
-    apiFetch("/vehicle-management/overview")
-      .then(setData)
-      .catch((e) => addToast(e.message || "Failed to load overview", "error"));
+    loadOverview();
+
+    const interval = setInterval(() => loadOverview(true), 30000);
+    const onFocus = () => loadOverview(true);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") loadOverview(true);
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   const k = data?.kpis || {};
@@ -49,6 +75,17 @@ export default function VehicleModuleOverviewPage() {
 
   return (
     <AdminShell title="Vehicle Management" user={null}>
+      <div className="flex items-center justify-end mb-2">
+        <button
+          type="button"
+          onClick={() => loadOverview()}
+          disabled={refreshing}
+          className="rounded-lg border px-3 py-1.5 text-sm text-zinc-700 disabled:opacity-60"
+        >
+          {refreshing ? "Refreshing..." : "Refresh Overview"}
+        </button>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
         <NumberCard
           title="Total Vehicles"
