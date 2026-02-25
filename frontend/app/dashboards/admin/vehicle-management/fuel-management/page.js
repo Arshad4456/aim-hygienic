@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import AdminShell from "../../components/AdminShell";
 import { apiFetch } from "../../../../lib/api";
-import { ToastStack, useToastStack } from "../components/ToastStick";
+import { ToastStack, useToastStack } from "../components/ToastStack";
 
 async function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -251,6 +251,10 @@ function TripForm({ vehicles, form, setForm, setStartFile, setEndFile, onSubmit,
           {vehicles.map((v) => <option key={v._id} value={v._id}>{vehicleLabel(v)}</option>)}
         </select>
         <input type="date" value={form.tripDate} onChange={(e) => set("tripDate", e.target.value)} className="border rounded-xl px-2 py-2" />
+        <select value={form.tripType} onChange={(e) => set("tripType", e.target.value)} className="border rounded-xl px-2 py-2">
+          <option value="company">Company Work</option>
+          <option value="personal">Personal Use</option>
+        </select>
         <input placeholder="From" value={form.fromPlace} onChange={(e) => set("fromPlace", e.target.value)} className="border rounded-xl px-2 py-2" />
         <input placeholder="To" value={form.toPlace} onChange={(e) => set("toPlace", e.target.value)} className="border rounded-xl px-2 py-2" />
         <input placeholder="Start Odometer" type="number" value={form.startOdometer} onChange={(e) => set("startOdometer", e.target.value)} className="border rounded-xl px-2 py-2" />
