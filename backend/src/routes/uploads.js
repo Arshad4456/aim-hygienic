@@ -400,4 +400,60 @@ router.post("/vehicle-proof-url", requireAuth, async (req, res) => {
   }
 });
 
+
+router.post("/vehicle-proof", requireAuth, async (req, res) => {
+  try {
+    const { vehicleId, entity, recordId, slot, contentType, fileBase64, date } = req.body || {};
+    if (!vehicleId || !entity || !recordId || !slot || !contentType || !fileBase64) {
+      return res.status(400).json({ ok: false, message: "vehicleId, entity, recordId, slot, contentType and fileBase64 are required" });
+    }
+
+    const { bucket, accountId, accessKeyId, secretAccessKey, endpoint, jurisdiction, missing } = readR2Config();
+    if (missing.length) {
+      return res.status(500).json({
+        ok: false,
+        message: `R2 storage is not configured (${missing.join(", ")}). Configure S3-compatible Access Key + Secret (API token is not used for presigned S3 uploads).`,
+      });
+    }
+
+    const d = date ? new Date(date) : new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const ext = extensionFromContentType(contentType);
+
+    let objectKey = "";
+    if (entity === "fuel") {
+      objectKey = `fuel/${vehicleId}/${year}/${month}/${recordId}/${slot}.${ext}`;
+    } else if (entity === "vehicle-maintenance") {
+      objectKey = `vehicle-maintenance/${vehicleId}/${year}/${month}/${recordId}/${slot}.${ext}`;
+    } else {
+      return res.status(400).json({ ok: false, message: "entity must be fuel or vehicle-maintenance" });
+    }
+
+    const base64Payload = normalizeBase64Payload(fileBase64);
+    const fileBuffer = Buffer.from(base64Payload, "base64");
+    if (!fileBuffer.length) {
+      return res.status(400).json({ ok: false, message: "Invalid base64 file payload" });
+    }
+
+    const publicUrl = `${resolvePublicBaseUrl()}/${objectKey}`;
+    const uploadUrl = getPresignedPutUrl({ accountId, accessKeyId, secretAccessKey, bucket, key: objectKey, endpoint, jurisdiction });
+    assertR2UploadHost(uploadUrl);
+
+    const cloudRes = await uploadBufferToPresignedUrl(uploadUrl, {
+      contentType: String(contentType).trim() || "image/jpeg",
+      body: fileBuffer,
+    });
+
+    if (!cloudRes.ok) {
+      return res.status(502).json({ ok: false, message: `R2 upload failed (${cloudRes.status})` });
+    }
+
+    return res.json({ ok: true, objectKey, publicUrl });
+  } catch (error) {
+    const message = String(error?.message || "").trim();
+    return res.status(500).json({ ok: false, message: message ? `Failed to upload vehicle proof: ${message}` : "Failed to upload vehicle proof" });
+  }
+});
+
 module.exports = router;
