@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import AdminShell from "../../components/AdminShell";
 import { apiFetch } from "../../../../lib/api";
+import { ToastStack, useToastStack } from "../components/ToastStack";
 
 async function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -41,9 +42,9 @@ export default function FuelManagementPage() {
   const [vehicles, setVehicles] = useState([]);
   const [trips, setTrips] = useState([]);
   const [refuels, setRefuels] = useState([]);
-  const [error, setError] = useState("");
   const [savingTrip, setSavingTrip] = useState(false);
   const [savingRefuel, setSavingRefuel] = useState(false);
+  const { toasts, addToast, closeToast } = useToastStack();
 
   const [form, setForm] = useState({ vehicleId: "", tripType: "company", tripDate: "", fromPlace: "", toPlace: "", startOdometer: "", endOdometer: "", liters: "" });
   const [startFile, setStartFile] = useState(null);
@@ -70,12 +71,12 @@ export default function FuelManagementPage() {
   };
 
   useEffect(() => {
-    load().catch(() => setError("Failed to load fuel management data"));
+    load().catch((e) => addToast(e.message || "Failed to load fuel management data", "error"));
   }, []);
 
   async function saveTrip() {
-    setError("");
     setSavingTrip(true);
+    const pending = addToast("Promise is pending", "pending", true);
     try {
       if (!form.vehicleId || !form.tripDate || !form.fromPlace || !form.toPlace) throw new Error("Please fill required trip fields");
       if (!startFile || !endFile) throw new Error("Start and End meter photos are required");
@@ -93,16 +94,19 @@ export default function FuelManagementPage() {
       setForm({ vehicleId: "", tripType: "company", tripDate: "", fromPlace: "", toPlace: "", startOdometer: "", endOdometer: "", liters: "" });
       setStartFile(null);
       setEndFile(null);
+      closeToast(pending);
+      addToast("Trip saved successfully", "success");
     } catch (e) {
-      setError(e.message || "Failed to save trip");
+      closeToast(pending);
+      addToast(e.message || "Failed to save trip", "error");
     } finally {
       setSavingTrip(false);
     }
   }
 
   async function saveRefuel() {
-    setError("");
     setSavingRefuel(true);
+    const pending = addToast("Promise is pending", "pending", true);
     try {
       if (!refuel.vehicleId || !refuel.date || !refuel.liters) throw new Error("Please fill required refuel fields");
       if (!receipt) throw new Error("Fuel receipt image is required");
@@ -118,8 +122,11 @@ export default function FuelManagementPage() {
       await load();
       setRefuel({ vehicleId: "", date: "", liters: "", cost: "", vendor: "" });
       setReceipt(null);
+      closeToast(pending);
+      addToast("Refuel saved successfully", "success");
     } catch (e) {
-      setError(e.message || "Failed to save refuel");
+      closeToast(pending);
+      addToast(e.message || "Failed to save refuel", "error");
     } finally {
       setSavingRefuel(false);
     }
@@ -127,18 +134,33 @@ export default function FuelManagementPage() {
 
   return (
     <AdminShell title="Fuel Management" user={null}>
-      {error ? <div className="rounded-xl border border-red-200 bg-red-50 text-red-700 px-4 py-2 mb-3 text-sm">{error}</div> : null}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <TripForm
           vehicles={vehicles}
           form={form}
           setForm={setForm}
-          setStartFile={setStartFile}
-          setEndFile={setEndFile}
+          setStartFile={(f) => {
+            setStartFile(f);
+            if (f) addToast("Start meter photo selected", "info");
+          }}
+          setEndFile={(f) => {
+            setEndFile(f);
+            if (f) addToast("End meter photo selected", "info");
+          }}
           onSubmit={saveTrip}
           saving={savingTrip}
         />
-        <RefuelForm vehicles={vehicles} form={refuel} setForm={setRefuel} setReceipt={setReceipt} onSubmit={saveRefuel} saving={savingRefuel} />
+        <RefuelForm
+          vehicles={vehicles}
+          form={refuel}
+          setForm={setRefuel}
+          setReceipt={(f) => {
+            setReceipt(f);
+            if (f) addToast("Fuel receipt selected", "info");
+          }}
+          onSubmit={saveRefuel}
+          saving={savingRefuel}
+        />
       </div>
 
       <div className="rounded-2xl border bg-white p-4 mt-3 overflow-auto">
@@ -149,13 +171,13 @@ export default function FuelManagementPage() {
               <th className="px-2 py-2 border">Date</th>
               <th className="px-2 py-2 border">Vehicle / User</th>
               <th className="px-2 py-2 border">Trip Type</th>
-              <th className="px-2 py-2 border">From → To</th>
-              <th className="px-2 py-2 border">Start / End ODO</th>
+              <th className="px-2 py-2 border">Route</th>
+              <th className="px-2 py-2 border">Odometer</th>
               <th className="px-2 py-2 border">Distance</th>
               <th className="px-2 py-2 border">Liters</th>
               <th className="px-2 py-2 border">Start Proof</th>
               <th className="px-2 py-2 border">End Proof</th>
-              <th className="px-2 py-2 border">Fuel Receipt</th>
+              <th className="px-2 py-2 border">Receipt</th>
             </tr>
           </thead>
           <tbody>
@@ -212,6 +234,8 @@ export default function FuelManagementPage() {
           </tbody>
         </table>
       </div>
+
+      <ToastStack items={toasts} onClose={closeToast} />
     </AdminShell>
   );
 }

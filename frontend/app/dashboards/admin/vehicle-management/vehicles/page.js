@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import AdminShell from "../../components/AdminShell";
 import { apiFetch } from "../../../../lib/api";
+import { ToastStack, useToastStack } from "../components/ToastStack";
 
 const STATUS_OPTIONS = ["", "Active", "Inactive", "Under Maintenance", "Sold"];
 
@@ -20,7 +21,7 @@ export default function VehicleManagementListPage() {
   const [zones, setZones] = useState([]);
   const [areas, setAreas] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const { toasts, addToast, closeToast } = useToastStack();
 
   const [detailModal, setDetailModal] = useState(null);
   const [editModal, setEditModal] = useState(null);
@@ -42,7 +43,6 @@ export default function VehicleManagementListPage() {
   const usersMap = useMemo(() => new Map(users.map((u) => [String(u._id), u])), [users]);
 
   async function load() {
-    setError("");
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -73,7 +73,7 @@ export default function VehicleManagementListPage() {
       setZones(zonesRes.zones || []);
       setAreas(areasRes.areas || []);
     } catch (e) {
-      setError(e.message || "Failed to load vehicles");
+      addToast(e.message || "Failed to load vehicles", "error");
     } finally {
       setLoading(false);
     }
@@ -104,7 +104,7 @@ export default function VehicleManagementListPage() {
       const data = await apiFetch(`/vehicles/${id}/detail`);
       setDetailModal(data);
     } catch (e) {
-      setError(e.message || "Failed to load vehicle detail");
+      addToast(e.message || "Failed to load vehicle detail", "error");
     }
   }
 
@@ -113,15 +113,15 @@ export default function VehicleManagementListPage() {
     try {
       await apiFetch(`/vehicles/${id}`, { method: "DELETE" });
       await load();
+      addToast("Vehicle deleted successfully", "success");
     } catch (e) {
-      setError(e.message || "Failed to delete vehicle");
+      addToast(e.message || "Failed to delete vehicle", "error");
     }
   }
 
   async function saveEdit() {
     if (!editModal?._id) return;
     setSavingEdit(true);
-    setError("");
     try {
       const region = regions.find((r) => r._id === editModal.regionPickId);
       const zone = zones.find((z) => z._id === editModal.zonePickId);
@@ -161,8 +161,9 @@ export default function VehicleManagementListPage() {
       await apiFetch(`/vehicles/${editModal._id}`, { method: "PUT", body: payload });
       setEditModal(null);
       await load();
+      addToast("Vehicle updated successfully", "success");
     } catch (e) {
-      setError(e.message || "Failed to update vehicle");
+      addToast(e.message || "Failed to update vehicle", "error");
     } finally {
       setSavingEdit(false);
     }
@@ -188,8 +189,6 @@ export default function VehicleManagementListPage() {
 
   return (
     <AdminShell title="Vehicle Management · Vehicle List" user={null}>
-      {error ? <div className="rounded-xl border border-red-200 bg-red-50 text-red-700 px-4 py-2 mb-3 text-sm">{error}</div> : null}
-
       <div className="rounded-2xl bg-white border p-4">
         <div className="text-lg font-semibold">Vehicle List</div>
         <div className="text-sm text-zinc-500 mt-1">Detailed filters, detail view, edit and delete actions.</div>
@@ -302,6 +301,7 @@ export default function VehicleManagementListPage() {
           areas={areas}
         />
       ) : null}
+      <ToastStack items={toasts} onClose={closeToast} />
     </AdminShell>
   );
 }

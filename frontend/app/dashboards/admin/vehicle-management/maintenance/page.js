@@ -1,27 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AdminShell from "../../components/AdminShell";
 import { apiFetch } from "../../../../lib/api";
+import { ToastStack, useToastStack } from "../components/ToastStack";
 
 const types = ["oil_change", "oil_filter", "car_wash", "tyre", "brake", "battery", "routine", "accidental", "other"];
-
-function ToastStack({ items, onClose }) {
-  return (
-    <div className="fixed top-4 right-4 z-[70] space-y-2 w-[360px]">
-      {items.map((t) => (
-        <div key={t.id} className="rounded-xl border bg-white shadow-md overflow-hidden">
-          <div className="px-3 py-3 flex items-start gap-2 text-sm">
-            <span>{t.icon}</span>
-            <div className="flex-1 text-zinc-800">{t.message}</div>
-            <button className="text-zinc-400" onClick={() => onClose(t.id)}>✕</button>
-          </div>
-          <div className="h-1" style={{ background: t.color }} />
-        </div>
-      ))}
-    </div>
-  );
-}
 
 async function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -60,29 +44,10 @@ export default function MaintenancePage() {
   const [vehicles, setVehicles] = useState([]);
   const [rows, setRows] = useState([]);
   const [saving, setSaving] = useState(false);
-  const [toasts, setToasts] = useState([]);
-  const timers = useRef(new Map());
+  const { toasts, addToast, closeToast } = useToastStack();
 
   const [form, setForm] = useState({ vehicleId: "", date: "", maintenanceType: "oil_change", cost: "", vendor: "", notes: "" });
   const [proof, setProof] = useState(null);
-
-  function addToast(message, type = "info", sticky = false) {
-    const style = type === "success" ? { icon: "✅", color: "#22c55e" } : type === "error" ? { icon: "❌", color: "#ef4444" } : type === "warn" ? { icon: "⚠️", color: "#f59e0b" } : { icon: "ℹ️", color: "#0ea5e9" };
-    const id = crypto.randomUUID();
-    setToasts((s) => [{ id, message, ...style }, ...s].slice(0, 5));
-    if (!sticky) {
-      const timer = setTimeout(() => closeToast(id), 2800);
-      timers.current.set(id, timer);
-    }
-    return id;
-  }
-
-  function closeToast(id) {
-    const timer = timers.current.get(id);
-    if (timer) clearTimeout(timer);
-    timers.current.delete(id);
-    setToasts((s) => s.filter((t) => t.id !== id));
-  }
 
   const vehiclesMap = useMemo(() => {
     const map = new Map();
@@ -98,15 +63,11 @@ export default function MaintenancePage() {
 
   useEffect(() => {
     load().catch(() => addToast("Failed to load maintenance data", "error"));
-    return () => {
-      for (const t of timers.current.values()) clearTimeout(t);
-      timers.current.clear();
-    };
   }, []);
 
   async function save() {
     setSaving(true);
-    const pending = addToast("Saving maintenance record...", "warn", true);
+    const pending = addToast("Promise is pending", "pending", true);
 
     try {
       if (!form.vehicleId || !form.date || !form.maintenanceType || !form.cost) throw new Error("Please fill required fields");
