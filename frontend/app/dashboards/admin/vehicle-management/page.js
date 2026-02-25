@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -84,6 +85,21 @@ export default function VehicleModuleOverviewPage() {
     return (Number(k.activeVehicles || 0) / total) * 100;
   }, [k.totalVehicles, k.activeVehicles]);
 
+  const avgFuelCostPerLiter = useMemo(() => {
+    const liters = Number(k.totalFuel || 0);
+    if (!liters) return 0;
+    return Number(k.fuelCost || 0) / liters;
+  }, [k.totalFuel, k.fuelCost]);
+
+  const maintenanceEntries = useMemo(() => {
+    return b.maintenanceByType?.reduce((sum, row) => sum + Number(row.count || 0), 0) || 0;
+  }, [b.maintenanceByType]);
+
+  const avgMaintenanceCost = useMemo(() => {
+    if (!maintenanceEntries) return 0;
+    return Number(k.maintenanceCost || 0) / maintenanceEntries;
+  }, [k.maintenanceCost, maintenanceEntries]);
+
   return (
     <AdminShell title="Vehicle Management" user={null}>
       <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
@@ -117,7 +133,7 @@ export default function VehicleModuleOverviewPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
         <NumberCard
           title="Total Vehicles"
           value={k.totalVehicles || 0}
@@ -125,20 +141,27 @@ export default function VehicleModuleOverviewPage() {
           tone="emerald"
         />
         <NumberCard
-          title="Trips & Distance (MTD)"
-          value={`${k.totalTrips || 0} trips`}
-          subtitle={`${k.totalKm || 0} KM total · company ${k.companyKm || 0} KM · personal ${k.personalKm || 0} KM`}
+          title="Company Trips (MTD)"
+          value={`${k.companyTrips || 0} trips`}
+          subtitle={`${Number(k.companyKm || 0).toFixed(0)} KM company distance`}
+          tone="emerald"
+        />
+        <NumberCard
+          title="Personal Trips (MTD)"
+          value={`${k.personalTrips || 0} trips`}
+          subtitle={`${Number(k.personalKm || 0).toFixed(0)} KM personal distance`}
+          tone="rose"
         />
         <NumberCard
           title="Fuel Analysis (MTD)"
           value={`${Number(k.totalFuel || 0).toFixed(1)} L`}
-          subtitle={`Cost ${Number(k.fuelCost || 0).toLocaleString()} · avg efficiency ${Number(k.avgEfficiency || 0).toFixed(2)} KM/L`}
+          subtitle={`Cost ${Number(k.fuelCost || 0).toLocaleString()} · ${Number(k.totalKm || 0).toFixed(0)} KM · ${avgFuelCostPerLiter.toFixed(2)} per L · ${Number(k.avgEfficiency || 0).toFixed(2)} KM/L`}
           tone="amber"
         />
         <NumberCard
           title="Maintenance Health (MTD)"
           value={Number(k.maintenanceCost || 0).toLocaleString()}
-          subtitle={`${k.dueMaintenanceCount || 0} vehicles currently under maintenance`}
+          subtitle={`${maintenanceEntries} jobs · avg ${avgMaintenanceCost.toFixed(0)} per job · ${k.dueMaintenanceCount || 0} vehicles under maintenance`}
           tone={Number(k.dueMaintenanceCount || 0) > 0 ? "rose" : "zinc"}
         />
       </div>

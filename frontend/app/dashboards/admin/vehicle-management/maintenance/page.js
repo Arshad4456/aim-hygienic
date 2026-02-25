@@ -6,6 +6,7 @@ import { apiFetch } from "../../../../lib/api";
 import { ToastStack, useToastStack } from "../components/ToastStick";
 
 const types = ["oil_change", "oil_filter", "car_wash", "tyre", "brake", "battery", "routine", "accidental", "other"];
+const PAGE_SIZE = 20;
 
 async function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -40,11 +41,21 @@ function renderProof(url, label) {
   );
 }
 
+function paginate(rows, page) {
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const safePage = Math.min(Math.max(page, 1), totalPages);
+  const start = (safePage - 1) * PAGE_SIZE;
+  return { totalPages, page: safePage, rows: rows.slice(start, start + PAGE_SIZE) };
+}
+
 export default function MaintenancePage() {
   const [vehicles, setVehicles] = useState([]);
   const [rows, setRows] = useState([]);
   const [saving, setSaving] = useState(false);
   const { toasts, addToast, closeToast } = useToastStack();
+
+  const [page, setPage] = useState(1);
+  const [filters, setFilters] = useState({ search: "", vehicleId: "", maintenanceType: "", from: "", to: "" });
 
   const [form, setForm] = useState({ vehicleId: "", date: "", maintenanceType: "oil_change", cost: "", vendor: "", notes: "" });
   const [proof, setProof] = useState(null);
@@ -64,6 +75,23 @@ export default function MaintenancePage() {
   useEffect(() => {
     load().catch(() => addToast("Failed to load maintenance data", "error"));
   }, []);
+
+  const filteredRows = useMemo(() => {
+    return rows.filter((r) => {
+      const v = vehiclesMap.get(r.vehicleId) || {};
+      const text = `${vehicleLabel(v)} ${r.maintenanceType || ""} ${r.vendor || ""} ${r.notes || ""}`.toLowerCase();
+      const q = filters.search.trim().toLowerCase();
+      if (q && !text.includes(q)) return false;
+      if (filters.vehicleId && String(r.vehicleId) !== String(filters.vehicleId)) return false;
+      if (filters.maintenanceType && String(r.maintenanceType) !== String(filters.maintenanceType)) return false;
+      if (filters.from && String(r.date || "").slice(0, 10) < filters.from) return false;
+      if (filters.to && String(r.date || "").slice(0, 10) > filters.to) return false;
+      return true;
+    });
+  }, [rows, filters, vehiclesMap]);
+
+  useEffect(() => setPage(1), [filters, rows.length]);
+  const pageData = paginate(filteredRows, page);
 
   async function save() {
     setSaving(true);
@@ -127,8 +155,33 @@ export default function MaintenancePage() {
         </div>
       </div>
 
+      <div className="rounded-2xl border bg-white p-4 mt-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+          <div className="font-semibold">Vehicle Maintenance Ledger</div>
+          <div className="text-xs text-zinc-500">{filteredRows.length} entries · Page {pageData.page} of {pageData.totalPages}</div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <input value={filters.search} onChange={(e) => setFilters((s) => ({ ...s, search: e.target.value }))} placeholder="Search vehicle / vendor / notes" className="border rounded-lg px-2 py-1.5 text-sm" />
+          <select value={filters.vehicleId} onChange={(e) => setFilters((s) => ({ ...s, vehicleId: e.target.value }))} className="border rounded-lg px-2 py-1.5 text-sm">
+            <option value="">All vehicles</option>
+            {vehicles.map((v) => <option key={v._id} value={v._id}>{vehicleLabel(v)}</option>)}
+          </select>
+          <select value={filters.maintenanceType} onChange={(e) => setFilters((s) => ({ ...s, maintenanceType: e.target.value }))} className="border rounded-lg px-2 py-1.5 text-sm">
+            <option value="">All maintenance types</option>
+            {types.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <input type="date" value={filters.from} onChange={(e) => setFilters((s) => ({ ...s, from: e.target.value }))} className="border rounded-lg px-2 py-1.5 text-sm" />
+          <input type="date" value={filters.to} onChange={(e) => setFilters((s) => ({ ...s, to: e.target.value }))} className="border rounded-lg px-2 py-1.5 text-sm" />
+        </div>
+        <div className="flex flex-wrap items-center gap-2 mt-3">
+          <button type="button" onClick={() => setPage(1)} disabled={pageData.page <= 1} className="rounded border px-2 py-1 text-xs disabled:opacity-50">Start</button>
+          <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={pageData.page <= 1} className="rounded border px-2 py-1 text-xs disabled:opacity-50">Previous</button>
+          <button type="button" onClick={() => setPage((p) => Math.min(pageData.totalPages, p + 1))} disabled={pageData.page >= pageData.totalPages} className="rounded border px-2 py-1 text-xs disabled:opacity-50">Next</button>
+          <button type="button" onClick={() => setPage(pageData.totalPages)} disabled={pageData.page >= pageData.totalPages} className="rounded border px-2 py-1 text-xs disabled:opacity-50">End</button>
+        </div>
+      </div>
+
       <div className="rounded-2xl border bg-white p-4 mt-3 overflow-auto">
-        <div className="font-semibold mb-2">Vehicle Maintenance Ledger</div>
         <table className="min-w-[1000px] w-full text-sm">
           <thead>
             <tr className="text-left bg-zinc-50">
@@ -145,7 +198,7 @@ export default function MaintenancePage() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => {
+            {pageData.rows.map((r) => {
               const v = vehiclesMap.get(r.vehicleId) || {};
               return (
                 <tr key={r._id} className="align-top">

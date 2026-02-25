@@ -5,6 +5,8 @@ import AdminShell from "../../components/AdminShell";
 import { apiFetch } from "../../../../lib/api";
 import { ToastStack, useToastStack } from "../components/ToastStick";
 
+const PAGE_SIZE = 20;
+
 async function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -38,6 +40,13 @@ function renderProof(url, label) {
   );
 }
 
+function paginate(rows, page) {
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const safePage = Math.min(Math.max(page, 1), totalPages);
+  const start = (safePage - 1) * PAGE_SIZE;
+  return { totalPages, page: safePage, rows: rows.slice(start, start + PAGE_SIZE) };
+}
+
 export default function FuelManagementPage() {
   const [vehicles, setVehicles] = useState([]);
   const [trips, setTrips] = useState([]);
@@ -45,6 +54,12 @@ export default function FuelManagementPage() {
   const [savingTrip, setSavingTrip] = useState(false);
   const [savingRefuel, setSavingRefuel] = useState(false);
   const { toasts, addToast, closeToast } = useToastStack();
+
+  const [tripPage, setTripPage] = useState(1);
+  const [refuelPage, setRefuelPage] = useState(1);
+
+  const [tripFilters, setTripFilters] = useState({ search: "", vehicleId: "", tripType: "", from: "", to: "" });
+  const [refuelFilters, setRefuelFilters] = useState({ search: "", vehicleId: "", from: "", to: "" });
 
   const [form, setForm] = useState({ vehicleId: "", tripType: "company", tripDate: "", fromPlace: "", toPlace: "", startOdometer: "", endOdometer: "", liters: "" });
   const [startFile, setStartFile] = useState(null);
@@ -73,6 +88,39 @@ export default function FuelManagementPage() {
   useEffect(() => {
     load().catch((e) => addToast(e.message || "Failed to load fuel management data", "error"));
   }, []);
+
+  const filteredTrips = useMemo(() => {
+    return trips.filter((t) => {
+      const v = vehiclesMap.get(t.vehicleId) || {};
+      const text = `${vehicleLabel(v)} ${t.fromPlace || ""} ${t.toPlace || ""}`.toLowerCase();
+      const q = tripFilters.search.trim().toLowerCase();
+      if (q && !text.includes(q)) return false;
+      if (tripFilters.vehicleId && String(t.vehicleId) !== String(tripFilters.vehicleId)) return false;
+      if (tripFilters.tripType && String(t.tripType) !== String(tripFilters.tripType)) return false;
+      if (tripFilters.from && String(t.tripDate || "").slice(0, 10) < tripFilters.from) return false;
+      if (tripFilters.to && String(t.tripDate || "").slice(0, 10) > tripFilters.to) return false;
+      return true;
+    });
+  }, [trips, tripFilters, vehiclesMap]);
+
+  const filteredRefuels = useMemo(() => {
+    return refuels.filter((r) => {
+      const v = vehiclesMap.get(r.vehicleId) || {};
+      const text = `${vehicleLabel(v)} ${r.vendor || ""}`.toLowerCase();
+      const q = refuelFilters.search.trim().toLowerCase();
+      if (q && !text.includes(q)) return false;
+      if (refuelFilters.vehicleId && String(r.vehicleId) !== String(refuelFilters.vehicleId)) return false;
+      if (refuelFilters.from && String(r.date || "").slice(0, 10) < refuelFilters.from) return false;
+      if (refuelFilters.to && String(r.date || "").slice(0, 10) > refuelFilters.to) return false;
+      return true;
+    });
+  }, [refuels, refuelFilters, vehiclesMap]);
+
+  useEffect(() => setTripPage(1), [tripFilters, trips.length]);
+  useEffect(() => setRefuelPage(1), [refuelFilters, refuels.length]);
+
+  const tripPageData = paginate(filteredTrips, tripPage);
+  const refuelPageData = paginate(filteredRefuels, refuelPage);
 
   async function saveTrip() {
     setSavingTrip(true);
@@ -163,8 +211,31 @@ export default function FuelManagementPage() {
         />
       </div>
 
+      <LedgerFilters
+        title="Trip Ledger"
+        total={filteredTrips.length}
+        page={tripPageData.page}
+        totalPages={tripPageData.totalPages}
+        onFirst={() => setTripPage(1)}
+        onPrev={() => setTripPage((p) => Math.max(1, p - 1))}
+        onNext={() => setTripPage((p) => Math.min(tripPageData.totalPages, p + 1))}
+        onEnd={() => setTripPage(tripPageData.totalPages)}
+      >
+        <input value={tripFilters.search} onChange={(e) => setTripFilters((s) => ({ ...s, search: e.target.value }))} placeholder="Search route / vehicle" className="border rounded-lg px-2 py-1.5 text-sm" />
+        <select value={tripFilters.vehicleId} onChange={(e) => setTripFilters((s) => ({ ...s, vehicleId: e.target.value }))} className="border rounded-lg px-2 py-1.5 text-sm">
+          <option value="">All vehicles</option>
+          {vehicles.map((v) => <option key={v._id} value={v._id}>{vehicleLabel(v)}</option>)}
+        </select>
+        <select value={tripFilters.tripType} onChange={(e) => setTripFilters((s) => ({ ...s, tripType: e.target.value }))} className="border rounded-lg px-2 py-1.5 text-sm">
+          <option value="">All trip types</option>
+          <option value="company">Company Work</option>
+          <option value="personal">Personal Use</option>
+        </select>
+        <input type="date" value={tripFilters.from} onChange={(e) => setTripFilters((s) => ({ ...s, from: e.target.value }))} className="border rounded-lg px-2 py-1.5 text-sm" />
+        <input type="date" value={tripFilters.to} onChange={(e) => setTripFilters((s) => ({ ...s, to: e.target.value }))} className="border rounded-lg px-2 py-1.5 text-sm" />
+      </LedgerFilters>
+
       <div className="rounded-2xl border bg-white p-4 mt-3 overflow-auto">
-        <div className="font-semibold mb-2">Trip Ledger</div>
         <table className="min-w-[1200px] w-full text-sm">
           <thead>
             <tr className="text-left bg-zinc-50">
@@ -181,7 +252,7 @@ export default function FuelManagementPage() {
             </tr>
           </thead>
           <tbody>
-            {trips.map((t) => {
+            {tripPageData.rows.map((t) => {
               const v = vehiclesMap.get(t.vehicleId) || {};
               return (
                 <tr key={t._id} className="align-top">
@@ -202,8 +273,26 @@ export default function FuelManagementPage() {
         </table>
       </div>
 
+      <LedgerFilters
+        title="Refuel Ledger"
+        total={filteredRefuels.length}
+        page={refuelPageData.page}
+        totalPages={refuelPageData.totalPages}
+        onFirst={() => setRefuelPage(1)}
+        onPrev={() => setRefuelPage((p) => Math.max(1, p - 1))}
+        onNext={() => setRefuelPage((p) => Math.min(refuelPageData.totalPages, p + 1))}
+        onEnd={() => setRefuelPage(refuelPageData.totalPages)}
+      >
+        <input value={refuelFilters.search} onChange={(e) => setRefuelFilters((s) => ({ ...s, search: e.target.value }))} placeholder="Search vehicle / vendor" className="border rounded-lg px-2 py-1.5 text-sm" />
+        <select value={refuelFilters.vehicleId} onChange={(e) => setRefuelFilters((s) => ({ ...s, vehicleId: e.target.value }))} className="border rounded-lg px-2 py-1.5 text-sm">
+          <option value="">All vehicles</option>
+          {vehicles.map((v) => <option key={v._id} value={v._id}>{vehicleLabel(v)}</option>)}
+        </select>
+        <input type="date" value={refuelFilters.from} onChange={(e) => setRefuelFilters((s) => ({ ...s, from: e.target.value }))} className="border rounded-lg px-2 py-1.5 text-sm" />
+        <input type="date" value={refuelFilters.to} onChange={(e) => setRefuelFilters((s) => ({ ...s, to: e.target.value }))} className="border rounded-lg px-2 py-1.5 text-sm" />
+      </LedgerFilters>
+
       <div className="rounded-2xl border bg-white p-4 mt-3 overflow-auto">
-        <div className="font-semibold mb-2">Refuel Ledger</div>
         <table className="min-w-[900px] w-full text-sm">
           <thead>
             <tr className="text-left bg-zinc-50">
@@ -217,7 +306,7 @@ export default function FuelManagementPage() {
             </tr>
           </thead>
           <tbody>
-            {refuels.map((r) => {
+            {refuelPageData.rows.map((r) => {
               const v = vehiclesMap.get(r.vehicleId) || {};
               return (
                 <tr key={r._id} className="align-top">
@@ -283,6 +372,24 @@ function RefuelForm({ vehicles, form, setForm, setReceipt, onSubmit, saving }) {
         <input placeholder="Vendor" value={form.vendor} onChange={(e) => set("vendor", e.target.value)} className="border rounded-xl px-2 py-2" />
         <input type="file" accept="image/*" onChange={(e) => setReceipt(e.target.files?.[0] || null)} />
         <button type="button" onClick={onSubmit} disabled={saving} className="col-span-2 bg-emerald-600 text-white rounded-xl px-3 py-2 disabled:opacity-70">{saving ? "Saving..." : "Save Refuel"}</button>
+      </div>
+    </div>
+  );
+}
+
+function LedgerFilters({ title, children, total, page, totalPages, onFirst, onPrev, onNext, onEnd }) {
+  return (
+    <div className="rounded-2xl border bg-white p-4 mt-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <div className="font-semibold">{title}</div>
+        <div className="text-xs text-zinc-500">{total} entries · Page {page} of {totalPages}</div>
+      </div>
+      <div className="flex flex-wrap gap-2">{children}</div>
+      <div className="flex flex-wrap items-center gap-2 mt-3">
+        <button type="button" onClick={onFirst} disabled={page <= 1} className="rounded border px-2 py-1 text-xs disabled:opacity-50">Start</button>
+        <button type="button" onClick={onPrev} disabled={page <= 1} className="rounded border px-2 py-1 text-xs disabled:opacity-50">Previous</button>
+        <button type="button" onClick={onNext} disabled={page >= totalPages} className="rounded border px-2 py-1 text-xs disabled:opacity-50">Next</button>
+        <button type="button" onClick={onEnd} disabled={page >= totalPages} className="rounded border px-2 py-1 text-xs disabled:opacity-50">End</button>
       </div>
     </div>
   );
