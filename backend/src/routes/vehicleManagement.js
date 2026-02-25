@@ -45,6 +45,8 @@ router.get("/overview", requireAuth, async (req, res) => {
     ]);
 
     const totalKm = trips.reduce((a, t) => a + (t.distance || 0), 0);
+    const companyTrips = trips.filter((t) => t.tripType === "company").length;
+    const personalTrips = trips.filter((t) => t.tripType === "personal").length;
     const companyKm = trips.filter((t) => t.tripType === "company").reduce((a, t) => a + (t.distance || 0), 0);
     const personalKm = totalKm - companyKm;
     const totalFuel = refuels.reduce((a, r) => a + (r.liters || 0), 0);
@@ -247,6 +249,8 @@ router.get("/overview", requireAuth, async (req, res) => {
         activeVehicles: activeCount,
         idleVehicles: vehicles.length - activeCount,
         totalTrips: trips.length,
+        companyTrips,
+        personalTrips,
         totalKm,
         companyKm,
         personalKm,
