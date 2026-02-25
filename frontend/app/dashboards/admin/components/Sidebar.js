@@ -124,20 +124,6 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
 
       {
         type: "group",
-        key: "vehicleManagement",
-        title: "Vehicle Management",
-        icon: "vehicle",
-        children: [
-          { title: "Module Overview", href: "/dashboards/admin/vehicle-management" },
-          { title: "Add Vehicle", href: "/dashboards/admin/vehicle-management/add" },
-          { title: "Vehicle List", href: "/dashboards/admin/vehicle-management/vehicles" },
-          { title: "Fuel Management", href: "/dashboards/admin/vehicle-management/fuel-management" },
-          { title: "Vehicle Maintenance", href: "/dashboards/admin/vehicle-management/maintenance" },
-        ],
-      },
-
-      {
-        type: "group",
         key: "territory",
         title: "Territory & Assets",
         icon: "territory",
@@ -173,28 +159,15 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
 
       {
         type: "group",
-        key: "procurement",
-        title: "Procurement",
-        icon: "purchase",
+        key: "vehicleManagement",
+        title: "Vehicle Management",
+        icon: "vehicle",
         children: [
-          { title: "Module Overview", href: "/dashboards/admin/procurement" },
-          { title: "Supplier Master", href: "/dashboards/admin/procurement/suppliers" },
-          { title: "Purchase Orders", href: "/dashboards/admin/procurement/purchase-orders" },
-          { title: "Goods Receipt (GRN)", href: "/dashboards/admin/procurement/grn" },
-          { title: "Supplier Payments", href: "/dashboards/admin/procurement/payments" },
-        ],
-      },
-
-      {
-        type: "group",
-        key: "logistics",
-        title: "Distribution & Logistics",
-        icon: "logistics",
-        children: [
-          { title: "Module Overview", href: "/dashboards/admin/logistics" },
-          { title: "Route Planning", href: "/dashboards/admin/logistics/routes" },
-          { title: "Dispatch & Delivery", href: "/dashboards/admin/logistics/dispatch" },
-          { title: "Vehicle Assignment", href: "/dashboards/admin/assets/vehicles" },
+          { title: "Module Overview", href: "/dashboards/admin/vehicle-management" },
+          { title: "Add Vehicle", href: "/dashboards/admin/vehicle-management/add" },
+          { title: "Vehicle List", href: "/dashboards/admin/vehicle-management/vehicles" },
+          { title: "Fuel Management", href: "/dashboards/admin/vehicle-management/fuel-management" },
+          { title: "Vehicle Maintenance", href: "/dashboards/admin/vehicle-management/maintenance" },
         ],
       },
 
@@ -233,6 +206,33 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
           { title: "AIM – Personal Expense", href: "/dashboards/admin/expense/personal" },
           { title: "Daily Expense", href: "/dashboards/admin/expense/daily" },
           { title: "Distributor Expense", href: "/dashboards/admin/expense/distributor" },
+        ],
+      },
+
+      {
+        type: "group",
+        key: "procurement",
+        title: "Procurement",
+        icon: "purchase",
+        children: [
+          { title: "Module Overview", href: "/dashboards/admin/procurement" },
+          { title: "Supplier Master", href: "/dashboards/admin/procurement/suppliers" },
+          { title: "Purchase Orders", href: "/dashboards/admin/procurement/purchase-orders" },
+          { title: "Goods Receipt (GRN)", href: "/dashboards/admin/procurement/grn" },
+          { title: "Supplier Payments", href: "/dashboards/admin/procurement/payments" },
+        ],
+      },
+
+      {
+        type: "group",
+        key: "logistics",
+        title: "Distribution & Logistics",
+        icon: "logistics",
+        children: [
+          { title: "Module Overview", href: "/dashboards/admin/logistics" },
+          { title: "Route Planning", href: "/dashboards/admin/logistics/routes" },
+          { title: "Dispatch & Delivery", href: "/dashboards/admin/logistics/dispatch" },
+          { title: "Vehicle Assignment", href: "/dashboards/admin/assets/vehicles" },
         ],
       },
 
