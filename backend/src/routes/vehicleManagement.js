@@ -14,6 +14,10 @@ function monthRange(from, to) {
   return { start, end };
 }
 
+function dayKey(value) {
+  return new Date(value).toISOString().slice(0, 10);
+}
+
 router.get("/overview", requireAuth, async (req, res) => {
   try {
     const { start, end } = monthRange(req.query.from, req.query.to);
@@ -22,8 +26,10 @@ router.get("/overview", requireAuth, async (req, res) => {
       if (req.query[k]) vf[k] = req.query[k];
     });
     if (req.query.assignedUserId) vf.assignedUserId = req.query.assignedUserId;
+
     const vehicles = await Vehicle.find(vf).lean();
     const vehicleIds = vehicles.map((v) => v._id);
+    const vehicleMap = new Map(vehicles.map((v) => [String(v._id), v]));
 
     const [trips, refuels, maintenance] = await Promise.all([
       VehicleTrip.find({ vehicleId: { $in: vehicleIds }, tripDate: { $gte: start, $lte: end } }).lean(),
@@ -41,18 +47,122 @@ router.get("/overview", requireAuth, async (req, res) => {
     const dueMaintenanceCount = vehicles.filter((v) => v.status === "Under Maintenance").length;
 
     const byType = vehicles.reduce((acc, v) => {
-      acc[v.type] = (acc[v.type] || 0) + 1;
+      const key = v.type || "Other";
+      acc[key] = (acc[key] || 0) + 1;
       return acc;
     }, {});
+
+    const byStatus = vehicles.reduce((acc, v) => {
+      const key = v.status || "Unknown";
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+
+    const byRegion = vehicles.reduce((acc, v) => {
+      const key = v.regionName || v.regionId || "Unknown";
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+
+    const fuelTrendByDay = refuels.reduce((acc, item) => {
+      const key = dayKey(item.date);
+      if (!acc[key]) acc[key] = { date: key, liters: 0, cost: 0 };
+      acc[key].liters += Number(item.liters || 0);
+      acc[key].cost += Number(item.cost || 0);
+      return acc;
+    }, {});
+
+    const maintenanceTrendByDay = maintenance.reduce((acc, item) => {
+      const key = dayKey(item.date);
+      if (!acc[key]) acc[key] = { date: key, cost: 0, count: 0 };
+      acc[key].cost += Number(item.cost || 0);
+      acc[key].count += 1;
+      return acc;
+    }, {});
+
+    const maintenanceByType = maintenance.reduce((acc, item) => {
+      const key = item.maintenanceType || "other";
+      if (!acc[key]) acc[key] = { type: key, count: 0, cost: 0 };
+      acc[key].count += 1;
+      acc[key].cost += Number(item.cost || 0);
+      return acc;
+    }, {});
+
+    const tripAggByVehicle = trips.reduce((acc, t) => {
+      const key = String(t.vehicleId);
+      if (!acc[key]) {
+        const vehicle = vehicleMap.get(key) || {};
+        acc[key] = {
+          vehicleId: key,
+          registrationNo: vehicle.registrationNo || "-",
+          assignedUserName: vehicle.assignedUserName || "-",
+          distance: 0,
+          litersFromTrips: 0,
+          tripCount: 0,
+          companyKm: 0,
+          personalKm: 0,
+        };
+      }
+      acc[key].distance += Number(t.distance || 0);
+      acc[key].litersFromTrips += Number(t.liters || 0);
+      acc[key].tripCount += 1;
+      if (t.tripType === "company") acc[key].companyKm += Number(t.distance || 0);
+      if (t.tripType === "personal") acc[key].personalKm += Number(t.distance || 0);
+      return acc;
+    }, {});
+
+    const refuelAggByVehicle = refuels.reduce((acc, r) => {
+      const key = String(r.vehicleId);
+      if (!acc[key]) acc[key] = { liters: 0, cost: 0, count: 0 };
+      acc[key].liters += Number(r.liters || 0);
+      acc[key].cost += Number(r.cost || 0);
+      acc[key].count += 1;
+      return acc;
+    }, {});
+
+    const vehicleInsights = Object.values(tripAggByVehicle).map((row) => {
+      const ref = refuelAggByVehicle[row.vehicleId] || { liters: 0, cost: 0, count: 0 };
+      const efficiency = ref.liters > 0 ? row.distance / ref.liters : 0;
+      const personalRatio = row.distance > 0 ? (row.personalKm / row.distance) * 100 : 0;
+      return {
+        ...row,
+        refuelLiters: ref.liters,
+        refuelCost: ref.cost,
+        refuelCount: ref.count,
+        efficiency,
+        personalRatio,
+      };
+    });
+
+    const topFuelVehicles = [...vehicleInsights]
+      .sort((a, b) => b.refuelLiters - a.refuelLiters)
+      .slice(0, 10);
+    const lowEfficiencyVehicles = [...vehicleInsights]
+      .filter((v) => v.refuelLiters > 0)
+      .sort((a, b) => a.efficiency - b.efficiency)
+      .slice(0, 10);
+    const topPersonalUsageVehicles = [...vehicleInsights]
+      .filter((v) => v.personalKm > 0)
+      .sort((a, b) => b.personalKm - a.personalKm)
+      .slice(0, 10);
 
     const alerts = [];
     for (const trip of trips) {
       if (trip.distance > 600) alerts.push({ type: "sudden_km_jump", tripId: trip._id, message: "Large KM jump detected" });
       if (!trip.startMeterUrl || !trip.endMeterUrl) alerts.push({ type: "missing_meter_photo", tripId: trip._id, message: "Meter photo missing" });
     }
+    for (const v of vehicleInsights) {
+      if (v.personalRatio > Number(process.env.VEHICLE_PERSONAL_KM_ALERT_RATIO || 30)) {
+        alerts.push({ type: "high_personal_usage", vehicleId: v.vehicleId, message: `${v.registrationNo}: personal KM ratio ${v.personalRatio.toFixed(1)}%` });
+      }
+      if (v.refuelLiters > 0 && v.efficiency > 0 && v.efficiency < Number(process.env.VEHICLE_MIN_EFFICIENCY_ALERT || 5)) {
+        alerts.push({ type: "low_efficiency", vehicleId: v.vehicleId, message: `${v.registrationNo}: low fuel efficiency ${v.efficiency.toFixed(2)} km/l` });
+      }
+    }
 
     return res.json({
       ok: true,
+      range: { start, end },
       kpis: {
         totalVehicles: vehicles.length,
         activeVehicles: activeCount,
@@ -69,11 +179,16 @@ router.get("/overview", requireAuth, async (req, res) => {
       },
       breakdowns: {
         byType,
-        byRegion: vehicles.reduce((acc, v) => {
-          const key = v.regionName || v.regionId || "Unknown";
-          acc[key] = (acc[key] || 0) + 1;
-          return acc;
-        }, {}),
+        byStatus,
+        byRegion,
+        fuelTrendByDay: Object.values(fuelTrendByDay).sort((a, b) => a.date.localeCompare(b.date)),
+        maintenanceTrendByDay: Object.values(maintenanceTrendByDay).sort((a, b) => a.date.localeCompare(b.date)),
+        maintenanceByType: Object.values(maintenanceByType).sort((a, b) => b.cost - a.cost),
+      },
+      insights: {
+        topFuelVehicles,
+        lowEfficiencyVehicles,
+        topPersonalUsageVehicles,
       },
       alerts,
     });
@@ -135,7 +250,7 @@ router.post("/trips", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/trips", requireAuth, async (req, res) => {
+router.get("/trips", requireAuth, async (_req, res) => {
   const trips = await VehicleTrip.find().sort({ tripDate: -1 }).limit(200).lean();
   return res.json({ ok: true, trips });
 });
