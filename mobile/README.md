@@ -34,7 +34,16 @@ src/
    ```bash
    export EXPO_PUBLIC_API_BASE_URL="https://your-vps-domain.com"
    ```
-3. Start Expo:
+3. (One-time) link the app to your Expo project to generate a valid EAS UUID:
+   ```bash
+   eas login
+   eas init
+   ```
+   If you already have an Expo project ID, you can set it manually:
+   ```bash
+   export EXPO_EAS_PROJECT_ID="your-valid-project-uuid"
+   ```
+4. Start Expo:
    ```bash
    npm run start
    ```
