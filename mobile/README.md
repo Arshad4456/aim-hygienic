@@ -39,7 +39,8 @@ src/
    eas login
    eas init
    ```
-   If you already have an Expo project ID, you can set it manually:
+   This repo is preconfigured with project ID `303e87e6-cab0-40d8-bb4d-1765ed3a1dc5`.
+   If you need to override it for another Expo account/project, set:
    ```bash
    export EXPO_EAS_PROJECT_ID="your-valid-project-uuid"
    ```
