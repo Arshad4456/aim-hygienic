@@ -49,6 +49,19 @@ src/
    npm run start
    ```
 
+
+## Expo health checks
+
+Run:
+```bash
+npx expo-doctor
+```
+
+If peer dependency warnings appear, install/align with:
+```bash
+npx expo install react-native-gesture-handler react-native-reanimated @react-native-async-storage/async-storage@1.23.1
+```
+
 ## Build artifacts
 
 - APK (internal distribution first):
