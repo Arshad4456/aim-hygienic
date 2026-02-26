@@ -1,0 +1,1 @@
+export const warehouseModules = ['Orders', 'Dispatch Management', 'Payment View', 'Inventory', 'Proof of Delivery', 'Reports'];
