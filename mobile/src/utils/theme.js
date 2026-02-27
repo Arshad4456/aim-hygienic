@@ -1,17 +1,19 @@
 export const theme = {
   colors: {
-    bg: '#f5f5f4',
+    bg: '#f3f6ff',
     surface: '#ffffff',
-    text: '#18181b',
-    muted: '#52525b',
-    primary: '#059669',
-    primaryDark: '#047857',
-    border: '#d4d4d8',
+    text: '#111827',
+    muted: '#6b7280',
+    primary: '#2563eb',
+    primaryDark: '#1d4ed8',
+    accent: '#06b6d4',
+    border: '#dbe3f3',
     danger: '#dc2626',
+    success: '#16a34a',
   },
   radius: {
-    card: 16,
-    input: 14,
-    button: 14,
+    card: 20,
+    input: 16,
+    button: 16,
   },
 };

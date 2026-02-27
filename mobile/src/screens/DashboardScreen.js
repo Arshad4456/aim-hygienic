@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import { get } from '../config/api';
@@ -30,24 +30,49 @@ export default function DashboardScreen() {
     run();
   }, [refreshUser]);
 
+  const metrics = useMemo(() => {
+    if (!dashboardData || typeof dashboardData !== 'object') {
+      return [];
+    }
+
+    return Object.entries(dashboardData)
+      .slice(0, 3)
+      .map(([key, value]) => ({
+        label: key.replace(/([A-Z])/g, ' $1').replace(/^./, (str) => str.toUpperCase()),
+        value: typeof value === 'number' ? value : Array.isArray(value) ? value.length : '--',
+      }));
+  }, [dashboardData]);
+
   return (
     <ScreenContainer>
-      <Text style={styles.title}>Dashboard</Text>
-
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Current User</Text>
-        <Text style={styles.cardText}>Name: {user?.fullName || user?.username || '-'}</Text>
-        <Text style={styles.cardText}>Role: {user?.role || '-'}</Text>
+      <View style={styles.heroCard}>
+        <Text style={styles.heroTitle}>Hello, {user?.fullName || user?.username || 'Team Member'} 👋</Text>
+        <Text style={styles.heroSubtitle}>Here is a quick look at your operations overview.</Text>
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Backend Dashboard Payload</Text>
+        <Text style={styles.cardTitle}>Account</Text>
+        <Text style={styles.cardText}>Role: {user?.role || '-'}</Text>
+        <Text style={styles.cardText}>Mobile: {user?.mobile || '-'}</Text>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Performance Snapshot</Text>
         {loading ? (
           <ActivityIndicator color={theme.colors.primary} />
         ) : error ? (
           <Text style={styles.error}>{error}</Text>
+        ) : metrics.length ? (
+          <View style={styles.metricsGrid}>
+            {metrics.map((item) => (
+              <View style={styles.metricTile} key={item.label}>
+                <Text style={styles.metricValue}>{item.value}</Text>
+                <Text style={styles.metricLabel}>{item.label}</Text>
+              </View>
+            ))}
+          </View>
         ) : (
-          <Text style={styles.payload}>{JSON.stringify(dashboardData, null, 2)}</Text>
+          <Text style={styles.cardText}>No dashboard data available.</Text>
         )}
       </View>
 
@@ -59,18 +84,28 @@ export default function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: theme.colors.text,
-    marginBottom: 8,
+  heroCard: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.card,
+    padding: 18,
+    gap: 6,
+  },
+  heroTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#fff',
+  },
+  heroSubtitle: {
+    color: '#dbeafe',
+    fontSize: 14,
+    lineHeight: 20,
   },
   card: {
     backgroundColor: theme.colors.surface,
     borderRadius: theme.radius.card,
     borderColor: theme.colors.border,
     borderWidth: 1,
-    padding: 14,
+    padding: 16,
     gap: 8,
   },
   cardTitle: {
@@ -81,16 +116,32 @@ const styles = StyleSheet.create({
   cardText: {
     color: theme.colors.muted,
   },
-  payload: {
+  metricsGrid: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  metricTile: {
+    flex: 1,
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: '#eff6ff',
+    borderColor: '#bfdbfe',
+    borderWidth: 1,
+    gap: 4,
+  },
+  metricValue: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: theme.colors.primaryDark,
+  },
+  metricLabel: {
     fontSize: 12,
-    color: theme.colors.text,
-    fontFamily: 'monospace',
+    color: theme.colors.muted,
   },
   error: {
     color: theme.colors.danger,
   },
   logoutButton: {
-    marginTop: 4,
     backgroundColor: theme.colors.primaryDark,
     borderRadius: theme.radius.button,
     alignItems: 'center',
@@ -98,6 +149,6 @@ const styles = StyleSheet.create({
   },
   logoutText: {
     color: '#fff',
-    fontWeight: '600',
+    fontWeight: '700',
   },
 });
