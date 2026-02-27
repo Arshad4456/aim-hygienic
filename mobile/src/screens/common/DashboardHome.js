@@ -1,44 +1,37 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 import { useAuth } from '../../auth/useAuth';
-import { getRoleMenu } from '../../navigation/RoleMenuConfig';
+import { getRoleModules } from '../../navigation/RoleMenuConfig';
+import { toTitle } from '../../utils/routeTitle';
 import Card from '../../ui/Card';
-import { colors } from '../../theme/colors';
 
 export default function DashboardHome({ navigation }) {
-  const { user, role } = useAuth();
-  const menu = getRoleMenu(role);
+  const { role, roleKey, user, isKnownRole } = useAuth();
+  const modules = getRoleModules(roleKey);
 
   return (
-    <View style={styles.content}>
+    <ScrollView contentContainerStyle={styles.content}>
       <Card>
-        <Text style={styles.title}>Welcome, {user?.fullName || user?.name || 'User'}</Text>
-        <Text style={styles.subtitle}>Role: {role || 'Unknown'}</Text>
+        <Text style={styles.title}>AIM ERP Mobile</Text>
+        <Text style={styles.subtitle}>{user?.fullName || user?.name || 'User'} • {role}</Text>
+        {!isKnownRole ? <Text style={styles.warning}>Unknown role mapped to admin menu.</Text> : null}
       </Card>
-      <View style={styles.grid}>
-        {menu.map((item) => (
-          <Pressable key={item} style={styles.tile} onPress={() => navigation.navigate(item)}>
-            <Text style={styles.tileText}>{item}</Text>
-          </Pressable>
-        ))}
-      </View>
-    </View>
+      {modules.map((mod) => (
+        <Pressable key={mod.key} style={styles.item} onPress={() => navigation.navigate(mod.key)}>
+          <Text style={styles.itemTitle}>{toTitle(mod.modulePath || 'dashboard')}</Text>
+          <Text style={styles.route}>{mod.modulePath || '/'}</Text>
+        </Pressable>
+      ))}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { gap: 12 },
-  title: { fontSize: 20, fontWeight: '700', color: colors.text },
-  subtitle: { marginTop: 6, color: colors.subtext },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  tile: {
-    width: '48%',
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: 18,
-    paddingHorizontal: 12,
-  },
-  tileText: { color: colors.text, fontWeight: '600', fontSize: 14 },
+  content: { padding: 16, gap: 10 },
+  title: { fontSize: 20, fontWeight: '700', color: '#18181b' },
+  subtitle: { marginTop: 6, color: '#52525b' },
+  warning: { marginTop: 6, color: '#b45309', fontSize: 12 },
+  item: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e4e4e7', padding: 14 },
+  itemTitle: { fontSize: 15, fontWeight: '700', color: '#18181b' },
+  route: { fontSize: 12, color: '#71717a', marginTop: 4 },
 });
