@@ -1,60 +1,44 @@
 import React from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import { createDrawerNavigator } from '@react-navigation/drawer';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import LoginScreen from '../screens/auth/LoginScreen';
-import RoleDashboardScreen from '../screens/common/RoleDashboardScreen';
-import ModuleDetailsScreen from '../screens/common/ModuleDetailsScreen';
+import { createDrawerNavigator } from '@react-navigation/drawer';
+import LoginScreen from '../screens/LoginScreen';
+import DashboardScreen from '../screens/DashboardScreen';
 import { useAuth } from '../hooks/useAuth';
-import { roleModules } from './roleModules';
 
 const Stack = createNativeStackNavigator();
 const Drawer = createDrawerNavigator();
 
-function RoleDrawer({ role }) {
-  const modules = roleModules[role] || [];
-
+function AuthenticatedNavigator() {
   return (
-    <Drawer.Navigator>
-      <Drawer.Screen
-        name="Dashboard"
-        component={RoleDashboardScreen}
-        initialParams={{ role, modules }}
-      />
-      {modules.map((moduleName) => (
-        <Drawer.Screen
-          key={moduleName}
-          name={moduleName}
-          component={ModuleDetailsScreen}
-          initialParams={{ moduleName, role }}
-        />
-      ))}
+    <Drawer.Navigator
+      screenOptions={{
+        headerShown: false,
+        drawerType: 'slide',
+      }}
+    >
+      <Drawer.Screen name="Dashboard" component={DashboardScreen} />
     </Drawer.Navigator>
   );
 }
 
 export default function RootNavigator() {
-  const { user, initializing, isAuthenticated } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
 
-  if (initializing) {
+  if (loading) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator />
+        <ActivityIndicator size="large" />
       </View>
     );
   }
 
   return (
-    <Stack.Navigator>
-      {!isAuthenticated ? (
-        <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      {isAuthenticated ? (
+        <Stack.Screen name="App" component={AuthenticatedNavigator} />
       ) : (
-        <>
-          <Stack.Screen name="RoleHome" options={{ headerShown: false }}>
-            {() => <RoleDrawer role={user?.role} />}
-          </Stack.Screen>
-          <Stack.Screen name="ModuleDetails" component={ModuleDetailsScreen} options={{ title: 'Module Details' }} />
-        </>
+        <Stack.Screen name="Login" component={LoginScreen} />
       )}
     </Stack.Navigator>
   );

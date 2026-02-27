@@ -1,1 +1,0 @@
-export const orderbookerModules = ['Create Secondary Order', 'My Orders', 'Receipts Entry'];
