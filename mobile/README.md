@@ -1,64 +1,52 @@
-# AIM ERP Mobile (Expo)
+# AIM Hygienic Mobile (Expo)
 
-This project is an Expo-based React Native ERP mobile client for Android-first distribution.
+Clean rebuild of the mobile client to consume the **same Node.js backend APIs** used by the website.
 
-## Highlights
-- JWT authentication via `POST /api/auth/login`.
-- Secure token storage using `expo-secure-store`.
-- Role-based dashboards (Admin, Warehouse Manager, Distributor, Salesman, Orderbooker, Customer, Account Officer, CEO/MD).
-- Drawer + stack navigation with module-level access.
-- Backend-driven business logic and hierarchy filtering (`Region → Zone → Territory → Field`).
-- Cloudflare R2 proof upload flow via backend presigned URLs.
-- APK-first EAS profile and Play Store-ready AAB profile.
+## Environment
 
-## Folder layout
+Set API base URL (domain only; `/api` is appended automatically if missing):
 
-```
-src/
-  components/
-  context/AuthContext.js
-  hooks/
-  navigation/
-  screens/
-  services/api.js
-  utils/
+```bash
+EXPO_PUBLIC_API_BASE_URL=https://www.aimhygienics.com
 ```
 
-## Run locally
+You can place this in a `.env` file in `mobile/`.
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
-2. Configure API base URL:
-   ```bash
-   export EXPO_PUBLIC_API_BASE_URL="https://your-vps-domain.com"
-   ```
-3. Start Expo:
-   ```bash
-   npm run start
-   ```
+## Run with Expo Go
 
-## Build artifacts
+```bash
+npm install
+npm run start
+```
 
-- APK (internal distribution first):
-  ```bash
-  eas build --profile preview --platform android
-  ```
-- AAB (Play Store later):
-  ```bash
-  eas build --profile production --platform android
-  ```
+Then scan the QR code from Expo Go.
 
-## Security model
+## Build Android APK with EAS
 
-- Mobile app contains no business rules.
-- All permissions validated on backend middleware.
-- Token expiry/invalid token should trigger logout in production interceptors.
-- HTTPS-only backend endpoints.
-- No direct R2 write credentials inside app.
+```bash
+npm install -g eas-cli
+cd mobile
+eas login
+eas build --platform android --profile preview
+```
 
-## Future phases
+## OTA updates (optional)
 
-- Firebase Cloud Messaging push notifications.
-- Offline queue sync (order creation, trip entry, POD upload).
+```bash
+eas update --branch production --message "Mobile UI update"
+```
+
+## Architecture
+
+- `src/api/client.js`: centralized API client with token injection and global 401 logout handling.
+- `src/auth/storage.js`: SecureStore persistence for `aim_token`, `aim_user`, `aim_role`.
+- `src/navigation/*`: auth stack + role-aware drawer shell.
+- `src/screens/common/DashboardHome.js`: role-based module tiles.
+- `src/screens/roles/*`: role shell placeholders for all defined roles.
+
+## Auth flow
+
+- Login endpoint: `POST /auth/login`
+- Body: `{ mobile: mobile.trim(), password }`
+- Response expected: `{ token, user }`
+- Session persisted in SecureStore and restored on app startup.
