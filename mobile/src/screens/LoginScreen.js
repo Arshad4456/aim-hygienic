@@ -1,5 +1,14 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import { useAuth } from '../hooks/useAuth';
 import { theme } from '../utils/theme';
@@ -26,35 +35,46 @@ export default function LoginScreen() {
 
   return (
     <ScreenContainer scroll={false}>
-      <View style={styles.wrapper}>
-        <Text style={styles.title}>AIM ERP</Text>
-        <Text style={styles.subtitle}>Sign in using your existing backend account</Text>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.wrapper}>
+        <View style={styles.hero}>
+          <Text style={styles.eyebrow}>Welcome back</Text>
+          <Text style={styles.title}>AIM ERP</Text>
+          <Text style={styles.subtitle}>Track hygiene operations, workforce, and performance in one place.</Text>
+        </View>
 
-        <TextInput
-          autoCapitalize="none"
-          keyboardType="phone-pad"
-          placeholder="Mobile"
-          placeholderTextColor={theme.colors.muted}
-          style={styles.input}
-          value={mobile}
-          onChangeText={setMobile}
-        />
+        <View style={styles.formCard}>
+          <Text style={styles.formTitle}>Sign in</Text>
 
-        <TextInput
-          secureTextEntry
-          placeholder="Password"
-          placeholderTextColor={theme.colors.muted}
-          style={styles.input}
-          value={password}
-          onChangeText={setPassword}
-        />
+          <TextInput
+            autoCapitalize="none"
+            keyboardType="phone-pad"
+            placeholder="Mobile number"
+            placeholderTextColor={theme.colors.muted}
+            style={styles.input}
+            value={mobile}
+            onChangeText={setMobile}
+          />
 
-        {!!error && <Text style={styles.error}>{error}</Text>}
+          <TextInput
+            secureTextEntry
+            placeholder="Password"
+            placeholderTextColor={theme.colors.muted}
+            style={styles.input}
+            value={password}
+            onChangeText={setPassword}
+          />
 
-        <Pressable style={styles.button} onPress={onSubmit} disabled={submitting}>
-          {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Login</Text>}
-        </Pressable>
-      </View>
+          {!!error && <Text style={styles.error}>{error}</Text>}
+
+          <Pressable
+            style={({ pressed }) => [styles.button, pressed && !submitting && styles.buttonPressed]}
+            onPress={onSubmit}
+            disabled={submitting}
+          >
+            {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Login</Text>}
+          </Pressable>
+        </View>
+      </KeyboardAvoidingView>
     </ScreenContainer>
   );
 }
@@ -63,20 +83,50 @@ const styles = StyleSheet.create({
   wrapper: {
     flex: 1,
     justifyContent: 'center',
-    gap: 12,
+    gap: 24,
+  },
+  hero: {
+    gap: 8,
+  },
+  eyebrow: {
+    color: theme.colors.primary,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    fontSize: 12,
   },
   title: {
-    fontSize: 32,
-    fontWeight: '700',
+    fontSize: 36,
+    fontWeight: '800',
     color: theme.colors.text,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 15,
+    lineHeight: 22,
     color: theme.colors.muted,
-    marginBottom: 12,
+    maxWidth: '95%',
+  },
+  formCard: {
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.card,
+    padding: 18,
+    gap: 12,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+  formTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: theme.colors.text,
+    marginBottom: 4,
   },
   input: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: '#f8faff',
     borderRadius: theme.radius.input,
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -85,19 +135,23 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
   button: {
-    marginTop: 8,
+    marginTop: 6,
     backgroundColor: theme.colors.primary,
     paddingVertical: 14,
     borderRadius: theme.radius.button,
     alignItems: 'center',
   },
+  buttonPressed: {
+    opacity: 0.85,
+  },
   buttonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   error: {
     color: theme.colors.danger,
     fontSize: 13,
+    marginBottom: 2,
   },
 });
