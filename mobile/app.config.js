@@ -18,11 +18,10 @@ module.exports = {
     android: {
       package: 'com.aim.erp.mobile',
       versionCode: 1,
-      permissions: ['CAMERA', 'READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE'],
     },
     plugins: ['expo-secure-store'],
     extra: {
-      apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL,
+      apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL || 'https://www.aimhygienics.com',
       eas: {
         projectId,
       },
