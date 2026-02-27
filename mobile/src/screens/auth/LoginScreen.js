@@ -14,9 +14,16 @@ export default function LoginScreen() {
 
   async function onSubmit() {
     setError('');
+
+    const normalizedMobile = mobile.trim();
+    if (!normalizedMobile || !password) {
+      setError('Please enter mobile number and password');
+      return;
+    }
+
     setLoading(true);
     try {
-      await login({ mobile: mobile.trim(), password });
+      await login({ mobile: normalizedMobile, password });
     } catch (err) {
       setError(err.message || 'Failed to login');
     } finally {
