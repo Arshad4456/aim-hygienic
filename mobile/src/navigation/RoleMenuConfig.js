@@ -1,28 +1,18 @@
-import { roleToMenuKey } from '../utils/roleRedirect';
+import moduleMap from './moduleMap.json';
+import { toTitle } from '../utils/routeTitle';
 
-export const roleMenus = {
-  admin: ['Operations', 'Sales KPI', 'Companies', 'Products', 'Warehouse', 'Orders', 'Reports', 'Settings'],
-  ceo: ['Executive Dashboard', 'Reports'],
-  managingDirector: ['Executive Dashboard', 'Operations', 'Reports'],
-  warehouseManager: ['Dashboard', 'Warehouse & Inventory', 'Order Management', 'Payments'],
-  distributor: ['Dashboard', 'Expenses', 'Receipts', 'Payments', 'Orders', 'Messages'],
-  salesman: ['Dashboard', 'Deliveries'],
-  orderBooker: ['Dashboard', 'Secondary Sale Requests', 'Receipts'],
-  customer: ['Dashboard', 'Order Requests', 'Receipts', 'Settings'],
-  accountOfficer: ['Dashboard', 'Accounts', 'Reports'],
-  hrAssistant: ['Dashboard', 'HR'],
-  cashier: ['Dashboard', 'Cash Management'],
-  kpo: ['Dashboard', 'KPI'],
-  brandManager: ['Dashboard', 'Primary Orders', 'Returns', 'Messages'],
-  nationalSM: ['Dashboard', 'Sales Summary'],
-  regionalSM: ['Dashboard', 'Regional Sales'],
-  zoneSM: ['Dashboard', 'Zone Sales'],
-  territorySM: ['Dashboard', 'Territory Sales'],
-  fieldSM: ['Dashboard', 'Field Operations'],
-  deliveryBoy: ['Dashboard', 'Proof of Delivery'],
-};
+export const roleMenuConfig = moduleMap.reduce((acc, mod) => {
+  if (!acc[mod.role]) acc[mod.role] = [];
+  acc[mod.role].push({
+    key: mod.key,
+    title: toTitle(mod.modulePath || 'dashboard'),
+    modulePath: mod.modulePath,
+    screenFile: mod.screenFile,
+    endpoints: mod.endpoints || [],
+  });
+  return acc;
+}, {});
 
-export function getRoleMenu(role) {
-  const key = roleToMenuKey(role);
-  return roleMenus[key] || roleMenus.admin;
+export function getRoleModules(role) {
+  return roleMenuConfig[role] || roleMenuConfig.admin || [];
 }

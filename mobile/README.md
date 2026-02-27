@@ -1,52 +1,51 @@
 # AIM Hygienic Mobile (Expo)
 
-Clean rebuild of the mobile client to consume the **same Node.js backend APIs** used by the website.
+This mobile app is a **client only** for the existing AIM backend APIs.
+It mirrors website dashboards/modules discovered from `frontend/app/dashboards/**/page.js`.
 
 ## Environment
-
-Set API base URL (domain only; `/api` is appended automatically if missing):
 
 ```bash
 EXPO_PUBLIC_API_BASE_URL=https://www.aimhygienics.com
 ```
 
-You can place this in a `.env` file in `mobile/`.
+`src/api/client.js` follows web behavior by appending `/api` automatically when missing.
 
-## Run with Expo Go
+## Run
 
 ```bash
+cd mobile
 npm install
 npm run start
 ```
 
-Then scan the QR code from Expo Go.
-
-## Build Android APK with EAS
+## Build APK (EAS)
 
 ```bash
-npm install -g eas-cli
-cd mobile
 eas login
 eas build --platform android --profile preview
 ```
 
-## OTA updates (optional)
+## Auth contract (same as web)
 
-```bash
-eas update --branch production --message "Mobile UI update"
-```
-
-## Architecture
-
-- `src/api/client.js`: centralized API client with token injection and global 401 logout handling.
-- `src/auth/storage.js`: SecureStore persistence for `aim_token`, `aim_user`, `aim_role`.
-- `src/navigation/*`: auth stack + role-aware drawer shell.
-- `src/screens/common/DashboardHome.js`: role-based module tiles.
-- `src/screens/roles/*`: role shell placeholders for all defined roles.
-
-## Auth flow
-
-- Login endpoint: `POST /auth/login`
+- Endpoint: `POST /auth/login`
 - Body: `{ mobile: mobile.trim(), password }`
-- Response expected: `{ token, user }`
-- Session persisted in SecureStore and restored on app startup.
+- Response: `{ token, user }`
+- Storage: `expo-secure-store` keys `aim_token`, `aim_user`, `aim_role`
+
+## Generated module parity
+
+- Source scan: `frontend/app/dashboards/**/page.js`
+- Generated map: `src/navigation/moduleMap.json`
+- Generated role menu config: `src/navigation/RoleMenuConfig.js`
+- Generated screen registry: `src/navigation/ScreenRegistry.js`
+- Mobile screens: `src/screens/<role>/**`
+
+Each generated module screen is wired to endpoint(s) extracted from its corresponding web page (`apiFetch(...)` usage) and performs GET fetches where applicable.
+
+## Upload flow
+
+Use backend presigned flow via `src/api/uploads.js`:
+1. request presigned URL from backend (`/uploads/presign`)
+2. upload file with PUT to returned URL
+3. confirm save in backend (`/uploads/complete`)

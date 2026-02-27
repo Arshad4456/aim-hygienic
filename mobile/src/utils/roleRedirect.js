@@ -1,12 +1,8 @@
-const ROLE_KEY_MAP = {
+const ROLE_TO_DASHBOARD = {
   admin: 'admin',
   CEO: 'ceo',
-  'Managing Director': 'managingDirector',
+  'Managing Director': 'manageDirector',
   'Warehouse Manager': 'warehouseManager',
-  Distributor: 'distributor',
-  Salesman: 'salesman',
-  'Order Booker': 'orderBooker',
-  customer: 'customer',
   'Account Officer': 'accountOfficer',
   'HR Assistant': 'hrAssistant',
   Cashier: 'cashier',
@@ -16,10 +12,18 @@ const ROLE_KEY_MAP = {
   'Regional Sale Manager': 'regionalSM',
   'Zone Sale Manager': 'zoneSM',
   'Territory Sale Manager': 'territorySM',
+  Distributor: 'distributor',
   'Field Sale Manager': 'fieldSM',
+  'Order Booker': 'orderBooker',
+  Salesman: 'salesman',
   'Delivery Boy': 'deliveryBoy',
+  customer: 'customer',
 };
 
-export function roleToMenuKey(role) {
-  return ROLE_KEY_MAP[role] || 'admin';
+export function roleToDashboardKey(role) {
+  return ROLE_TO_DASHBOARD[role] || 'admin';
+}
+
+export function isKnownRole(role) {
+  return Boolean(ROLE_TO_DASHBOARD[role]);
 }

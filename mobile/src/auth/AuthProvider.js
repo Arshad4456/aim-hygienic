@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useEffect, useMemo, useState } from 
 import { configureApiClient } from '../api/client';
 import { loginWithMobile } from '../api/auth';
 import { clearSession, loadSession, saveSession } from './storage';
-import { roleToMenuKey } from '../utils/roleRedirect';
+import { isKnownRole, roleToDashboardKey } from '../utils/roleRedirect';
 
 export const AuthContext = createContext(null);
 
@@ -59,7 +59,8 @@ export function AuthProvider({ children }) {
       token,
       user,
       role,
-      roleKey: roleToMenuKey(role),
+      roleKey: roleToDashboardKey(role),
+      isKnownRole: isKnownRole(role),
       isAuthenticated: Boolean(token),
       isBootstrapping,
       login,
