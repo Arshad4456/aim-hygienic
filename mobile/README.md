@@ -1,64 +1,33 @@
 # AIM ERP Mobile (Expo)
 
-This project is an Expo-based React Native ERP mobile client for Android-first distribution.
+Clean React Native client for AIM ERP using the existing backend API only.
 
-## Highlights
-- JWT authentication via `POST /api/auth/login`.
-- Secure token storage using `expo-secure-store`.
-- Role-based dashboards (Admin, Warehouse Manager, Distributor, Salesman, Orderbooker, Customer, Account Officer, CEO/MD).
-- Drawer + stack navigation with module-level access.
-- Backend-driven business logic and hierarchy filtering (`Region → Zone → Territory → Field`).
-- Cloudflare R2 proof upload flow via backend presigned URLs.
-- APK-first EAS profile and Play Store-ready AAB profile.
+## Environment
 
-## Folder layout
+Set production API domain before running Expo:
 
-```
-src/
-  components/
-  context/AuthContext.js
-  hooks/
-  navigation/
-  screens/
-  services/api.js
-  utils/
+```bash
+export EXPO_PUBLIC_API_BASE_URL="https://aimhygienics.com"
 ```
 
-## Run locally
+`src/config/api.js` automatically calls `${BASE_URL}/api/*` endpoints, including login at `/api/auth/login`.
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
-2. Configure API base URL:
-   ```bash
-   export EXPO_PUBLIC_API_BASE_URL="https://your-vps-domain.com"
-   ```
-3. Start Expo:
-   ```bash
-   npm run start
-   ```
+## Auth flow
 
-## Build artifacts
-
-- APK (internal distribution first):
-  ```bash
-  eas build --profile preview --platform android
+- `POST /api/auth/login` with body:
+  ```json
+  {
+    "mobile": "trimmed-value",
+    "password": "..."
+  }
   ```
-- AAB (Play Store later):
-  ```bash
-  eas build --profile production --platform android
-  ```
+- JWT stored in `expo-secure-store`
+- Token attached as `Authorization: Bearer <token>` for all requests
+- Any `401` response triggers automatic logout
 
-## Security model
+## Run
 
-- Mobile app contains no business rules.
-- All permissions validated on backend middleware.
-- Token expiry/invalid token should trigger logout in production interceptors.
-- HTTPS-only backend endpoints.
-- No direct R2 write credentials inside app.
-
-## Future phases
-
-- Firebase Cloud Messaging push notifications.
-- Offline queue sync (order creation, trip entry, POD upload).
+```bash
+npm install
+npm run start
+```

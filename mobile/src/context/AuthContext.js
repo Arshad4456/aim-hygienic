@@ -1,66 +1,112 @@
 import React, { createContext, useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert } from 'react-native';
-import { getCurrentProfile, login as loginApi, logout as logoutApi } from '../services/authService';
-import { tokenStorage } from '../services/api';
+import * as SecureStore from 'expo-secure-store';
+import { get, post, registerUnauthorizedHandler, setAuthToken } from '../config/api';
+
+const STORAGE_KEYS = {
+  token: 'token',
+  role: 'role',
+  user: 'user',
+};
 
 export const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
-  const [initializing, setInitializing] = useState(true);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const bootstrap = useCallback(async () => {
-    try {
-      const existingToken = await tokenStorage.get();
-      if (!existingToken) {
-        return;
-      }
-
-      setToken(existingToken);
-      const profile = await getCurrentProfile();
-      setUser(profile?.user ?? profile);
-    } catch (error) {
-      await tokenStorage.clear();
-      setToken(null);
-      setUser(null);
-    } finally {
-      setInitializing(false);
-    }
+  const clearSession = useCallback(async () => {
+    setToken(null);
+    setUser(null);
+    setAuthToken(null);
+    await Promise.all([
+      SecureStore.deleteItemAsync(STORAGE_KEYS.token),
+      SecureStore.deleteItemAsync(STORAGE_KEYS.role),
+      SecureStore.deleteItemAsync(STORAGE_KEYS.user),
+    ]);
   }, []);
 
   useEffect(() => {
-    bootstrap();
-  }, [bootstrap]);
+    registerUnauthorizedHandler(clearSession);
+  }, [clearSession]);
 
-  const login = useCallback(async (credentials) => {
-    try {
-      const data = await loginApi(credentials);
-      setToken(data.token);
-      setUser(data.user);
-      return { ok: true };
-    } catch (error) {
-      Alert.alert('Login failed', error?.response?.data?.message || 'Invalid credentials.');
-      return { ok: false };
+  useEffect(() => {
+    const bootstrap = async () => {
+      try {
+        const savedToken = await SecureStore.getItemAsync(STORAGE_KEYS.token);
+        const savedUser = await SecureStore.getItemAsync(STORAGE_KEYS.user);
+
+        if (savedToken) {
+          setToken(savedToken);
+          setAuthToken(savedToken);
+        }
+
+        if (savedUser) {
+          setUser(JSON.parse(savedUser));
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    bootstrap();
+  }, []);
+
+  const login = useCallback(async ({ mobile, password }) => {
+    const payload = {
+      mobile: mobile.trim(),
+      password,
+    };
+
+    const response = await post('/auth/login', payload);
+    const nextToken = response?.token;
+    const nextUser = response?.user;
+
+    if (!nextToken || !nextUser) {
+      throw new Error('Invalid login response from server.');
     }
+
+    setToken(nextToken);
+    setUser(nextUser);
+    setAuthToken(nextToken);
+
+    await Promise.all([
+      SecureStore.setItemAsync(STORAGE_KEYS.token, nextToken),
+      SecureStore.setItemAsync(STORAGE_KEYS.role, String(nextUser.role || '')),
+      SecureStore.setItemAsync(STORAGE_KEYS.user, JSON.stringify(nextUser)),
+    ]);
   }, []);
 
   const logout = useCallback(async () => {
-    await logoutApi();
-    setToken(null);
-    setUser(null);
+    await clearSession();
+  }, [clearSession]);
+
+  const refreshUser = useCallback(async () => {
+    const response = await get('/users/me');
+    const nextUser = response?.user || response;
+
+    if (nextUser) {
+      setUser(nextUser);
+      await Promise.all([
+        SecureStore.setItemAsync(STORAGE_KEYS.role, String(nextUser.role || '')),
+        SecureStore.setItemAsync(STORAGE_KEYS.user, JSON.stringify(nextUser)),
+      ]);
+    }
+
+    return nextUser;
   }, []);
 
   const value = useMemo(
     () => ({
-      user,
       token,
-      initializing,
-      isAuthenticated: Boolean(token && user),
+      user,
+      loading,
+      isAuthenticated: Boolean(token),
       login,
-      logout
+      logout,
+      refreshUser,
     }),
-    [initializing, login, logout, token, user]
+    [token, user, loading, login, logout, refreshUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
