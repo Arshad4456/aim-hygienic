@@ -2,9 +2,8 @@ import Constants from 'expo-constants';
 
 const configBaseUrl = Constants?.expoConfig?.extra?.apiBaseUrl;
 const envBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
-const rawBaseUrl = configBaseUrl || envBaseUrl || '';
+const rawBaseUrl = (configBaseUrl || envBaseUrl || '').trim();
 const API_BASE_URL = rawBaseUrl.replace(/\/$/, '');
-const API_PREFIX = '/api';
 
 let authToken = null;
 let onUnauthorized = null;
@@ -19,7 +18,10 @@ export function registerUnauthorizedHandler(handler) {
 
 function resolveUrl(path) {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  return `${API_BASE_URL}${API_PREFIX}${normalizedPath}`;
+  const hasApiPrefix = /\/api$/i.test(API_BASE_URL);
+  const baseWithApi = hasApiPrefix ? API_BASE_URL : `${API_BASE_URL}/api`;
+
+  return `${baseWithApi}${normalizedPath}`;
 }
 
 export async function apiRequest(path, options = {}) {
