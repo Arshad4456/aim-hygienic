@@ -1,8 +1,8 @@
 import api, { tokenStorage } from './api';
 
-export async function login({ usernameOrEmail, password }) {
+export async function login({ mobile, password }) {
   const { data } = await api.post('/api/auth/login', {
-    email: usernameOrEmail,
+    mobile,
     password
   });
 

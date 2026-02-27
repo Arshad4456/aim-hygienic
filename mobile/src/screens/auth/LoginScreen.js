@@ -5,13 +5,13 @@ import { useAuth } from '../../hooks/useAuth';
 
 export default function LoginScreen() {
   const { login } = useAuth();
-  const [usernameOrEmail, setUsernameOrEmail] = useState('');
+  const [mobile, setMobile] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
     setLoading(true);
-    await login({ usernameOrEmail, password });
+    await login({ mobile: mobile.trim(), password });
     setLoading(false);
   };
 
@@ -19,11 +19,12 @@ export default function LoginScreen() {
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={styles.container}>
         <Text style={styles.title}>AIM ERP Login</Text>
-        <Text style={styles.subtitle}>Sign in with your username/email and password.</Text>
+        <Text style={styles.subtitle}>Sign in with your mobile number and password.</Text>
         <AppInput
-          label="Email or Username"
-          value={usernameOrEmail}
-          onChangeText={setUsernameOrEmail}
+          label="Mobile Number"
+          value={mobile}
+          onChangeText={setMobile}
+          keyboardType="phone-pad"
           autoCapitalize="none"
           autoCorrect={false}
         />

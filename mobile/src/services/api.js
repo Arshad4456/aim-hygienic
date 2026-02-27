@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios from 'axios/dist/browser/axios.cjs';
 import * as SecureStore from 'expo-secure-store';
 import { API_BASE_URL, API_TIMEOUT_MS } from '../config/env';
 
