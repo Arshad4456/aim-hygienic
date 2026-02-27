@@ -1,64 +1,51 @@
-# AIM ERP Mobile (Expo)
+# AIM Hygienic Mobile (Expo)
 
-This project is an Expo-based React Native ERP mobile client for Android-first distribution.
+This mobile app is a **client only** for the existing AIM backend APIs.
+It mirrors website dashboards/modules discovered from `frontend/app/dashboards/**/page.js`.
 
-## Highlights
-- JWT authentication via `POST /api/auth/login`.
-- Secure token storage using `expo-secure-store`.
-- Role-based dashboards (Admin, Warehouse Manager, Distributor, Salesman, Orderbooker, Customer, Account Officer, CEO/MD).
-- Drawer + stack navigation with module-level access.
-- Backend-driven business logic and hierarchy filtering (`Region → Zone → Territory → Field`).
-- Cloudflare R2 proof upload flow via backend presigned URLs.
-- APK-first EAS profile and Play Store-ready AAB profile.
+## Environment
 
-## Folder layout
-
-```
-src/
-  components/
-  context/AuthContext.js
-  hooks/
-  navigation/
-  screens/
-  services/api.js
-  utils/
+```bash
+EXPO_PUBLIC_API_BASE_URL=https://www.aimhygienics.com
 ```
 
-## Run locally
+`src/api/client.js` follows web behavior by appending `/api` automatically when missing.
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
-2. Configure API base URL:
-   ```bash
-   export EXPO_PUBLIC_API_BASE_URL="https://your-vps-domain.com"
-   ```
-3. Start Expo:
-   ```bash
-   npm run start
-   ```
+## Run
 
-## Build artifacts
+```bash
+cd mobile
+npm install
+npm run start
+```
 
-- APK (internal distribution first):
-  ```bash
-  eas build --profile preview --platform android
-  ```
-- AAB (Play Store later):
-  ```bash
-  eas build --profile production --platform android
-  ```
+## Build APK (EAS)
 
-## Security model
+```bash
+eas login
+eas build --platform android --profile preview
+```
 
-- Mobile app contains no business rules.
-- All permissions validated on backend middleware.
-- Token expiry/invalid token should trigger logout in production interceptors.
-- HTTPS-only backend endpoints.
-- No direct R2 write credentials inside app.
+## Auth contract (same as web)
 
-## Future phases
+- Endpoint: `POST /auth/login`
+- Body: `{ mobile: mobile.trim(), password }`
+- Response: `{ token, user }`
+- Storage: `expo-secure-store` keys `aim_token`, `aim_user`, `aim_role`
 
-- Firebase Cloud Messaging push notifications.
-- Offline queue sync (order creation, trip entry, POD upload).
+## Generated module parity
+
+- Source scan: `frontend/app/dashboards/**/page.js`
+- Generated map: `src/navigation/moduleMap.json`
+- Generated role menu config: `src/navigation/RoleMenuConfig.js`
+- Generated screen registry: `src/navigation/ScreenRegistry.js`
+- Mobile screens: `src/screens/<role>/**`
+
+Each generated module screen is wired to endpoint(s) extracted from its corresponding web page (`apiFetch(...)` usage) and performs GET fetches where applicable.
+
+## Upload flow
+
+Use backend presigned flow via `src/api/uploads.js`:
+1. request presigned URL from backend (`/uploads/presign`)
+2. upload file with PUT to returned URL
+3. confirm save in backend (`/uploads/complete`)
