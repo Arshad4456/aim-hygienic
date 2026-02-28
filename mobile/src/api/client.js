@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios from 'axios/dist/browser/axios.cjs';
 import Constants from 'expo-constants';
 import { clearSession } from '../auth/storage';
 

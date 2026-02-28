@@ -1,17 +1,48 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 
-export default function EmptyState({ title = 'Coming soon', description = 'This module skeleton is ready for backend integration.' }) {
+export default function Input({
+  label,
+  error,
+  style,
+  inputStyle,
+  ...props
+}) {
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.description}>{description}</Text>
+    <View style={style}>
+      {label ? <Text style={styles.label}>{label}</Text> : null}
+      <TextInput
+        style={[styles.input, error ? styles.inputError : null, inputStyle]}
+        placeholderTextColor="#9ca3af"
+        {...props}
+      />
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { paddingVertical: 40, alignItems: 'center', gap: 6 },
-  title: { fontSize: 18, fontWeight: '700', color: '#18181b' },
-  description: { fontSize: 13, color: '#52525b', textAlign: 'center' },
+  label: {
+    color: '#374151',
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 12,
+    minHeight: 46,
+    paddingHorizontal: 12,
+    color: '#111827',
+    backgroundColor: '#fff',
+  },
+  inputError: {
+    borderColor: '#fca5a5',
+  },
+  errorText: {
+    marginTop: 6,
+    color: '#b91c1c',
+    fontSize: 12,
+  },
 });
