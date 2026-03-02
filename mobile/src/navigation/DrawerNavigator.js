@@ -14,6 +14,7 @@ export default function DrawerNavigator() {
 
   return (
     <Drawer.Navigator
+      useLegacyImplementation={false}
       screenOptions={{
         headerStyle: { backgroundColor: '#fff' },
         headerTintColor: '#18181b',
