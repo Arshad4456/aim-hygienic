@@ -1,37 +1,69 @@
-import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import React, { useMemo } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../../auth/useAuth';
 import { getRoleModules } from '../../navigation/RoleMenuConfig';
 import { toTitle } from '../../utils/routeTitle';
 import Card from '../../ui/Card';
 
+function groupModules(modules) {
+  const grouped = {};
+  modules.forEach((mod) => {
+    const key = (mod.modulePath || 'other').split('/')[0] || 'other';
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(mod);
+  });
+  return Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b));
+}
+
 export default function DashboardHome({ navigation }) {
   const { role, roleKey, user, isKnownRole } = useAuth();
   const modules = getRoleModules(roleKey);
+  const groups = useMemo(() => groupModules(modules), [modules]);
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <Card>
-        <Text style={styles.title}>AIM ERP Mobile</Text>
-        <Text style={styles.subtitle}>{user?.fullName || user?.name || 'User'} • {role}</Text>
-        {!isKnownRole ? <Text style={styles.warning}>Unknown role mapped to admin menu.</Text> : null}
+        <Text style={styles.pageTitle}>Dashboard</Text>
+        <Text style={styles.pageSubtitle}>{user?.fullName || user?.name || 'User'} • {role}</Text>
+        {!isKnownRole ? <Text style={styles.warning}>Unknown role mapped to admin module set.</Text> : null}
       </Card>
-      {modules.map((mod) => (
-        <Pressable key={mod.key} style={styles.item} onPress={() => navigation.navigate(mod.key)}>
-          <Text style={styles.itemTitle}>{toTitle(mod.modulePath || 'dashboard')}</Text>
-          <Text style={styles.route}>{mod.modulePath || '/'}</Text>
-        </Pressable>
+
+      <View style={styles.kpiRow}>
+        <Card style={styles.kpiCard}><Text style={styles.kpiLabel}>Modules</Text><Text style={styles.kpiValue}>{modules.length}</Text></Card>
+        <Card style={styles.kpiCard}><Text style={styles.kpiLabel}>Groups</Text><Text style={styles.kpiValue}>{groups.length}</Text></Card>
+      </View>
+
+      {groups.map(([groupName, items]) => (
+        <Card key={groupName}>
+          <Text style={styles.sectionTitle}>{groupName.toUpperCase()}</Text>
+          <Text style={styles.sectionHelp}>{items.length} modules</Text>
+          <View style={styles.moduleList}>
+            {items.map((mod) => (
+              <Pressable key={mod.key} style={styles.item} onPress={() => navigation.navigate(mod.key)}>
+                <Text style={styles.itemTitle}>{toTitle(mod.modulePath || 'dashboard')}</Text>
+                <Text style={styles.route}>{mod.modulePath || '/'}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </Card>
       ))}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 16, gap: 10 },
-  title: { fontSize: 20, fontWeight: '700', color: '#18181b' },
-  subtitle: { marginTop: 6, color: '#52525b' },
+  content: { padding: 14, gap: 10, backgroundColor: '#f5f6f8' },
+  pageTitle: { fontSize: 28, fontWeight: '700', color: '#111827' },
+  pageSubtitle: { marginTop: 6, color: '#52525b' },
   warning: { marginTop: 6, color: '#b45309', fontSize: 12 },
-  item: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e4e4e7', padding: 14 },
-  itemTitle: { fontSize: 15, fontWeight: '700', color: '#18181b' },
-  route: { fontSize: 12, color: '#71717a', marginTop: 4 },
+  kpiRow: { flexDirection: 'row', gap: 8 },
+  kpiCard: { flex: 1 },
+  kpiLabel: { color: '#6b7280', fontSize: 12 },
+  kpiValue: { marginTop: 4, fontSize: 22, fontWeight: '700', color: '#111827' },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#111827' },
+  sectionHelp: { marginTop: 4, color: '#6b7280', fontSize: 12, marginBottom: 10 },
+  moduleList: { gap: 8 },
+  item: { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', padding: 12 },
+  itemTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
+  route: { fontSize: 12, color: '#6b7280', marginTop: 4 },
 });
