@@ -1,17 +1,10 @@
-import apiClient, { uploadFileToPresignedUrl } from './client';
+import { apiClient } from './client';
 
-export async function getPresignedUpload(payload) {
-  const { data } = await apiClient.post('/uploads/presign', payload);
-  return data;
+export function presignUpload(payload) {
+  return apiClient('/uploads/presign', { method: 'POST', body: payload });
 }
 
-export async function confirmUpload(payload) {
-  const { data } = await apiClient.post('/uploads/complete', payload);
-  return data;
-}
-
-export async function uploadViaBackendPresigned({ presignPayload, fileBlob, contentType }) {
-  const presigned = await getPresignedUpload(presignPayload);
-  await uploadFileToPresignedUrl(presigned.uploadUrl, fileBlob, contentType);
-  return presigned;
+export async function putToPresignedUrl(uploadUrl, file, contentType = 'application/octet-stream') {
+  const res = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': contentType }, body: file });
+  if (!res.ok) throw new Error(`Upload failed (${res.status})`);
 }
