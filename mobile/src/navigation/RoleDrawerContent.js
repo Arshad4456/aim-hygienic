@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 function toGroupTitle(name = '') {
@@ -28,6 +28,16 @@ export default function RoleDrawerContent({ modules, activeRoute, onSelect }) {
   const groups = useMemo(() => buildGroups(modules), [modules]);
   const [expanded, setExpanded] = useState(() => Object.fromEntries(groups.map((group, i) => [group.key, i < 4])));
 
+  useEffect(() => {
+    setExpanded((prev) => {
+      const next = {};
+      groups.forEach((group, i) => {
+        next[group.key] = prev[group.key] ?? i < 4;
+      });
+      return next;
+    });
+  }, [groups]);
+
   const toggleGroup = (name) => {
     setExpanded((prev) => ({ ...prev, [name]: !prev[name] }));
   };
@@ -38,10 +48,6 @@ export default function RoleDrawerContent({ modules, activeRoute, onSelect }) {
         <View style={styles.brandAvatar}><Text style={styles.brandAvatarText}>AH</Text></View>
         <Text style={styles.brandText}>AIM Hygienics</Text>
       </View>
-
-      <Pressable style={[styles.baseItem, activeRoute === 'Home' ? styles.itemActive : null]} onPress={() => onSelect('Home')}>
-        <Text style={styles.baseLabel}>Dashboard Home</Text>
-      </Pressable>
 
       {groups.map((group) => (
         <View key={group.key} style={styles.groupBlock}>
@@ -64,9 +70,6 @@ export default function RoleDrawerContent({ modules, activeRoute, onSelect }) {
         </View>
       ))}
 
-      <Pressable style={[styles.baseItem, activeRoute === 'Settings' ? styles.itemActive : null]} onPress={() => onSelect('Settings')}>
-        <Text style={styles.baseLabel}>Settings</Text>
-      </Pressable>
     </ScrollView>
   );
 }
@@ -100,12 +103,6 @@ const styles = StyleSheet.create({
   },
   groupTitle: { fontSize: 13, fontWeight: '700', color: '#27272a' },
   chevron: { fontSize: 14, color: '#52525b' },
-  baseItem: {
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    borderRadius: 10,
-  },
-  baseLabel: { fontSize: 14, color: '#18181b', fontWeight: '600' },
   subItem: {
     borderTopWidth: 1,
     borderTopColor: '#f4f4f5',

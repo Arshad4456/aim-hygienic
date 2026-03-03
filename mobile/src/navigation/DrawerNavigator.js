@@ -96,19 +96,25 @@ export default function DrawerNavigator() {
     return base;
   }, [modules, user?.fullName]);
 
+  const availableModules = useMemo(() => modules.filter((mod) => Boolean(screens[mod.key])), [modules, screens]);
   const Current = screens[activeRoute]?.component || DashboardHome;
   const title = screens[activeRoute]?.title || 'Dashboard';
 
   const filteredModules = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return modules;
-    return modules.filter((mod) => mod.title.toLowerCase().includes(query));
-  }, [modules, searchQuery]);
+    if (!query) return availableModules;
+    return availableModules.filter((mod) => mod.title.toLowerCase().includes(query));
+  }, [availableModules, searchQuery]);
+
+  const settingsRoute = useMemo(() => {
+    const matched = availableModules.find((mod) => (mod.modulePath || '').toLowerCase() === 'settings');
+    return matched?.key || 'Settings';
+  }, [availableModules]);
 
   const changePasswordRoute = useMemo(() => {
-    const matched = modules.find((mod) => (mod.modulePath || '').toLowerCase().includes('change-password'));
+    const matched = availableModules.find((mod) => (mod.modulePath || '').toLowerCase().includes('change-password'));
     return matched?.key || null;
-  }, [modules]);
+  }, [availableModules]);
 
   const goToRoute = (name) => {
     if (!screens[name]) return;
@@ -148,7 +154,7 @@ export default function DrawerNavigator() {
         <View style={styles.overlay}>
           <View style={[styles.drawerPanel, { paddingTop: insets.top }]}>
             <RoleDrawerContent
-              modules={modules}
+              modules={availableModules}
               activeRoute={activeRoute}
               onSelect={(routeName) => {
                 goToRoute(routeName);
@@ -166,7 +172,7 @@ export default function DrawerNavigator() {
             <Text style={styles.accountName}>{user?.fullName || 'User'}</Text>
             <Text style={styles.accountRole}>{user?.role || roleKey}</Text>
 
-            <Pressable style={styles.accountItem} onPress={() => goToRoute('Settings')}>
+            <Pressable style={styles.accountItem} onPress={() => goToRoute(settingsRoute)}>
               <Text style={styles.accountItemText}>Account Settings</Text>
             </Pressable>
             {changePasswordRoute ? (
