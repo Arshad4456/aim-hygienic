@@ -1,14 +1,31 @@
-import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Linking, ScrollView, StyleSheet, Text } from 'react-native';
+import Constants from 'expo-constants';
 import apiClient from '../../api/client';
+import Button from '../../ui/Button';
 import Card from '../../ui/Card';
 import EmptyState from '../../ui/EmptyState';
 import Loader from '../../ui/Loader';
+
+function joinUrl(baseUrl, route) {
+  const normalizedBase = (baseUrl || '').replace(/\/+$/, '');
+  const normalizedRoute = `/${(route || '').replace(/^\/+/, '')}`;
+  return `${normalizedBase}${normalizedRoute}`;
+}
 
 export default function ModulePlaceholderScreen({ config }) {
   const [loading, setLoading] = useState(true);
   const [payloads, setPayloads] = useState([]);
   const [error, setError] = useState('');
+
+  const webBaseUrl =
+    Constants?.expoConfig?.extra?.webBaseUrl ||
+    process.env.EXPO_PUBLIC_WEB_BASE_URL ||
+    Constants?.expoConfig?.extra?.apiBaseUrl ||
+    process.env.EXPO_PUBLIC_API_BASE_URL ||
+    'https://www.aimhygienics.com';
+
+  const webUrl = useMemo(() => joinUrl(webBaseUrl, config?.route || '/'), [webBaseUrl, config?.route]);
 
   useEffect(() => {
     let mounted = true;
@@ -18,6 +35,7 @@ export default function ModulePlaceholderScreen({ config }) {
         const results = [];
         for (const endpoint of calls) {
           if (endpoint.method !== 'GET') continue;
+          if (endpoint.path.includes('${')) continue;
           try {
             const response = await apiClient.get(endpoint.path);
             results.push({ endpoint, data: response.data });
@@ -44,6 +62,8 @@ export default function ModulePlaceholderScreen({ config }) {
       <Card>
         <Text style={styles.title}>{config?.title || 'Module'}</Text>
         <Text style={styles.meta}>Web route: {config?.route}</Text>
+        <Text style={styles.meta}>Mirror URL: {webUrl}</Text>
+        <Button title="Open Web Mirror" onPress={() => Linking.openURL(webUrl)} />
       </Card>
 
       {error ? (
@@ -53,7 +73,7 @@ export default function ModulePlaceholderScreen({ config }) {
       ) : null}
 
       {(payloads || []).length === 0 ? (
-        <EmptyState title="Module wired" description="No GET endpoint found in this web module yet." />
+        <EmptyState title="Module wired" description="No static GET endpoint found in this module yet." />
       ) : (
         payloads.map((item) => (
           <Card key={`${item.endpoint.method}-${item.endpoint.path}`}>

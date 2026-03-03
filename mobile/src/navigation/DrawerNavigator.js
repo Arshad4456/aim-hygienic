@@ -1,5 +1,5 @@
 import React from 'react';
-import { createDrawerNavigator } from '@react-navigation/drawer';
+import { createDrawerNavigator, DrawerToggleButton } from '@react-navigation/drawer';
 import { useAuth } from '../auth/useAuth';
 import DashboardHome from '../screens/common/DashboardHome';
 import SettingsScreen from '../screens/common/SettingsScreen';
@@ -18,6 +18,7 @@ export default function DrawerNavigator() {
         headerStyle: { backgroundColor: '#fff' },
         headerTintColor: '#18181b',
         drawerActiveTintColor: '#059669',
+        headerLeft: (props) => <DrawerToggleButton {...props} tintColor="#18181b" />,
       }}
     >
       <Drawer.Screen name="Home" component={DashboardHome} options={{ title: `${user?.fullName || 'ERP'} Dashboard` }} />
