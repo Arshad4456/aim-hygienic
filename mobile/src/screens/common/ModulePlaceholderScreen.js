@@ -1,17 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import apiClient from '../../api/client';
 import Button from '../../ui/Button';
 import Input from '../../ui/Input';
 import Card from '../../ui/Card';
 import EmptyState from '../../ui/EmptyState';
 import Loader from '../../ui/Loader';
-
-function renderValue(value) {
-  if (value == null) return '-';
-  if (typeof value === 'object') return JSON.stringify(value);
-  return String(value);
-}
 
 function normalizeRows(data) {
   if (Array.isArray(data)) return data;
@@ -24,47 +18,60 @@ function normalizeRows(data) {
   return [];
 }
 
-function DataTable({ data }) {
+function toString(value) {
+  if (value == null) return '-';
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+}
+
+function ModuleHeader({ title, route, rowsCount, endpointCount }) {
+  return (
+    <Card>
+      <Text style={styles.title}>{title}</Text>
+      <Text style={styles.route}>{route}</Text>
+      <View style={styles.kpiRow}>
+        <View style={styles.kpiCard}><Text style={styles.kpiLabel}>Rows</Text><Text style={styles.kpiValue}>{rowsCount}</Text></View>
+        <View style={styles.kpiCard}><Text style={styles.kpiLabel}>Endpoints</Text><Text style={styles.kpiValue}>{endpointCount}</Text></View>
+      </View>
+    </Card>
+  );
+}
+
+function DataGrid({ data }) {
   const rows = normalizeRows(data);
+  if (!rows.length) return <Text style={styles.json}>{JSON.stringify(data, null, 2)}</Text>;
 
-  if (!rows.length) {
-    return <Text style={styles.json}>{JSON.stringify(data, null, 2)}</Text>;
-  }
-
-  const headers = Array.from(new Set(rows.flatMap((row) => Object.keys(row || {})))).slice(0, 6);
+  const headers = Array.from(new Set(rows.flatMap((row) => Object.keys(row || {})))).slice(0, 5);
 
   return (
     <View>
-      <View style={styles.tableHeaderRow}>
-        {headers.map((header) => (
-          <Text key={header} style={styles.tableHeaderCell}>{header}</Text>
-        ))}
+      <View style={styles.gridHeader}>
+        {headers.map((header) => <Text key={header} style={styles.gridHeaderCell}>{header}</Text>)}
       </View>
-      {rows.slice(0, 10).map((row, index) => (
-        <View key={`${index}-${headers[0] || 'row'}`} style={styles.tableRow}>
-          {headers.map((header) => (
-            <Text key={`${index}-${header}`} numberOfLines={1} style={styles.tableCell}>{renderValue(row?.[header])}</Text>
-          ))}
+      {rows.slice(0, 12).map((row, idx) => (
+        <View key={`${idx}-${headers[0] || 'row'}`} style={styles.gridRow}>
+          {headers.map((header) => <Text key={`${idx}-${header}`} style={styles.gridCell} numberOfLines={1}>{toString(row?.[header])}</Text>)}
         </View>
       ))}
-      {rows.length > 10 ? <Text style={styles.hint}>Showing first 10 rows for mobile preview.</Text> : null}
+      {rows.length > 12 ? <Text style={styles.help}>Showing first 12 records on mobile.</Text> : null}
     </View>
   );
 }
 
-function EndpointForm({ endpoint }) {
+function FormAction({ endpoint }) {
   const [payload, setPayload] = useState('{}');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [response, setResponse] = useState(null);
+  const [result, setResult] = useState(null);
 
-  const submit = async () => {
+  const run = async () => {
     setError('');
-    setResponse(null);
-    let parsed = {};
+    setResult(null);
+
+    let parsedPayload = {};
     try {
-      parsed = payload?.trim() ? JSON.parse(payload) : {};
-    } catch (e) {
+      parsedPayload = payload.trim() ? JSON.parse(payload) : {};
+    } catch {
       setError('Payload must be valid JSON.');
       return;
     }
@@ -72,8 +79,8 @@ function EndpointForm({ endpoint }) {
     try {
       setLoading(true);
       const method = (endpoint.method || 'POST').toLowerCase();
-      const res = await apiClient.request({ method, url: endpoint.path, data: parsed });
-      setResponse(res.data);
+      const response = await apiClient.request({ method, url: endpoint.path, data: parsedPayload });
+      setResult(response.data);
     } catch (e) {
       setError(e.message || 'Request failed');
     } finally {
@@ -84,61 +91,59 @@ function EndpointForm({ endpoint }) {
   return (
     <Card>
       <Text style={styles.endpoint}>{endpoint.method} {endpoint.path}</Text>
-      {endpoint.path.includes('${') ? <Text style={styles.hint}>This endpoint has URL parameters. Replace placeholders in backend mapping first.</Text> : null}
+      {endpoint.path.includes('${') ? <Text style={styles.help}>Dynamic URL params required. Update mapping with selected ids/context.</Text> : null}
       <Input
-        label="Form JSON payload"
-        multiline
-        numberOfLines={5}
+        label="Form payload"
         value={payload}
         onChangeText={setPayload}
+        multiline
+        numberOfLines={5}
         inputStyle={styles.textArea}
       />
-      <Button title="Submit" onPress={submit} loading={loading} disabled={endpoint.path.includes('${')} />
+      <Button title="Submit Action" onPress={run} loading={loading} disabled={endpoint.path.includes('${')} />
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      {response ? (
-        <View style={styles.responseWrap}>
-          <Text style={styles.responseTitle}>Response</Text>
-          <Text style={styles.json}>{JSON.stringify(response, null, 2)}</Text>
-        </View>
-      ) : null}
+      {result ? <Text style={styles.json}>{JSON.stringify(result, null, 2)}</Text> : null}
     </Card>
   );
 }
 
 export default function ModulePlaceholderScreen({ config }) {
   const [loading, setLoading] = useState(true);
-  const [payloads, setPayloads] = useState([]);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState('tables');
+  const [records, setRecords] = useState([]);
 
   const endpoints = useMemo(() => config?.endpoints || [], [config]);
-  const getEndpoints = useMemo(() => endpoints.filter((ep) => ep.method === 'GET'), [endpoints]);
-  const formEndpoints = useMemo(() => endpoints.filter((ep) => ep.method !== 'GET'), [endpoints]);
+  const getEndpoints = useMemo(() => endpoints.filter((e) => e.method === 'GET'), [endpoints]);
+  const actionEndpoints = useMemo(() => endpoints.filter((e) => e.method !== 'GET'), [endpoints]);
 
   useEffect(() => {
     let mounted = true;
+
     (async () => {
+      const next = [];
       try {
-        const results = [];
         for (const endpoint of getEndpoints) {
           if (endpoint.path.includes('${')) {
-            results.push({ endpoint, skipped: true });
+            next.push({ endpoint, skipped: true });
             continue;
           }
+
           try {
             const response = await apiClient.get(endpoint.path);
-            results.push({ endpoint, data: response.data });
-          } catch (callError) {
-            results.push({ endpoint, error: callError.message });
+            next.push({ endpoint, data: response.data });
+          } catch (e) {
+            next.push({ endpoint, error: e.message });
           }
         }
-        if (mounted) setPayloads(results);
+
+        if (mounted) setRecords(next);
       } catch (e) {
-        if (mounted) setError(e.message || 'Failed to load module');
+        if (mounted) setError(e.message || 'Failed to load data');
       } finally {
         if (mounted) setLoading(false);
       }
     })();
+
     return () => {
       mounted = false;
     };
@@ -146,69 +151,65 @@ export default function ModulePlaceholderScreen({ config }) {
 
   if (loading) return <Loader />;
 
+  const totalRows = records.reduce((sum, item) => sum + normalizeRows(item.data).length, 0);
+
   return (
     <ScrollView contentContainerStyle={styles.content}>
+      <ModuleHeader
+        title={config?.title || 'Module'}
+        route={config?.route || '/'}
+        rowsCount={totalRows}
+        endpointCount={endpoints.length}
+      />
+
+      {error ? <Card><Text style={styles.error}>{error}</Text></Card> : null}
+
       <Card>
-        <Text style={styles.title}>{config?.title || 'Module'}</Text>
-        <Text style={styles.meta}>Web route: {config?.route}</Text>
-        <View style={styles.tabRow}>
-          <Pressable style={[styles.tab, activeTab === 'tables' ? styles.tabActive : null]} onPress={() => setActiveTab('tables')}>
-            <Text style={[styles.tabText, activeTab === 'tables' ? styles.tabTextActive : null]}>Tables / Ledgers</Text>
-          </Pressable>
-          <Pressable style={[styles.tab, activeTab === 'forms' ? styles.tabActive : null]} onPress={() => setActiveTab('forms')}>
-            <Text style={[styles.tabText, activeTab === 'forms' ? styles.tabTextActive : null]}>Forms / Actions</Text>
-          </Pressable>
-        </View>
+        <Text style={styles.sectionTitle}>Tables / Ledgers</Text>
       </Card>
 
-      {error ? (
-        <Card>
-          <Text style={styles.error}>{error}</Text>
-        </Card>
-      ) : null}
-
-      {activeTab === 'tables' ? (
-        (payloads || []).length === 0 ? (
-          <EmptyState title="No table data" description="No GET endpoints configured for this module." />
-        ) : (
-          payloads.map((item) => (
-            <Card key={`${item.endpoint.method}-${item.endpoint.path}`}>
-              <Text style={styles.endpoint}>{item.endpoint.method} {item.endpoint.path}</Text>
-              {item.skipped ? <Text style={styles.hint}>Endpoint has URL placeholders and needs selected record/context.</Text> : null}
-              {item.error ? <Text style={styles.error}>{item.error}</Text> : null}
-              {!item.error && !item.skipped ? <DataTable data={item.data} /> : null}
-            </Card>
-          ))
-        )
+      {records.length === 0 ? (
+        <EmptyState title="No table data" description="No static GET endpoints configured for this module." />
       ) : (
-        formEndpoints.length === 0 ? (
-          <EmptyState title="No forms/actions" description="No non-GET endpoints configured for this module." />
-        ) : (
-          formEndpoints.map((endpoint) => <EndpointForm key={`${endpoint.method}-${endpoint.path}`} endpoint={endpoint} />)
-        )
+        records.map((record) => (
+          <Card key={`${record.endpoint.method}-${record.endpoint.path}`}>
+            <Text style={styles.endpoint}>{record.endpoint.method} {record.endpoint.path}</Text>
+            {record.skipped ? <Text style={styles.help}>Endpoint requires selected row context (id/url params).</Text> : null}
+            {record.error ? <Text style={styles.error}>{record.error}</Text> : null}
+            {!record.error && !record.skipped ? <DataGrid data={record.data} /> : null}
+          </Card>
+        ))
+      )}
+
+      <Card>
+        <Text style={styles.sectionTitle}>Forms / Actions</Text>
+      </Card>
+
+      {actionEndpoints.length === 0 ? (
+        <EmptyState title="No action endpoints" description="No non-GET endpoints configured for this module." />
+      ) : (
+        actionEndpoints.map((endpoint) => <FormAction key={`${endpoint.method}-${endpoint.path}`} endpoint={endpoint} />)
       )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 16, gap: 12 },
-  title: { fontSize: 18, fontWeight: '700', color: '#18181b' },
-  meta: { marginTop: 6, marginBottom: 10, color: '#52525b' },
-  tabRow: { flexDirection: 'row', gap: 8 },
-  tab: { flex: 1, borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
-  tabActive: { backgroundColor: '#ecfdf5', borderColor: '#10b981' },
-  tabText: { color: '#3f3f46', fontSize: 13, fontWeight: '600' },
-  tabTextActive: { color: '#047857' },
-  endpoint: { fontWeight: '700', marginBottom: 8, color: '#0f172a' },
-  hint: { color: '#52525b', fontSize: 12, marginBottom: 8 },
-  error: { color: '#b91c1c', marginTop: 8 },
+  content: { padding: 14, gap: 10, backgroundColor: '#f5f6f8' },
+  title: { fontSize: 28, fontWeight: '700', color: '#111827' },
+  route: { marginTop: 8, color: '#6b7280', fontSize: 13 },
+  kpiRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  kpiCard: { flex: 1, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff', borderRadius: 12, padding: 12 },
+  kpiLabel: { color: '#6b7280', fontSize: 12 },
+  kpiValue: { color: '#111827', fontSize: 20, fontWeight: '700', marginTop: 4 },
+  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
+  endpoint: { fontWeight: '700', color: '#111827', fontSize: 16, marginBottom: 8 },
+  help: { color: '#6b7280', fontSize: 12, marginTop: 4 },
+  error: { color: '#b91c1c', marginTop: 6 },
+  json: { marginTop: 8, color: '#1f2937', fontSize: 12 },
   textArea: { minHeight: 120, textAlignVertical: 'top', paddingTop: 10 },
-  responseWrap: { marginTop: 10, borderTopWidth: 1, borderTopColor: '#e4e4e7', paddingTop: 10 },
-  responseTitle: { fontWeight: '700', color: '#0f172a', marginBottom: 6 },
-  json: { color: '#334155', fontSize: 12 },
-  tableHeaderRow: { flexDirection: 'row', backgroundColor: '#f4f4f5', borderRadius: 8, paddingVertical: 8, marginBottom: 6 },
-  tableHeaderCell: { flex: 1, paddingHorizontal: 6, fontSize: 11, fontWeight: '700', color: '#18181b' },
-  tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#e4e4e7', paddingVertical: 8 },
-  tableCell: { flex: 1, paddingHorizontal: 6, fontSize: 11, color: '#3f3f46' },
+  gridHeader: { flexDirection: 'row', backgroundColor: '#f3f4f6', borderRadius: 10, paddingVertical: 8, marginBottom: 8 },
+  gridHeaderCell: { flex: 1, fontWeight: '700', color: '#111827', fontSize: 12, paddingHorizontal: 6 },
+  gridRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#e5e7eb', paddingVertical: 8 },
+  gridCell: { flex: 1, color: '#374151', fontSize: 12, paddingHorizontal: 6 },
 });

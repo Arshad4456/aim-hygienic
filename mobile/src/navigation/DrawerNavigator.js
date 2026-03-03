@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Modal, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../auth/useAuth';
 import DashboardHome from '../screens/common/DashboardHome';
 import SettingsScreen from '../screens/common/SettingsScreen';
@@ -7,9 +8,9 @@ import { getRoleModules } from './RoleMenuConfig';
 import { screenRegistry } from './ScreenRegistry';
 import RoleDrawerContent from './RoleDrawerContent';
 
-function Header({ title, onMenu }) {
+function Header({ title, onMenu, topInset }) {
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, { paddingTop: topInset, height: 56 + topInset }] }>
       <Pressable onPress={onMenu} style={styles.menuButton}>
         <Text style={styles.menuIcon}>☰</Text>
       </Pressable>
@@ -20,6 +21,7 @@ function Header({ title, onMenu }) {
 }
 
 export default function DrawerNavigator() {
+  const insets = useSafeAreaInsets();
   const { roleKey, user } = useAuth();
   const modules = getRoleModules(roleKey);
   const [activeRoute, setActiveRoute] = useState('Home');
@@ -54,7 +56,7 @@ export default function DrawerNavigator() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header title={title} onMenu={() => setDrawerOpen(true)} />
+      <Header title={title} onMenu={() => setDrawerOpen(true)} topInset={insets.top} />
       <View style={styles.body}>
         <Current navigation={nav} />
       </View>
@@ -62,7 +64,7 @@ export default function DrawerNavigator() {
       <Modal transparent animationType="fade" visible={drawerOpen} onRequestClose={() => setDrawerOpen(false)}>
         <View style={styles.overlay}>
           <Pressable style={styles.backdrop} onPress={() => setDrawerOpen(false)} />
-          <View style={styles.drawerPanel}>
+          <View style={[styles.drawerPanel, { paddingTop: insets.top }]}>
             <RoleDrawerContent
               modules={modules}
               activeRoute={activeRoute}
@@ -79,9 +81,8 @@ export default function DrawerNavigator() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: '#f5f6f8' },
   header: {
-    height: 56,
     borderBottomWidth: 1,
     borderBottomColor: '#e4e4e7',
     flexDirection: 'row',
@@ -95,5 +96,5 @@ const styles = StyleSheet.create({
   body: { flex: 1 },
   overlay: { flex: 1, flexDirection: 'row' },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.25)' },
-  drawerPanel: { width: '75%', maxWidth: 320, backgroundColor: '#fff', borderRightWidth: 1, borderRightColor: '#e4e4e7' },
+  drawerPanel: { width: '78%', maxWidth: 340, backgroundColor: '#fff', borderRightWidth: 1, borderRightColor: '#e4e4e7' },
 });
