@@ -1,73 +1,53 @@
-import React, { createContext, useCallback, useEffect, useMemo, useState } from 'react';
-import { configureApiClient } from '../api/client';
-import { loginWithMobile } from '../api/auth';
-import { clearSession, loadSession, saveSession } from './storage';
-import { isKnownRole, roleToDashboardKey } from '../utils/roleRedirect';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { clearSession, readToken, readUser, saveSession } from './secureStore';
+import { loginApi, meApi } from '../api/auth';
+import { setUnauthorizedHandler } from '../api/client';
 
-export const AuthContext = createContext(null);
+const Ctx = createContext(null);
 
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(null);
   const [user, setUser] = useState(null);
-  const [role, setRole] = useState(null);
-  const [isBootstrapping, setIsBootstrapping] = useState(true);
-
-  const logout = useCallback(async () => {
-    await clearSession();
-    setToken(null);
-    setUser(null);
-    setRole(null);
-  }, []);
+  const [booting, setBooting] = useState(true);
 
   useEffect(() => {
-    configureApiClient({
-      tokenProvider: async () => token,
-      unauthorizedHandler: logout,
-    });
-  }, [token, logout]);
-
-  useEffect(() => {
+    setUnauthorizedHandler(() => logout());
     (async () => {
-      try {
-        const session = await loadSession();
-        if (session?.token) {
-          setToken(session.token);
-          setUser(session.user || null);
-          setRole(session.role || session.user?.role || null);
+      const t = await readToken();
+      const u = await readUser();
+      if (t) {
+        setToken(t);
+        setUser(u);
+        try {
+          const me = await meApi(t);
+          setUser(me.user || u);
+        } catch {
+          await clearSession();
+          setToken(null);
+          setUser(null);
         }
-      } finally {
-        setIsBootstrapping(false);
       }
+      setBooting(false);
     })();
   }, []);
 
-  const login = useCallback(async ({ mobile, password }) => {
-    const data = await loginWithMobile({ mobile, password });
-    const nextToken = data?.token;
-    const nextUser = data?.user || null;
-    const nextRole = nextUser?.role || '';
+  const login = async (mobile, password) => {
+    const data = await loginApi(mobile, password);
+    await saveSession(data.token, data.user);
+    setToken(data.token);
+    setUser(data.user || null);
+  };
 
-    await saveSession({ token: nextToken, user: nextUser, role: nextRole });
-    setToken(nextToken);
-    setUser(nextUser);
-    setRole(nextRole);
-    return data;
-  }, []);
+  const logout = async () => {
+    await clearSession();
+    setToken(null);
+    setUser(null);
+  };
 
-  const value = useMemo(
-    () => ({
-      token,
-      user,
-      role,
-      roleKey: roleToDashboardKey(role),
-      isKnownRole: isKnownRole(role),
-      isAuthenticated: Boolean(token),
-      isBootstrapping,
-      login,
-      logout,
-    }),
-    [token, user, role, isBootstrapping, login, logout]
-  );
+  const value = useMemo(() => ({ token, user, booting, login, logout, isAuthed: Boolean(token) }), [token, user, booting]);
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+export function useAuthContext() {
+  return useContext(Ctx);
 }

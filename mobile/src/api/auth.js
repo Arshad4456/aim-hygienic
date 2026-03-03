@@ -1,15 +1,13 @@
-import apiClient from './client';
-import { endpoints } from './endpoints';
+import { apiClient } from './client';
 
-export async function loginWithMobile({ mobile, password }) {
-  const { data } = await apiClient.post(endpoints.auth.login, {
-    mobile: mobile.trim(),
-    password,
-  });
-  return data;
+export function loginApi(mobile, password) {
+  return apiClient('/auth/login', { method: 'POST', body: { mobile: String(mobile || '').trim(), password } });
 }
 
-export async function fetchMe() {
-  const { data } = await apiClient.get(endpoints.auth.me);
-  return data;
+export function meApi(token) {
+  return apiClient('/auth/me', { token });
+}
+
+export function logoutApi() {
+  return apiClient('/auth/logout', { method: 'POST' });
 }
