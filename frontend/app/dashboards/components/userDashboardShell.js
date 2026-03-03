@@ -207,7 +207,9 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
               openGroups={openGroups}
               setOpenGroups={setOpenGroups}
               collapsed={false}
+              variant="mobile"
               onNavigate={() => setMobileOpen(false)}
+              onClose={() => setMobileOpen(false)}
             />
           </div>
         </div>
@@ -222,6 +224,7 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
           openGroups={openGroups}
           setOpenGroups={setOpenGroups}
           collapsed={collapsed}
+          variant="desktop"
         />
       </div>
 
@@ -378,7 +381,7 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
   );
 }
 
-function UserSidebar({ title, roleKey, groups, pathname, openGroups, setOpenGroups, collapsed, onNavigate }) {
+function UserSidebar({ title, roleKey, groups, pathname, openGroups, setOpenGroups, collapsed, onNavigate, variant = "desktop", onClose }) {
   const router = useRouter();
 
   function go(href) {
@@ -388,9 +391,31 @@ function UserSidebar({ title, roleKey, groups, pathname, openGroups, setOpenGrou
 
   return (
     <aside className={["h-screen border-r bg-white flex flex-col", collapsed ? "w-[70px]" : "w-[220px]"].join(" ")}>
-      <div className={["px-3 py-[15px] flex flex-col items-center gap-0", collapsed ? "border-b" : ""].join(" ")}>
-        <div className="h-11 w-11 rounded-md bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center">AH</div>
-        {!collapsed ? (<><div className="text-[11px] font-medium text-zinc-600 text-center">AIM</div></>) : null}
+      <div className={["px-3 py-[15px]", "border-b"].join(" ")}>
+        <div className="flex items-center justify-between gap-2">
+          <div className={[
+            "flex items-center gap-3",
+            collapsed ? "justify-center w-full" : "",
+          ].join(" ")}>
+            <div className="h-11 w-11 rounded-md bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center">AH</div>
+            {!collapsed ? (
+              <div className="leading-tight">
+                <div className="text-sm font-semibold text-zinc-900">{title}</div>
+                <div className="text-[11px] font-medium text-zinc-600 text-left">{roleKey}</div>
+              </div>
+            ) : null}
+          </div>
+
+          {variant === "mobile" ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border px-3 py-2 text-sm hover:bg-zinc-50"
+            >
+              ✕
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
