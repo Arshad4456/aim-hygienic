@@ -1,13 +1,24 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../../auth/useAuth';
 import { getRoleModules } from '../../navigation/RoleMenuConfig';
 import { toTitle } from '../../utils/routeTitle';
 import Card from '../../ui/Card';
 
+function groupModules(modules) {
+  const grouped = {};
+  modules.forEach((mod) => {
+    const key = (mod.modulePath || 'other').split('/')[0] || 'other';
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(mod);
+  });
+  return Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b));
+}
+
 export default function DashboardHome({ navigation }) {
   const { role, roleKey, user, isKnownRole } = useAuth();
   const modules = getRoleModules(roleKey);
+  const groups = useMemo(() => groupModules(modules), [modules]);
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
@@ -18,20 +29,23 @@ export default function DashboardHome({ navigation }) {
       </Card>
 
       <View style={styles.kpiRow}>
-        <Card style={styles.kpiCard}><Text style={styles.kpiLabel}>Total Modules</Text><Text style={styles.kpiValue}>{modules.length}</Text></Card>
-        <Card style={styles.kpiCard}><Text style={styles.kpiLabel}>Role</Text><Text style={styles.kpiValueSmall}>{role}</Text></Card>
+        <Card style={styles.kpiCard}><Text style={styles.kpiLabel}>Modules</Text><Text style={styles.kpiValue}>{modules.length}</Text></Card>
+        <Card style={styles.kpiCard}><Text style={styles.kpiLabel}>Groups</Text><Text style={styles.kpiValue}>{groups.length}</Text></Card>
       </View>
 
-      <Card>
-        <Text style={styles.sectionTitle}>All Modules</Text>
-        <Text style={styles.sectionHelp}>Open each screen with the same backend/API integration as web.</Text>
-      </Card>
-
-      {modules.map((mod) => (
-        <Pressable key={mod.key} style={styles.item} onPress={() => navigation.navigate(mod.key)}>
-          <Text style={styles.itemTitle}>{toTitle(mod.modulePath || 'dashboard')}</Text>
-          <Text style={styles.route}>{mod.modulePath || '/'}</Text>
-        </Pressable>
+      {groups.map(([groupName, items]) => (
+        <Card key={groupName}>
+          <Text style={styles.sectionTitle}>{groupName.toUpperCase()}</Text>
+          <Text style={styles.sectionHelp}>{items.length} modules</Text>
+          <View style={styles.moduleList}>
+            {items.map((mod) => (
+              <Pressable key={mod.key} style={styles.item} onPress={() => navigation.navigate(mod.key)}>
+                <Text style={styles.itemTitle}>{toTitle(mod.modulePath || 'dashboard')}</Text>
+                <Text style={styles.route}>{mod.modulePath || '/'}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </Card>
       ))}
     </ScrollView>
   );
@@ -46,10 +60,10 @@ const styles = StyleSheet.create({
   kpiCard: { flex: 1 },
   kpiLabel: { color: '#6b7280', fontSize: 12 },
   kpiValue: { marginTop: 4, fontSize: 22, fontWeight: '700', color: '#111827' },
-  kpiValueSmall: { marginTop: 4, fontSize: 18, fontWeight: '700', color: '#111827' },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
-  sectionHelp: { marginTop: 6, color: '#6b7280', fontSize: 12 },
-  item: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e5e7eb', padding: 14 },
-  itemTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
-  route: { fontSize: 13, color: '#6b7280', marginTop: 4 },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#111827' },
+  sectionHelp: { marginTop: 4, color: '#6b7280', fontSize: 12, marginBottom: 10 },
+  moduleList: { gap: 8 },
+  item: { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', padding: 12 },
+  itemTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
+  route: { fontSize: 12, color: '#6b7280', marginTop: 4 },
 });

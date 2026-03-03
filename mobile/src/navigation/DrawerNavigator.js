@@ -63,7 +63,6 @@ export default function DrawerNavigator() {
 
       <Modal transparent animationType="fade" visible={drawerOpen} onRequestClose={() => setDrawerOpen(false)}>
         <View style={styles.overlay}>
-          <Pressable style={styles.backdrop} onPress={() => setDrawerOpen(false)} />
           <View style={[styles.drawerPanel, { paddingTop: insets.top }]}>
             <RoleDrawerContent
               modules={modules}
@@ -74,6 +73,7 @@ export default function DrawerNavigator() {
               }}
             />
           </View>
+          <Pressable style={styles.backdrop} onPress={() => setDrawerOpen(false)} />
         </View>
       </Modal>
     </SafeAreaView>
@@ -91,10 +91,10 @@ const styles = StyleSheet.create({
   },
   menuButton: { paddingHorizontal: 14, paddingVertical: 8 },
   menuIcon: { fontSize: 24, color: '#18181b', fontWeight: '700' },
-  headerTitle: { flex: 1, textAlign: 'center', fontSize: 20, fontWeight: '700', color: '#18181b', paddingRight: 18 },
-  headerRight: { width: 38 },
+  headerTitle: { flex: 1, textAlign: 'left', fontSize: 17, fontWeight: '700', color: '#18181b', paddingRight: 12 },
+  headerRight: { width: 12 },
   body: { flex: 1 },
-  overlay: { flex: 1, flexDirection: 'row' },
+  overlay: { flex: 1, flexDirection: 'row', justifyContent: 'flex-start' },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.25)' },
-  drawerPanel: { width: '78%', maxWidth: 340, backgroundColor: '#fff', borderRightWidth: 1, borderRightColor: '#e4e4e7' },
+  drawerPanel: { width: '82%', maxWidth: 340, backgroundColor: '#fff', borderRightWidth: 1, borderRightColor: '#e4e4e7' },
 });
