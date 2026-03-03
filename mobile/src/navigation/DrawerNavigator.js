@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../auth/useAuth';
@@ -77,10 +77,6 @@ export default function DrawerNavigator() {
   const insets = useSafeAreaInsets();
   const { roleKey, user, logout } = useAuth();
   const modules = getRoleModules(roleKey);
-  const [activeRoute, setActiveRoute] = useState('Home');
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [accountOpen, setAccountOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
 
   const screens = useMemo(() => {
     const base = {
@@ -97,8 +93,23 @@ export default function DrawerNavigator() {
   }, [modules, user?.fullName]);
 
   const availableModules = useMemo(() => modules.filter((mod) => Boolean(screens[mod.key])), [modules, screens]);
-  const Current = screens[activeRoute]?.component || DashboardHome;
-  const title = screens[activeRoute]?.title || 'Dashboard';
+
+  const defaultRoute = useMemo(() => {
+    const dashboardModule = availableModules.find((mod) => !mod.modulePath);
+    return dashboardModule?.key || availableModules[0]?.key || 'Home';
+  }, [availableModules]);
+
+  const [activeRoute, setActiveRoute] = useState(defaultRoute);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    setActiveRoute(defaultRoute);
+  }, [defaultRoute]);
+
+  const Current = screens[activeRoute]?.component || screens[defaultRoute]?.component || DashboardHome;
+  const title = screens[activeRoute]?.title || screens[defaultRoute]?.title || 'Dashboard';
 
   const filteredModules = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -127,9 +138,9 @@ export default function DrawerNavigator() {
     () => ({
       navigate: (name) => goToRoute(name),
       jumpTo: (name) => goToRoute(name),
-      goBack: () => setActiveRoute('Home'),
+      goBack: () => setActiveRoute(defaultRoute),
     }),
-    [screens]
+    [defaultRoute, screens]
   );
 
   return (
@@ -154,6 +165,7 @@ export default function DrawerNavigator() {
         <View style={styles.overlay}>
           <View style={[styles.drawerPanel, { paddingTop: insets.top }]}>
             <RoleDrawerContent
+              roleKey={roleKey}
               modules={availableModules}
               activeRoute={activeRoute}
               onSelect={(routeName) => {
