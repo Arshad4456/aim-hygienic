@@ -17,6 +17,7 @@ export default function DrawerNavigator() {
 
   return (
     <Drawer.Navigator
+      useLegacyImplementation={false}
       drawerContent={(props) => <RoleDrawerContent {...props} modules={modules} />}
       screenOptions={({ navigation }) => ({
         headerStyle: { backgroundColor: '#fff' },
