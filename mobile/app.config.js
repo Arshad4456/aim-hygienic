@@ -22,7 +22,6 @@ module.exports = {
     plugins: ['expo-secure-store'],
     extra: {
       apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL || 'https://www.aimhygienics.com',
-      webBaseUrl: process.env.EXPO_PUBLIC_WEB_BASE_URL || 'https://www.aimhygienics.com',
       eas: {
         projectId,
       },

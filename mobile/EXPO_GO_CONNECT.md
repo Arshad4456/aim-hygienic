@@ -1,25 +1,20 @@
 # Expo Go update guide (AIM ERP Mobile)
 
-This update keeps mobile connected to the **same backend APIs** used by web and also provides a direct **Open Web Mirror** action inside each module screen so you can open the exact web frontend route.
+This update keeps mobile connected to the **same backend APIs** used by web and improves the native mobile navigation UX:
 
-## What changed
+- persistent sidebar/hamburger toggle in headers,
+- grouped module list with collapsible dropdown sections in drawer,
+- module screens showing data in mobile-friendly cards/tables instead of a mirror button.
 
-- Drawer header now always renders a visible sidebar (hamburger) button.
-- Every module screen now shows a **Mirror URL** and an **Open Web Mirror** button.
-- Mobile config now supports `EXPO_PUBLIC_WEB_BASE_URL` so mirror links can point to your website frontend domain.
+## 1) Set backend URL
 
-## 1) Set env for backend + web frontend
-
-From the `mobile/` folder, set:
+From `mobile/`:
 
 ```bash
 export EXPO_PUBLIC_API_BASE_URL="https://www.aimhygienics.com"
-export EXPO_PUBLIC_WEB_BASE_URL="https://www.aimhygienics.com"
 ```
 
-> Use your real production/staging URL if different.
-
-## 2) Start Expo with cache clear
+## 2) Start Expo (clear old cache)
 
 ```bash
 npm install
@@ -29,34 +24,34 @@ npx expo start -c
 ## 3) Open in Expo Go
 
 1. Install **Expo Go** on your Android phone.
-2. Ensure phone and dev machine are on same network (or use tunnel mode).
-3. Scan the QR code shown by Expo CLI.
+2. Keep phone + computer on same network (or use tunnel mode in Expo).
+3. Scan the QR code shown in terminal.
 
-## 4) Verify the new update is loaded
+## 4) Verify this update is active
 
-After scanning:
+After opening app in Expo Go:
 
-1. Login normally.
-2. On dashboard, check top-left header: hamburger icon should be visible.
-3. Open any module from dashboard list.
-4. Confirm you see:
-   - `Mirror URL: ...`
-   - `Open Web Mirror` button.
-5. Tap **Open Web Mirror** and verify it opens the matching website frontend route.
+1. Login.
+2. Open any module screen and verify top-left **☰** sidebar button is visible.
+3. Tap ☰ and verify modules are shown in grouped dropdown sections.
+4. Open `Loan Detail` (or any module):
+   - no "Open Web Mirror" button,
+   - endpoints render in mobile cards/table format,
+   - same backend data is loading in mobile app.
 
-## 5) Will these changes show after scanning new QR code?
+## 5) Will these changes show after scanning QR?
 
-Yes — if you start Expo after pulling this code and scan the **new running session QR**, Expo Go loads the updated JS bundle.
+Yes. If you scan the QR from this updated Expo session, Expo Go loads the new JS bundle.
 
 If old UI still appears:
 
 - shake device → **Reload**,
+- close/reopen Expo Go,
 - run `npx expo start -c`,
-- close and reopen Expo Go,
-- rescan the QR code.
+- rescan QR.
 
 ## Troubleshooting
 
-- No sidebar button: verify you are on the updated bundle (clear cache + rescan).
-- Mirror URL wrong: set `EXPO_PUBLIC_WEB_BASE_URL` correctly and restart Expo.
-- API data not loading: verify backend URL in `EXPO_PUBLIC_API_BASE_URL` and auth token/login status.
+- Sidebar still missing: make sure app is on latest bundle (`expo start -c` + rescan).
+- Module list not grouped: ensure you opened drawer via ☰ after login.
+- Data empty/error: check `EXPO_PUBLIC_API_BASE_URL`, backend reachability, and auth token/login.

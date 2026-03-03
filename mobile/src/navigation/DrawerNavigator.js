@@ -1,10 +1,13 @@
 import React from 'react';
-import { createDrawerNavigator, DrawerToggleButton } from '@react-navigation/drawer';
+import { Pressable, Text } from 'react-native';
+import { createDrawerNavigator } from '@react-navigation/drawer';
+import { DrawerActions } from '@react-navigation/native';
 import { useAuth } from '../auth/useAuth';
 import DashboardHome from '../screens/common/DashboardHome';
 import SettingsScreen from '../screens/common/SettingsScreen';
 import { getRoleModules } from './RoleMenuConfig';
 import { screenRegistry } from './ScreenRegistry';
+import RoleDrawerContent from './RoleDrawerContent';
 
 const Drawer = createDrawerNavigator();
 
@@ -14,12 +17,18 @@ export default function DrawerNavigator() {
 
   return (
     <Drawer.Navigator
-      screenOptions={{
+      drawerContent={(props) => <RoleDrawerContent {...props} modules={modules} />}
+      screenOptions={({ navigation }) => ({
         headerStyle: { backgroundColor: '#fff' },
         headerTintColor: '#18181b',
         drawerActiveTintColor: '#059669',
-        headerLeft: (props) => <DrawerToggleButton {...props} tintColor="#18181b" />,
-      }}
+        headerBackVisible: false,
+        headerLeft: () => (
+          <Pressable onPress={() => navigation.dispatch(DrawerActions.toggleDrawer())} style={{ paddingHorizontal: 14, paddingVertical: 8 }}>
+            <Text style={{ fontSize: 24, color: '#18181b', fontWeight: '700' }}>☰</Text>
+          </Pressable>
+        ),
+      })}
     >
       <Drawer.Screen name="Home" component={DashboardHome} options={{ title: `${user?.fullName || 'ERP'} Dashboard` }} />
       {modules.map((mod) => {
