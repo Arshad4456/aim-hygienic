@@ -17,7 +17,7 @@ export default function DashboardHome({ navigation }) {
         {!isKnownRole ? <Text style={styles.warning}>Unknown role mapped to admin menu.</Text> : null}
       </Card>
       {modules.map((mod) => (
-        <Pressable key={mod.key} style={styles.item} onPress={() => navigation.jumpTo(mod.key)}>
+        <Pressable key={mod.key} style={styles.item} onPress={() => navigation.navigate(mod.key)}>
           <Text style={styles.itemTitle}>{toTitle(mod.modulePath || 'dashboard')}</Text>
           <Text style={styles.route}>{mod.modulePath || '/'}</Text>
         </Pressable>
