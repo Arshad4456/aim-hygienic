@@ -6,6 +6,7 @@ import Loader from '../../../ui/Loader';
 import { AIM_USER_ROLES, FIELD_LABELS, ROLE_EXTRA_FIELDS, validatePassword } from './roleConfig';
 
 const BASE_EDIT_FIELDS = ['fullName', 'email', 'mobileNumber', 'cnicNo', 'address', 'businessType', 'businessName'];
+const PAGE_SIZE = 50;
 
 function Field({ label, value, onChangeText, secureTextEntry = false }) {
   return (
@@ -24,10 +25,59 @@ function toCsv(rows) {
   return [headers.join(','), ...lines.map((line) => line.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))].join('\n');
 }
 
-function toReport(rows) {
-  const header = 'User Report\n\n';
-  const body = rows.map((u, i) => `${i + 1}. ${u.userId || '-'} | ${u.fullName || '-'} | ${u.role || '-'} | ${u.mobileNumber || '-'} | ${u.email || '-'}`).join('\n');
-  return header + body;
+function buildPdfHtml(rows) {
+  const body = rows.map((u, index) => `
+    <tr>
+      <td>${index + 1}</td>
+      <td>${u.userId || '-'}</td>
+      <td>${u.fullName || '-'}</td>
+      <td>${u.role || '-'}</td>
+      <td>${u.warehouseName || '-'}</td>
+      <td>${u.regionName || '-'}</td>
+      <td>${u.zoneName || '-'}</td>
+      <td>${u.territoryName || '-'}</td>
+      <td>${u.fieldName || '-'}</td>
+      <td>${u.mobileNumber || '-'}</td>
+      <td>${u.email || '-'}</td>
+    </tr>
+  `).join('');
+
+  return `
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <style>
+          body { font-family: Arial, sans-serif; padding: 16px; }
+          h1 { font-size: 18px; margin: 0 0 12px; }
+          table { border-collapse: collapse; width: 100%; font-size: 11px; }
+          th, td { border: 1px solid #d1d5db; padding: 6px; text-align: left; }
+          th { background: #f3f4f6; }
+          tr:nth-child(even) { background: #fafafa; }
+        </style>
+      </head>
+      <body>
+        <h1>Users Report</h1>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>User ID</th>
+              <th>Name</th>
+              <th>Role</th>
+              <th>Warehouse</th>
+              <th>Region</th>
+              <th>Zone</th>
+              <th>Territory</th>
+              <th>Field</th>
+              <th>Mobile</th>
+              <th>Email</th>
+            </tr>
+          </thead>
+          <tbody>${body}</tbody>
+        </table>
+      </body>
+    </html>
+  `;
 }
 
 export default function UsersScreen({ navigation }) {
@@ -46,6 +96,9 @@ export default function UsersScreen({ navigation }) {
   const [zoneFilter, setZoneFilter] = useState('');
   const [territoryFilter, setTerritoryFilter] = useState('');
   const [fieldFilter, setFieldFilter] = useState('');
+  const [sortBy, setSortBy] = useState('userId');
+  const [sortDirection, setSortDirection] = useState('asc');
+  const [page, setPage] = useState(1);
 
   const [err, setErr] = useState('');
   const [editUser, setEditUser] = useState(null);
@@ -83,6 +136,10 @@ export default function UsersScreen({ navigation }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, roleFilter, warehouseFilter, regionFilter, zoneFilter, territoryFilter, fieldFilter, sortBy, sortDirection]);
 
   const selectedWarehouse = useMemo(() => warehouses.find((w) => w.warehouseId === warehouseFilter), [warehouses, warehouseFilter]);
   const selectedRegion = useMemo(() => regions.find((r) => r.regionId === regionFilter), [regions, regionFilter]);
@@ -132,6 +189,24 @@ export default function UsersScreen({ navigation }) {
     });
   }, [rows, search, roleFilter, warehouseFilter, regionFilter, zoneFilter, territoryFilter, fieldFilter]);
 
+  const filteredSorted = useMemo(() => {
+    const next = [...filtered];
+    next.sort((a, b) => {
+      const left = String(a[sortBy] || '').toLowerCase();
+      const right = String(b[sortBy] || '').toLowerCase();
+      const result = left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' });
+      return sortDirection === 'asc' ? result : -result;
+    });
+    return next;
+  }, [filtered, sortBy, sortDirection]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredSorted.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginatedRows = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE;
+    return filteredSorted.slice(start, start + PAGE_SIZE);
+  }, [filteredSorted, safePage]);
+
   const onDelete = (id) => {
     Alert.alert('Delete User', 'Are you sure you want to delete this user?', [
       { text: 'Cancel', style: 'cancel' },
@@ -175,14 +250,44 @@ export default function UsersScreen({ navigation }) {
     }
   };
 
+  const onSortColumn = (column) => {
+    if (sortBy === column) {
+      setSortDirection((s) => (s === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortBy(column);
+    setSortDirection('asc');
+  };
+
   const downloadCsv = async () => {
-    const csv = toCsv(filtered);
-    await Share.share({ title: 'Users CSV', message: csv });
+    try {
+      const csv = toCsv(filteredSorted);
+      await Share.share({
+        title: 'Users Excel (CSV)',
+        message: csv,
+      });
+      Alert.alert('Downloaded Successfully', 'CSV export generated. Use the share sheet to save it in your File Manager.');
+    } catch (e) {
+      Alert.alert('Download Failed', e.message || 'Could not export CSV file.');
+    }
   };
 
   const downloadPdf = async () => {
-    const report = toReport(filtered);
-    await Share.share({ title: 'Users PDF Report', message: report });
+    try {
+      const htmlTable = buildPdfHtml(filteredSorted)
+        .replace(/\n\s+/g, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      await Share.share({
+        title: 'Users PDF Report',
+        message: htmlTable,
+      });
+      Alert.alert('Downloaded Successfully', 'PDF report content generated. Use the share sheet to save it in your File Manager.');
+    } catch (e) {
+      Alert.alert('Download Failed', e.message || 'Could not export PDF file.');
+    }
   };
 
   if (loading) return <Loader />;
@@ -198,6 +303,17 @@ export default function UsersScreen({ navigation }) {
           <Pressable style={styles.addBtn} onPress={() => navigation?.navigate?.('admin:users/add')}><Text style={styles.addBtnText}>Add User</Text></Pressable>
         </View>
 
+        <View style={styles.summaryRow}>
+          <View style={styles.totalCard}>
+            <Text style={styles.totalLabel}>Total Users</Text>
+            <Text style={styles.totalCount}>{rows.length}</Text>
+          </View>
+          <View style={styles.totalCard}>
+            <Text style={styles.totalLabel}>Filtered Users</Text>
+            <Text style={styles.totalCount}>{filteredSorted.length}</Text>
+          </View>
+        </View>
+
         <View style={styles.filters}>
           <TextInput value={search} onChangeText={setSearch} placeholder="Search" placeholderTextColor="#71717a" style={styles.input} />
 
@@ -209,8 +325,8 @@ export default function UsersScreen({ navigation }) {
           <FilterRow label="Field" value={fieldFilter} onClear={() => setFieldFilter('')} options={filterFields.map((f) => ({ label: f.name, value: f.fieldId }))} onPick={setFieldFilter} />
 
           <View style={styles.exportRow}>
-            <Pressable style={styles.exportBtn} onPress={downloadPdf}><Text style={styles.exportText}>Download PDF</Text></Pressable>
-            <Pressable style={styles.exportBtn} onPress={downloadCsv}><Text style={styles.exportText}>Download Excel (CSV)</Text></Pressable>
+            <Pressable style={styles.exportBtnPrimary} onPress={downloadPdf}><Text style={styles.exportTextPrimary}>Download PDF</Text></Pressable>
+            <Pressable style={styles.exportBtnSecondary} onPress={downloadCsv}><Text style={styles.exportTextSecondary}>Download Excel (CSV)</Text></Pressable>
           </View>
         </View>
 
@@ -221,16 +337,24 @@ export default function UsersScreen({ navigation }) {
         <ScrollView horizontal showsHorizontalScrollIndicator>
           <View style={styles.tableWrap}>
             <View style={styles.tableHeader}>
-              {['User ID', 'Name', 'Role', 'Warehouse', 'Region', 'Zone', 'Territory', 'Field', 'Mobile', 'Email', 'Actions'].map((h) => (
-                <Text key={h} style={[styles.headCell, h === 'Actions' ? styles.colAction : styles.colData]}>{h}</Text>
+              <Pressable onPress={() => onSortColumn('userId')} style={[styles.headCell, styles.colData, styles.sortableHead]}>
+                <Text style={styles.headText}>User ID {sortBy === 'userId' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}</Text>
+              </Pressable>
+              <Pressable onPress={() => onSortColumn('fullName')} style={[styles.headCell, styles.colData, styles.sortableHead]}>
+                <Text style={styles.headText}>Name {sortBy === 'fullName' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}</Text>
+              </Pressable>
+              {['Role', 'Warehouse', 'Region', 'Zone', 'Territory', 'Field', 'Mobile', 'Email', 'Actions'].map((h) => (
+                <View key={h} style={[styles.headCell, h === 'Actions' ? styles.colAction : styles.colData]}>
+                  <Text style={styles.headText}>{h}</Text>
+                </View>
               ))}
             </View>
 
             <View style={styles.stack}>
-              {filtered.length === 0 ? (
+              {paginatedRows.length === 0 ? (
                 <Text style={styles.help}>No users found.</Text>
               ) : (
-                filtered.map((u) => (
+                paginatedRows.map((u) => (
                   <View key={u._id} style={styles.tableRow}>
                     <Text style={[styles.cell, styles.colData]}>{u.userId || '-'}</Text>
                     <Text style={[styles.cell, styles.colData]}>{u.fullName || '-'}</Text>
@@ -252,6 +376,16 @@ export default function UsersScreen({ navigation }) {
             </View>
           </View>
         </ScrollView>
+
+        <View style={styles.paginationWrap}>
+          <Text style={styles.pageText}>Page {safePage} of {totalPages}</Text>
+          <View style={styles.pageActions}>
+            <Pressable style={[styles.pageBtn, safePage === 1 ? styles.pageBtnDisabled : null]} disabled={safePage === 1} onPress={() => setPage(1)}><Text style={styles.pageBtnText}>Start</Text></Pressable>
+            <Pressable style={[styles.pageBtn, safePage === 1 ? styles.pageBtnDisabled : null]} disabled={safePage === 1} onPress={() => setPage((p) => Math.max(1, p - 1))}><Text style={styles.pageBtnText}>Previous</Text></Pressable>
+            <Pressable style={[styles.pageBtn, safePage === totalPages ? styles.pageBtnDisabled : null]} disabled={safePage === totalPages} onPress={() => setPage((p) => Math.min(totalPages, p + 1))}><Text style={styles.pageBtnText}>Next</Text></Pressable>
+            <Pressable style={[styles.pageBtn, safePage === totalPages ? styles.pageBtnDisabled : null]} disabled={safePage === totalPages} onPress={() => setPage(totalPages)}><Text style={styles.pageBtnText}>End</Text></Pressable>
+          </View>
+        </View>
       </Card>
 
       <Modal visible={Boolean(editUser)} transparent animationType="slide" onRequestClose={() => setEditUser(null)}>
@@ -308,6 +442,10 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: '700', color: '#111827' },
   subtitle: { marginTop: 6, color: '#6b7280', fontSize: 13 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  summaryRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  totalCard: { flex: 1, borderWidth: 1, borderColor: '#d1d5db', borderRadius: 10, backgroundColor: '#fff', paddingVertical: 8, paddingHorizontal: 10 },
+  totalLabel: { color: '#6b7280', fontSize: 12, fontWeight: '600' },
+  totalCount: { marginTop: 2, color: '#111827', fontSize: 20, fontWeight: '700' },
   addBtn: { backgroundColor: '#059669', borderRadius: 10, paddingVertical: 9, paddingHorizontal: 12 },
   addBtnText: { color: '#fff', fontWeight: '700', fontSize: 12 },
   filters: { marginTop: 10, gap: 8 },
@@ -327,12 +465,16 @@ const styles = StyleSheet.create({
   roleChipText: { color: '#52525b', fontSize: 12 },
   roleChipTextActive: { color: '#047857', fontWeight: '700' },
   exportRow: { flexDirection: 'row', gap: 8, marginTop: 6 },
-  exportBtn: { flex: 1, borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, paddingVertical: 9, alignItems: 'center', backgroundColor: '#fff' },
-  exportText: { fontSize: 12, fontWeight: '600', color: '#111827' },
+  exportBtnPrimary: { flex: 1, borderWidth: 1, borderColor: '#0284c7', borderRadius: 10, paddingVertical: 10, alignItems: 'center', backgroundColor: '#0284c7' },
+  exportTextPrimary: { fontSize: 12, fontWeight: '700', color: '#fff' },
+  exportBtnSecondary: { flex: 1, borderWidth: 1, borderColor: '#16a34a', borderRadius: 10, paddingVertical: 10, alignItems: 'center', backgroundColor: '#fff' },
+  exportTextSecondary: { fontSize: 12, fontWeight: '700', color: '#15803d' },
   error: { marginTop: 8, color: '#b91c1c' },
   tableWrap: { minWidth: 1420 },
   tableHeader: { flexDirection: 'row', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, backgroundColor: '#f3f4f6', paddingVertical: 8, paddingHorizontal: 8 },
-  headCell: { fontSize: 12, color: '#111827', fontWeight: '700' },
+  headCell: { justifyContent: 'center' },
+  headText: { fontSize: 12, color: '#111827', fontWeight: '700' },
+  sortableHead: { borderRadius: 8 },
   tableRow: { flexDirection: 'row', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, backgroundColor: '#fff', paddingVertical: 8, paddingHorizontal: 8, alignItems: 'center' },
   stack: { gap: 8, marginTop: 8 },
   cell: { fontSize: 12, color: '#374151' },
@@ -344,6 +486,12 @@ const styles = StyleSheet.create({
   deleteBtn: { flex: 1, borderRadius: 8, backgroundColor: '#fee2e2', paddingVertical: 7, alignItems: 'center' },
   deleteBtnText: { color: '#b91c1c', fontWeight: '700', fontSize: 12 },
   help: { color: '#6b7280', fontSize: 13 },
+  paginationWrap: { marginTop: 12, borderTopWidth: 1, borderTopColor: '#e5e7eb', paddingTop: 10, gap: 8 },
+  pageText: { fontSize: 12, color: '#374151', fontWeight: '600' },
+  pageActions: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  pageBtn: { borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#fff' },
+  pageBtnDisabled: { opacity: 0.5 },
+  pageBtnText: { color: '#111827', fontSize: 12, fontWeight: '600' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' },
   modalCard: { maxHeight: '88%', backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 12 },
   modalTitle: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 8 },
