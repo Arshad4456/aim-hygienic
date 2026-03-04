@@ -95,6 +95,7 @@ export default function PurchaseStockScreen() {
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState(EMPTY_FORM);
   const [invoiceFallbackRow, setInvoiceFallbackRow] = useState(null);
+  const [calendarPick, setCalendarPick] = useState(null);
 
   const load = async () => {
     setLoading(true); setErr('');
@@ -195,8 +196,8 @@ export default function PurchaseStockScreen() {
                   <Text style={[styles.cell, styles.colData]}>{calc.v4gst.toFixed(2)}</Text>
                   <TextInput style={[styles.input, styles.colData]} keyboardType="numeric" value={line.gstPer} onChangeText={(v) => setItem(idx, 'gstPer', v)} />
                   <Text style={[styles.cell, styles.colData]}>{calc.netAmt.toFixed(2)}</Text>
-                  <TextInput style={[styles.input, styles.colData]} placeholder="YYYY-MM-DD" value={line.manufactureDate} onChangeText={(v) => setItem(idx, 'manufactureDate', v)} />
-                  <TextInput style={[styles.input, styles.colData]} placeholder="YYYY-MM-DD" value={line.expiryDate} onChangeText={(v) => setItem(idx, 'expiryDate', v)} />
+                  <DateField value={line.manufactureDate} onPress={() => setCalendarPick({ idx, key: 'manufactureDate', value: line.manufactureDate })} />
+                  <DateField value={line.expiryDate} onPress={() => setCalendarPick({ idx, key: 'expiryDate', value: line.expiryDate })} />
                   <View style={styles.colAction}><Pressable style={styles.deleteBtn} onPress={() => removeItem(idx)}><Text style={styles.deleteText}>X</Text></Pressable></View>
                 </View>
               ))}
@@ -243,6 +244,18 @@ export default function PurchaseStockScreen() {
           </View>
         </ScrollView>
       </Card>
+
+
+      <CalendarModal
+        visible={Boolean(calendarPick)}
+        value={calendarPick?.value || ''}
+        onClose={() => setCalendarPick(null)}
+        onSelect={(date) => {
+          if (!calendarPick) return;
+          setItem(calendarPick.idx, calendarPick.key, date);
+          setCalendarPick(null);
+        }}
+      />
 
       <Modal visible={Boolean(invoiceFallbackRow)} transparent animationType="slide" onRequestClose={() => setInvoiceFallbackRow(null)}>
         <View style={styles.modalOverlay}>
@@ -299,6 +312,57 @@ function SelectDropdown({ placeholder, options, value, onPick }) {
         </View>
       </Modal>
     </>
+  );
+}
+
+
+function DateField({ value, onPress }) {
+  return (
+    <Pressable style={[styles.input, styles.colData]} onPress={onPress}>
+      <Text style={value ? styles.dateValue : styles.datePlaceholder}>{value || 'Select date'}</Text>
+    </Pressable>
+  );
+}
+
+function CalendarModal({ visible, value, onClose, onSelect }) {
+  const initial = value ? new Date(value) : new Date();
+  const [month, setMonth] = useState(initial.getMonth());
+  const [year, setYear] = useState(initial.getFullYear());
+  useEffect(() => {
+    if (!visible) return;
+    const d = value ? new Date(value) : new Date();
+    setMonth(d.getMonth());
+    setYear(d.getFullYear());
+  }, [visible, value]);
+
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < firstDay; i += 1) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d += 1) cells.push(d);
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.calendarCard}>
+          <Text style={styles.modalTitle}>Pick Date</Text>
+          <View style={styles.calNav}>
+            <Pressable style={styles.navBtn} onPress={() => { if (month === 0) { setMonth(11); setYear((y) => y - 1); } else setMonth((m) => m - 1); }}><Text>{'<'}</Text></Pressable>
+            <Text style={styles.calTitle}>{new Date(year, month, 1).toLocaleString('default', { month: 'long' })} {year}</Text>
+            <Pressable style={styles.navBtn} onPress={() => { if (month === 11) { setMonth(0); setYear((y) => y + 1); } else setMonth((m) => m + 1); }}><Text>{'>'}</Text></Pressable>
+          </View>
+          <View style={styles.calGrid}>
+            {['S','M','T','W','T','F','S'].map((d) => <Text key={d} style={styles.calHead}>{d}</Text>)}
+            {cells.map((d, idx) => (
+              <Pressable key={`${d}-${idx}`} disabled={!d} style={[styles.calCell, !d ? styles.calCellEmpty : null]} onPress={() => onSelect(`${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`)}>
+                <Text style={styles.calCellText}>{d || ''}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <Pressable style={styles.cancelBtn} onPress={onClose}><Text style={styles.cancelText}>Close</Text></Pressable>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -361,4 +425,15 @@ const styles = StyleSheet.create({
   cancelText: { color: '#111827', fontWeight: '600' },
   fallbackLine: { color: '#374151', fontSize: 13, marginTop: 4 },
   fallbackItem: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, padding: 8, marginTop: 6, backgroundColor: '#fff' },
+  dateValue: { color: '#111827', fontSize: 12 },
+  datePlaceholder: { color: '#9ca3af', fontSize: 12 },
+  calendarCard: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 12 },
+  calNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  navBtn: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 8, width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  calTitle: { fontSize: 14, fontWeight: '700', color: '#111827' },
+  calGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  calHead: { width: '14.28%', textAlign: 'center', fontWeight: '700', color: '#6b7280', marginBottom: 6 },
+  calCell: { width: '14.28%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
+  calCellEmpty: { opacity: 0.2 },
+  calCellText: { color: '#111827' },
 });

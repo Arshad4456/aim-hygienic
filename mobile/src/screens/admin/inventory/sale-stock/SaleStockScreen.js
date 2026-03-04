@@ -1,6 +1,338 @@
-import React from 'react';
-import InventoryTransactionModule from '../components/InventoryTransactionModule';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import apiClient from '../../../../api/client';
+import Card from '../../../../ui/Card';
+import Loader from '../../../../ui/Loader';
+
+const EMPTY_LINE = { productId: '', qty: '', toValue: '0', discValue: '0', extraValue: '0', bonsValue: '0', gstPer: '0' };
+const EMPTY_FORM = {
+  warehouseId: '', regionId: '', zoneId: '', territoryName: '',
+  toEntityType: 'BRAND', businessName: '', distributorName: '', subDistributorName: '', address: '',
+  extraDiscPer: '0', advTaxPer: '0', whTaxPer: '0', expense: '0',
+  items: [{ ...EMPTY_LINE }],
+};
+
+function toNum(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
+
+function getSizeMultiplier(product) {
+  if (!product) return 1;
+  const nums = String(product.size || '').match(/\d+(?:\.\d+)?/g)?.map(Number) || [];
+  if (nums.length) return nums.reduce((a, b) => a * b, 1);
+  return toNum(product.packSize) > 0 ? toNum(product.packSize) : 1;
+}
+
+function computeLine(line, product) {
+  const sizeMultiplier = getSizeMultiplier(product);
+  const qty = toNum(line.qty);
+  const rate = toNum(product?.wholesalePrice || 0);
+  const gross = sizeMultiplier * qty * rate;
+  const toValue = toNum(line.toValue);
+  const discValue = line.discValue === '' ? toNum(product?.discountPer || 0) : toNum(line.discValue);
+  const extraValue = toNum(line.extraValue);
+  const bonsValue = toNum(line.bonsValue);
+  const v4gst = gross - toValue - discValue - extraValue - bonsValue;
+  const gstPer = toNum(line.gstPer);
+  const gstAmount = (v4gst * gstPer) / 100;
+  const netAmt = v4gst + gstAmount;
+  return { sizeText: product?.size || '-', sizeMultiplier, qty, rate, gross, toValue, discValue, extraValue, bonsValue, v4gst, gstPer, gstAmount, netAmt };
+}
 
 export default function SaleStockScreen() {
-  return <InventoryTransactionModule title="Sale Stock" subtitle="Create sale stock entries with product details and sale stock ledger." transactionType="SALE_STOCK" />;
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const [products, setProducts] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
+  const [regions, setRegions] = useState([]);
+  const [zones, setZones] = useState([]);
+  const [rows, setRows] = useState([]);
+  const [form, setForm] = useState(EMPTY_FORM);
+
+  const load = async () => {
+    setLoading(true); setErr('');
+    try {
+      const [productsRes, warehousesRes, txRes, regionsRes, zonesRes] = await Promise.all([
+        apiClient.get('/products'),
+        apiClient.get('/warehouses'),
+        apiClient.get('/inventory/transactions?transactionType=SALE_STOCK'),
+        apiClient.get('/regions'),
+        apiClient.get('/zones'),
+      ]);
+      setProducts(productsRes.data?.products || []);
+      setWarehouses(warehousesRes.data?.warehouses || []);
+      setRows(txRes.data?.transactions || []);
+      setRegions(regionsRes.data?.regions || []);
+      setZones(zonesRes.data?.zones || []);
+    } catch (e) { setErr(e.message || 'Failed to load sale stock'); } finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const zoneOptions = useMemo(() => {
+    const r = regions.find((x) => x._id === form.regionId);
+    if (!r) return zones;
+    return zones.filter((z) => z.regionId === r.regionId || z.regionId === r._id);
+  }, [regions, zones, form.regionId]);
+
+  const lineRows = useMemo(() => form.items.map((line, idx) => {
+    const product = products.find((p) => p._id === line.productId);
+    return { idx, line, product, calc: computeLine(line, product) };
+  }), [form.items, products]);
+
+  const totalAmount = useMemo(() => lineRows.reduce((sum, r) => sum + r.calc.netAmt, 0), [lineRows]);
+  const extraDiscAmt = useMemo(() => (totalAmount * toNum(form.extraDiscPer)) / 100, [totalAmount, form.extraDiscPer]);
+  const advTaxAmt = useMemo(() => (totalAmount * toNum(form.advTaxPer)) / 100, [totalAmount, form.advTaxPer]);
+  const whTaxAmt = useMemo(() => (totalAmount * toNum(form.whTaxPer)) / 100, [totalAmount, form.whTaxPer]);
+  const grandTotal = useMemo(() => totalAmount - extraDiscAmt + advTaxAmt + whTaxAmt + toNum(form.expense), [totalAmount, extraDiscAmt, advTaxAmt, whTaxAmt, form.expense]);
+
+  const setField = (k, v) => setForm((s) => ({ ...s, [k]: v }));
+  const setItem = (i, k, v) => setForm((s) => ({ ...s, items: s.items.map((it, idx) => (idx === i ? { ...it, [k]: v } : it)) }));
+  const addItem = () => setForm((s) => ({ ...s, items: [...s.items, { ...EMPTY_LINE }] }));
+  const removeItem = (i) => setForm((s) => ({ ...s, items: s.items.filter((_, idx) => idx !== i) }));
+
+  const onSubmit = async () => {
+    setSaving(true); setErr('');
+    try {
+      const fromWarehouse = warehouses.find((w) => w._id === form.warehouseId);
+      const region = regions.find((r) => r._id === form.regionId);
+      const zone = zones.find((z) => z._id === form.zoneId);
+      const normalizedItems = lineRows.filter((r) => r.product && r.calc.qty > 0).map((r) => ({
+        productId: r.product.productId,
+        productName: r.product.name,
+        cartonSize: `1x${r.calc.qty || 0}`,
+        cartons: 1,
+        totalPacks: r.calc.qty || 0,
+        packsPerCarton: r.calc.qty || 0,
+        onePackPrice: r.calc.rate,
+        oneCartonPrice: r.calc.rate * r.calc.sizeMultiplier,
+        totalPrice: r.calc.netAmt,
+        unitPrice: r.calc.rate,
+        notes: `gross:${r.calc.gross},to:${r.calc.toValue},disc:${r.calc.discValue},extra:${r.calc.extraValue},bons:${r.calc.bonsValue},v4gst:${r.calc.v4gst},gst:${r.calc.gstAmount},net:${r.calc.netAmt}`,
+      }));
+
+      const toEntityName = form.toEntityType === 'BRAND' ? form.businessName : form.toEntityType === 'DISTRIBUTOR' ? form.distributorName : form.subDistributorName;
+      if (!fromWarehouse || !toEntityName.trim() || !normalizedItems.length) throw new Error('Please fill required fields');
+
+      await apiClient.post('/inventory/transactions', {
+        transactionType: 'SALE_STOCK',
+        warehouseId: fromWarehouse.warehouseId || '',
+        warehouseName: fromWarehouse.name || '',
+        fromEntityName: fromWarehouse.name || '',
+        toEntityType: form.toEntityType,
+        toEntityName,
+        brandName: form.toEntityType === 'BRAND' ? toEntityName : '',
+        distributorName: form.toEntityType === 'DISTRIBUTOR' ? toEntityName : '',
+        subDistributorName: form.toEntityType === 'SUB_DISTRIBUTOR' ? toEntityName : '',
+        regionId: region?.regionId || '',
+        regionName: region?.name || '',
+        zoneId: zone?.zoneId || '',
+        zoneName: zone?.name || '',
+        territory: form.territoryName,
+        note: form.address,
+        extraDiscPer: Number(form.extraDiscPer || 0), advTaxPer: Number(form.advTaxPer || 0), whTaxPer: Number(form.whTaxPer || 0), expense: Number(form.expense || 0),
+        items: normalizedItems, subtotal: totalAmount, grandTotal,
+      });
+      setForm(EMPTY_FORM);
+      await load();
+    } catch (e) { setErr(e.message || 'Failed to save sale stock'); } finally { setSaving(false); }
+  };
+
+  const updateStatus = async (id, status) => {
+    try { await apiClient.put(`/inventory/transactions/${id}/request-status`, { status }); await load(); }
+    catch (e) { setErr(e.message || 'Failed to update status'); }
+  };
+  const markRead = async (id) => {
+    try { await apiClient.put(`/inventory/transactions/${id}/mark-read`); await load(); }
+    catch (e) { setErr(e.message || 'Failed to mark read'); }
+  };
+
+  const onDelete = (id) => Alert.alert('Delete', 'Delete this sale stock entry?', [
+    { text: 'Cancel', style: 'cancel' },
+    { text: 'Delete', style: 'destructive', onPress: async () => { try { await apiClient.delete(`/inventory/transactions/${id}`); await load(); } catch (e) { setErr(e.message || 'Failed to delete'); } } },
+  ]);
+
+  if (loading) return <Loader />;
+
+  return (
+    <ScrollView contentContainerStyle={styles.content}>
+      <Card>
+        <Text style={styles.title}>Sale Stock</Text>
+        <Text style={styles.subtitle}>Website-like sale stock form and ledger.</Text>
+        {err ? <Text style={styles.error}>{err}</Text> : null}
+
+        <Text style={styles.label}>Sale Mode</Text>
+        <View style={styles.modeRow}>
+          <Pressable style={[styles.modeBtn, form.toEntityType === 'BRAND' ? styles.modeBtnActive : null]} onPress={() => setField('toEntityType', 'BRAND')}><Text>Sale to Brand</Text></Pressable>
+          <Pressable style={[styles.modeBtn, form.toEntityType === 'DISTRIBUTOR' ? styles.modeBtnActive : null]} onPress={() => setField('toEntityType', 'DISTRIBUTOR')}><Text>Sale to Distributor</Text></Pressable>
+          <Pressable style={[styles.modeBtn, form.toEntityType === 'SUB_DISTRIBUTOR' ? styles.modeBtnActive : null]} onPress={() => setField('toEntityType', 'SUB_DISTRIBUTOR')}><Text>Sale to Sub-Distributor</Text></Pressable>
+        </View>
+
+        <Text style={styles.label}>From (Warehouse)</Text>
+        <SelectDropdown placeholder="Select warehouse" options={warehouses.map((w) => ({ value: w._id, label: w.name }))} value={form.warehouseId} onPick={(v) => setField('warehouseId', v)} />
+
+        <Text style={styles.label}>Region</Text>
+        <SelectDropdown placeholder="Select region" options={regions.map((r) => ({ value: r._id, label: r.name }))} value={form.regionId} onPick={(v) => setField('regionId', v)} />
+        <Text style={styles.label}>Zone</Text>
+        <SelectDropdown placeholder="Select zone" options={zoneOptions.map((z) => ({ value: z._id, label: z.name }))} value={form.zoneId} onPick={(v) => setField('zoneId', v)} />
+        <Text style={styles.label}>Territory</Text>
+        <TextInput style={styles.input} value={form.territoryName} onChangeText={(v) => setField('territoryName', v)} />
+
+        {form.toEntityType === 'BRAND' ? <><Text style={styles.label}>Business Name</Text><TextInput style={styles.input} value={form.businessName} onChangeText={(v) => setField('businessName', v)} /></> : null}
+        {form.toEntityType === 'DISTRIBUTOR' ? <><Text style={styles.label}>Distributor Name</Text><TextInput style={styles.input} value={form.distributorName} onChangeText={(v) => setField('distributorName', v)} /></> : null}
+        {form.toEntityType === 'SUB_DISTRIBUTOR' ? <><Text style={styles.label}>Sub Distributor Name</Text><TextInput style={styles.input} value={form.subDistributorName} onChangeText={(v) => setField('subDistributorName', v)} /></> : null}
+        <Text style={styles.label}>Address</Text>
+        <TextInput style={styles.input} value={form.address} onChangeText={(v) => setField('address', v)} />
+
+        <ScrollView horizontal showsHorizontalScrollIndicator>
+          <View style={styles.productTableWrap}>
+            <View style={styles.headerRow}>{['Product Name', 'Size', 'Qty', 'Rate', 'Gross', 'T.O', 'Disc', 'Extra', 'Bons', 'V4GST', 'GST(%)', 'Net Amt', 'Action'].map((h) => <Text key={h} style={[styles.headCell, h === 'Action' ? styles.colAction : styles.colData]}>{h}</Text>)}</View>
+            <View style={{ gap: 8, marginTop: 8 }}>
+              {lineRows.map(({ idx, line, calc }) => (
+                <View key={`line-${idx}`} style={styles.dataRow}>
+                  <View style={styles.colData}><SelectDropdown placeholder="Select product" options={products.map((p) => ({ value: p._id, label: p.name }))} value={line.productId} onPick={(v) => setItem(idx, 'productId', v)} /></View>
+                  <Text style={[styles.cell, styles.colData]}>{calc.sizeText}</Text>
+                  <TextInput style={[styles.input, styles.colData]} keyboardType="numeric" value={line.qty} onChangeText={(v) => setItem(idx, 'qty', v)} />
+                  <Text style={[styles.cell, styles.colData]}>{calc.rate.toFixed(2)}</Text>
+                  <Text style={[styles.cell, styles.colData]}>{calc.gross.toFixed(2)}</Text>
+                  <TextInput style={[styles.input, styles.colData]} keyboardType="numeric" value={line.toValue} onChangeText={(v) => setItem(idx, 'toValue', v)} />
+                  <TextInput style={[styles.input, styles.colData]} keyboardType="numeric" value={line.discValue} onChangeText={(v) => setItem(idx, 'discValue', v)} />
+                  <TextInput style={[styles.input, styles.colData]} keyboardType="numeric" value={line.extraValue} onChangeText={(v) => setItem(idx, 'extraValue', v)} />
+                  <TextInput style={[styles.input, styles.colData]} keyboardType="numeric" value={line.bonsValue} onChangeText={(v) => setItem(idx, 'bonsValue', v)} />
+                  <Text style={[styles.cell, styles.colData]}>{calc.v4gst.toFixed(2)}</Text>
+                  <TextInput style={[styles.input, styles.colData]} keyboardType="numeric" value={line.gstPer} onChangeText={(v) => setItem(idx, 'gstPer', v)} />
+                  <Text style={[styles.cell, styles.colData]}>{calc.netAmt.toFixed(2)}</Text>
+                  <View style={styles.colAction}><Pressable style={styles.deleteBtn} onPress={() => removeItem(idx)}><Text style={styles.deleteText}>X</Text></Pressable></View>
+                </View>
+              ))}
+            </View>
+          </View>
+        </ScrollView>
+
+        <Pressable style={styles.secondaryBtn} onPress={addItem}><Text style={styles.secondaryText}>+ Add product</Text></Pressable>
+        <View style={styles.totalsWrap}>
+          <RowInput label="Extra Disc (%)" value={form.extraDiscPer} onChange={(v) => setField('extraDiscPer', v)} amount={extraDiscAmt} />
+          <RowInput label="Adv Tax (%)" value={form.advTaxPer} onChange={(v) => setField('advTaxPer', v)} amount={advTaxAmt} />
+          <RowInput label="W.H Tax (%)" value={form.whTaxPer} onChange={(v) => setField('whTaxPer', v)} amount={whTaxAmt} />
+          <RowInput label="Expense" value={form.expense} onChange={(v) => setField('expense', v)} amount={toNum(form.expense)} />
+          <Text style={styles.grand}>Grand Total: {grandTotal.toFixed(2)}</Text>
+        </View>
+
+        <Pressable style={styles.primaryBtn} onPress={onSubmit} disabled={saving}><Text style={styles.primaryText}>{saving ? 'Saving...' : 'Save'}</Text></Pressable>
+      </Card>
+
+      <Card>
+        <Text style={styles.ledgerTitle}>2 Sale Stock Ledger</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator>
+          <View style={styles.ledgerWrap}>
+            <View style={styles.headerRow}>{['Code', 'From', 'Distributor Name', 'Business Name', 'Date and Time', 'Status', 'Unread', 'Action'].map((h) => <Text key={h} style={[styles.headCell, h === 'Action' ? styles.colActionWide : styles.colDataWide]}>{h}</Text>)}</View>
+            <View style={{ gap: 8, marginTop: 8 }}>
+              {rows.length === 0 ? <Text style={styles.help}>No sale stock found.</Text> : rows.map((r) => (
+                <View key={r._id} style={styles.dataRow}>
+                  <Text style={[styles.cell, styles.colDataWide]}>{r.transactionCode || '-'}</Text>
+                  <Text style={[styles.cell, styles.colDataWide]}>{r.fromEntityName || '-'}</Text>
+                  <Text style={[styles.cell, styles.colDataWide]}>{r.distributorName || '-'}</Text>
+                  <Text style={[styles.cell, styles.colDataWide]}>{r.brandName || r.toEntityName || '-'}</Text>
+                  <Text style={[styles.cell, styles.colDataWide]}>{r.transactionAt ? new Date(r.transactionAt).toLocaleString() : '-'}</Text>
+                  <Text style={[styles.cell, styles.colDataWide]}>{r.requestStatus || '-'}</Text>
+                  <Text style={[styles.cell, styles.colDataWide]}>{r.requestReadAt ? 'Read' : 'Unread'}</Text>
+                  <View style={[styles.actionCell, styles.colActionWide]}>
+                    <Pressable style={styles.actionBtn} onPress={() => markRead(r._id)}><Text style={styles.actionText}>Open</Text></Pressable>
+                    <Pressable style={styles.actionBtn} onPress={() => updateStatus(r._id, 'REJECTED')}><Text style={styles.actionText}>Reject</Text></Pressable>
+                    <Pressable style={styles.actionBtn} onPress={() => updateStatus(r._id, 'APPROVED')}><Text style={styles.actionText}>Approve</Text></Pressable>
+                    <Pressable style={styles.actionBtn} onPress={() => updateStatus(r._id, 'DISPATCHED')}><Text style={styles.actionText}>Dispatch</Text></Pressable>
+                    <Pressable style={styles.actionBtn} onPress={() => updateStatus(r._id, 'DELIVERED')}><Text style={styles.actionText}>Delivered</Text></Pressable>
+                    <Pressable style={styles.deleteBtn} onPress={() => onDelete(r._id)}><Text style={styles.deleteText}>Delete</Text></Pressable>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        </ScrollView>
+      </Card>
+    </ScrollView>
+  );
 }
+
+function SelectDropdown({ placeholder, options, value, onPick }) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((o) => o.value === value);
+  return (
+    <>
+      <Pressable style={styles.dropdownBox} onPress={() => setOpen(true)}><Text style={selected ? styles.dropdownText : styles.dropdownPlaceholder}>{selected?.label || placeholder}</Text></Pressable>
+      <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.dropdownModalCard}>
+            <Text style={styles.modalTitle}>{placeholder}</Text>
+            <ScrollView style={{ maxHeight: 300 }}>
+              {options.map((o) => (
+                <Pressable key={`${o.value}`} style={styles.dropdownOption} onPress={() => { onPick(o.value); setOpen(false); }}>
+                  <Text style={[styles.dropdownText, value === o.value ? styles.dropdownTextActive : null]}>{o.label}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            <Pressable style={styles.cancelBtn} onPress={() => setOpen(false)}><Text style={styles.cancelText}>Close</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
+}
+
+function RowInput({ label, value, onChange, amount }) {
+  return (
+    <View style={styles.rowInput}>
+      <Text style={styles.rowLabel}>{label}</Text>
+      <TextInput style={styles.rowField} keyboardType="numeric" value={value} onChangeText={onChange} />
+      <Text style={styles.rowAmount}>{Number(amount || 0).toFixed(2)}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  content: { padding: 14, gap: 10, backgroundColor: '#f5f6f8' },
+  title: { fontSize: 24, fontWeight: '700', color: '#111827' },
+  subtitle: { marginTop: 4, color: '#6b7280', fontSize: 13 },
+  error: { marginTop: 8, color: '#b91c1c' },
+  label: { marginTop: 8, fontSize: 12, fontWeight: '600', color: '#374151' },
+  input: { marginTop: 4, borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#fff', color: '#111827', minWidth: 120 },
+  productTableWrap: { minWidth: 2300 },
+  ledgerWrap: { minWidth: 1800 },
+  headerRow: { flexDirection: 'row', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, backgroundColor: '#f3f4f6', padding: 8 },
+  headCell: { fontSize: 12, fontWeight: '700', color: '#111827' },
+  colData: { width: 150 },
+  colAction: { width: 90 },
+  colDataWide: { width: 180 },
+  colActionWide: { width: 380 },
+  dataRow: { flexDirection: 'row', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, backgroundColor: '#fff', padding: 8, alignItems: 'center' },
+  cell: { fontSize: 12, color: '#374151' },
+  actionCell: { flexDirection: 'row', gap: 6, alignItems: 'center', flexWrap: 'wrap' },
+  modeRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginTop: 6 },
+  modeBtn: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 7, backgroundColor: '#fff' },
+  modeBtnActive: { borderColor: '#10b981', backgroundColor: '#ecfdf5' },
+  secondaryBtn: { marginTop: 10, alignSelf: 'flex-start', borderWidth: 1, borderColor: '#a1a1aa', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: '#fff' },
+  secondaryText: { color: '#111827', fontWeight: '700', fontSize: 12 },
+  totalsWrap: { marginTop: 10, gap: 8 },
+  rowInput: { marginTop: 4, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  rowLabel: { width: 110, fontSize: 12, color: '#374151' },
+  rowField: { flex: 1, borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 7, backgroundColor: '#fff', color: '#111827' },
+  rowAmount: { width: 90, textAlign: 'right', fontSize: 12, color: '#111827' },
+  grand: { marginTop: 8, textAlign: 'right', fontSize: 18, fontWeight: '700', color: '#111827' },
+  primaryBtn: { marginTop: 10, backgroundColor: '#111827', borderRadius: 10, paddingVertical: 11, alignItems: 'center' },
+  primaryText: { color: '#fff', fontWeight: '700' },
+  ledgerTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
+  actionBtn: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 7, backgroundColor: '#fff' },
+  actionText: { color: '#111827', fontSize: 12, fontWeight: '600' },
+  deleteBtn: { borderWidth: 1, borderColor: '#fecaca', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 7, backgroundColor: '#fef2f2' },
+  deleteText: { color: '#991b1b', fontSize: 12, fontWeight: '700' },
+  help: { color: '#6b7280' },
+  dropdownBox: { marginTop: 4, borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, backgroundColor: '#fff', paddingHorizontal: 10, paddingVertical: 10 },
+  dropdownPlaceholder: { color: '#9ca3af', fontSize: 13 },
+  dropdownText: { color: '#111827', fontSize: 13 },
+  dropdownTextActive: { color: '#047857', fontWeight: '700' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
+  dropdownModalCard: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 12 },
+  modalTitle: { fontSize: 17, fontWeight: '700', color: '#111827', marginBottom: 8 },
+  dropdownOption: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10, marginBottom: 6 },
+  cancelBtn: { marginTop: 8, borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
+  cancelText: { color: '#111827', fontWeight: '600' },
+});
