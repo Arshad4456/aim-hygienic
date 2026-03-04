@@ -32,10 +32,15 @@ export default function CompaniesScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  const [ok, setOk] = useState('');
   const [rows, setRows] = useState([]);
+
   const [editOpen, setEditOpen] = useState(false);
   const [editId, setEditId] = useState('');
   const [form, setForm] = useState(emptyForm);
+
+  const [addOpen, setAddOpen] = useState(false);
+  const [addForm, setAddForm] = useState(emptyForm);
 
   const load = useCallback(async () => {
     setErr('');
@@ -59,6 +64,7 @@ export default function CompaniesScreen() {
     setEditOpen(true);
     setForm(emptyForm);
     setSaving(true);
+    setErr('');
     try {
       const res = await apiClient.get(`/companies/${id}`);
       const company = res.data?.company || {};
@@ -81,12 +87,31 @@ export default function CompaniesScreen() {
   const updateCompany = async () => {
     setSaving(true);
     setErr('');
+    setOk('');
     try {
       await apiClient.put(`/companies/${editId}`, form);
       setEditOpen(false);
+      setOk('Company updated successfully.');
       await load();
     } catch (e) {
       setErr(e.message || 'Update failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const createCompany = async () => {
+    setSaving(true);
+    setErr('');
+    setOk('');
+    try {
+      await apiClient.post('/companies', addForm);
+      setAddOpen(false);
+      setAddForm(emptyForm);
+      setOk('Company created successfully.');
+      await load();
+    } catch (e) {
+      setErr(e.message || 'Failed to create company');
     } finally {
       setSaving(false);
     }
@@ -102,36 +127,73 @@ export default function CompaniesScreen() {
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <Card>
-        <Text style={styles.title}>Company Management</Text>
-        <Text style={styles.subtitle}>Same data source as website company list (`/companies`).</Text>
+        <View style={styles.titleRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>Companies</Text>
+            <Text style={styles.subtitle}>Same data source as website company list (`/companies`).</Text>
+          </View>
+          <Pressable style={styles.addBtn} onPress={() => setAddOpen(true)}>
+            <Text style={styles.addBtnText}>Add Company</Text>
+          </Pressable>
+        </View>
         {err ? <Text style={styles.error}>{err}</Text> : null}
+        {ok ? <Text style={styles.ok}>{ok}</Text> : null}
       </Card>
 
       <Card>
-        <View style={styles.tableHeader}>
-          {headerRows.map((label, idx) => (
-            <Text key={label} style={[styles.headCell, idx === 1 ? styles.colName : styles.colDefault]}>{label}</Text>
-          ))}
-        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator>
+          <View style={styles.tableWrap}>
+            <View style={styles.tableHeader}>
+              {headerRows.map((label, idx) => (
+                <Text key={label} style={[styles.headCell, idx === 1 ? styles.colName : styles.colDefault]}>{label}</Text>
+              ))}
+            </View>
 
-        <View style={styles.stack}>
-          {rows.length === 0 ? (
-            <Text style={styles.help}>No companies found.</Text>
-          ) : (
-            rows.map((c) => (
-              <View key={c._id} style={styles.tableRow}>
-                <Text style={[styles.cell, styles.colDefault]}>{c.companyId || '-'}</Text>
-                <Text style={[styles.cell, styles.colName]}>{c.name || '-'}</Text>
-                <Text style={[styles.cell, styles.colDefault]}>{c.phone1 || '-'}</Text>
-                <Text style={[styles.cell, styles.colDefault]}>{c.email || '-'}</Text>
-                <Pressable style={styles.editBtn} onPress={() => startEdit(c._id)}>
-                  <Text style={styles.editBtnText}>Edit</Text>
-                </Pressable>
-              </View>
-            ))
-          )}
-        </View>
+            <View style={styles.stack}>
+              {rows.length === 0 ? (
+                <Text style={styles.help}>No companies found.</Text>
+              ) : (
+                rows.map((c) => (
+                  <View key={c._id} style={styles.tableRow}>
+                    <Text style={[styles.cell, styles.colDefault]}>{c.companyId || '-'}</Text>
+                    <Text style={[styles.cell, styles.colName]}>{c.name || '-'}</Text>
+                    <Text style={[styles.cell, styles.colDefault]}>{c.phone1 || '-'}</Text>
+                    <Text style={[styles.cell, styles.colDefault]}>{c.email || '-'}</Text>
+                    <Pressable style={styles.editBtn} onPress={() => startEdit(c._id)}>
+                      <Text style={styles.editBtnText}>Edit</Text>
+                    </Pressable>
+                  </View>
+                ))
+              )}
+            </View>
+          </View>
+        </ScrollView>
       </Card>
+
+      <Modal visible={addOpen} transparent animationType="slide" onRequestClose={() => setAddOpen(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Add New Company</Text>
+            <ScrollView contentContainerStyle={styles.formWrap}>
+              <Field label="Company ID" value={addForm.companyId} onChangeText={(v) => setAddForm((s) => ({ ...s, companyId: v }))} />
+              <Field label="Company Name" value={addForm.name} onChangeText={(v) => setAddForm((s) => ({ ...s, name: v }))} />
+              <Field label="Phone #1" value={addForm.phone1} onChangeText={(v) => setAddForm((s) => ({ ...s, phone1: v }))} />
+              <Field label="Phone #2" value={addForm.phone2} onChangeText={(v) => setAddForm((s) => ({ ...s, phone2: v }))} />
+              <Field label="Email" value={addForm.email} onChangeText={(v) => setAddForm((s) => ({ ...s, email: v }))} />
+              <Field
+                label="Main Office Address"
+                value={addForm.mainOfficeAddress}
+                onChangeText={(v) => setAddForm((s) => ({ ...s, mainOfficeAddress: v }))}
+                multiline
+              />
+            </ScrollView>
+            <View style={styles.modalActions}>
+              <Pressable style={styles.cancelBtn} onPress={() => setAddOpen(false)}><Text style={styles.cancelText}>Cancel</Text></Pressable>
+              <Pressable style={styles.saveBtn} onPress={createCompany} disabled={saving}><Text style={styles.saveText}>{saving ? 'Saving...' : 'Save Company'}</Text></Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={editOpen} transparent animationType="slide" onRequestClose={() => setEditOpen(false)}>
         <View style={styles.modalOverlay}>
@@ -168,10 +230,15 @@ export default function CompaniesScreen() {
 const styles = StyleSheet.create({
   content: { padding: 14, gap: 10, backgroundColor: '#f5f6f8' },
   title: { fontSize: 24, fontWeight: '700', color: '#111827' },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   subtitle: { marginTop: 6, color: '#6b7280', fontSize: 13 },
   error: { marginTop: 8, color: '#b91c1c' },
+  ok: { marginTop: 8, color: '#047857' },
   help: { color: '#6b7280', fontSize: 13 },
+  addBtn: { backgroundColor: '#059669', borderRadius: 10, paddingVertical: 9, paddingHorizontal: 12 },
+  addBtnText: { color: '#fff', fontWeight: '700', fontSize: 12 },
   stack: { gap: 8, marginTop: 8 },
+  tableWrap: { minWidth: 720 },
   tableHeader: {
     flexDirection: 'row',
     borderWidth: 1,
@@ -192,16 +259,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     alignItems: 'center',
   },
-  colDefault: { flex: 1 },
-  colName: { flex: 1.4 },
+  colDefault: { width: 130 },
+  colName: { width: 220 },
   cell: { fontSize: 12, color: '#374151' },
   editBtn: {
+    width: 90,
     borderWidth: 1,
     borderColor: '#d4d4d8',
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 6,
     backgroundColor: '#fafafa',
+    alignItems: 'center',
   },
   editBtnText: { fontSize: 12, fontWeight: '600', color: '#111827' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' },
