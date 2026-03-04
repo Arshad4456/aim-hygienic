@@ -6,13 +6,29 @@ import Loader from '../../../../ui/Loader';
 
 const EMPTY_LINE = { productId: '', qty: '', toValue: '0', discValue: '0', extraValue: '0', bonsValue: '0', gstPer: '0' };
 const EMPTY_FORM = {
-  warehouseId: '', regionId: '', zoneId: '', territoryName: '',
+  warehouseId: '', regionId: '', zoneId: '', territoryName: '', fieldId: '',
   toEntityType: 'BRAND', businessName: '', distributorName: '', subDistributorName: '', address: '',
-  extraDiscPer: '0', advTaxPer: '0', whTaxPer: '0', expense: '0',
-  items: [{ ...EMPTY_LINE }],
+  extraDiscPer: '0', advTaxPer: '0', whTaxPer: '0', expense: '0', items: [{ ...EMPTY_LINE }],
 };
 
+const LEDGER_FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: 'brand', label: 'To Brand' },
+  { key: 'distributor', label: 'To Distributor' },
+  { key: 'subDistributor', label: 'To Sub-Distributor' },
+];
+
 function toNum(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
+function normalizeRequestSource(value) { return String(value || '').toLowerCase().replace(/[^a-z]/g, ''); }
+function normalizeRequestStatus(value) { const status = String(value || '').toUpperCase(); return status === 'DISPATCH' ? 'DISPATCHED' : status; }
+function isSaleOrderRequest(row) {
+  if (!row || row.transactionType !== 'SALE_STOCK') return false;
+  const source = normalizeRequestSource(row.requestSourceRole || row.fromEntityType || '');
+  const hasKnownSource = source.includes('brandmanager') || source.includes('distributor') || source === 'brand';
+  const status = normalizeRequestStatus(row.requestStatus || '');
+  const isPendingNonAdmin = status === 'PENDING' && normalizeRequestSource(row.requestSourceRole) !== 'admin';
+  return hasKnownSource || isPendingNonAdmin;
+}
 
 function getSizeMultiplier(product) {
   if (!product) return 1;
@@ -45,24 +61,31 @@ export default function SaleStockScreen() {
   const [warehouses, setWarehouses] = useState([]);
   const [regions, setRegions] = useState([]);
   const [zones, setZones] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [fields, setFields] = useState([]);
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [saleLedgerFilter, setSaleLedgerFilter] = useState('all');
 
   const load = async () => {
     setLoading(true); setErr('');
     try {
-      const [productsRes, warehousesRes, txRes, regionsRes, zonesRes] = await Promise.all([
+      const [productsRes, warehousesRes, txRes, regionsRes, zonesRes, usersRes, fieldsRes] = await Promise.all([
         apiClient.get('/products'),
         apiClient.get('/warehouses'),
         apiClient.get('/inventory/transactions?transactionType=SALE_STOCK'),
         apiClient.get('/regions'),
         apiClient.get('/zones'),
+        apiClient.get('/users'),
+        apiClient.get('/fields?limit=500'),
       ]);
       setProducts(productsRes.data?.products || []);
       setWarehouses(warehousesRes.data?.warehouses || []);
       setRows(txRes.data?.transactions || []);
       setRegions(regionsRes.data?.regions || []);
       setZones(zonesRes.data?.zones || []);
+      setUsers(usersRes.data?.users || []);
+      setFields(fieldsRes.data?.fields || []);
     } catch (e) { setErr(e.message || 'Failed to load sale stock'); } finally { setLoading(false); }
   };
 
@@ -70,9 +93,22 @@ export default function SaleStockScreen() {
 
   const zoneOptions = useMemo(() => {
     const r = regions.find((x) => x._id === form.regionId);
-    if (!r) return zones;
+    if (!r) return [];
     return zones.filter((z) => z.regionId === r.regionId || z.regionId === r._id);
   }, [regions, zones, form.regionId]);
+
+  const territoriesForZone = useMemo(() => {
+    const z = zones.find((x) => x._id === form.zoneId);
+    if (!z) return [];
+    return [...new Set(users.filter((u) => u.zoneId === z.zoneId || u.zoneName === z.name).map((u) => u.territoryName).filter(Boolean))];
+  }, [zones, users, form.zoneId]);
+
+  const fieldsForTerritory = useMemo(() => fields.filter((f) => {
+    const regionMatch = !form.regionId || f.regionId === (regions.find((r) => r._id === form.regionId)?.regionId || '');
+    const zoneMatch = !form.zoneId || f.zoneId === (zones.find((z) => z._id === form.zoneId)?.zoneId || '');
+    const territoryMatch = !form.territoryName || f.territoryName === form.territoryName || f.areaName === form.territoryName;
+    return regionMatch && zoneMatch && territoryMatch;
+  }), [fields, form.regionId, form.zoneId, form.territoryName, regions, zones]);
 
   const lineRows = useMemo(() => form.items.map((line, idx) => {
     const product = products.find((p) => p._id === line.productId);
@@ -85,6 +121,20 @@ export default function SaleStockScreen() {
   const whTaxAmt = useMemo(() => (totalAmount * toNum(form.whTaxPer)) / 100, [totalAmount, form.whTaxPer]);
   const grandTotal = useMemo(() => totalAmount - extraDiscAmt + advTaxAmt + whTaxAmt + toNum(form.expense), [totalAmount, extraDiscAmt, advTaxAmt, whTaxAmt, form.expense]);
 
+  const saleStockRequests = useMemo(() => rows.filter((t) => isSaleOrderRequest(t)).sort((a, b) => new Date(b.transactionAt).getTime() - new Date(a.transactionAt).getTime()), [rows]);
+
+  const ledgerRows = useMemo(() => {
+    if (saleLedgerFilter === 'all') return rows;
+    const mapType = { brand: 'BRAND', distributor: 'DISTRIBUTOR', subDistributor: 'SUB_DISTRIBUTOR' };
+    return rows.filter((t) => {
+      const tt = String(t.toEntityType || '').toUpperCase();
+      if (tt) return tt === mapType[saleLedgerFilter];
+      if (saleLedgerFilter === 'subDistributor') return Boolean(t.subDistributorName);
+      if (saleLedgerFilter === 'distributor') return Boolean(t.distributorName) && !t.subDistributorName;
+      return !t.distributorName && !t.subDistributorName;
+    });
+  }, [rows, saleLedgerFilter]);
+
   const setField = (k, v) => setForm((s) => ({ ...s, [k]: v }));
   const setItem = (i, k, v) => setForm((s) => ({ ...s, items: s.items.map((it, idx) => (idx === i ? { ...it, [k]: v } : it)) }));
   const addItem = () => setForm((s) => ({ ...s, items: [...s.items, { ...EMPTY_LINE }] }));
@@ -96,38 +146,21 @@ export default function SaleStockScreen() {
       const fromWarehouse = warehouses.find((w) => w._id === form.warehouseId);
       const region = regions.find((r) => r._id === form.regionId);
       const zone = zones.find((z) => z._id === form.zoneId);
+      const fieldObj = fieldsForTerritory.find((f) => f._id === form.fieldId);
       const normalizedItems = lineRows.filter((r) => r.product && r.calc.qty > 0).map((r) => ({
-        productId: r.product.productId,
-        productName: r.product.name,
-        cartonSize: `1x${r.calc.qty || 0}`,
-        cartons: 1,
-        totalPacks: r.calc.qty || 0,
-        packsPerCarton: r.calc.qty || 0,
-        onePackPrice: r.calc.rate,
-        oneCartonPrice: r.calc.rate * r.calc.sizeMultiplier,
-        totalPrice: r.calc.netAmt,
-        unitPrice: r.calc.rate,
+        productId: r.product.productId, productName: r.product.name, cartonSize: `1x${r.calc.qty || 0}`, cartons: 1, totalPacks: r.calc.qty || 0, packsPerCarton: r.calc.qty || 0,
+        onePackPrice: r.calc.rate, oneCartonPrice: r.calc.rate * r.calc.sizeMultiplier, totalPrice: r.calc.netAmt, unitPrice: r.calc.rate,
         notes: `gross:${r.calc.gross},to:${r.calc.toValue},disc:${r.calc.discValue},extra:${r.calc.extraValue},bons:${r.calc.bonsValue},v4gst:${r.calc.v4gst},gst:${r.calc.gstAmount},net:${r.calc.netAmt}`,
       }));
-
       const toEntityName = form.toEntityType === 'BRAND' ? form.businessName : form.toEntityType === 'DISTRIBUTOR' ? form.distributorName : form.subDistributorName;
       if (!fromWarehouse || !toEntityName.trim() || !normalizedItems.length) throw new Error('Please fill required fields');
 
       await apiClient.post('/inventory/transactions', {
-        transactionType: 'SALE_STOCK',
-        warehouseId: fromWarehouse.warehouseId || '',
-        warehouseName: fromWarehouse.name || '',
-        fromEntityName: fromWarehouse.name || '',
-        toEntityType: form.toEntityType,
-        toEntityName,
-        brandName: form.toEntityType === 'BRAND' ? toEntityName : '',
-        distributorName: form.toEntityType === 'DISTRIBUTOR' ? toEntityName : '',
-        subDistributorName: form.toEntityType === 'SUB_DISTRIBUTOR' ? toEntityName : '',
-        regionId: region?.regionId || '',
-        regionName: region?.name || '',
-        zoneId: zone?.zoneId || '',
-        zoneName: zone?.name || '',
-        territory: form.territoryName,
+        transactionType: 'SALE_STOCK', warehouseId: fromWarehouse.warehouseId || '', warehouseName: fromWarehouse.name || '', fromEntityName: fromWarehouse.name || '',
+        toEntityType: form.toEntityType, toEntityName,
+        brandName: form.toEntityType === 'BRAND' ? toEntityName : '', distributorName: form.toEntityType === 'DISTRIBUTOR' ? toEntityName : '', subDistributorName: form.toEntityType === 'SUB_DISTRIBUTOR' ? toEntityName : '',
+        regionId: region?.regionId || '', regionName: region?.name || '', zoneId: zone?.zoneId || '', zoneName: zone?.name || '', territory: form.territoryName,
+        fieldId: fieldObj?.fieldId || '', fieldName: fieldObj?.name || '',
         note: form.address,
         extraDiscPer: Number(form.extraDiscPer || 0), advTaxPer: Number(form.advTaxPer || 0), whTaxPer: Number(form.whTaxPer || 0), expense: Number(form.expense || 0),
         items: normalizedItems, subtotal: totalAmount, grandTotal,
@@ -151,6 +184,8 @@ export default function SaleStockScreen() {
     { text: 'Delete', style: 'destructive', onPress: async () => { try { await apiClient.delete(`/inventory/transactions/${id}`); await load(); } catch (e) { setErr(e.message || 'Failed to delete'); } } },
   ]);
 
+  const onInvoice = (r) => Alert.alert('Invoice/Receipt', `Code: ${r.transactionCode || '-'}\nFrom: ${r.fromEntityName || '-'}\nTo: ${r.toEntityName || '-'}\nDate: ${r.transactionAt ? new Date(r.transactionAt).toLocaleString() : '-'}\nGrand Total: ${Number(r.grandTotal || 0).toFixed(2)}`);
+
   if (loading) return <Loader />;
 
   return (
@@ -169,15 +204,21 @@ export default function SaleStockScreen() {
 
         <Text style={styles.label}>From (Warehouse)</Text>
         <SelectDropdown placeholder="Select warehouse" options={warehouses.map((w) => ({ value: w._id, label: w.name }))} value={form.warehouseId} onPick={(v) => setField('warehouseId', v)} />
-
         <Text style={styles.label}>Region</Text>
         <SelectDropdown placeholder="Select region" options={regions.map((r) => ({ value: r._id, label: r.name }))} value={form.regionId} onPick={(v) => setField('regionId', v)} />
         <Text style={styles.label}>Zone</Text>
         <SelectDropdown placeholder="Select zone" options={zoneOptions.map((z) => ({ value: z._id, label: z.name }))} value={form.zoneId} onPick={(v) => setField('zoneId', v)} />
         <Text style={styles.label}>Territory</Text>
-        <TextInput style={styles.input} value={form.territoryName} onChangeText={(v) => setField('territoryName', v)} />
+        <SelectDropdown placeholder="Select territory" options={territoriesForZone.map((t) => ({ value: t, label: t }))} value={form.territoryName} onPick={(v) => setField('territoryName', v)} />
 
-        {form.toEntityType === 'BRAND' ? <><Text style={styles.label}>Business Name</Text><TextInput style={styles.input} value={form.businessName} onChangeText={(v) => setField('businessName', v)} /></> : null}
+        {form.toEntityType === 'BRAND' ? (
+          <>
+            <Text style={styles.label}>Field</Text>
+            <SelectDropdown placeholder="Select field" options={fieldsForTerritory.map((f) => ({ value: f._id, label: f.name }))} value={form.fieldId} onPick={(v) => setField('fieldId', v)} />
+            <Text style={styles.label}>Business Name</Text>
+            <TextInput style={styles.input} value={form.businessName} onChangeText={(v) => setField('businessName', v)} />
+          </>
+        ) : null}
         {form.toEntityType === 'DISTRIBUTOR' ? <><Text style={styles.label}>Distributor Name</Text><TextInput style={styles.input} value={form.distributorName} onChangeText={(v) => setField('distributorName', v)} /></> : null}
         {form.toEntityType === 'SUB_DISTRIBUTOR' ? <><Text style={styles.label}>Sub Distributor Name</Text><TextInput style={styles.input} value={form.subDistributorName} onChangeText={(v) => setField('subDistributorName', v)} /></> : null}
         <Text style={styles.label}>Address</Text>
@@ -210,6 +251,7 @@ export default function SaleStockScreen() {
 
         <Pressable style={styles.secondaryBtn} onPress={addItem}><Text style={styles.secondaryText}>+ Add product</Text></Pressable>
         <View style={styles.totalsWrap}>
+          <Text style={styles.totalAmount}>Total amount: {totalAmount.toFixed(2)}</Text>
           <RowInput label="Extra Disc (%)" value={form.extraDiscPer} onChange={(v) => setField('extraDiscPer', v)} amount={extraDiscAmt} />
           <RowInput label="Adv Tax (%)" value={form.advTaxPer} onChange={(v) => setField('advTaxPer', v)} amount={advTaxAmt} />
           <RowInput label="W.H Tax (%)" value={form.whTaxPer} onChange={(v) => setField('whTaxPer', v)} amount={whTaxAmt} />
@@ -221,26 +263,49 @@ export default function SaleStockScreen() {
       </Card>
 
       <Card>
+        <Text style={styles.ledgerTitle}>Order requests list</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator>
+          <View style={styles.ledgerWrapRequests}>
+            <View style={styles.headerRow}>{['Code', 'From', 'Source', 'Date and Time', 'Status', 'Unread', 'Action'].map((h) => <Text key={h} style={[styles.headCell, h === 'Action' ? styles.colActionReq : styles.colDataReq]}>{h}</Text>)}</View>
+            <View style={{ gap: 8, marginTop: 8 }}>
+              {saleStockRequests.length === 0 ? <Text style={styles.help}>No order requests.</Text> : saleStockRequests.map((r) => (
+                <View key={r._id} style={styles.dataRow}>
+                  <Text style={[styles.cell, styles.colDataReq]}>{r.transactionCode || '-'}</Text>
+                  <Text style={[styles.cell, styles.colDataReq]}>{r.fromEntityName || '-'}</Text>
+                  <Text style={[styles.cell, styles.colDataReq]}>{r.requestSourceRole || r.fromEntityType || '-'}</Text>
+                  <Text style={[styles.cell, styles.colDataReq]}>{r.transactionAt ? new Date(r.transactionAt).toLocaleString() : '-'}</Text>
+                  <Text style={[styles.cell, styles.colDataReq]}>{normalizeRequestStatus(r.requestStatus || 'PENDING')}</Text>
+                  <Text style={[styles.cell, styles.colDataReq]}>{r.requestReadAt ? 'Read' : 'Unread'}</Text>
+                  <View style={[styles.actionCell, styles.colActionReq]}>
+                    <Pressable style={styles.actionBtn} onPress={() => markRead(r._id)}><Text style={styles.actionText}>Open</Text></Pressable>
+                    <Pressable style={styles.actionBtn} onPress={() => updateStatus(r._id, 'REJECTED')}><Text style={styles.actionText}>Reject</Text></Pressable>
+                    <Pressable style={styles.actionBtn} onPress={() => updateStatus(r._id, 'APPROVED')}><Text style={styles.actionText}>Approve</Text></Pressable>
+                    <Pressable style={styles.actionBtn} onPress={() => updateStatus(r._id, 'DISPATCHED')}><Text style={styles.actionText}>Dispatch</Text></Pressable>
+                    <Pressable style={styles.actionBtn} onPress={() => updateStatus(r._id, 'DELIVERED')}><Text style={styles.actionText}>Delivered</Text></Pressable>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        </ScrollView>
+      </Card>
+
+      <Card>
         <Text style={styles.ledgerTitle}>2 Sale Stock Ledger</Text>
+        <View style={styles.modeRow}>{LEDGER_FILTERS.map((f) => <Pressable key={f.key} style={[styles.modeBtn, saleLedgerFilter === f.key ? styles.modeBtnActive : null]} onPress={() => setSaleLedgerFilter(f.key)}><Text>{f.label}</Text></Pressable>)}</View>
         <ScrollView horizontal showsHorizontalScrollIndicator>
           <View style={styles.ledgerWrap}>
-            <View style={styles.headerRow}>{['Code', 'From', 'Distributor Name', 'Business Name', 'Date and Time', 'Status', 'Unread', 'Action'].map((h) => <Text key={h} style={[styles.headCell, h === 'Action' ? styles.colActionWide : styles.colDataWide]}>{h}</Text>)}</View>
+            <View style={styles.headerRow}>{['Code', 'From', 'Distributor Name', 'Business Name', 'Date and Time', 'Action'].map((h) => <Text key={h} style={[styles.headCell, h === 'Action' ? styles.colActionWide : styles.colDataWide]}>{h}</Text>)}</View>
             <View style={{ gap: 8, marginTop: 8 }}>
-              {rows.length === 0 ? <Text style={styles.help}>No sale stock found.</Text> : rows.map((r) => (
+              {ledgerRows.length === 0 ? <Text style={styles.help}>No sale stock found.</Text> : ledgerRows.map((r) => (
                 <View key={r._id} style={styles.dataRow}>
                   <Text style={[styles.cell, styles.colDataWide]}>{r.transactionCode || '-'}</Text>
                   <Text style={[styles.cell, styles.colDataWide]}>{r.fromEntityName || '-'}</Text>
                   <Text style={[styles.cell, styles.colDataWide]}>{r.distributorName || '-'}</Text>
                   <Text style={[styles.cell, styles.colDataWide]}>{r.brandName || r.toEntityName || '-'}</Text>
                   <Text style={[styles.cell, styles.colDataWide]}>{r.transactionAt ? new Date(r.transactionAt).toLocaleString() : '-'}</Text>
-                  <Text style={[styles.cell, styles.colDataWide]}>{r.requestStatus || '-'}</Text>
-                  <Text style={[styles.cell, styles.colDataWide]}>{r.requestReadAt ? 'Read' : 'Unread'}</Text>
                   <View style={[styles.actionCell, styles.colActionWide]}>
-                    <Pressable style={styles.actionBtn} onPress={() => markRead(r._id)}><Text style={styles.actionText}>Open</Text></Pressable>
-                    <Pressable style={styles.actionBtn} onPress={() => updateStatus(r._id, 'REJECTED')}><Text style={styles.actionText}>Reject</Text></Pressable>
-                    <Pressable style={styles.actionBtn} onPress={() => updateStatus(r._id, 'APPROVED')}><Text style={styles.actionText}>Approve</Text></Pressable>
-                    <Pressable style={styles.actionBtn} onPress={() => updateStatus(r._id, 'DISPATCHED')}><Text style={styles.actionText}>Dispatch</Text></Pressable>
-                    <Pressable style={styles.actionBtn} onPress={() => updateStatus(r._id, 'DELIVERED')}><Text style={styles.actionText}>Delivered</Text></Pressable>
+                    <Pressable style={styles.actionBtn} onPress={() => onInvoice(r)}><Text style={styles.actionText}>Invoice/Receipt</Text></Pressable>
                     <Pressable style={styles.deleteBtn} onPress={() => onDelete(r._id)}><Text style={styles.deleteText}>Delete</Text></Pressable>
                   </View>
                 </View>
@@ -296,13 +361,16 @@ const styles = StyleSheet.create({
   label: { marginTop: 8, fontSize: 12, fontWeight: '600', color: '#374151' },
   input: { marginTop: 4, borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#fff', color: '#111827', minWidth: 120 },
   productTableWrap: { minWidth: 2300 },
-  ledgerWrap: { minWidth: 1800 },
+  ledgerWrap: { minWidth: 1450 },
+  ledgerWrapRequests: { minWidth: 1550 },
   headerRow: { flexDirection: 'row', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, backgroundColor: '#f3f4f6', padding: 8 },
   headCell: { fontSize: 12, fontWeight: '700', color: '#111827' },
   colData: { width: 150 },
   colAction: { width: 90 },
-  colDataWide: { width: 180 },
-  colActionWide: { width: 380 },
+  colDataWide: { width: 210 },
+  colActionWide: { width: 220 },
+  colDataReq: { width: 170 },
+  colActionReq: { width: 360 },
   dataRow: { flexDirection: 'row', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, backgroundColor: '#fff', padding: 8, alignItems: 'center' },
   cell: { fontSize: 12, color: '#374151' },
   actionCell: { flexDirection: 'row', gap: 6, alignItems: 'center', flexWrap: 'wrap' },
@@ -312,6 +380,7 @@ const styles = StyleSheet.create({
   secondaryBtn: { marginTop: 10, alignSelf: 'flex-start', borderWidth: 1, borderColor: '#a1a1aa', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: '#fff' },
   secondaryText: { color: '#111827', fontWeight: '700', fontSize: 12 },
   totalsWrap: { marginTop: 10, gap: 8 },
+  totalAmount: { color: '#111827', fontWeight: '700' },
   rowInput: { marginTop: 4, flexDirection: 'row', alignItems: 'center', gap: 8 },
   rowLabel: { width: 110, fontSize: 12, color: '#374151' },
   rowField: { flex: 1, borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 7, backgroundColor: '#fff', color: '#111827' },
