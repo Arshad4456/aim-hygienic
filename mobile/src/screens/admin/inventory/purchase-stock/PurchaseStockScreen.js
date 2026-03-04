@@ -352,7 +352,7 @@ function CalendarModal({ visible, value, onClose, onSelect }) {
             <Pressable style={styles.navBtn} onPress={() => { if (month === 11) { setMonth(0); setYear((y) => y + 1); } else setMonth((m) => m + 1); }}><Text>{'>'}</Text></Pressable>
           </View>
           <View style={styles.calGrid}>
-            {['S','M','T','W','T','F','S'].map((d) => <Text key={d} style={styles.calHead}>{d}</Text>)}
+            {['S','M','T','W','T','F','S'].map((d, idx) => <Text key={`day-${idx}-${d}`} style={styles.calHead}>{d}</Text>)}
             {cells.map((d, idx) => (
               <Pressable key={`${d}-${idx}`} disabled={!d} style={[styles.calCell, !d ? styles.calCellEmpty : null]} onPress={() => onSelect(`${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`)}>
                 <Text style={styles.calCellText}>{d || ''}</Text>

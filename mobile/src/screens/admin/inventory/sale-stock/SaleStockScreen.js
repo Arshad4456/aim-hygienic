@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import apiClient from '../../../../api/client';
 import Card from '../../../../ui/Card';
 import Loader from '../../../../ui/Loader';
@@ -53,6 +53,58 @@ function computeLine(line, product) {
   return { sizeText: product?.size || '-', sizeMultiplier, qty, rate, gross, toValue, discValue, extraValue, bonsValue, v4gst, gstPer, gstAmount, netAmt };
 }
 
+function escapeHtml(value) { return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+
+function buildInvoiceHtml(txn) {
+  const logo = `
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="width:54px;height:54px;border-radius:10px;background:linear-gradient(135deg,#065f46,#10b981);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;">AH</div>
+      <div><div style="font-weight:700;font-size:16px;">AIM-HYGIENICS</div><div style="font-size:11px;color:#555;">PVT LIMITED</div></div>
+    </div>`;
+
+  const rows = (txn.items || []).map((i, idx) => {
+    const parts = Object.fromEntries(String(i.notes || '').split(',').map((seg) => seg.split(':')));
+    return `<tr><td>${idx + 1}</td><td>${escapeHtml(i.productName || '-')}</td><td>${toNum(i.totalPacks || 0)}</td><td>${toNum(i.onePackPrice || 0)}</td><td>${toNum(parts.gross || 0)}</td><td>${toNum(parts.to || 0)}</td><td>${toNum(parts.disc || 0)}</td><td>${toNum(parts.extra || 0)}</td><td>${toNum(parts.bons || 0)}</td><td>${toNum(parts.v4gst || 0)}</td><td>${toNum(parts.gst || 0)}</td><td>${toNum(parts.net || i.totalPrice || 0)}</td></tr>`;
+  });
+
+  const lineTotal = (txn.items || []).reduce((sum, i) => {
+    const parts = Object.fromEntries(String(i.notes || '').split(',').map((seg) => seg.split(':')));
+    return sum + toNum(parts.net || i.totalPrice);
+  }, 0);
+
+  const totalAmount = toNum(txn.subtotal || lineTotal);
+  const extraDiscPer = toNum(txn.extraDiscPer);
+  const advTaxPer = toNum(txn.advTaxPer);
+  const whTaxPer = toNum(txn.whTaxPer);
+  const expense = toNum(txn.expense);
+  const extraDiscAmt = (totalAmount * extraDiscPer) / 100;
+  const advTaxAmt = (totalAmount * advTaxPer) / 100;
+  const whTaxAmt = (totalAmount * whTaxPer) / 100;
+  const calculatedGrandTotal = totalAmount - extraDiscAmt + advTaxAmt + whTaxAmt + expense;
+
+  return `
+  <html><body style="font-family: Arial; padding: 16px; position:relative;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">${logo}<div style="text-align:right;"><div style="font-size:13px;font-weight:700;">Sales Tax Invoice</div></div></div>
+    <div style="margin-top:8px; display:flex; justify-content:space-between; font-size:12px;"><div>Date: ${escapeHtml(new Date(txn.transactionAt).toLocaleDateString())}</div><div>Invoice #: ${escapeHtml(txn.transactionCode || '-')}</div></div>
+    <div style="margin-top:8px;font-size:12px;">Invoice From: ${escapeHtml(txn.fromEntityName || txn.warehouseName || '-')}</div>
+    <div style="font-size:12px;">Bill To: ${escapeHtml(txn.toEntityName || txn.distributorName || '-')}</div>
+    <div style="font-size:12px;">Address: ${escapeHtml(String(txn.note || '').trim() || '-')}</div>
+    <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; width:100%; margin-top:10px; font-size:12px;">
+      <thead><tr><th>#</th><th>Product Name</th><th>Qty</th><th>Rate</th><th>Gross</th><th>TO</th><th>Disc</th><th>Extra</th><th>Bons</th><th>V4GST</th><th>GST</th><th>Net Amt</th></tr></thead>
+      <tbody>${rows.join('')}</tbody>
+    </table>
+    <div style="margin-top:12px; font-size:12px; display:flex; justify-content:flex-end;"><div style="min-width:280px;">
+      <div style="display:flex; justify-content:space-between;"><span>Total Amount:</span><strong>${totalAmount.toFixed(2)}</strong></div>
+      <div style="display:flex; justify-content:space-between;"><span>Extra Disc (${extraDiscPer}%):</span><span>${extraDiscAmt.toFixed(2)}</span></div>
+      <div style="display:flex; justify-content:space-between;"><span>Adv Tax (${advTaxPer}%):</span><span>${advTaxAmt.toFixed(2)}</span></div>
+      <div style="display:flex; justify-content:space-between;"><span>W.H Tax (${whTaxPer}%):</span><span>${whTaxAmt.toFixed(2)}</span></div>
+      <div style="display:flex; justify-content:space-between;"><span>Expense:</span><span>${expense.toFixed(2)}</span></div>
+      <div style="display:flex; justify-content:space-between; margin-top:4px; border-top:1px solid #ccc; padding-top:4px;"><span><strong>Grand Total:</strong></span><strong>${calculatedGrandTotal.toFixed(2)}</strong></div>
+    </div></div>
+    <div style="margin-top:16px;text-align:center;font-size:13px;font-weight:600;">Thank you for bussiness with us</div>
+  </body></html>`;
+}
+
 export default function SaleStockScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -66,6 +118,7 @@ export default function SaleStockScreen() {
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saleLedgerFilter, setSaleLedgerFilter] = useState('all');
+  const [previewRow, setPreviewRow] = useState(null);
 
   const load = async () => {
     setLoading(true); setErr('');
@@ -184,7 +237,15 @@ export default function SaleStockScreen() {
     { text: 'Delete', style: 'destructive', onPress: async () => { try { await apiClient.delete(`/inventory/transactions/${id}`); await load(); } catch (e) { setErr(e.message || 'Failed to delete'); } } },
   ]);
 
-  const onInvoice = (r) => Alert.alert('Invoice/Receipt', `Code: ${r.transactionCode || '-'}\nFrom: ${r.fromEntityName || '-'}\nTo: ${r.toEntityName || '-'}\nDate: ${r.transactionAt ? new Date(r.transactionAt).toLocaleString() : '-'}\nGrand Total: ${Number(r.grandTotal || 0).toFixed(2)}`);
+  const onInvoice = async (row) => {
+    try {
+      const html = buildInvoiceHtml(row);
+      const url = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+      await Linking.openURL(url);
+    } catch (_e) {
+      setPreviewRow(row);
+    }
+  };
 
   if (loading) return <Loader />;
 
@@ -278,6 +339,7 @@ export default function SaleStockScreen() {
                   <Text style={[styles.cell, styles.colDataReq]}>{r.requestReadAt ? 'Read' : 'Unread'}</Text>
                   <View style={[styles.actionCell, styles.colActionReq]}>
                     <Pressable style={styles.actionBtn} onPress={() => markRead(r._id)}><Text style={styles.actionText}>Open</Text></Pressable>
+                    <Pressable style={styles.actionBtn} onPress={() => setPreviewRow(r)}><Text style={styles.actionText}>Preview</Text></Pressable>
                     <Pressable style={styles.actionBtn} onPress={() => updateStatus(r._id, 'REJECTED')}><Text style={styles.actionText}>Reject</Text></Pressable>
                     <Pressable style={styles.actionBtn} onPress={() => updateStatus(r._id, 'APPROVED')}><Text style={styles.actionText}>Approve</Text></Pressable>
                     <Pressable style={styles.actionBtn} onPress={() => updateStatus(r._id, 'DISPATCHED')}><Text style={styles.actionText}>Dispatch</Text></Pressable>
@@ -314,6 +376,33 @@ export default function SaleStockScreen() {
           </View>
         </ScrollView>
       </Card>
+
+      <Modal visible={Boolean(previewRow)} transparent animationType="slide" onRequestClose={() => setPreviewRow(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.dropdownModalCard}>
+            <Text style={styles.modalTitle}>Request Preview</Text>
+            {previewRow ? (
+              <ScrollView style={{ maxHeight: 420 }}>
+                <Text style={styles.previewLine}>Code: {previewRow.transactionCode || '-'}</Text>
+                <Text style={styles.previewLine}>From: {previewRow.fromEntityName || '-'}</Text>
+                <Text style={styles.previewLine}>To: {previewRow.toEntityName || previewRow.brandName || previewRow.distributorName || '-'}</Text>
+                <Text style={styles.previewLine}>Source: {previewRow.requestSourceRole || previewRow.fromEntityType || '-'}</Text>
+                <Text style={styles.previewLine}>Status: {normalizeRequestStatus(previewRow.requestStatus || 'PENDING')}</Text>
+                <Text style={styles.previewLine}>Date: {previewRow.transactionAt ? new Date(previewRow.transactionAt).toLocaleString() : '-'}</Text>
+                <Text style={[styles.previewLine, { marginTop: 8, fontWeight: '700' }]}>Items</Text>
+                {(previewRow.items || []).map((item, idx) => (
+                  <View key={`${item.productId}-${idx}`} style={styles.previewItem}>
+                    <Text style={styles.previewLine}>{idx + 1}. {item.productName || item.productId || '-'}</Text>
+                    <Text style={styles.previewLine}>Qty: {Number(item.totalPacks || 0)} | Rate: {Number(item.onePackPrice || item.unitPrice || 0).toFixed(2)} | Net: {Number(item.totalPrice || 0).toFixed(2)}</Text>
+                  </View>
+                ))}
+              </ScrollView>
+            ) : null}
+            <Pressable style={styles.cancelBtn} onPress={() => setPreviewRow(null)}><Text style={styles.cancelText}>Close</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
+
     </ScrollView>
   );
 }
@@ -404,4 +493,6 @@ const styles = StyleSheet.create({
   dropdownOption: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10, marginBottom: 6 },
   cancelBtn: { marginTop: 8, borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
   cancelText: { color: '#111827', fontWeight: '600' },
+  previewLine: { color: '#374151', fontSize: 13, marginTop: 4 },
+  previewItem: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, padding: 8, marginTop: 6, backgroundColor: '#fff' },
 });
