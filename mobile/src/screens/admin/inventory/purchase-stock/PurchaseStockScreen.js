@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import apiClient from '../../../../api/client';
 import Card from '../../../../ui/Card';
 import Loader from '../../../../ui/Loader';
@@ -64,6 +64,7 @@ export default function PurchaseStockScreen() {
   const [warehouses, setWarehouses] = useState([]);
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [invoiceRow, setInvoiceRow] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -172,10 +173,6 @@ export default function PurchaseStockScreen() {
     ]);
   };
 
-  const onInvoice = (row) => {
-    Alert.alert('Invoice/Receipt', `Code: ${row.transactionCode}\nFrom: ${row.fromEntityName || '-'}\nTo: ${row.toEntityName || '-'}\nGrand Total: ${Number(row.grandTotal || 0).toFixed(2)}`);
-  };
-
   if (loading) return <Loader />;
 
   return (
@@ -188,7 +185,12 @@ export default function PurchaseStockScreen() {
         <Text style={styles.label}>From</Text>
         <TextInput style={styles.input} value={form.fromEntityName} onChangeText={(v) => setField('fromEntityName', v)} />
         <Text style={styles.label}>To (Warehouse)</Text>
-        <PillRow options={warehouses.map((w) => ({ value: w._id, label: w.name }))} value={form.toWarehouseId} onPick={(v) => setField('toWarehouseId', v)} />
+        <SelectDropdown
+          placeholder="Select warehouse"
+          options={warehouses.map((w) => ({ value: w._id, label: w.name }))}
+          value={form.toWarehouseId}
+          onPick={(v) => setField('toWarehouseId', v)}
+        />
 
         <ScrollView horizontal showsHorizontalScrollIndicator>
           <View style={styles.productTableWrap}>
@@ -198,9 +200,16 @@ export default function PurchaseStockScreen() {
               ))}
             </View>
             <View style={{ gap: 8, marginTop: 8 }}>
-              {lineRows.map(({ idx, line, product, calc }) => (
+              {lineRows.map(({ idx, line, calc }) => (
                 <View key={`line-${idx}`} style={styles.dataRow}>
-                  <View style={styles.colData}><PillRow options={products.map((p) => ({ value: p._id, label: p.name }))} value={line.productId} onPick={(v) => setItem(idx, 'productId', v)} /></View>
+                  <View style={styles.colData}>
+                    <SelectDropdown
+                      placeholder="Select product"
+                      options={products.map((p) => ({ value: p._id, label: p.name }))}
+                      value={line.productId}
+                      onPick={(v) => setItem(idx, 'productId', v)}
+                    />
+                  </View>
                   <Text style={[styles.cell, styles.colData]}>{calc.sizeText}</Text>
                   <TextInput style={[styles.input, styles.colData]} keyboardType="numeric" value={line.qty} onChangeText={(v) => setItem(idx, 'qty', v)} />
                   <Text style={[styles.cell, styles.colData]}>{calc.rate.toFixed(2)}</Text>
@@ -255,7 +264,7 @@ export default function PurchaseStockScreen() {
                   <Text style={[styles.cell, styles.colDataWide]}>{r.transactionAt ? new Date(r.transactionAt).toLocaleString() : '-'}</Text>
                   <Text style={[styles.cell, styles.colDataWide]}>{Number(r.grandTotal || 0).toFixed(2)}</Text>
                   <View style={[styles.actionCell, styles.colActionWide]}>
-                    <Pressable style={styles.actionBtn} onPress={() => onInvoice(r)}><Text style={styles.actionText}>Invoice/Receipt</Text></Pressable>
+                    <Pressable style={styles.actionBtn} onPress={() => setInvoiceRow(r)}><Text style={styles.actionText}>Invoice/Receipt</Text></Pressable>
                     <Pressable style={styles.deleteBtn} onPress={() => onDelete(r._id)}><Text style={styles.deleteText}>Delete</Text></Pressable>
                   </View>
                 </View>
@@ -264,7 +273,73 @@ export default function PurchaseStockScreen() {
           </View>
         </ScrollView>
       </Card>
+
+      <InvoiceReceiptModal row={invoiceRow} onClose={() => setInvoiceRow(null)} />
     </ScrollView>
+  );
+}
+
+function SelectDropdown({ placeholder, options, value, onPick }) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((o) => o.value === value);
+  return (
+    <>
+      <Pressable style={styles.dropdownBox} onPress={() => setOpen(true)}>
+        <Text style={selected ? styles.dropdownText : styles.dropdownPlaceholder}>{selected?.label || placeholder}</Text>
+      </Pressable>
+      <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.dropdownModalCard}>
+            <Text style={styles.modalTitle}>{placeholder}</Text>
+            <ScrollView style={{ maxHeight: 300 }}>
+              {options.map((o) => (
+                <Pressable key={`${o.value}`} style={styles.dropdownOption} onPress={() => { onPick(o.value); setOpen(false); }}>
+                  <Text style={[styles.dropdownText, value === o.value ? styles.dropdownTextActive : null]}>{o.label}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            <Pressable style={styles.cancelBtn} onPress={() => setOpen(false)}><Text style={styles.cancelText}>Close</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
+}
+
+function InvoiceReceiptModal({ row, onClose }) {
+  if (!row) return null;
+  return (
+    <Modal visible={Boolean(row)} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.invoiceCard}>
+          <Text style={styles.invoiceTitle}>Invoice / Receipt</Text>
+          <Text style={styles.invoiceLine}>Code: {row.transactionCode || '-'}</Text>
+          <Text style={styles.invoiceLine}>From: {row.fromEntityName || '-'}</Text>
+          <Text style={styles.invoiceLine}>To: {row.toEntityName || '-'}</Text>
+          <Text style={styles.invoiceLine}>Date: {row.transactionAt ? new Date(row.transactionAt).toLocaleString() : '-'}</Text>
+          <Text style={styles.invoiceLine}>Subtotal: {Number(row.subtotal || 0).toFixed(2)}</Text>
+          <Text style={styles.invoiceLine}>Extra Disc (%): {Number(row.extraDiscPer || 0).toFixed(2)}</Text>
+          <Text style={styles.invoiceLine}>Adv Tax (%): {Number(row.advTaxPer || 0).toFixed(2)}</Text>
+          <Text style={styles.invoiceLine}>W.H Tax (%): {Number(row.whTaxPer || 0).toFixed(2)}</Text>
+          <Text style={styles.invoiceLine}>Expense: {Number(row.expense || 0).toFixed(2)}</Text>
+          <Text style={styles.invoiceTotal}>Grand Total: {Number(row.grandTotal || 0).toFixed(2)}</Text>
+
+          <Text style={[styles.invoiceTitle, { fontSize: 16, marginTop: 8 }]}>Items</Text>
+          <ScrollView style={{ maxHeight: 220 }}>
+            {(row.items || []).map((item, idx) => (
+              <View key={`${item.productId}-${idx}`} style={styles.invoiceItem}>
+                <Text style={styles.invoiceItemText}>{item.productName || item.productId || '-'}</Text>
+                <Text style={styles.invoiceItemText}>Qty: {Number(item.totalPacks || 0)}</Text>
+                <Text style={styles.invoiceItemText}>Rate: {Number(item.unitPrice || 0).toFixed(2)}</Text>
+                <Text style={styles.invoiceItemText}>Amount: {Number(item.totalPrice || 0).toFixed(2)}</Text>
+              </View>
+            ))}
+          </ScrollView>
+
+          <Pressable style={styles.primaryBtn} onPress={onClose}><Text style={styles.primaryText}>Close</Text></Pressable>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -278,18 +353,6 @@ function RowInput({ label, value, onChange, amount }) {
   );
 }
 
-function PillRow({ options, value, onPick }) {
-  return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-      {options.map((o) => (
-        <Pressable key={`${o.value}`} style={[styles.chip, value === o.value ? styles.chipActive : null]} onPress={() => onPick(o.value)}>
-          <Text style={[styles.chipText, value === o.value ? styles.chipTextActive : null]}>{o.label}</Text>
-        </Pressable>
-      ))}
-    </ScrollView>
-  );
-}
-
 const styles = StyleSheet.create({
   content: { padding: 14, gap: 10, backgroundColor: '#f5f6f8' },
   title: { fontSize: 24, fontWeight: '700', color: '#111827' },
@@ -297,10 +360,6 @@ const styles = StyleSheet.create({
   error: { marginTop: 8, color: '#b91c1c' },
   label: { marginTop: 8, fontSize: 12, fontWeight: '600', color: '#374151' },
   input: { marginTop: 4, borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#fff', color: '#111827', minWidth: 120 },
-  chip: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#fff' },
-  chipActive: { borderColor: '#10b981', backgroundColor: '#ecfdf5' },
-  chipText: { color: '#52525b', fontSize: 12 },
-  chipTextActive: { color: '#047857', fontWeight: '700' },
   productTableWrap: { minWidth: 2450 },
   ledgerWrap: { minWidth: 1200 },
   headerRow: { flexDirection: 'row', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, backgroundColor: '#f3f4f6', padding: 8 },
@@ -331,4 +390,20 @@ const styles = StyleSheet.create({
   deleteBtn: { borderWidth: 1, borderColor: '#fecaca', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 7, backgroundColor: '#fef2f2' },
   deleteText: { color: '#991b1b', fontSize: 12, fontWeight: '700' },
   help: { color: '#6b7280' },
+  dropdownBox: { marginTop: 4, borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, backgroundColor: '#fff', paddingHorizontal: 10, paddingVertical: 10 },
+  dropdownPlaceholder: { color: '#9ca3af', fontSize: 13 },
+  dropdownText: { color: '#111827', fontSize: 13 },
+  dropdownTextActive: { color: '#047857', fontWeight: '700' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
+  dropdownModalCard: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 12 },
+  modalTitle: { fontSize: 17, fontWeight: '700', color: '#111827', marginBottom: 8 },
+  dropdownOption: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10, marginBottom: 6 },
+  cancelBtn: { marginTop: 8, borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
+  cancelText: { color: '#111827', fontWeight: '600' },
+  invoiceCard: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 12, maxHeight: '92%' },
+  invoiceTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
+  invoiceLine: { marginTop: 4, color: '#374151', fontSize: 13 },
+  invoiceTotal: { marginTop: 6, color: '#111827', fontWeight: '700', fontSize: 15 },
+  invoiceItem: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, padding: 8, marginTop: 6 },
+  invoiceItemText: { color: '#374151', fontSize: 12 },
 });
