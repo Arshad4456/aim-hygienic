@@ -28,7 +28,7 @@ function Field({ label, value, onChangeText, multiline = false }) {
   );
 }
 
-export default function CompaniesScreen() {
+export default function CompaniesScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
@@ -38,9 +38,6 @@ export default function CompaniesScreen() {
   const [editOpen, setEditOpen] = useState(false);
   const [editId, setEditId] = useState('');
   const [form, setForm] = useState(emptyForm);
-
-  const [addOpen, setAddOpen] = useState(false);
-  const [addForm, setAddForm] = useState(emptyForm);
 
   const load = useCallback(async () => {
     setErr('');
@@ -100,23 +97,6 @@ export default function CompaniesScreen() {
     }
   };
 
-  const createCompany = async () => {
-    setSaving(true);
-    setErr('');
-    setOk('');
-    try {
-      await apiClient.post('/companies', addForm);
-      setAddOpen(false);
-      setAddForm(emptyForm);
-      setOk('Company created successfully.');
-      await load();
-    } catch (e) {
-      setErr(e.message || 'Failed to create company');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const headerRows = useMemo(
     () => ['Company ID', 'Company Name', 'Phone #1', 'Email', 'Actions'],
     []
@@ -132,7 +112,7 @@ export default function CompaniesScreen() {
             <Text style={styles.title}>Companies</Text>
             <Text style={styles.subtitle}>Same data source as website company list (`/companies`).</Text>
           </View>
-          <Pressable style={styles.addBtn} onPress={() => setAddOpen(true)}>
+          <Pressable style={styles.addBtn} onPress={() => navigation?.navigate?.('admin:companies/add')}>
             <Text style={styles.addBtnText}>Add Company</Text>
           </Pressable>
         </View>
@@ -169,31 +149,6 @@ export default function CompaniesScreen() {
           </View>
         </ScrollView>
       </Card>
-
-      <Modal visible={addOpen} transparent animationType="slide" onRequestClose={() => setAddOpen(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Add New Company</Text>
-            <ScrollView contentContainerStyle={styles.formWrap}>
-              <Field label="Company ID" value={addForm.companyId} onChangeText={(v) => setAddForm((s) => ({ ...s, companyId: v }))} />
-              <Field label="Company Name" value={addForm.name} onChangeText={(v) => setAddForm((s) => ({ ...s, name: v }))} />
-              <Field label="Phone #1" value={addForm.phone1} onChangeText={(v) => setAddForm((s) => ({ ...s, phone1: v }))} />
-              <Field label="Phone #2" value={addForm.phone2} onChangeText={(v) => setAddForm((s) => ({ ...s, phone2: v }))} />
-              <Field label="Email" value={addForm.email} onChangeText={(v) => setAddForm((s) => ({ ...s, email: v }))} />
-              <Field
-                label="Main Office Address"
-                value={addForm.mainOfficeAddress}
-                onChangeText={(v) => setAddForm((s) => ({ ...s, mainOfficeAddress: v }))}
-                multiline
-              />
-            </ScrollView>
-            <View style={styles.modalActions}>
-              <Pressable style={styles.cancelBtn} onPress={() => setAddOpen(false)}><Text style={styles.cancelText}>Cancel</Text></Pressable>
-              <Pressable style={styles.saveBtn} onPress={createCompany} disabled={saving}><Text style={styles.saveText}>{saving ? 'Saving...' : 'Save Company'}</Text></Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       <Modal visible={editOpen} transparent animationType="slide" onRequestClose={() => setEditOpen(false)}>
         <View style={styles.modalOverlay}>
