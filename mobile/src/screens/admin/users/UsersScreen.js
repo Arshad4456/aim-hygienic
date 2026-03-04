@@ -25,59 +25,185 @@ function toCsv(rows) {
   return [headers.join(','), ...lines.map((line) => line.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))].join('\n');
 }
 
-function buildPdfHtml(rows) {
-  const body = rows.map((u, index) => `
-    <tr>
-      <td>${index + 1}</td>
-      <td>${u.userId || '-'}</td>
-      <td>${u.fullName || '-'}</td>
-      <td>${u.role || '-'}</td>
-      <td>${u.warehouseName || '-'}</td>
-      <td>${u.regionName || '-'}</td>
-      <td>${u.zoneName || '-'}</td>
-      <td>${u.territoryName || '-'}</td>
-      <td>${u.fieldName || '-'}</td>
-      <td>${u.mobileNumber || '-'}</td>
-      <td>${u.email || '-'}</td>
-    </tr>
-  `).join('');
+function wrapByChars(value, maxChars) {
+  const text = String(value || '-');
+  if (text.length <= maxChars) return [text];
+  const out = [];
+  let rest = text;
+  while (rest.length > maxChars) {
+    out.push(rest.slice(0, maxChars));
+    rest = rest.slice(maxChars);
+  }
+  if (rest) out.push(rest);
+  return out;
+}
 
-  return `
-    <html>
-      <head>
-        <meta charset="utf-8" />
-        <style>
-          body { font-family: Arial, sans-serif; padding: 16px; }
-          h1 { font-size: 18px; margin: 0 0 12px; }
-          table { border-collapse: collapse; width: 100%; font-size: 11px; }
-          th, td { border: 1px solid #d1d5db; padding: 6px; text-align: left; }
-          th { background: #f3f4f6; }
-          tr:nth-child(even) { background: #fafafa; }
-        </style>
-      </head>
-      <body>
-        <h1>Users Report</h1>
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>User ID</th>
-              <th>Name</th>
-              <th>Role</th>
-              <th>Warehouse</th>
-              <th>Region</th>
-              <th>Zone</th>
-              <th>Territory</th>
-              <th>Field</th>
-              <th>Mobile</th>
-              <th>Email</th>
-            </tr>
-          </thead>
-          <tbody>${body}</tbody>
-        </table>
-      </body>
-    </html>
-  `;
+function pdfEscape(value) {
+  return String(value || '').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+}
+
+function buildTablePdf(rows) {
+  const pageWidth = 842;
+  const pageHeight = 595;
+  const margin = 26;
+  const rowPadding = 3;
+
+  const columns = [
+    { key: 'userId', label: 'User ID', width: 64, chars: 12 },
+    { key: 'fullName', label: 'Name', width: 110, chars: 20 },
+    { key: 'role', label: 'Role', width: 95, chars: 17 },
+    { key: 'warehouseName', label: 'Warehouse', width: 86, chars: 16 },
+    { key: 'regionName', label: 'Region', width: 72, chars: 14 },
+    { key: 'zoneName', label: 'Zone', width: 72, chars: 14 },
+    { key: 'territoryName', label: 'Territory', width: 82, chars: 15 },
+    { key: 'fieldName', label: 'Field', width: 68, chars: 13 },
+    { key: 'mobileNumber', label: 'Mobile', width: 84, chars: 14 },
+    { key: 'email', label: 'Email', width: 123, chars: 24 },
+  ];
+
+  const rowsForExport = rows.map((row) => ({
+    userId: row.userId || '-',
+    fullName: row.fullName || '-',
+    role: row.role || '-',
+    warehouseName: row.warehouseName || '-',
+    regionName: row.regionName || '-',
+    zoneName: row.zoneName || '-',
+    territoryName: row.territoryName || '-',
+    fieldName: row.fieldName || '-',
+    mobileNumber: row.mobileNumber || '-',
+    email: row.email || '-',
+  }));
+
+  const pageStreams = [];
+  let pageContent = '';
+  let y = pageHeight - margin;
+
+  function drawText(x, yy, text, size = 8) {
+    pageContent += `BT /F1 ${size} Tf 1 0 0 1 ${x.toFixed(2)} ${yy.toFixed(2)} Tm (${pdfEscape(text)}) Tj ET\n`;
+  }
+
+  function drawLine(x1, y1, x2, y2) {
+    pageContent += `${x1.toFixed(2)} ${y1.toFixed(2)} m ${x2.toFixed(2)} ${y2.toFixed(2)} l S\n`;
+  }
+
+  function drawHeader() {
+    drawText(margin, y, `AIM Hygienic - User List (${new Date().toLocaleString()})`, 10);
+    y -= 16;
+    let x = margin;
+    const top = y + 6;
+    const bottom = y - 12;
+    drawLine(margin, top, pageWidth - margin, top);
+    drawLine(margin, bottom, pageWidth - margin, bottom);
+    columns.forEach((col) => {
+      drawText(x + 2, y - 8, col.label, 8);
+      drawLine(x, top, x, bottom);
+      x += col.width;
+    });
+    drawLine(pageWidth - margin, top, pageWidth - margin, bottom);
+    y -= 18;
+  }
+
+  function startPage() {
+    if (pageContent) pageStreams.push(pageContent);
+    pageContent = '';
+    y = pageHeight - margin;
+    drawHeader();
+  }
+
+  startPage();
+
+  rowsForExport.forEach((row) => {
+    const lineGroups = columns.map((col) => wrapByChars(row[col.key], col.chars));
+    const maxLines = Math.max(...lineGroups.map((g) => g.length));
+    const rowHeight = maxLines * 10 + rowPadding * 2;
+
+    if (y - rowHeight < margin) startPage();
+
+    let x = margin;
+    const top = y + 6;
+    const bottom = y - rowHeight + 4;
+    drawLine(margin, top, pageWidth - margin, top);
+    drawLine(margin, bottom, pageWidth - margin, bottom);
+
+    columns.forEach((col, idx) => {
+      drawLine(x, top, x, bottom);
+      lineGroups[idx].forEach((line, li) => drawText(x + 2, y - 8 - li * 10, line, 8));
+      x += col.width;
+    });
+    drawLine(pageWidth - margin, top, pageWidth - margin, bottom);
+
+    y -= rowHeight;
+  });
+
+  if (pageContent) pageStreams.push(pageContent);
+
+  const objs = [];
+  const catalogObjId = 1;
+  const pagesObjId = 2;
+  const fontObjId = 3;
+
+  const pageObjIds = [];
+  const streamObjIds = [];
+  let nextObjId = 4;
+  pageStreams.forEach(() => {
+    pageObjIds.push(nextObjId);
+    nextObjId += 1;
+    streamObjIds.push(nextObjId);
+    nextObjId += 1;
+  });
+
+  objs[catalogObjId] = `<< /Type /Catalog /Pages ${pagesObjId} 0 R >>`;
+  objs[pagesObjId] = `<< /Type /Pages /Kids [${pageObjIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageObjIds.length} >>`;
+  objs[fontObjId] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
+
+  pageStreams.forEach((stream, index) => {
+    objs[pageObjIds[index]] = `<< /Type /Page /Parent ${pagesObjId} 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontObjId} 0 R >> >> /Contents ${streamObjIds[index]} 0 R >>`;
+    objs[streamObjIds[index]] = `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`;
+  });
+
+  let pdf = '%PDF-1.4\n';
+  const offsets = new Array(objs.length).fill(0);
+  for (let idx = 1; idx < objs.length; idx += 1) {
+    const obj = objs[idx];
+    if (!obj) continue;
+    offsets[idx] = pdf.length;
+    pdf += `${idx} 0 obj\n${obj}\nendobj\n`;
+  }
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objs.length}\n0000000000 65535 f \n`;
+  for (let i = 1; i < objs.length; i += 1) {
+    const offset = offsets[i] || 0;
+    const marker = objs[i] ? 'n' : 'f';
+    pdf += `${String(offset).padStart(10, '0')} 00000 ${marker} \n`;
+  }
+  pdf += `trailer\n<< /Size ${objs.length} /Root ${catalogObjId} 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return pdf;
+}
+
+function toBase64(str) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+  let output = '';
+  let i = 0;
+  while (i < str.length) {
+    const c1 = str.charCodeAt(i++) & 0xff;
+    const c2 = i < str.length ? str.charCodeAt(i++) & 0xff : Number.NaN;
+    const c3 = i < str.length ? str.charCodeAt(i++) & 0xff : Number.NaN;
+
+    const e1 = c1 >> 2;
+    const e2 = ((c1 & 3) << 4) | (c2 >> 4);
+    let e3 = ((c2 & 15) << 2) | (c3 >> 6);
+    let e4 = c3 & 63;
+
+    if (Number.isNaN(c2)) {
+      e3 = 64;
+      e4 = 64;
+    } else if (Number.isNaN(c3)) {
+      e4 = 64;
+    }
+
+    output += chars.charAt(e1) + chars.charAt(e2) + chars.charAt(e3) + chars.charAt(e4);
+  }
+  return output;
 }
 
 export default function UsersScreen({ navigation }) {
@@ -262,11 +388,12 @@ export default function UsersScreen({ navigation }) {
   const downloadCsv = async () => {
     try {
       const csv = toCsv(filteredSorted);
+      const uri = `data:text/csv;base64,${toBase64(csv)}`;
       await Share.share({
         title: 'Users Excel (CSV)',
-        message: csv,
+        url: uri,
       });
-      Alert.alert('Downloaded Successfully', 'CSV export generated. Use the share sheet to save it in your File Manager.');
+      Alert.alert('Downloaded Successfully', 'CSV file is ready. Save it from the share options to local File Manager.');
     } catch (e) {
       Alert.alert('Download Failed', e.message || 'Could not export CSV file.');
     }
