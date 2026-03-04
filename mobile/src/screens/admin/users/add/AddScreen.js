@@ -3,12 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import apiClient from '../../../../api/client';
 import Card from '../../../../ui/Card';
 import Loader from '../../../../ui/Loader';
-
-const ROLES = [
-  'admin', 'ceo', 'manageDirector', 'nationalSM', 'regionalSM', 'zoneSM', 'fieldSM', 'territorySM',
-  'warehouseManager', 'salesman', 'orderBooker', 'deliveryBoy', 'distributor', 'brandManager',
-  'customer', 'kpo', 'hrAssistant', 'accountOfficer', 'cashier',
-];
+import { AIM_USER_ROLES, COMMON_USER_FIELDS, FIELD_LABELS, ROLE_EXTRA_FIELDS, validatePassword } from '../roleConfig';
 
 function SelectPills({ options, value, onChange }) {
   return (
@@ -22,7 +17,7 @@ function SelectPills({ options, value, onChange }) {
   );
 }
 
-function Field({ label, value, onChangeText, keyboardType = 'default', secureTextEntry = false }) {
+function Field({ label, value, onChangeText, keyboardType = 'default', secureTextEntry = false, readOnly = false }) {
   return (
     <View style={styles.fieldWrap}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -31,7 +26,8 @@ function Field({ label, value, onChangeText, keyboardType = 'default', secureTex
         onChangeText={onChangeText}
         keyboardType={keyboardType}
         secureTextEntry={secureTextEntry}
-        style={styles.input}
+        editable={!readOnly}
+        style={[styles.input, readOnly ? styles.inputReadonly : null]}
         placeholderTextColor="#71717a"
       />
     </View>
@@ -49,10 +45,11 @@ export default function AddScreen({ navigation }) {
   const [regions, setRegions] = useState([]);
   const [zones, setZones] = useState([]);
   const [areas, setAreas] = useState([]);
+  const [fields, setFields] = useState([]);
 
   const [form, setForm] = useState({
     userId: '',
-    role: 'salesman',
+    role: 'Salesman',
     fullName: '',
     email: '',
     mobileNumber: '',
@@ -69,6 +66,8 @@ export default function AddScreen({ navigation }) {
     zoneName: '',
     territoryId: '',
     territoryName: '',
+    fieldId: '',
+    fieldName: '',
   });
 
   useEffect(() => {
@@ -82,6 +81,12 @@ export default function AddScreen({ navigation }) {
           apiClient.get('/zones'),
           apiClient.get('/areas'),
         ]);
+        let f = { data: { fields: [] } };
+        try {
+          f = await apiClient.get('/fields');
+        } catch {
+          f = { data: { fields: [] } };
+        }
 
         if (!mounted) return;
 
@@ -91,6 +96,7 @@ export default function AddScreen({ navigation }) {
         setRegions(r.data?.regions || []);
         setZones(z.data?.zones || []);
         setAreas(a.data?.areas || []);
+        setFields(f.data?.fields || []);
 
         const nextId = `USR-${String(userRows.length + 1).padStart(4, '0')}`;
         setForm((prev) => ({ ...prev, userId: nextId }));
@@ -106,59 +112,59 @@ export default function AddScreen({ navigation }) {
     };
   }, []);
 
+  const roleNeeds = useMemo(() => ROLE_EXTRA_FIELDS[form.role] || [], [form.role]);
+
   const filteredRegions = useMemo(() => {
     if (!form.warehouseId) return regions;
-    return regions.filter((r) => !r.warehouseId || r.warehouseId === form.warehouseId);
-  }, [regions, form.warehouseId]);
+    return regions.filter((r) => !r.companyId || r.companyId === warehouses.find((w) => w.warehouseId === form.warehouseId)?.companyId);
+  }, [regions, warehouses, form.warehouseId]);
 
-  const filteredZones = useMemo(() => {
-    return zones.filter((z) => {
+  const filteredZones = useMemo(
+    () => zones.filter((z) => {
       if (form.warehouseId && z.warehouseId !== form.warehouseId) return false;
       if (form.regionId && z.regionId !== form.regionId) return false;
       return true;
-    });
-  }, [zones, form.warehouseId, form.regionId]);
+    }),
+    [zones, form.warehouseId, form.regionId]
+  );
 
-  const filteredAreas = useMemo(() => {
-    return areas.filter((a) => {
+  const filteredAreas = useMemo(
+    () => areas.filter((a) => {
       if (form.warehouseId && a.warehouseId !== form.warehouseId) return false;
       if (form.regionId && a.regionId !== form.regionId) return false;
       if (form.zoneId && a.zoneId !== form.zoneId) return false;
       return true;
-    });
-  }, [areas, form.warehouseId, form.regionId, form.zoneId]);
+    }),
+    [areas, form.warehouseId, form.regionId, form.zoneId]
+  );
+
+  const filteredFields = useMemo(
+    () => fields.filter((f) => {
+      if (form.warehouseId && f.warehouseId !== form.warehouseId) return false;
+      if (form.regionId && f.regionId !== form.regionId) return false;
+      if (form.zoneId && f.zoneId !== form.zoneId) return false;
+      if (form.territoryId && f.territoryId !== form.territoryId) return false;
+      return true;
+    }),
+    [fields, form.warehouseId, form.regionId, form.zoneId, form.territoryId]
+  );
 
   const save = async () => {
     setErr('');
     setOk('');
-    if (!form.role || !form.fullName.trim() || !form.mobileNumber.trim() || !form.password.trim()) {
-      setErr('Role, Full Name, Mobile Number and Password are required.');
+    const passwordError = validatePassword(form.password);
+    if (passwordError) {
+      setErr(passwordError);
+      return;
+    }
+    if (!form.role || !form.fullName.trim() || !form.mobileNumber.trim()) {
+      setErr('Role, Name, and Mobile Number are required.');
       return;
     }
 
     setSaving(true);
     try {
-      await apiClient.post('/users', {
-        userId: form.userId,
-        role: form.role,
-        fullName: form.fullName,
-        email: form.email,
-        mobileNumber: form.mobileNumber,
-        cnicNo: form.cnicNo,
-        address: form.address,
-        businessType: form.businessType,
-        businessName: form.businessName,
-        password: form.password,
-        warehouseId: form.warehouseId,
-        warehouseName: form.warehouseName,
-        regionId: form.regionId,
-        regionName: form.regionName,
-        zoneId: form.zoneId,
-        zoneName: form.zoneName,
-        territoryId: form.territoryId,
-        territoryName: form.territoryName,
-      });
-
+      await apiClient.post('/users', form);
       setOk('✅ User created successfully.');
       setTimeout(() => navigation?.navigate?.('admin:users'), 500);
     } catch (e) {
@@ -181,59 +187,94 @@ export default function AddScreen({ navigation }) {
 
         <View style={styles.formWrap}>
           <Text style={styles.fieldLabel}>Role</Text>
-          <SelectPills options={ROLES} value={form.role} onChange={(role) => setForm((s) => ({ ...s, role }))} />
+          <SelectPills options={AIM_USER_ROLES} value={form.role} onChange={(role) => setForm((s) => ({ ...s, role }))} />
 
-          <Field label="Auto User ID" value={form.userId} onChangeText={() => {}} />
-          <Field label="Full Name" value={form.fullName} onChangeText={(v) => setForm((s) => ({ ...s, fullName: v }))} />
-          <Field label="Email" value={form.email} onChangeText={(v) => setForm((s) => ({ ...s, email: v }))} keyboardType="email-address" />
-          <Field label="Mobile Number" value={form.mobileNumber} onChangeText={(v) => setForm((s) => ({ ...s, mobileNumber: v }))} keyboardType="phone-pad" />
-          <Field label="CNIC" value={form.cnicNo} onChangeText={(v) => setForm((s) => ({ ...s, cnicNo: v }))} />
-          <Field label="Address" value={form.address} onChangeText={(v) => setForm((s) => ({ ...s, address: v }))} />
-          <Field label="Business Type" value={form.businessType} onChangeText={(v) => setForm((s) => ({ ...s, businessType: v }))} />
-          <Field label="Business Name" value={form.businessName} onChangeText={(v) => setForm((s) => ({ ...s, businessName: v }))} />
+          <Field label="Auto User ID" value={form.userId} onChangeText={() => {}} readOnly />
+
+          {COMMON_USER_FIELDS.map((field) => (
+            <Field
+              key={field}
+              label={FIELD_LABELS[field] || field}
+              value={form[field] || ''}
+              onChangeText={(v) => setForm((s) => ({ ...s, [field]: v }))}
+              keyboardType={field === 'mobileNumber' ? 'phone-pad' : field === 'email' ? 'email-address' : 'default'}
+            />
+          ))}
+
           <Field label="Password" value={form.password} onChangeText={(v) => setForm((s) => ({ ...s, password: v }))} secureTextEntry />
 
-          <Text style={styles.sectionLabel}>Location Mapping (optional)</Text>
+          {roleNeeds.includes('businessType') ? <Field label="Business Type" value={form.businessType} onChangeText={(v) => setForm((s) => ({ ...s, businessType: v }))} /> : null}
+          {roleNeeds.includes('businessName') ? <Field label="Business Name" value={form.businessName} onChangeText={(v) => setForm((s) => ({ ...s, businessName: v }))} /> : null}
 
-          <Text style={styles.fieldLabel}>Warehouse</Text>
-          <SelectPills
-            options={['(none)', ...warehouses.map((w) => w.name)]}
-            value={form.warehouseName || '(none)'}
-            onChange={(name) => {
-              const w = warehouses.find((x) => x.name === name);
-              setForm((s) => ({ ...s, warehouseId: w?.warehouseId || '', warehouseName: w?.name || '' }));
-            }}
-          />
+          {roleNeeds.includes('warehouse') ? (
+            <>
+              <Text style={styles.fieldLabel}>Warehouse Name</Text>
+              <SelectPills
+                options={warehouses.map((w) => w.name)}
+                value={form.warehouseName}
+                onChange={(name) => {
+                  const w = warehouses.find((x) => x.name === name);
+                  setForm((s) => ({ ...s, warehouseId: w?.warehouseId || '', warehouseName: w?.name || '', regionId: '', regionName: '', zoneId: '', zoneName: '', territoryId: '', territoryName: '', fieldId: '', fieldName: '' }));
+                }}
+              />
+            </>
+          ) : null}
 
-          <Text style={styles.fieldLabel}>Region</Text>
-          <SelectPills
-            options={['(none)', ...filteredRegions.map((r) => r.name)]}
-            value={form.regionName || '(none)'}
-            onChange={(name) => {
-              const r = filteredRegions.find((x) => x.name === name);
-              setForm((s) => ({ ...s, regionId: r?.regionId || '', regionName: r?.name || '' }));
-            }}
-          />
+          {roleNeeds.includes('region') ? (
+            <>
+              <Text style={styles.fieldLabel}>Region Name</Text>
+              <SelectPills
+                options={filteredRegions.map((r) => r.name)}
+                value={form.regionName}
+                onChange={(name) => {
+                  const r = filteredRegions.find((x) => x.name === name);
+                  setForm((s) => ({ ...s, regionId: r?.regionId || '', regionName: r?.name || '', zoneId: '', zoneName: '', territoryId: '', territoryName: '', fieldId: '', fieldName: '' }));
+                }}
+              />
+            </>
+          ) : null}
 
-          <Text style={styles.fieldLabel}>Zone</Text>
-          <SelectPills
-            options={['(none)', ...filteredZones.map((z) => z.name)]}
-            value={form.zoneName || '(none)'}
-            onChange={(name) => {
-              const z = filteredZones.find((x) => x.name === name);
-              setForm((s) => ({ ...s, zoneId: z?.zoneId || '', zoneName: z?.name || '' }));
-            }}
-          />
+          {roleNeeds.includes('zone') ? (
+            <>
+              <Text style={styles.fieldLabel}>Zone Name</Text>
+              <SelectPills
+                options={filteredZones.map((z) => z.name)}
+                value={form.zoneName}
+                onChange={(name) => {
+                  const z = filteredZones.find((x) => x.name === name);
+                  setForm((s) => ({ ...s, zoneId: z?.zoneId || '', zoneName: z?.name || '', territoryId: '', territoryName: '', fieldId: '', fieldName: '' }));
+                }}
+              />
+            </>
+          ) : null}
 
-          <Text style={styles.fieldLabel}>Territory</Text>
-          <SelectPills
-            options={['(none)', ...filteredAreas.map((a) => a.name)]}
-            value={form.territoryName || '(none)'}
-            onChange={(name) => {
-              const a = filteredAreas.find((x) => x.name === name);
-              setForm((s) => ({ ...s, territoryId: a?.areaId || '', territoryName: a?.name || '' }));
-            }}
-          />
+          {roleNeeds.includes('territory') ? (
+            <>
+              <Text style={styles.fieldLabel}>Territory Name</Text>
+              <SelectPills
+                options={filteredAreas.map((a) => a.name)}
+                value={form.territoryName}
+                onChange={(name) => {
+                  const a = filteredAreas.find((x) => x.name === name);
+                  setForm((s) => ({ ...s, territoryId: a?.areaId || '', territoryName: a?.name || '', fieldId: '', fieldName: '' }));
+                }}
+              />
+            </>
+          ) : null}
+
+          {roleNeeds.includes('field') ? (
+            <>
+              <Text style={styles.fieldLabel}>Field Name</Text>
+              <SelectPills
+                options={filteredFields.map((f) => f.name)}
+                value={form.fieldName}
+                onChange={(name) => {
+                  const f = filteredFields.find((x) => x.name === name);
+                  setForm((s) => ({ ...s, fieldId: f?.fieldId || '', fieldName: f?.name || '' }));
+                }}
+              />
+            </>
+          ) : null}
 
           <View style={styles.actions}>
             <Pressable style={styles.primaryBtn} onPress={save} disabled={saving}>
@@ -265,11 +306,11 @@ const styles = StyleSheet.create({
     color: '#111827',
     fontSize: 13,
   },
+  inputReadonly: { backgroundColor: '#f4f4f5' },
   roleChip: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#fff' },
   roleChipActive: { borderColor: '#10b981', backgroundColor: '#ecfdf5' },
   roleChipText: { color: '#52525b', fontSize: 12 },
   roleChipTextActive: { color: '#047857', fontWeight: '700' },
-  sectionLabel: { marginTop: 10, fontSize: 13, fontWeight: '700', color: '#111827' },
   actions: { marginTop: 10 },
   primaryBtn: { backgroundColor: '#059669', borderRadius: 10, paddingVertical: 11, alignItems: 'center' },
   primaryText: { color: '#fff', fontWeight: '700', fontSize: 13 },
