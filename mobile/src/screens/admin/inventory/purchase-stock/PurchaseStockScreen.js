@@ -160,7 +160,6 @@ export default function PurchaseStockScreen() {
       await Linking.openURL(url);
     } catch (_e) {
       setInvoiceFallbackRow(row);
-      Alert.alert('Invoice/Receipt', 'Direct download/open is not supported on this device. Showing invoice preview.');
     }
   };
 
