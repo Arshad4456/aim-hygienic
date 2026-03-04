@@ -25,6 +25,10 @@ import S23 from '../screens/admin/inventory/low-stock/LowStockScreen';
 import S24 from '../screens/admin/inventory/summary/SummaryScreen';
 import S25 from '../screens/admin/inventory/transfers/TransfersScreen';
 import S26 from '../screens/admin/inventory/warehouses/WarehousesScreen';
+import S26a from '../screens/admin/inventory/purchase-stock/PurchaseStockScreen';
+import S26b from '../screens/admin/inventory/sale-stock/SaleStockScreen';
+import S26c from '../screens/admin/inventory/damage-stock/DamageStockScreen';
+import S26d from '../screens/admin/inventory/return-stock/ReturnStockScreen';
 import S27 from '../screens/admin/live-tracking/LiveTrackingScreen';
 import S28 from '../screens/admin/logistics/LogisticsScreen';
 import S29 from '../screens/admin/logistics/routes/RoutesScreen';
@@ -151,6 +155,10 @@ export const screenRegistry = {
   'admin:inventory/summary': S24,
   'admin:inventory/transfers': S25,
   'admin:inventory/warehouses': S26,
+  'admin:inventory/purchase-stock': S26a,
+  'admin:inventory/sale-stock': S26b,
+  'admin:inventory/damage-stock': S26c,
+  'admin:inventory/return-stock': S26d,
   'admin:live-tracking': S27,
   'admin:logistics': S28,
   'admin:logistics/routes': S29,
