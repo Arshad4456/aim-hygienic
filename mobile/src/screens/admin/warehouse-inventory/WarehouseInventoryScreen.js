@@ -16,8 +16,42 @@ const CARDS = [
   { key: 'WAREHOUSE_MASTER', title: '9 Warehouse Master' },
 ];
 
-const TXN_EMPTY = { warehouseId: '', fromEntityName: '', toEntityName: '', note: '', productId: '', quantity: '', manufactureDate: '', expiryDate: '' };
+const TXN_EMPTY = {
+  warehouseId: '',
+  fromEntityName: '',
+  toEntityName: '',
+  note: '',
+  productId: '',
+  quantity: '',
+  toValue: '0',
+  discValue: '0',
+  extraValue: '0',
+  bonsValue: '0',
+  gstPer: '0',
+  manufactureDate: '',
+  expiryDate: '',
+};
 const TRANSFER_EMPTY = { productId: '', fromWarehouseId: '', toWarehouseId: '', quantity: '', note: '' };
+
+const num = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const computeLine = (line, product) => {
+  const qty = num(line.quantity);
+  const rate = num(product?.wholesalePrice || 0);
+  const gross = qty * rate;
+  const toValue = num(line.toValue);
+  const discValue = num(line.discValue);
+  const extraValue = num(line.extraValue);
+  const bonsValue = num(line.bonsValue);
+  const v4gst = gross - toValue - discValue - extraValue - bonsValue;
+  const gstPer = num(line.gstPer);
+  const gstAmt = (v4gst * gstPer) / 100;
+  const net = v4gst + gstAmt;
+  return { qty, rate, gross, toValue, discValue, extraValue, bonsValue, v4gst, gstPer, gstAmt, net };
+};
 
 export default function WarehouseInventoryScreen() {
   const [loading, setLoading] = useState(true);
@@ -70,7 +104,8 @@ export default function WarehouseInventoryScreen() {
   useEffect(() => { loadAll(); }, []);
 
   const txRows = useMemo(() => transactions.filter((t) => t.transactionType === selectedCard), [transactions, selectedCard]);
-  const productMap = useMemo(() => new Map(products.map((p) => [p.productId, p])), [products]);
+  const selectedProduct = useMemo(() => products.find((p) => p.productId === txnForm.productId), [products, txnForm.productId]);
+  const line = useMemo(() => computeLine(txnForm, selectedProduct), [txnForm, selectedProduct]);
 
   const submitTransaction = async () => {
     setSaving(true);
@@ -78,22 +113,33 @@ export default function WarehouseInventoryScreen() {
     try {
       const warehouse = warehouses.find((w) => w.warehouseId === txnForm.warehouseId);
       const product = products.find((p) => p.productId === txnForm.productId);
+      if (!warehouse || !product) throw new Error('Please select warehouse and product.');
       await apiClient.post('/inventory/transactions', {
         transactionType: selectedCard,
-        warehouseId: warehouse?.warehouseId,
-        warehouseName: warehouse?.name,
-        fromEntityName: txnForm.fromEntityName || warehouse?.name,
-        toEntityName: txnForm.toEntityName || selectedCard.replace('_', ' '),
+        warehouseId: warehouse.warehouseId,
+        warehouseName: warehouse.name,
+        fromEntityName: txnForm.fromEntityName || warehouse.name,
+        toEntityName: txnForm.toEntityName || selectedCard.replaceAll('_', ' '),
         note: txnForm.note,
         items: [{
-          productId: product?.productId,
-          productName: product?.name,
-          totalPacks: Number(txnForm.quantity || 0),
-          quantity: Number(txnForm.quantity || 0),
+          productId: product.productId,
+          productName: product.name,
+          size: product.size || '-',
+          totalPacks: line.qty,
+          quantity: line.qty,
+          unitPrice: line.rate,
+          gross: line.gross,
+          toValue: line.toValue,
+          discValue: line.discValue,
+          extraValue: line.extraValue,
+          bonsValue: line.bonsValue,
+          v4gst: line.v4gst,
+          gstPer: line.gstPer,
+          gstAmt: line.gstAmt,
+          totalPrice: line.net,
+          netAmount: line.net,
           manufactureDate: txnForm.manufactureDate || undefined,
           expiryDate: txnForm.expiryDate || undefined,
-          unitPrice: Number(product?.wholesalePrice || 0),
-          totalPrice: Number(product?.wholesalePrice || 0) * Number(txnForm.quantity || 0),
         }],
       });
       setTxnForm(TXN_EMPTY);
@@ -122,14 +168,17 @@ export default function WarehouseInventoryScreen() {
   };
 
   const printInvoice = async (row) => {
-    await Share.share({ title: 'Invoice/Receipt', message: `Invoice/Receipt\nType: ${row.transactionType}\nID: ${row._id}\nDate: ${row.createdAt ? new Date(row.createdAt).toLocaleString() : '-'}\nNote: ${row.note || '-'}` });
+    await Share.share({
+      title: 'Invoice/Receipt',
+      message: `Invoice/Receipt\nType: ${row.transactionType}\nID: ${row._id}\nDate: ${row.createdAt ? new Date(row.createdAt).toLocaleString() : '-'}\nNote: ${row.note || '-'}`,
+    });
   };
 
   const createTransfer = async () => {
     setSaving(true);
     setErr('');
     try {
-      await apiClient.post('/inventory/transfers', { ...transferForm, quantity: Number(transferForm.quantity || 0) });
+      await apiClient.post('/inventory/transfers', { ...transferForm, quantity: num(transferForm.quantity) });
       setTransferForm(TRANSFER_EMPTY);
       await loadAll();
     } catch (e) {
@@ -143,7 +192,7 @@ export default function WarehouseInventoryScreen() {
     if (!transferEdit) return;
     setSaving(true);
     try {
-      await apiClient.put(`/inventory/transfers/${transferEdit._id}`, { ...transferEdit, quantity: Number(transferEdit.quantity || 0) });
+      await apiClient.put(`/inventory/transfers/${transferEdit._id}`, { ...transferEdit, quantity: num(transferEdit.quantity) });
       setTransferEdit(null);
       await loadAll();
     } catch (e) {
@@ -177,7 +226,7 @@ export default function WarehouseInventoryScreen() {
     const product = products.find((p) => p._id === productDbId);
     if (!product) return;
     try {
-      await apiClient.put(`/products/${productDbId}`, { ...product, minStockLevel: Number(value || 0) });
+      await apiClient.put(`/products/${productDbId}`, { ...product, minStockLevel: num(value) });
       await loadAll();
     } catch (e) {
       setErr(e.message || 'Failed to update minimum stock');
@@ -223,7 +272,14 @@ export default function WarehouseInventoryScreen() {
             <PillRow options={warehouses.map((w) => ({ value: w.warehouseId, label: w.name }))} value={txnForm.warehouseId} onPick={(v) => setTxnForm((s) => ({ ...s, warehouseId: v }))} />
             <Text style={styles.label}>Product</Text>
             <PillRow options={products.map((p) => ({ value: p.productId, label: `${p.productId} - ${p.name}` }))} value={txnForm.productId} onPick={(v) => setTxnForm((s) => ({ ...s, productId: v }))} />
+            <Text style={styles.label}>From Entity Name</Text><TextInput style={styles.input} value={txnForm.fromEntityName} onChangeText={(v) => setTxnForm((s) => ({ ...s, fromEntityName: v }))} />
+            <Text style={styles.label}>To Entity Name</Text><TextInput style={styles.input} value={txnForm.toEntityName} onChangeText={(v) => setTxnForm((s) => ({ ...s, toEntityName: v }))} />
             <Text style={styles.label}>Quantity</Text><TextInput style={styles.input} keyboardType="numeric" value={txnForm.quantity} onChangeText={(v) => setTxnForm((s) => ({ ...s, quantity: v }))} />
+            <Text style={styles.label}>TO Value</Text><TextInput style={styles.input} keyboardType="numeric" value={txnForm.toValue} onChangeText={(v) => setTxnForm((s) => ({ ...s, toValue: v }))} />
+            <Text style={styles.label}>Disc Value</Text><TextInput style={styles.input} keyboardType="numeric" value={txnForm.discValue} onChangeText={(v) => setTxnForm((s) => ({ ...s, discValue: v }))} />
+            <Text style={styles.label}>Extra Value</Text><TextInput style={styles.input} keyboardType="numeric" value={txnForm.extraValue} onChangeText={(v) => setTxnForm((s) => ({ ...s, extraValue: v }))} />
+            <Text style={styles.label}>Bons Value</Text><TextInput style={styles.input} keyboardType="numeric" value={txnForm.bonsValue} onChangeText={(v) => setTxnForm((s) => ({ ...s, bonsValue: v }))} />
+            <Text style={styles.label}>GST %</Text><TextInput style={styles.input} keyboardType="numeric" value={txnForm.gstPer} onChangeText={(v) => setTxnForm((s) => ({ ...s, gstPer: v }))} />
             {['PURCHASING_STOCK', 'DAMAGE_STOCK', 'RETURN_STOCK'].includes(selectedCard) ? (
               <>
                 <Text style={styles.label}>Manufacture Date</Text><TextInput style={styles.input} value={txnForm.manufactureDate} onChangeText={(v) => setTxnForm((s) => ({ ...s, manufactureDate: v }))} placeholder="YYYY-MM-DD" placeholderTextColor="#71717a" />
@@ -231,30 +287,66 @@ export default function WarehouseInventoryScreen() {
               </>
             ) : null}
             <Text style={styles.label}>Note</Text><TextInput style={styles.input} value={txnForm.note} onChangeText={(v) => setTxnForm((s) => ({ ...s, note: v }))} />
+
+            <Text style={styles.productDetailTitle}>Product Detail</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator>
+              <View style={styles.productTableWrap}>
+                <View style={styles.headerRow}>
+                  {['Product', 'Size', 'Qty', 'Rate', 'Gross', 'TO', 'Disc', 'Extra', 'Bons', 'V4GST', 'GST %', 'GST Amt', 'Net Amt'].map((h) => <Text key={h} style={[styles.headCell, styles.colMini]}>{h}</Text>)}
+                </View>
+                <View style={styles.dataRow}>
+                  <Text style={[styles.cell, styles.colMini]}>{selectedProduct?.name || '-'}</Text>
+                  <Text style={[styles.cell, styles.colMini]}>{selectedProduct?.size || '-'}</Text>
+                  <Text style={[styles.cell, styles.colMini]}>{line.qty}</Text>
+                  <Text style={[styles.cell, styles.colMini]}>{line.rate}</Text>
+                  <Text style={[styles.cell, styles.colMini]}>{line.gross.toFixed(2)}</Text>
+                  <Text style={[styles.cell, styles.colMini]}>{line.toValue.toFixed(2)}</Text>
+                  <Text style={[styles.cell, styles.colMini]}>{line.discValue.toFixed(2)}</Text>
+                  <Text style={[styles.cell, styles.colMini]}>{line.extraValue.toFixed(2)}</Text>
+                  <Text style={[styles.cell, styles.colMini]}>{line.bonsValue.toFixed(2)}</Text>
+                  <Text style={[styles.cell, styles.colMini]}>{line.v4gst.toFixed(2)}</Text>
+                  <Text style={[styles.cell, styles.colMini]}>{line.gstPer.toFixed(2)}</Text>
+                  <Text style={[styles.cell, styles.colMini]}>{line.gstAmt.toFixed(2)}</Text>
+                  <Text style={[styles.cell, styles.colMini]}>{line.net.toFixed(2)}</Text>
+                </View>
+              </View>
+            </ScrollView>
+
             <Pressable style={styles.primaryBtn} onPress={submitTransaction} disabled={saving}><Text style={styles.primaryText}>{saving ? 'Saving...' : 'Save Entry'}</Text></Pressable>
           </Card>
 
           <Card>
+            <Text style={styles.sectionTitle}>Ledger</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator>
               <View style={styles.tableWrapWide}>
                 <View style={styles.headerRow}>
-                  {['Date', 'Product', 'Warehouse', 'Quantity', 'MFG', 'EXP', 'Actions'].map((h) => <Text key={h} style={[styles.headCell, h === 'Actions' ? styles.colAction : styles.colData]}>{h}</Text>)}
+                  {['Date', 'Product', 'Warehouse', 'Qty', 'TO', 'Disc', 'Extra', 'Bons', 'V4GST', 'GST Amt', 'Net', 'MFG', 'EXP', 'Action'].map((h) => <Text key={h} style={[styles.headCell, h === 'Action' ? styles.colAction : styles.colData]}>{h}</Text>)}
                 </View>
                 <View style={{ marginTop: 8, gap: 8 }}>
-                  {txRows.length === 0 ? <Text style={styles.help}>No records found.</Text> : txRows.map((r) => (
-                    <View key={r._id} style={styles.dataRow}>
-                      <Text style={[styles.cell, styles.colData]}>{r.createdAt ? new Date(r.createdAt).toLocaleString() : '-'}</Text>
-                      <Text style={[styles.cell, styles.colData]}>{r.items?.[0]?.productName || '-'}</Text>
-                      <Text style={[styles.cell, styles.colData]}>{r.warehouseName || '-'}</Text>
-                      <Text style={[styles.cell, styles.colData]}>{r.items?.[0]?.totalPacks ?? r.items?.[0]?.quantity ?? 0}</Text>
-                      <Text style={[styles.cell, styles.colData]}>{r.items?.[0]?.manufactureDate || '-'}</Text>
-                      <Text style={[styles.cell, styles.colData]}>{r.items?.[0]?.expiryDate || '-'}</Text>
-                      <View style={styles.actionCell}>
-                        <Pressable style={styles.lightBtn} onPress={() => printInvoice(r)}><Text style={styles.lightText}>Invoice/Receipt</Text></Pressable>
-                        <Pressable style={styles.deleteBtn} onPress={() => deleteTransaction(r._id)}><Text style={styles.deleteText}>Delete</Text></Pressable>
+                  {txRows.length === 0 ? <Text style={styles.help}>No records found.</Text> : txRows.map((r) => {
+                    const i = r.items?.[0] || {};
+                    return (
+                      <View key={r._id} style={styles.dataRow}>
+                        <Text style={[styles.cell, styles.colData]}>{r.createdAt ? new Date(r.createdAt).toLocaleString() : '-'}</Text>
+                        <Text style={[styles.cell, styles.colData]}>{i.productName || '-'}</Text>
+                        <Text style={[styles.cell, styles.colData]}>{r.warehouseName || '-'}</Text>
+                        <Text style={[styles.cell, styles.colData]}>{i.totalPacks ?? i.quantity ?? 0}</Text>
+                        <Text style={[styles.cell, styles.colData]}>{num(i.toValue).toFixed(2)}</Text>
+                        <Text style={[styles.cell, styles.colData]}>{num(i.discValue).toFixed(2)}</Text>
+                        <Text style={[styles.cell, styles.colData]}>{num(i.extraValue).toFixed(2)}</Text>
+                        <Text style={[styles.cell, styles.colData]}>{num(i.bonsValue).toFixed(2)}</Text>
+                        <Text style={[styles.cell, styles.colData]}>{num(i.v4gst).toFixed(2)}</Text>
+                        <Text style={[styles.cell, styles.colData]}>{num(i.gstAmt).toFixed(2)}</Text>
+                        <Text style={[styles.cell, styles.colData]}>{num(i.netAmount || i.totalPrice).toFixed(2)}</Text>
+                        <Text style={[styles.cell, styles.colData]}>{i.manufactureDate || '-'}</Text>
+                        <Text style={[styles.cell, styles.colData]}>{i.expiryDate || '-'}</Text>
+                        <View style={styles.actionCell}>
+                          <Pressable style={styles.lightBtn} onPress={() => printInvoice(r)}><Text style={styles.lightText}>Invoice/Receipt</Text></Pressable>
+                          <Pressable style={styles.deleteBtn} onPress={() => deleteTransaction(r._id)}><Text style={styles.deleteText}>Delete</Text></Pressable>
+                        </View>
                       </View>
-                    </View>
-                  ))}
+                    );
+                  })}
                 </View>
               </View>
             </ScrollView>
@@ -333,26 +425,9 @@ export default function WarehouseInventoryScreen() {
         </Card>
       ) : null}
 
-      {selectedCard === 'LOW_STOCK' ? (
-        <Card>
-          <Text style={styles.sectionTitle}>Low Stock Alert</Text>
-          <Text style={styles.help}>{lowStock.length} products are at or below minimum stock.</Text>
-        </Card>
-      ) : null}
-
-      {selectedCard === 'INVENTORY_LEDGER' ? (
-        <Card>
-          <Text style={styles.sectionTitle}>Inventory Ledger</Text>
-          <Text style={styles.help}>Movement rows: {movements.length}</Text>
-        </Card>
-      ) : null}
-
-      {selectedCard === 'WAREHOUSE_MASTER' ? (
-        <Card>
-          <Text style={styles.sectionTitle}>Warehouse Master</Text>
-          <Text style={styles.help}>Total Warehouses: {warehouses.length}</Text>
-        </Card>
-      ) : null}
+      {selectedCard === 'LOW_STOCK' ? <Card><Text style={styles.sectionTitle}>Low Stock Alert</Text><Text style={styles.help}>{lowStock.length} products are at or below minimum stock.</Text></Card> : null}
+      {selectedCard === 'INVENTORY_LEDGER' ? <Card><Text style={styles.sectionTitle}>Inventory Ledger</Text><Text style={styles.help}>Movement rows: {movements.length}</Text></Card> : null}
+      {selectedCard === 'WAREHOUSE_MASTER' ? <Card><Text style={styles.sectionTitle}>Warehouse Master</Text><Text style={styles.help}>Total Warehouses: {warehouses.length}</Text></Card> : null}
 
       <Modal visible={Boolean(transferEdit)} transparent animationType="slide" onRequestClose={() => setTransferEdit(null)}>
         <View style={styles.modalOverlay}><View style={styles.modalCard}>
@@ -402,6 +477,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: '700', color: '#111827' },
   subtitle: { marginTop: 4, fontSize: 15, color: '#374151', fontWeight: '600' },
   sectionTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
+  productDetailTitle: { marginTop: 10, fontSize: 14, fontWeight: '700', color: '#111827' },
   help: { marginTop: 8, color: '#6b7280', fontSize: 13 },
   error: { marginTop: 8, color: '#b91c1c' },
   cardGrid: { marginTop: 10, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
@@ -418,12 +494,14 @@ const styles = StyleSheet.create({
   chipTextActive: { color: '#047857', fontWeight: '700' },
   primaryBtn: { marginTop: 10, backgroundColor: '#059669', borderRadius: 10, alignItems: 'center', paddingVertical: 11 },
   primaryText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  tableWrapWide: { minWidth: 1320 },
+  tableWrapWide: { minWidth: 1500 },
+  productTableWrap: { minWidth: 1560, marginTop: 6 },
   headerRow: { flexDirection: 'row', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, backgroundColor: '#f3f4f6', padding: 8 },
   headCell: { fontSize: 12, fontWeight: '700', color: '#111827' },
-  colData: { width: 170 },
+  colData: { width: 150 },
+  colMini: { width: 120 },
   colAction: { width: 240 },
-  dataRow: { flexDirection: 'row', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, backgroundColor: '#fff', padding: 8, alignItems: 'center' },
+  dataRow: { flexDirection: 'row', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, backgroundColor: '#fff', padding: 8, alignItems: 'center', marginTop: 8 },
   cell: { fontSize: 12, color: '#374151' },
   actionCell: { width: 240, flexDirection: 'row', gap: 6 },
   lightBtn: { flex: 1, borderRadius: 8, borderWidth: 1, borderColor: '#93c5fd', backgroundColor: '#eff6ff', paddingVertical: 7, alignItems: 'center' },
