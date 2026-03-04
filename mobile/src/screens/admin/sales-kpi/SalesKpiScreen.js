@@ -134,11 +134,19 @@ export default function SalesKpiScreen() {
 
       <Card>
         <Text style={styles.sectionTitle}>Regional Contribution</Text>
+        <View style={styles.tableHeader}>
+          <Text style={[styles.tableHeadCell, styles.colRegion]}>Region</Text>
+          <Text style={[styles.tableHeadCell, styles.colNumeric]}>Orders</Text>
+          <Text style={[styles.tableHeadCell, styles.colNumeric]}>Units</Text>
+          <Text style={[styles.tableHeadCell, styles.colDate]}>Last</Text>
+        </View>
         <View style={styles.stack}>
           {regions.length ? regions.map((row, index) => (
-            <View key={`${row.region}-${index}`} style={styles.itemCard}>
-              <Text style={styles.itemTitle}>{row.region}</Text>
-              <Text style={styles.itemSub}>Orders: {formatNumber(row.orders)} • Units: {formatNumber(row.quantity)} • Last: {formatDate(row.lastMovementAt)}</Text>
+            <View key={`${row.region}-${index}`} style={styles.tableRow}>
+              <Text style={[styles.tableCell, styles.colRegion]}>{row.region || '—'}</Text>
+              <Text style={[styles.tableCell, styles.colNumeric]}>{formatNumber(row.orders)}</Text>
+              <Text style={[styles.tableCell, styles.colNumeric]}>{formatNumber(row.quantity)}</Text>
+              <Text style={[styles.tableCell, styles.colDate]}>{formatDate(row.lastMovementAt)}</Text>
             </View>
           )) : <Text style={styles.help}>No regional sales data available.</Text>}
         </View>
@@ -187,4 +195,27 @@ const styles = StyleSheet.create({
   barValue: { fontSize: 12, color: '#111827' },
   track: { height: 8, backgroundColor: '#e5e7eb', borderRadius: 8, overflow: 'hidden', marginTop: 4 },
   fill: { height: 8 },
+  tableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  tableHeadCell: { fontSize: 12, fontWeight: '700', color: '#111827' },
+  tableRow: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    backgroundColor: '#fff',
+  },
+  tableCell: { fontSize: 12, color: '#374151' },
+  colRegion: { flex: 1.3 },
+  colNumeric: { flex: 0.8, textAlign: 'right' },
+  colDate: { flex: 1, textAlign: 'right' },
 });
