@@ -94,6 +94,7 @@ export default function PurchaseStockScreen() {
   const [warehouses, setWarehouses] = useState([]);
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [invoiceFallbackRow, setInvoiceFallbackRow] = useState(null);
 
   const load = async () => {
     setLoading(true); setErr('');
@@ -156,11 +157,10 @@ export default function PurchaseStockScreen() {
     try {
       const html = buildInvoiceHtml(row);
       const url = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
-      const can = await Linking.canOpenURL(url);
-      if (!can) throw new Error('Unable to open invoice on this device');
       await Linking.openURL(url);
-    } catch (e) {
-      Alert.alert('Invoice/Receipt', e.message || 'Failed to open invoice');
+    } catch (_e) {
+      setInvoiceFallbackRow(row);
+      Alert.alert('Invoice/Receipt', 'Direct download/open is not supported on this device. Showing invoice preview.');
     }
   };
 
@@ -244,6 +244,36 @@ export default function PurchaseStockScreen() {
           </View>
         </ScrollView>
       </Card>
+
+      <Modal visible={Boolean(invoiceFallbackRow)} transparent animationType="slide" onRequestClose={() => setInvoiceFallbackRow(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.dropdownModalCard}>
+            <Text style={styles.modalTitle}>Invoice / Receipt</Text>
+            {invoiceFallbackRow ? (
+              <ScrollView style={{ maxHeight: 420 }}>
+                <Text style={styles.fallbackLine}>Invoice #: {invoiceFallbackRow.transactionCode || '-'}</Text>
+                <Text style={styles.fallbackLine}>Date: {invoiceFallbackRow.transactionAt ? new Date(invoiceFallbackRow.transactionAt).toLocaleString() : '-'}</Text>
+                <Text style={styles.fallbackLine}>Invoice From: {invoiceFallbackRow.fromEntityName || invoiceFallbackRow.warehouseName || '-'}</Text>
+                <Text style={styles.fallbackLine}>Bill To: {invoiceFallbackRow.toEntityName || '-'}</Text>
+                <Text style={[styles.fallbackLine, { marginTop: 8, fontWeight: '700' }]}>Items</Text>
+                {(invoiceFallbackRow.items || []).map((item, idx) => (
+                  <View key={`${item.productId}-${idx}`} style={styles.fallbackItem}>
+                    <Text style={styles.fallbackLine}>{idx + 1}. {item.productName || item.productId || '-'}</Text>
+                    <Text style={styles.fallbackLine}>Qty: {Number(item.totalPacks || 0)} | Rate: {Number(item.onePackPrice || item.unitPrice || 0).toFixed(2)} | Net: {Number(item.totalPrice || 0).toFixed(2)}</Text>
+                  </View>
+                ))}
+                <Text style={[styles.fallbackLine, { marginTop: 8 }]}>Total Amount: {Number(invoiceFallbackRow.subtotal || 0).toFixed(2)}</Text>
+                <Text style={styles.fallbackLine}>Extra Disc: {Number(invoiceFallbackRow.extraDiscPer || 0).toFixed(2)}%</Text>
+                <Text style={styles.fallbackLine}>Adv Tax: {Number(invoiceFallbackRow.advTaxPer || 0).toFixed(2)}%</Text>
+                <Text style={styles.fallbackLine}>W.H Tax: {Number(invoiceFallbackRow.whTaxPer || 0).toFixed(2)}%</Text>
+                <Text style={styles.fallbackLine}>Expense: {Number(invoiceFallbackRow.expense || 0).toFixed(2)}</Text>
+                <Text style={[styles.fallbackLine, { fontWeight: '700' }]}>Grand Total: {Number(invoiceFallbackRow.grandTotal || 0).toFixed(2)}</Text>
+              </ScrollView>
+            ) : null}
+            <Pressable style={styles.cancelBtn} onPress={() => setInvoiceFallbackRow(null)}><Text style={styles.cancelText}>Close</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -330,4 +360,6 @@ const styles = StyleSheet.create({
   dropdownOption: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10, marginBottom: 6 },
   cancelBtn: { marginTop: 8, borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
   cancelText: { color: '#111827', fontWeight: '600' },
+  fallbackLine: { color: '#374151', fontSize: 13, marginTop: 4 },
+  fallbackItem: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, padding: 8, marginTop: 6, backgroundColor: '#fff' },
 });
