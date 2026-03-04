@@ -1,35 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import apiClient from '../../../../api/client';
 import Card from '../../../../ui/Card';
 import Loader from '../../../../ui/Loader';
 
-const EMPTY_LINE = {
-  productId: '',
-  qty: '',
-  toValue: '0',
-  discValue: '0',
-  extraValue: '0',
-  bonsValue: '0',
-  gstPer: '0',
-  manufactureDate: '',
-  expiryDate: '',
-};
+const EMPTY_LINE = { productId: '', qty: '', toValue: '0', discValue: '0', extraValue: '0', bonsValue: '0', gstPer: '0', manufactureDate: '', expiryDate: '' };
+const EMPTY_FORM = { fromEntityName: '', toWarehouseId: '', extraDiscPer: '0', advTaxPer: '0', whTaxPer: '0', expense: '0', items: [{ ...EMPTY_LINE }] };
 
-const EMPTY_FORM = {
-  fromEntityName: '',
-  toWarehouseId: '',
-  extraDiscPer: '0',
-  advTaxPer: '0',
-  whTaxPer: '0',
-  expense: '0',
-  items: [{ ...EMPTY_LINE }],
-};
-
-function toNum(v) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
+function toNum(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
+function escapeHtml(value) { return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 
 function getSizeMultiplier(product) {
   if (!product) return 1;
@@ -56,6 +35,57 @@ function computeLine(line, product) {
   return { sizeText: product?.size || '-', sizeMultiplier, qty, rate, gross, toValue, discValue, extraValue, bonsValue, v4gst, gstPer, gstAmount, netAmt };
 }
 
+function buildInvoiceHtml(txn) {
+  const logo = `
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="width:54px;height:54px;border-radius:10px;background:linear-gradient(135deg,#065f46,#10b981);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;">AH</div>
+      <div><div style="font-weight:700;font-size:16px;">AIM-HYGIENICS</div><div style="font-size:11px;color:#555;">PVT LIMITED</div></div>
+    </div>`;
+
+  const rows = (txn.items || []).map((i, idx) => {
+    const parts = Object.fromEntries(String(i.notes || '').split(',').map((seg) => seg.split(':')));
+    return `<tr><td>${idx + 1}</td><td>${escapeHtml(i.productName || '-')}</td><td>${toNum(i.totalPacks || 0)}</td><td>${toNum(i.onePackPrice || 0)}</td><td>${toNum(parts.gross || 0)}</td><td>${toNum(parts.to || 0)}</td><td>${toNum(parts.disc || 0)}</td><td>${toNum(parts.extra || 0)}</td><td>${toNum(parts.bons || 0)}</td><td>${toNum(parts.v4gst || 0)}</td><td>${toNum(parts.gst || 0)}</td><td>${toNum(parts.net || i.totalPrice || 0)}</td></tr>`;
+  });
+
+  const lineTotal = (txn.items || []).reduce((sum, i) => {
+    const parts = Object.fromEntries(String(i.notes || '').split(',').map((seg) => seg.split(':')));
+    return sum + toNum(parts.net || i.totalPrice);
+  }, 0);
+
+  const totalAmount = toNum(txn.subtotal || lineTotal);
+  const extraDiscPer = toNum(txn.extraDiscPer);
+  const advTaxPer = toNum(txn.advTaxPer);
+  const whTaxPer = toNum(txn.whTaxPer);
+  const expense = toNum(txn.expense);
+  const extraDiscAmt = (totalAmount * extraDiscPer) / 100;
+  const advTaxAmt = (totalAmount * advTaxPer) / 100;
+  const whTaxAmt = (totalAmount * whTaxPer) / 100;
+  const calculatedGrandTotal = totalAmount - extraDiscAmt + advTaxAmt + whTaxAmt + expense;
+
+  return `
+  <html>
+  <body style="font-family: Arial; padding: 16px; position:relative;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">${logo}<div style="text-align:right;"><div style="font-size:13px;font-weight:700;">Sales Tax Invoice</div></div></div>
+    <div style="margin-top:8px; display:flex; justify-content:space-between; font-size:12px;"><div>Date: ${escapeHtml(new Date(txn.transactionAt).toLocaleDateString())}</div><div>Invoice #: ${escapeHtml(txn.transactionCode || '-')}</div></div>
+    <div style="margin-top:8px;font-size:12px;">Invoice From: ${escapeHtml(txn.fromEntityName || txn.warehouseName || '-')}</div>
+    <div style="font-size:12px;">Bill To: ${escapeHtml(txn.toEntityName || '-')}</div>
+    <div style="font-size:12px;">Address: ${escapeHtml(String(txn.note || '').trim() || '-')}</div>
+    <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; width:100%; margin-top:10px; font-size:12px;">
+      <thead><tr><th>#</th><th>Product Name</th><th>Qty</th><th>Rate</th><th>Gross</th><th>TO</th><th>Disc</th><th>Extra</th><th>Bons</th><th>V4GST</th><th>GST</th><th>Net Amt</th></tr></thead>
+      <tbody>${rows.join('')}</tbody>
+    </table>
+    <div style="margin-top:12px; font-size:12px; display:flex; justify-content:flex-end;"><div style="min-width:280px;">
+      <div style="display:flex; justify-content:space-between;"><span>Total Amount:</span><strong>${totalAmount.toFixed(2)}</strong></div>
+      <div style="display:flex; justify-content:space-between;"><span>Extra Disc (${extraDiscPer}%):</span><span>${extraDiscAmt.toFixed(2)}</span></div>
+      <div style="display:flex; justify-content:space-between;"><span>Adv Tax (${advTaxPer}%):</span><span>${advTaxAmt.toFixed(2)}</span></div>
+      <div style="display:flex; justify-content:space-between;"><span>W.H Tax (${whTaxPer}%):</span><span>${whTaxAmt.toFixed(2)}</span></div>
+      <div style="display:flex; justify-content:space-between;"><span>Expense:</span><span>${expense.toFixed(2)}</span></div>
+      <div style="display:flex; justify-content:space-between; margin-top:4px; border-top:1px solid #ccc; padding-top:4px;"><span><strong>Grand Total:</strong></span><strong>${calculatedGrandTotal.toFixed(2)}</strong></div>
+    </div></div>
+    <div style="margin-top:16px;text-align:center;font-size:13px;font-weight:600;">Thank you for bussiness with us</div>
+  </body></html>`;
+}
+
 export default function PurchaseStockScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -64,27 +94,18 @@ export default function PurchaseStockScreen() {
   const [warehouses, setWarehouses] = useState([]);
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [invoiceRow, setInvoiceRow] = useState(null);
 
   const load = async () => {
-    setLoading(true);
-    setErr('');
+    setLoading(true); setErr('');
     try {
       const [productsRes, warehousesRes, txRes] = await Promise.all([
-        apiClient.get('/products'),
-        apiClient.get('/warehouses'),
-        apiClient.get('/inventory/transactions?transactionType=PURCHASING_STOCK'),
+        apiClient.get('/products'), apiClient.get('/warehouses'), apiClient.get('/inventory/transactions?transactionType=PURCHASING_STOCK'),
       ]);
       setProducts(productsRes.data?.products || []);
       setWarehouses(warehousesRes.data?.warehouses || []);
       setRows(txRes.data?.transactions || []);
-    } catch (e) {
-      setErr(e.message || 'Failed to load purchase stock');
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { setErr(e.message || 'Failed to load purchase stock'); } finally { setLoading(false); }
   };
-
   useEffect(() => { load(); }, []);
 
   const lineRows = useMemo(() => form.items.map((line, idx) => {
@@ -104,73 +125,43 @@ export default function PurchaseStockScreen() {
   const removeItem = (i) => setForm((s) => ({ ...s, items: s.items.filter((_, idx) => idx !== i) }));
 
   const onSubmit = async () => {
-    setSaving(true);
-    setErr('');
+    setSaving(true); setErr('');
     try {
       const toWarehouse = warehouses.find((w) => w._id === form.toWarehouseId);
-      const normalizedItems = lineRows
-        .filter((r) => r.product && r.calc.qty > 0)
-        .map((r) => ({
-          productId: r.product.productId,
-          productName: r.product.name,
-          cartonSize: `1x${r.calc.qty || 0}`,
-          cartons: 1,
-          totalPacks: r.calc.qty || 0,
-          packsPerCarton: r.calc.qty || 0,
-          onePackPrice: r.calc.rate,
-          oneCartonPrice: r.calc.rate * r.calc.sizeMultiplier,
-          totalPrice: r.calc.netAmt,
-          unitPrice: r.calc.rate,
-          manufactureDate: r.line.manufactureDate || undefined,
-          expiryDate: r.line.expiryDate || undefined,
-          notes: `gross:${r.calc.gross},to:${r.calc.toValue},disc:${r.calc.discValue},extra:${r.calc.extraValue},bons:${r.calc.bonsValue},v4gst:${r.calc.v4gst},gst:${r.calc.gstAmount},net:${r.calc.netAmt}`,
-        }));
-
-      if (!form.fromEntityName.trim() || !toWarehouse || !normalizedItems.length) {
-        throw new Error('From, To (Warehouse), and at least one product row are required');
-      }
+      const normalizedItems = lineRows.filter((r) => r.product && r.calc.qty > 0).map((r) => ({
+        productId: r.product.productId, productName: r.product.name, cartonSize: `1x${r.calc.qty || 0}`, cartons: 1, totalPacks: r.calc.qty || 0, packsPerCarton: r.calc.qty || 0,
+        onePackPrice: r.calc.rate, oneCartonPrice: r.calc.rate * r.calc.sizeMultiplier, totalPrice: r.calc.netAmt, unitPrice: r.calc.rate,
+        manufactureDate: r.line.manufactureDate || undefined, expiryDate: r.line.expiryDate || undefined,
+        notes: `gross:${r.calc.gross},to:${r.calc.toValue},disc:${r.calc.discValue},extra:${r.calc.extraValue},bons:${r.calc.bonsValue},v4gst:${r.calc.v4gst},gst:${r.calc.gstAmount},net:${r.calc.netAmt}`,
+      }));
+      if (!form.fromEntityName.trim() || !toWarehouse || !normalizedItems.length) throw new Error('From, To (Warehouse), and at least one product row are required');
 
       await apiClient.post('/inventory/transactions', {
-        transactionType: 'PURCHASING_STOCK',
-        warehouseId: toWarehouse.warehouseId || '',
-        warehouseName: toWarehouse.name || '',
-        fromEntityName: form.fromEntityName,
-        toEntityName: toWarehouse.name || '',
-        adjustment: 0,
-        extraDiscPer: Number(form.extraDiscPer || 0),
-        advTaxPer: Number(form.advTaxPer || 0),
-        whTaxPer: Number(form.whTaxPer || 0),
-        expense: Number(form.expense || 0),
-        items: normalizedItems,
-        subtotal: totalAmount,
-        grandTotal,
+        transactionType: 'PURCHASING_STOCK', warehouseId: toWarehouse.warehouseId || '', warehouseName: toWarehouse.name || '',
+        fromEntityName: form.fromEntityName, toEntityName: toWarehouse.name || '', adjustment: 0,
+        extraDiscPer: Number(form.extraDiscPer || 0), advTaxPer: Number(form.advTaxPer || 0), whTaxPer: Number(form.whTaxPer || 0), expense: Number(form.expense || 0),
+        items: normalizedItems, subtotal: totalAmount, grandTotal,
       });
-
       setForm(EMPTY_FORM);
       await load();
-    } catch (e) {
-      setErr(e.message || 'Failed to save purchase stock');
-    } finally {
-      setSaving(false);
-    }
+    } catch (e) { setErr(e.message || 'Failed to save purchase stock'); } finally { setSaving(false); }
   };
 
-  const onDelete = (id) => {
-    Alert.alert('Delete', 'Delete this purchase stock entry?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await apiClient.delete(`/inventory/transactions/${id}`);
-            await load();
-          } catch (e) {
-            setErr(e.message || 'Failed to delete');
-          }
-        },
-      },
-    ]);
+  const onDelete = (id) => Alert.alert('Delete', 'Delete this purchase stock entry?', [
+    { text: 'Cancel', style: 'cancel' },
+    { text: 'Delete', style: 'destructive', onPress: async () => { try { await apiClient.delete(`/inventory/transactions/${id}`); await load(); } catch (e) { setErr(e.message || 'Failed to delete'); } } },
+  ]);
+
+  const onInvoiceDownload = async (row) => {
+    try {
+      const html = buildInvoiceHtml(row);
+      const url = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+      const can = await Linking.canOpenURL(url);
+      if (!can) throw new Error('Unable to open invoice on this device');
+      await Linking.openURL(url);
+    } catch (e) {
+      Alert.alert('Invoice/Receipt', e.message || 'Failed to open invoice');
+    }
   };
 
   if (loading) return <Loader />;
@@ -185,31 +176,15 @@ export default function PurchaseStockScreen() {
         <Text style={styles.label}>From</Text>
         <TextInput style={styles.input} value={form.fromEntityName} onChangeText={(v) => setField('fromEntityName', v)} />
         <Text style={styles.label}>To (Warehouse)</Text>
-        <SelectDropdown
-          placeholder="Select warehouse"
-          options={warehouses.map((w) => ({ value: w._id, label: w.name }))}
-          value={form.toWarehouseId}
-          onPick={(v) => setField('toWarehouseId', v)}
-        />
+        <SelectDropdown placeholder="Select warehouse" options={warehouses.map((w) => ({ value: w._id, label: w.name }))} value={form.toWarehouseId} onPick={(v) => setField('toWarehouseId', v)} />
 
         <ScrollView horizontal showsHorizontalScrollIndicator>
           <View style={styles.productTableWrap}>
-            <View style={styles.headerRow}>
-              {['Product Name', 'Size', 'Qty', 'Rate', 'Gross', 'T.O', 'Disc', 'Extra', 'Bons', 'V4GST', 'GST(%)', 'Net Amt', 'MFG Date', 'EXP Date', 'Action'].map((h) => (
-                <Text key={h} style={[styles.headCell, h === 'Action' ? styles.colAction : styles.colData]}>{h}</Text>
-              ))}
-            </View>
+            <View style={styles.headerRow}>{['Product Name', 'Size', 'Qty', 'Rate', 'Gross', 'T.O', 'Disc', 'Extra', 'Bons', 'V4GST', 'GST(%)', 'Net Amt', 'MFG Date', 'EXP Date', 'Action'].map((h) => <Text key={h} style={[styles.headCell, h === 'Action' ? styles.colAction : styles.colData]}>{h}</Text>)}</View>
             <View style={{ gap: 8, marginTop: 8 }}>
               {lineRows.map(({ idx, line, calc }) => (
                 <View key={`line-${idx}`} style={styles.dataRow}>
-                  <View style={styles.colData}>
-                    <SelectDropdown
-                      placeholder="Select product"
-                      options={products.map((p) => ({ value: p._id, label: p.name }))}
-                      value={line.productId}
-                      onPick={(v) => setItem(idx, 'productId', v)}
-                    />
-                  </View>
+                  <View style={styles.colData}><SelectDropdown placeholder="Select product" options={products.map((p) => ({ value: p._id, label: p.name }))} value={line.productId} onPick={(v) => setItem(idx, 'productId', v)} /></View>
                   <Text style={[styles.cell, styles.colData]}>{calc.sizeText}</Text>
                   <TextInput style={[styles.input, styles.colData]} keyboardType="numeric" value={line.qty} onChangeText={(v) => setItem(idx, 'qty', v)} />
                   <Text style={[styles.cell, styles.colData]}>{calc.rate.toFixed(2)}</Text>
@@ -250,11 +225,7 @@ export default function PurchaseStockScreen() {
         <Text style={styles.ledgerTitle}>1 Purchasing Stock Ledger</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator>
           <View style={styles.ledgerWrap}>
-            <View style={styles.headerRow}>
-              {['Code', 'From', 'To', 'Date and Time', 'Grand Total', 'Action'].map((h) => (
-                <Text key={h} style={[styles.headCell, h === 'Action' ? styles.colActionWide : styles.colDataWide]}>{h}</Text>
-              ))}
-            </View>
+            <View style={styles.headerRow}>{['Code', 'From', 'To', 'Date and Time', 'Grand Total', 'Action'].map((h) => <Text key={h} style={[styles.headCell, h === 'Action' ? styles.colActionWide : styles.colDataWide]}>{h}</Text>)}</View>
             <View style={{ gap: 8, marginTop: 8 }}>
               {rows.length === 0 ? <Text style={styles.help}>No purchasing stock found.</Text> : rows.map((r) => (
                 <View key={r._id} style={styles.dataRow}>
@@ -264,7 +235,7 @@ export default function PurchaseStockScreen() {
                   <Text style={[styles.cell, styles.colDataWide]}>{r.transactionAt ? new Date(r.transactionAt).toLocaleString() : '-'}</Text>
                   <Text style={[styles.cell, styles.colDataWide]}>{Number(r.grandTotal || 0).toFixed(2)}</Text>
                   <View style={[styles.actionCell, styles.colActionWide]}>
-                    <Pressable style={styles.actionBtn} onPress={() => setInvoiceRow(r)}><Text style={styles.actionText}>Invoice/Receipt</Text></Pressable>
+                    <Pressable style={styles.actionBtn} onPress={() => onInvoiceDownload(r)}><Text style={styles.actionText}>Invoice/Receipt</Text></Pressable>
                     <Pressable style={styles.deleteBtn} onPress={() => onDelete(r._id)}><Text style={styles.deleteText}>Delete</Text></Pressable>
                   </View>
                 </View>
@@ -273,8 +244,6 @@ export default function PurchaseStockScreen() {
           </View>
         </ScrollView>
       </Card>
-
-      <InvoiceReceiptModal row={invoiceRow} onClose={() => setInvoiceRow(null)} />
     </ScrollView>
   );
 }
@@ -284,9 +253,7 @@ function SelectDropdown({ placeholder, options, value, onPick }) {
   const selected = options.find((o) => o.value === value);
   return (
     <>
-      <Pressable style={styles.dropdownBox} onPress={() => setOpen(true)}>
-        <Text style={selected ? styles.dropdownText : styles.dropdownPlaceholder}>{selected?.label || placeholder}</Text>
-      </Pressable>
+      <Pressable style={styles.dropdownBox} onPress={() => setOpen(true)}><Text style={selected ? styles.dropdownText : styles.dropdownPlaceholder}>{selected?.label || placeholder}</Text></Pressable>
       <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.dropdownModalCard}>
@@ -303,43 +270,6 @@ function SelectDropdown({ placeholder, options, value, onPick }) {
         </View>
       </Modal>
     </>
-  );
-}
-
-function InvoiceReceiptModal({ row, onClose }) {
-  if (!row) return null;
-  return (
-    <Modal visible={Boolean(row)} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
-        <View style={styles.invoiceCard}>
-          <Text style={styles.invoiceTitle}>Invoice / Receipt</Text>
-          <Text style={styles.invoiceLine}>Code: {row.transactionCode || '-'}</Text>
-          <Text style={styles.invoiceLine}>From: {row.fromEntityName || '-'}</Text>
-          <Text style={styles.invoiceLine}>To: {row.toEntityName || '-'}</Text>
-          <Text style={styles.invoiceLine}>Date: {row.transactionAt ? new Date(row.transactionAt).toLocaleString() : '-'}</Text>
-          <Text style={styles.invoiceLine}>Subtotal: {Number(row.subtotal || 0).toFixed(2)}</Text>
-          <Text style={styles.invoiceLine}>Extra Disc (%): {Number(row.extraDiscPer || 0).toFixed(2)}</Text>
-          <Text style={styles.invoiceLine}>Adv Tax (%): {Number(row.advTaxPer || 0).toFixed(2)}</Text>
-          <Text style={styles.invoiceLine}>W.H Tax (%): {Number(row.whTaxPer || 0).toFixed(2)}</Text>
-          <Text style={styles.invoiceLine}>Expense: {Number(row.expense || 0).toFixed(2)}</Text>
-          <Text style={styles.invoiceTotal}>Grand Total: {Number(row.grandTotal || 0).toFixed(2)}</Text>
-
-          <Text style={[styles.invoiceTitle, { fontSize: 16, marginTop: 8 }]}>Items</Text>
-          <ScrollView style={{ maxHeight: 220 }}>
-            {(row.items || []).map((item, idx) => (
-              <View key={`${item.productId}-${idx}`} style={styles.invoiceItem}>
-                <Text style={styles.invoiceItemText}>{item.productName || item.productId || '-'}</Text>
-                <Text style={styles.invoiceItemText}>Qty: {Number(item.totalPacks || 0)}</Text>
-                <Text style={styles.invoiceItemText}>Rate: {Number(item.unitPrice || 0).toFixed(2)}</Text>
-                <Text style={styles.invoiceItemText}>Amount: {Number(item.totalPrice || 0).toFixed(2)}</Text>
-              </View>
-            ))}
-          </ScrollView>
-
-          <Pressable style={styles.primaryBtn} onPress={onClose}><Text style={styles.primaryText}>Close</Text></Pressable>
-        </View>
-      </View>
-    </Modal>
   );
 }
 
@@ -400,10 +330,4 @@ const styles = StyleSheet.create({
   dropdownOption: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10, marginBottom: 6 },
   cancelBtn: { marginTop: 8, borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
   cancelText: { color: '#111827', fontWeight: '600' },
-  invoiceCard: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 12, maxHeight: '92%' },
-  invoiceTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
-  invoiceLine: { marginTop: 4, color: '#374151', fontSize: 13 },
-  invoiceTotal: { marginTop: 6, color: '#111827', fontWeight: '700', fontSize: 15 },
-  invoiceItem: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, padding: 8, marginTop: 6 },
-  invoiceItemText: { color: '#374151', fontSize: 12 },
 });
