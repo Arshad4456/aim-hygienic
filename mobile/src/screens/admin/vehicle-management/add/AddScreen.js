@@ -1,13 +1,3 @@
-import React from 'react';
-import ModulePlaceholderScreen from '../../../common/ModulePlaceholderScreen';
+import AddVehicleScreen from '../../assets/vehicles/add/AddScreen';
 
-const config = {
-  "route": "/dashboards/admin/vehicle-management/add",
-  "moduleKey": "admin:vehicle-management/add",
-  "title": "Add",
-  "endpoints": []
-};
-
-export default function AddScreen() {
-  return <ModulePlaceholderScreen config={config} />;
-}
+export default AddVehicleScreen;
