@@ -115,6 +115,27 @@ export default function LoanDetailScreen() {
         <ScrollView horizontal contentContainerStyle={styles.rowWrap}>{loans.map((l) => <Pressable key={l._id} style={[styles.chip, selectedLoan === l._id ? styles.chipActive : null]} onPress={() => setSelectedLoan(l._id)}><Text style={selectedLoan === l._id ? styles.chipTx : null}>{l.partyName}</Text></Pressable>)}</ScrollView>
       </Card>
 
+      <Card>
+        <Text style={styles.h2}>{tab === 'received' ? 'Received Loans Ledger' : 'Given Loan Ledger'}</Text>
+        <ScrollView horizontal>
+          <View style={styles.table}>
+            <View style={[styles.tRow, styles.tHead]}>{['Party', 'Loan Date', 'Due Date', 'Principal', 'Returned/Received', 'Remaining', 'Status'].map((h) => <Text key={h} style={styles.tCell}>{h}</Text>)}</View>
+            {loans.map((l) => (
+              <View key={l._id} style={styles.tRow}>
+                <Text style={styles.tCell}>{l.partyName || '-'}</Text>
+                <Text style={styles.tCell}>{String(l.loanDate || '').slice(0, 10) || '-'}</Text>
+                <Text style={styles.tCell}>{String(l.dueDate || '').slice(0, 10) || '-'}</Text>
+                <Text style={styles.tCell}>{fmt(l.principalAmount)}</Text>
+                <Text style={styles.tCell}>{fmt(l.totalReturnedOrReceived)}</Text>
+                <Text style={styles.tCell}>{fmt(l.remainingAmount)}</Text>
+                <Text style={styles.tCell}>{l.status || '-'}</Text>
+              </View>
+            ))}
+            {!loans.length ? <Text style={styles.empty}>No loans found.</Text> : null}
+          </View>
+        </ScrollView>
+      </Card>
+
       {loanDetail?.loan ? (
         <Card>
           <Text style={styles.h2}>Loan Detail — {loanDetail.loan.partyName}</Text>

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import apiClient from '../../../../api/client';
 import Card from '../../../../ui/Card';
 import Loader from '../../../../ui/Loader';
@@ -209,7 +209,7 @@ export default function ManageScreen() {
         <Text style={styles.h2}>Transaction Ledger</Text>
         <ScrollView horizontal>
           <View style={styles.table}>
-            <View style={[styles.tRow, styles.tHead]}>{['Date', 'Type', 'Amount', 'Ref Type', 'Ref ID', 'Description', 'Attachment'].map((h) => <Text key={h} style={styles.tCell}>{h}</Text>)}</View>
+            <View style={[styles.tRow, styles.tHead]}>{['Date', 'Type', 'Amount', 'Ref Type', 'Ref ID', 'Description', 'Attachment', 'Receipt'].map((h) => <Text key={h} style={styles.tCell}>{h}</Text>)}</View>
             {transactions.map((tx) => (
               <View key={tx._id} style={styles.tRow}>
                 <Text style={styles.tCell}>{tx.transactionDate ? new Date(tx.transactionDate).toLocaleString() : '-'}</Text>
@@ -219,6 +219,13 @@ export default function ManageScreen() {
                 <Text style={styles.tCell}>{tx.referenceId || '-'}</Text>
                 <Text style={styles.tCell}>{tx.description || '-'}</Text>
                 <Text style={styles.tCell}>{tx.attachmentUrl || '-'}</Text>
+                <View style={styles.tCell}>
+                  {(tx.receiptUrl || tx.attachmentUrl) ? (
+                    <Pressable style={styles.btnAlt} onPress={() => Linking.openURL(tx.receiptUrl || tx.attachmentUrl)}>
+                      <Text>View</Text>
+                    </Pressable>
+                  ) : <Text>-</Text>}
+                </View>
               </View>
             ))}
             {!transactions.length ? <Text style={styles.empty}>No transactions yet.</Text> : null}
@@ -229,6 +236,7 @@ export default function ManageScreen() {
       <Modal visible={Boolean(editModal)} transparent animationType="fade" onRequestClose={() => setEditModal(null)}>
         <View style={styles.overlay}>
           <View style={styles.modal}>
+            <ScrollView>
             <Text style={styles.h2}>Edit Account</Text>
             <Input label="Account Name" value={editModal?.accountName || ''} onChangeText={(v) => setEditModal((s) => ({ ...s, accountName: v }))} />
             <Dropdown label="Account Type" value={editModal?.accountType || 'bank'} items={ACCOUNT_TYPES} onChange={(v) => setEditModal((s) => ({ ...s, accountType: v }))} />
@@ -246,6 +254,7 @@ export default function ManageScreen() {
               <Pressable style={styles.btnAlt} onPress={() => setEditModal(null)}><Text>Cancel</Text></Pressable>
               <Pressable style={styles.btn} onPress={updateAccount}><Text style={styles.btnTx}>Update</Text></Pressable>
             </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
