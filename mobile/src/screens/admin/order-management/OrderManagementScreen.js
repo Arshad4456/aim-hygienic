@@ -1,37 +1,16 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Card from '../../../ui/Card';
+import SaleStockScreen from '../inventory/sale-stock/SaleStockScreen';
+import ReturnStockScreen from '../inventory/return-stock/ReturnStockScreen';
 
 const ORDER_CARDS = [
-  {
-    key: 'primary',
-    title: 'Primary Orders Card',
-    subtitle: 'Open primary orders workflow and ledger.',
-    route: 'admin:order-management/sales-orders',
-    params: { mode: 'primary' },
-    panelTitle: 'Primary Orders',
-    panelDesc: 'Create and manage primary sale orders like website flow.',
-  },
-  {
-    key: 'secondary',
-    title: 'Secondary Orders Card',
-    subtitle: 'Open secondary orders workflow and ledger.',
-    route: 'admin:order-management/sales-orders',
-    params: { mode: 'secondary' },
-    panelTitle: 'Secondary Orders',
-    panelDesc: 'Manage secondary order requests and status updates.',
-  },
-  {
-    key: 'returnStock',
-    title: 'Return Stock Card',
-    subtitle: 'Open return stock request workflow and ledger.',
-    route: 'admin:order-management/returns',
-    panelTitle: 'Return Stock',
-    panelDesc: 'Create return stock requests and manage return ledger.',
-  },
+  { key: 'primary', title: 'Primary Orders Card', subtitle: 'Open primary orders workflow and ledger.', panelTitle: 'Primary Orders', panelDesc: 'Create and manage primary sale orders like website flow.' },
+  { key: 'secondary', title: 'Secondary Orders Card', subtitle: 'Open secondary orders workflow and ledger.', panelTitle: 'Secondary Orders', panelDesc: 'Manage secondary order requests and status updates.' },
+  { key: 'returnStock', title: 'Return Stock Card', subtitle: 'Open return stock request workflow and ledger.', panelTitle: 'Return Stock', panelDesc: 'Create return stock requests and manage return ledger.' },
 ];
 
-export default function OrderManagementScreen({ navigation }) {
+export default function OrderManagementScreen() {
   const [active, setActive] = useState('primary');
   const current = ORDER_CARDS.find((c) => c.key === active) || ORDER_CARDS[0];
 
@@ -48,7 +27,7 @@ export default function OrderManagementScreen({ navigation }) {
             <Card style={[styles.card, active === card.key ? styles.cardActive : null]}>
               <Text style={styles.cardTitle}>{card.title}</Text>
               <Text style={styles.cardSubtitle}>{card.subtitle}</Text>
-              <Pressable style={styles.openBtn} onPress={() => navigation?.navigate?.(card.route, card.params || {})}>
+              <Pressable style={styles.openBtn} onPress={() => setActive(card.key)}>
                 <Text style={styles.openText}>Open</Text>
               </Pressable>
             </Card>
@@ -59,10 +38,9 @@ export default function OrderManagementScreen({ navigation }) {
       <Card>
         <Text style={styles.panelTitle}>{current.panelTitle}</Text>
         <Text style={styles.panelText}>{current.panelDesc}</Text>
-        <Pressable style={styles.launchBtn} onPress={() => navigation?.navigate?.(current.route, current.params || {})}>
-          <Text style={styles.launchText}>Go to {current.panelTitle}</Text>
-        </Pressable>
       </Card>
+
+      {active === 'returnStock' ? <ReturnStockScreen /> : <SaleStockScreen />}
     </ScrollView>
   );
 }
@@ -80,6 +58,4 @@ const styles = StyleSheet.create({
   openText: { color: '#047857', fontWeight: '700', fontSize: 12 },
   panelTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
   panelText: { marginTop: 6, color: '#6b7280' },
-  launchBtn: { marginTop: 12, borderRadius: 10, backgroundColor: '#059669', alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 10 },
-  launchText: { color: '#fff', fontWeight: '700', fontSize: 12 },
 });
