@@ -7,7 +7,7 @@ import Loader from '../../../../ui/Loader';
 const EMPTY_LINE = { productId: '', qty: '', toValue: '0', discValue: '0', extraValue: '0', bonsValue: '0', gstPer: '0' };
 const EMPTY_FORM = {
   warehouseId: '', regionId: '', zoneId: '', territoryName: '', fieldId: '',
-  toEntityType: 'BRAND', businessName: '', distributorName: '', subDistributorName: '', address: '',
+  toEntityType: 'BRAND', businessName: '', distributorName: '', subDistributorName: '', requestSourceRole: 'Order Booker', address: '',
   extraDiscPer: '0', advTaxPer: '0', whTaxPer: '0', expense: '0', items: [{ ...EMPTY_LINE }],
 };
 
@@ -105,7 +105,7 @@ function buildInvoiceHtml(txn) {
   </body></html>`;
 }
 
-export default function SaleStockScreen() {
+export default function SaleStockScreen({ mode = 'primary' } = {}) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
@@ -118,6 +118,7 @@ export default function SaleStockScreen() {
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saleLedgerFilter, setSaleLedgerFilter] = useState('all');
+  const isSecondary = mode === 'secondary';
   const [previewRow, setPreviewRow] = useState(null);
 
   const load = async () => {
@@ -225,6 +226,7 @@ export default function SaleStockScreen() {
         note: form.address,
         extraDiscPer: Number(form.extraDiscPer || 0), advTaxPer: Number(form.advTaxPer || 0), whTaxPer: Number(form.whTaxPer || 0), expense: Number(form.expense || 0),
         items: normalizedItems, subtotal: totalAmount, grandTotal,
+        requestSourceRole: isSecondary ? form.requestSourceRole : 'Order Management',
       });
       setForm(EMPTY_FORM);
       await load();
@@ -260,16 +262,26 @@ export default function SaleStockScreen() {
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <Card>
-        <Text style={styles.title}>Sale Stock</Text>
-        <Text style={styles.subtitle}>Website-like sale stock form and ledger.</Text>
+        <Text style={styles.title}>{isSecondary ? 'Secondary Orders' : 'Sale Stock'}</Text>
+        <Text style={styles.subtitle}>{isSecondary ? 'Website-like secondary order form and ledger.' : 'Website-like sale stock form and ledger.'}</Text>
         {err ? <Text style={styles.error}>{err}</Text> : null}
 
         <Text style={styles.label}>Sale Mode</Text>
         <View style={styles.modeRow}>
           <Pressable style={[styles.modeBtn, form.toEntityType === 'BRAND' ? styles.modeBtnActive : null]} onPress={() => setField('toEntityType', 'BRAND')}><Text>Sale to Brand</Text></Pressable>
           <Pressable style={[styles.modeBtn, form.toEntityType === 'DISTRIBUTOR' ? styles.modeBtnActive : null]} onPress={() => setField('toEntityType', 'DISTRIBUTOR')}><Text>Sale to Distributor</Text></Pressable>
-          <Pressable style={[styles.modeBtn, form.toEntityType === 'SUB_DISTRIBUTOR' ? styles.modeBtnActive : null]} onPress={() => setField('toEntityType', 'SUB_DISTRIBUTOR')}><Text>Sale to Sub-Distributor</Text></Pressable>
+          {!isSecondary ? <Pressable style={[styles.modeBtn, form.toEntityType === 'SUB_DISTRIBUTOR' ? styles.modeBtnActive : null]} onPress={() => setField('toEntityType', 'SUB_DISTRIBUTOR')}><Text>Sale to Sub-Distributor</Text></Pressable> : null}
         </View>
+
+        {isSecondary ? (
+          <>
+            <Text style={styles.label}>Secondary Request Source</Text>
+            <View style={styles.modeRow}>
+              <Pressable style={[styles.modeBtn, form.requestSourceRole === 'Order Booker' ? styles.modeBtnActive : null]} onPress={() => setField('requestSourceRole', 'Order Booker')}><Text>Order Booker</Text></Pressable>
+              <Pressable style={[styles.modeBtn, form.requestSourceRole === 'Customer' ? styles.modeBtnActive : null]} onPress={() => setField('requestSourceRole', 'Customer')}><Text>Customer</Text></Pressable>
+            </View>
+          </>
+        ) : null}
 
         <Text style={styles.label}>From (Warehouse)</Text>
         <SelectDropdown placeholder="Select warehouse" options={warehouses.map((w) => ({ value: w._id, label: w.name }))} value={form.warehouseId} onPick={(v) => setField('warehouseId', v)} />

@@ -40,7 +40,7 @@ export default function OrderManagementScreen() {
         <Text style={styles.panelText}>{current.panelDesc}</Text>
       </Card>
 
-      {active === 'returnStock' ? <ReturnStockScreen /> : <SaleStockScreen />}
+      {active === 'returnStock' ? <ReturnStockScreen /> : <SaleStockScreen mode={active === 'secondary' ? 'secondary' : 'primary'} />}
     </ScrollView>
   );
 }
