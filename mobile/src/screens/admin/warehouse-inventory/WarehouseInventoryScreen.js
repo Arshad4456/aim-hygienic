@@ -3,10 +3,10 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Card from '../../../ui/Card';
 
 const MODULE_CARDS = [
-  { key: 'PURCHASING_STOCK', title: '1 Purchasing Stock', subtitle: 'Purchasing Stock', route: 'admin:inventory/summary' },
-  { key: 'SALE_STOCK', title: '2 Sale Stock', subtitle: 'Sale Stock', route: 'admin:inventory/summary' },
-  { key: 'DAMAGE_STOCK', title: '3 Damage Stock', subtitle: 'Damage Stock', route: 'admin:inventory/low-stock' },
-  { key: 'RETURN_STOCK', title: '4 Return Stock', subtitle: 'Return Stock', route: 'admin:inventory/transfers' },
+  { key: 'PURCHASING_STOCK', title: '1 Purchasing Stock', subtitle: 'Purchasing Stock', route: 'admin:inventory/purchase-stock' },
+  { key: 'SALE_STOCK', title: '2 Sale Stock', subtitle: 'Sale Stock', route: 'admin:inventory/sale-stock' },
+  { key: 'DAMAGE_STOCK', title: '3 Damage Stock', subtitle: 'Damage Stock', route: 'admin:inventory/damage-stock' },
+  { key: 'RETURN_STOCK', title: '4 Return Stock', subtitle: 'Return Stock', route: 'admin:inventory/return-stock' },
   { key: 'W2W_TRANSFER', title: '5 Warehouse to Warehouse Transfer', subtitle: 'Warehouse to Warehouse Transfer', route: 'admin:inventory/transfers' },
   { key: 'STOCK_SUMMARY', title: '6 Stock Summary', subtitle: 'Stock Summary', route: 'admin:inventory/summary' },
   { key: 'LOW_STOCK', title: '7 Low Stock Alert', subtitle: 'Low Stock Alert', route: 'admin:inventory/low-stock' },

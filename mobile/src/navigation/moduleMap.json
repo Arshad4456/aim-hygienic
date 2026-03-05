@@ -626,6 +626,174 @@
     ]
   },
   {
+    "key": "admin:inventory/return-stock",
+    "role": "admin",
+    "modulePath": "inventory/return-stock",
+    "route": "/dashboards/admin/inventory/return-stock",
+    "title": "Return Stock",
+    "screenFile": "screens/admin/inventory/return-stock/ReturnStockScreen.js",
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/warehouses"
+      },
+      {
+        "method": "GET",
+        "path": "/products"
+      },
+      {
+        "method": "GET",
+        "path": "/inventory/transactions?transactionType=RETURN_STOCK"
+      },
+      {
+        "method": "POST",
+        "path": "/inventory/transactions"
+      },
+      {
+        "method": "PUT",
+        "path": "/inventory/transactions/${id}"
+      },
+      {
+        "method": "PUT",
+        "path": "/inventory/transactions/${id}/mark-read"
+      },
+      {
+        "method": "PUT",
+        "path": "/inventory/transactions/${id}/request-status"
+      },
+      {
+        "method": "DELETE",
+        "path": "/inventory/transactions/${id}"
+      }
+    ]
+  },
+  {
+    "key": "admin:inventory/damage-stock",
+    "role": "admin",
+    "modulePath": "inventory/damage-stock",
+    "route": "/dashboards/admin/inventory/damage-stock",
+    "title": "Damage Stock",
+    "screenFile": "screens/admin/inventory/damage-stock/DamageStockScreen.js",
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/warehouses"
+      },
+      {
+        "method": "GET",
+        "path": "/products"
+      },
+      {
+        "method": "GET",
+        "path": "/inventory/transactions?transactionType=DAMAGE_STOCK"
+      },
+      {
+        "method": "POST",
+        "path": "/inventory/transactions"
+      },
+      {
+        "method": "PUT",
+        "path": "/inventory/transactions/${id}"
+      },
+      {
+        "method": "PUT",
+        "path": "/inventory/transactions/${id}/mark-read"
+      },
+      {
+        "method": "PUT",
+        "path": "/inventory/transactions/${id}/request-status"
+      },
+      {
+        "method": "DELETE",
+        "path": "/inventory/transactions/${id}"
+      }
+    ]
+  },
+  {
+    "key": "admin:inventory/sale-stock",
+    "role": "admin",
+    "modulePath": "inventory/sale-stock",
+    "route": "/dashboards/admin/inventory/sale-stock",
+    "title": "Sale Stock",
+    "screenFile": "screens/admin/inventory/sale-stock/SaleStockScreen.js",
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/warehouses"
+      },
+      {
+        "method": "GET",
+        "path": "/products"
+      },
+      {
+        "method": "GET",
+        "path": "/inventory/transactions?transactionType=SALE_STOCK"
+      },
+      {
+        "method": "POST",
+        "path": "/inventory/transactions"
+      },
+      {
+        "method": "PUT",
+        "path": "/inventory/transactions/${id}"
+      },
+      {
+        "method": "PUT",
+        "path": "/inventory/transactions/${id}/mark-read"
+      },
+      {
+        "method": "PUT",
+        "path": "/inventory/transactions/${id}/request-status"
+      },
+      {
+        "method": "DELETE",
+        "path": "/inventory/transactions/${id}"
+      }
+    ]
+  },
+  {
+    "key": "admin:inventory/purchase-stock",
+    "role": "admin",
+    "modulePath": "inventory/purchase-stock",
+    "route": "/dashboards/admin/inventory/purchase-stock",
+    "title": "Purchase Stock",
+    "screenFile": "screens/admin/inventory/purchase-stock/PurchaseStockScreen.js",
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/warehouses"
+      },
+      {
+        "method": "GET",
+        "path": "/products"
+      },
+      {
+        "method": "GET",
+        "path": "/inventory/transactions?transactionType=PURCHASING_STOCK"
+      },
+      {
+        "method": "POST",
+        "path": "/inventory/transactions"
+      },
+      {
+        "method": "PUT",
+        "path": "/inventory/transactions/${id}"
+      },
+      {
+        "method": "PUT",
+        "path": "/inventory/transactions/${id}/mark-read"
+      },
+      {
+        "method": "PUT",
+        "path": "/inventory/transactions/${id}/request-status"
+      },
+      {
+        "method": "DELETE",
+        "path": "/inventory/transactions/${id}"
+      }
+    ]
+  },
+  {
     "key": "admin:live-tracking",
     "role": "admin",
     "modulePath": "live-tracking",
