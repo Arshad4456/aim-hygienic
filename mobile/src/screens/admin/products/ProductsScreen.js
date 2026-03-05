@@ -3,7 +3,7 @@ import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View 
 import apiClient from '../../../api/client';
 import Card from '../../../ui/Card';
 import Loader from '../../../ui/Loader';
-import { PRODUCT_CATEGORIES } from './ProductConstants';
+import { PRODUCT_CATEGORIES } from './productConstants';
 
 const PAGE_SIZE = 50;
 const TABLE_COLUMNS = ['Code', 'Product ID', 'Product Name', 'Company', 'Category', 'Sub-Category', 'Size', 'Retail', 'Wholesale', 'Trade', 'Actions'];
