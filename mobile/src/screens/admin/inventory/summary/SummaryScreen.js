@@ -12,6 +12,7 @@ export default function SummaryScreen() {
   const [warehouseId, setWarehouseId] = useState('');
   const [rows, setRows] = useState([]);
   const [detailRow, setDetailRow] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [edit, setEdit] = useState(null);
 
   useEffect(() => {
@@ -37,9 +38,23 @@ export default function SummaryScreen() {
 
   const productMap = useMemo(() => new Map(products.map((p) => [p.productId, p])), [products]);
 
-  const onOpenDetail = (row) => {
+  const onOpenDetail = async (row) => {
     const product = productMap.get(row?._id?.productId || row?.productId);
-    setDetailRow({ ...row, product });
+    const next = { ...row, product, detailRows: [] };
+    setDetailRow(next);
+    setDetailLoading(true);
+    try {
+      const productId = row?._id?.productId || row?.productId || '';
+      const rowWarehouseId = row?._id?.warehouseId || row?.warehouseId || '';
+      if (productId && rowWarehouseId) {
+        const { data } = await apiClient.get(`/inventory/summary-detail?productId=${encodeURIComponent(productId)}&warehouseId=${encodeURIComponent(rowWarehouseId)}`);
+        setDetailRow((s0) => (s0 ? { ...s0, detailRows: data?.rows || [] } : s0));
+      }
+    } catch (_e) {
+      setDetailRow((s0) => (s0 ? { ...s0, detailRows: [] } : s0));
+    } finally {
+      setDetailLoading(false);
+    }
   };
 
   const onOpenUpdate = (row) => {
@@ -111,7 +126,7 @@ export default function SummaryScreen() {
           </View>
         </ScrollView>
       </Card>
-      <Modal visible={Boolean(detailRow)} transparent animationType="slide" onRequestClose={() => setDetailRow(null)}><View style={styles.modalOverlay}><View style={styles.modalCard}><Text style={styles.modalTitle}>Stock Detail</Text>{detailRow ? <><Text style={styles.modalLine}>Product: {detailRow.productName || detailRow?._id?.productId || '-'}</Text><Text style={styles.modalLine}>Warehouse: {detailRow.warehouseName || detailRow?._id?.warehouseId || '-'}</Text><Text style={styles.modalLine}>Available Qty: {detailRow.quantity ?? 0}</Text><Text style={styles.modalLine}>Min Stock: {detailRow.product?.minStockLevel ?? 0}</Text></> : null}<Pressable style={styles.closeBtn} onPress={() => setDetailRow(null)}><Text style={styles.closeText}>Close</Text></Pressable></View></View></Modal>
+      <Modal visible={Boolean(detailRow)} transparent animationType="slide" onRequestClose={() => setDetailRow(null)}><View style={styles.modalOverlay}><View style={styles.modalCard}><Text style={styles.modalTitle}>Stock Detail</Text>{detailRow ? <><Text style={styles.modalLine}>Product: {detailRow.productName || detailRow?._id?.productId || '-'}</Text><Text style={styles.modalLine}>Warehouse: {detailRow.warehouseName || detailRow?._id?.warehouseId || '-'}</Text><Text style={styles.modalLine}>Available Qty: {detailRow.quantity ?? 0}</Text><Text style={styles.modalLine}>Min Stock: {detailRow.product?.minStockLevel ?? 0}</Text><Text style={[styles.modalLine,{fontWeight:'700',marginTop:10}]}>Batch Detail (MFG/EXP)</Text>{detailLoading ? <Text style={styles.modalLine}>Loading detail...</Text> : detailRow?.detailRows?.length ? detailRow.detailRows.map((d,idx)=><Text key={`${d.manufactureDate}-${d.expiryDate}-${idx}`} style={styles.modalLine}>MFG: {d.manufactureDate ? new Date(d.manufactureDate).toLocaleDateString() : '-'} | EXP: {d.expiryDate ? new Date(d.expiryDate).toLocaleDateString() : '-'} | Qty: {d.quantity ?? 0}</Text>) : <Text style={styles.modalLine}>No MFG/EXP rows found.</Text>}</> : null}<Pressable style={styles.closeBtn} onPress={() => setDetailRow(null)}><Text style={styles.closeText}>Close</Text></Pressable></View></View></Modal>
 
       <Modal visible={Boolean(edit)} transparent animationType="slide" onRequestClose={() => setEdit(null)}><View style={styles.modalOverlay}><View style={styles.modalCard}><Text style={styles.modalTitle}>Update Min Stock</Text>{edit ? <><Text style={styles.modalLine}>{edit.name} ({edit.productId})</Text><TextInput style={styles.input} keyboardType="numeric" value={String(edit.minStockLevel ?? '')} onChangeText={(v) => setEdit((s0) => ({ ...s0, minStockLevel: v }))} /></> : null}<View style={styles.modalActions}><Pressable style={styles.closeBtn} onPress={() => setEdit(null)}><Text style={styles.closeText}>Cancel</Text></Pressable><Pressable style={styles.saveBtn} onPress={onSaveUpdate}><Text style={styles.saveText}>Save</Text></Pressable></View></View></View></Modal>
     </ScrollView>

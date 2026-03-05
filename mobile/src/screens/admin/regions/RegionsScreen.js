@@ -88,6 +88,14 @@ export default function RegionsScreen() {
           <TextInput style={styles.input} value={edit?.regionId || ''} onChangeText={(v) => setEdit((s) => ({ ...s, regionId: v }))} placeholder="Region ID" />
           <TextInput style={styles.input} value={edit?.name || ''} onChangeText={(v) => setEdit((s) => ({ ...s, name: v }))} placeholder="Region Name" />
           <TextInput style={styles.input} value={edit?.warehouseName || ''} onChangeText={(v) => setEdit((s) => ({ ...s, warehouseName: v }))} placeholder="Warehouse Name" />
+          <Text style={styles.smallLabel}>Status</Text>
+          <View style={styles.statusRow}>
+            {['active', 'inactive'].map((st) => (
+              <Pressable key={st} style={[styles.chip, edit?.status === st ? styles.chipActive : null]} onPress={() => setEdit((prev) => ({ ...prev, status: st }))}>
+                <Text style={edit?.status === st ? styles.chipTextActive : null}>{st}</Text>
+              </Pressable>
+            ))}
+          </View>
           <View style={styles.modalActions}><Pressable style={styles.btn} onPress={onSave}><Text style={styles.btnText}>Update</Text></Pressable><Pressable style={styles.btn} onPress={() => setEdit(null)}><Text style={styles.btnText}>Cancel</Text></Pressable></View>
         </View></View>
       </Modal>
@@ -118,4 +126,6 @@ const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 12 },
   modal: { backgroundColor: '#fff', borderRadius: 12, padding: 12 },
   modalActions: { flexDirection: 'row', gap: 8, marginTop: 6 },
+  smallLabel: { fontSize: 12, color: '#374151', fontWeight: '600' },
+  statusRow: { flexDirection: 'row', gap: 8, marginBottom: 6 },
 });
