@@ -5,7 +5,7 @@ import Button from '../../../../../ui/Button';
 import Card from '../../../../../ui/Card';
 import Loader from '../../../../../ui/Loader';
 
-const TYPES = ['Motorbike', 'Car', 'Pickup', 'Truck', 'Van'];
+const TYPES = ['Motorbike', 'Scooter', 'Bicycle', 'Car', 'Microbus', 'Van', 'Pickup', 'Truck', 'Covered Van', 'Lorry', 'Mini Truck', 'Bus', 'Auto Rickshaw', 'CNG', 'Tractor', 'Ambulance', 'Other'];
 const FUEL_TYPES = ['Petrol', 'Diesel', 'Octane', 'CNG', 'Electric'];
 const OWNERSHIP = ['company', 'rental', 'leased'];
 const STATUS = ['Active', 'Under Maintenance', 'Inactive'];
