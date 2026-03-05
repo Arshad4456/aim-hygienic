@@ -7,7 +7,7 @@ import SecondaryOrdersScreen from './secondary-orders/SecondaryOrdersScreen';
 
 const ORDER_CARDS = [
   { key: 'primary', title: 'Primary Orders Card', subtitle: 'Open primary orders workflow and ledger.', panelTitle: 'Primary Orders', panelDesc: 'Create and manage primary sale orders like website flow.' },
-  { key: 'secondary', title: 'Secondary Orders Card', subtitle: 'Open secondary orders flow.', panelTitle: 'Secondary Orders', panelDesc: 'Manage secondary order requests, status updates, and ledger records.' },
+  { key: 'secondary', title: 'Secondary Orders Card', subtitle: 'Open secondary orders flow.', panelTitle: 'Secondary Orders', panelDesc: 'Manage secondary order requests and status updates.' },
   { key: 'returnStock', title: 'Return Stock Card', subtitle: 'Open return stock request workflow and ledger.', panelTitle: 'Return Stock', panelDesc: 'Create return stock requests and manage return ledger.' },
 ];
 
