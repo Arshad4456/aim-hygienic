@@ -3,10 +3,11 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Card from '../../../ui/Card';
 import SaleStockScreen from '../inventory/sale-stock/SaleStockScreen';
 import ReturnStockScreen from '../inventory/return-stock/ReturnStockScreen';
+import SecondaryOrdersScreen from './secondary-orders/SecondaryOrdersScreen';
 
 const ORDER_CARDS = [
   { key: 'primary', title: 'Primary Orders Card', subtitle: 'Open primary orders workflow and ledger.', panelTitle: 'Primary Orders', panelDesc: 'Create and manage primary sale orders like website flow.' },
-  { key: 'secondary', title: 'Secondary Orders Card', subtitle: 'Open secondary orders workflow and ledger.', panelTitle: 'Secondary Orders', panelDesc: 'Manage secondary order requests and status updates.' },
+  { key: 'secondary', title: 'Secondary Orders Card', subtitle: 'Open secondary orders flow.', panelTitle: 'Secondary Orders', panelDesc: 'Manage secondary order requests and status updates.' },
   { key: 'returnStock', title: 'Return Stock Card', subtitle: 'Open return stock request workflow and ledger.', panelTitle: 'Return Stock', panelDesc: 'Create return stock requests and manage return ledger.' },
 ];
 
@@ -22,17 +23,23 @@ export default function OrderManagementScreen() {
       </Card>
 
       <View style={styles.grid}>
-        {ORDER_CARDS.map((card) => (
-          <Pressable key={card.key} onPress={() => setActive(card.key)}>
-            <Card style={[styles.card, active === card.key ? styles.cardActive : null]}>
-              <Text style={styles.cardTitle}>{card.title}</Text>
-              <Text style={styles.cardSubtitle}>{card.subtitle}</Text>
-              <Pressable style={styles.openBtn} onPress={() => setActive(card.key)}>
-                <Text style={styles.openText}>Open</Text>
-              </Pressable>
-            </Card>
-          </Pressable>
-        ))}
+        {ORDER_CARDS.map((card) => {
+          if (card.key === 'secondary') {
+            return <SecondaryOrdersScreen key={card.key} active={active === card.key} onOpen={setActive} />;
+          }
+
+          return (
+            <Pressable key={card.key} onPress={() => setActive(card.key)}>
+              <Card style={[styles.card, active === card.key ? styles.cardActive : null]}>
+                <Text style={styles.cardTitle}>{card.title}</Text>
+                <Text style={styles.cardSubtitle}>{card.subtitle}</Text>
+                <Pressable style={styles.openBtn} onPress={() => setActive(card.key)}>
+                  <Text style={styles.openText}>Open</Text>
+                </Pressable>
+              </Card>
+            </Pressable>
+          );
+        })}
       </View>
 
       <Card>
