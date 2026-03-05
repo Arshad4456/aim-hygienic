@@ -47,6 +47,7 @@ export default function DamageStockScreen() {
   const [rows, setRows] = useState([]);
   const [nearExpiry, setNearExpiry] = useState([]);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [calendarPick, setCalendarPick] = useState(null);
 
   const load = async () => {
     setLoading(true); setErr('');
@@ -60,7 +61,7 @@ export default function DamageStockScreen() {
       setProducts(productsRes.data?.products || []);
       setWarehouses(warehousesRes.data?.warehouses || []);
       setRows(txRes.data?.transactions || []);
-      setNearExpiry(nearRes.data?.products || []);
+      setNearExpiry(nearRes.data?.products || nearRes.data?.nearExpiryProducts || nearRes.data?.rows || []);
     } catch (e) { setErr(e.message || 'Failed to load damage stock'); } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
@@ -138,8 +139,8 @@ export default function DamageStockScreen() {
                   <Text style={[styles.cell, styles.colData]}>{calc.v4gst.toFixed(2)}</Text>
                   <TextInput style={[styles.input, styles.colData]} keyboardType="numeric" value={line.gstPer} onChangeText={(v) => setItem(idx, 'gstPer', v)} />
                   <Text style={[styles.cell, styles.colData]}>{calc.netAmt.toFixed(2)}</Text>
-                  <TextInput style={[styles.input, styles.colData]} placeholder="YYYY-MM-DD" value={line.manufactureDate} onChangeText={(v) => setItem(idx, 'manufactureDate', v)} />
-                  <TextInput style={[styles.input, styles.colData]} placeholder="YYYY-MM-DD" value={line.expiryDate} onChangeText={(v) => setItem(idx, 'expiryDate', v)} />
+                  <DateField value={line.manufactureDate} onPress={() => setCalendarPick({ idx, key: 'manufactureDate', value: line.manufactureDate })} />
+                  <DateField value={line.expiryDate} onPress={() => setCalendarPick({ idx, key: 'expiryDate', value: line.expiryDate })} />
                   <View style={styles.colAction}><Pressable style={styles.deleteBtn} onPress={() => removeItem(idx)}><Text style={styles.deleteText}>X</Text></Pressable></View>
                 </View>
               ))}
@@ -197,6 +198,18 @@ export default function DamageStockScreen() {
           </View>
         </ScrollView>
       </Card>
+
+      <CalendarModal
+        visible={Boolean(calendarPick)}
+        value={calendarPick?.value || ''}
+        onClose={() => setCalendarPick(null)}
+        onSelect={(date) => {
+          if (!calendarPick) return;
+          setItem(calendarPick.idx, calendarPick.key, date);
+          setCalendarPick(null);
+        }}
+      />
+
     </ScrollView>
   );
 }
@@ -211,6 +224,56 @@ function SelectDropdown({ placeholder, options, value, onPick }) {
         <View style={styles.modalOverlay}><View style={styles.dropdownModalCard}><Text style={styles.modalTitle}>{placeholder}</Text><ScrollView style={{ maxHeight: 300 }}>{options.map((o) => <Pressable key={`${o.value}`} style={styles.dropdownOption} onPress={() => { onPick(o.value); setOpen(false); }}><Text style={[styles.dropdownText, value === o.value ? styles.dropdownTextActive : null]}>{o.label}</Text></Pressable>)}</ScrollView><Pressable style={styles.cancelBtn} onPress={() => setOpen(false)}><Text style={styles.cancelText}>Close</Text></Pressable></View></View>
       </Modal>
     </>
+  );
+}
+
+function DateField({ value, onPress }) {
+  return (
+    <Pressable style={[styles.input, styles.colData]} onPress={onPress}>
+      <Text style={value ? styles.dateValue : styles.datePlaceholder}>{value || 'Select date'}</Text>
+    </Pressable>
+  );
+}
+
+function CalendarModal({ visible, value, onClose, onSelect }) {
+  const initial = value ? new Date(value) : new Date();
+  const [month, setMonth] = useState(initial.getMonth());
+  const [year, setYear] = useState(initial.getFullYear());
+  useEffect(() => {
+    if (!visible) return;
+    const d = value ? new Date(value) : new Date();
+    setMonth(d.getMonth());
+    setYear(d.getFullYear());
+  }, [visible, value]);
+
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < firstDay; i += 1) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d += 1) cells.push(d);
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.calendarCard}>
+          <Text style={styles.modalTitle}>Pick Date</Text>
+          <View style={styles.calNav}>
+            <Pressable style={styles.navBtn} onPress={() => { if (month === 0) { setMonth(11); setYear((y) => y - 1); } else setMonth((m) => m - 1); }}><Text>{'<'}</Text></Pressable>
+            <Text style={styles.calTitle}>{new Date(year, month, 1).toLocaleString('default', { month: 'long' })} {year}</Text>
+            <Pressable style={styles.navBtn} onPress={() => { if (month === 11) { setMonth(0); setYear((y) => y + 1); } else setMonth((m) => m + 1); }}><Text>{'>'}</Text></Pressable>
+          </View>
+          <View style={styles.calGrid}>
+            {['S','M','T','W','T','F','S'].map((d, idx) => <Text key={`day-${idx}-${d}`} style={styles.calHead}>{d}</Text>)}
+            {cells.map((d, idx) => (
+              <Pressable key={`${d}-${idx}`} disabled={!d} style={[styles.calCell, !d ? styles.calCellEmpty : null]} onPress={() => onSelect(`${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`)}>
+                <Text style={styles.calCellText}>{d || ''}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <Pressable style={styles.cancelBtn} onPress={onClose}><Text style={styles.cancelText}>Close</Text></Pressable>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -229,5 +292,16 @@ const styles = StyleSheet.create({
   totalsWrap: { marginTop: 10, gap: 8 }, totalAmount: { color: '#111827', fontWeight: '700' }, rowInput: { marginTop: 4, flexDirection: 'row', alignItems: 'center', gap: 8 }, rowLabel: { width: 110, fontSize: 12, color: '#374151' }, rowField: { flex: 1, borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 7, backgroundColor: '#fff', color: '#111827' }, rowAmount: { width: 90, textAlign: 'right', fontSize: 12, color: '#111827' },
   grand: { marginTop: 8, textAlign: 'right', fontSize: 18, fontWeight: '700', color: '#111827' }, primaryBtn: { marginTop: 10, backgroundColor: '#111827', borderRadius: 10, paddingVertical: 11, alignItems: 'center' }, primaryText: { color: '#fff', fontWeight: '700' }, ledgerTitle: { fontSize: 18, fontWeight: '700', color: '#111827' }, actionBtn: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 7, backgroundColor: '#fff' }, actionText: { color: '#111827', fontSize: 12, fontWeight: '600' }, deleteBtn: { borderWidth: 1, borderColor: '#fecaca', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 7, backgroundColor: '#fef2f2' }, deleteText: { color: '#991b1b', fontSize: 12, fontWeight: '700' }, help: { color: '#6b7280' },
   dropdownBox: { marginTop: 4, borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, backgroundColor: '#fff', paddingHorizontal: 10, paddingVertical: 10 }, dropdownPlaceholder: { color: '#9ca3af', fontSize: 13 }, dropdownText: { color: '#111827', fontSize: 13 }, dropdownTextActive: { color: '#047857', fontWeight: '700' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }, dropdownModalCard: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 12 }, modalTitle: { fontSize: 17, fontWeight: '700', color: '#111827', marginBottom: 8 }, dropdownOption: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10, marginBottom: 6 }, cancelBtn: { marginTop: 8, borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, paddingVertical: 10, alignItems: 'center' }, cancelText: { color: '#111827', fontWeight: '600' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
+  dateValue: { color: '#111827', fontSize: 12 },
+  datePlaceholder: { color: '#9ca3af', fontSize: 12 },
+  calendarCard: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 12 },
+  calNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  navBtn: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 8, width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  calTitle: { fontSize: 14, fontWeight: '700', color: '#111827' },
+  calGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  calHead: { width: '14.28%', textAlign: 'center', fontWeight: '700', color: '#6b7280', marginBottom: 6 },
+  calCell: { width: '14.28%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
+  calCellEmpty: { opacity: 0.2 },
+  calCellText: { color: '#111827' }, dropdownModalCard: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 12 }, modalTitle: { fontSize: 17, fontWeight: '700', color: '#111827', marginBottom: 8 }, dropdownOption: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10, marginBottom: 6 }, cancelBtn: { marginTop: 8, borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, paddingVertical: 10, alignItems: 'center' }, cancelText: { color: '#111827', fontWeight: '600' },
 });
