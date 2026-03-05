@@ -38,6 +38,34 @@ function buildInvoiceHtml(txn) {
   return `<html><body style="font-family:Arial;padding:16px;"><h3>Damage Stock</h3><div>Date: ${new Date(txn.transactionAt).toLocaleDateString()}</div><div>Code: ${escapeHtml(txn.transactionCode || '-')}</div><table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin-top:8px;"><thead><tr><th>#</th><th>Product</th><th>Qty</th><th>Rate</th><th>Net</th></tr></thead><tbody>${rows.join('')}</tbody></table></body></html>`;
 }
 
+
+function buildNearExpiryFallbackFromMovements(movements = []) {
+  const now = Date.now();
+  const max = now + 90 * 24 * 60 * 60 * 1000;
+  const map = new Map();
+  for (const row of movements) {
+    const expiryRaw = row?.batchExpiryDate || row?.expiryDate;
+    if (!expiryRaw) continue;
+    const expiryTime = new Date(expiryRaw).getTime();
+    if (!Number.isFinite(expiryTime) || expiryTime < now || expiryTime > max) continue;
+    const qty = Number(row?.quantity || 0);
+    if (!(qty > 0)) continue;
+    const key = [row?.productId || '', row?.warehouseId || '', row?.batchManufactureDate || row?.manufactureDate || '', expiryRaw].join('|');
+    const prev = map.get(key) || {
+      productName: row?.productName || '-',
+      warehouseName: row?.warehouseName || row?.warehouseId || '-',
+      manufactureDate: row?.batchManufactureDate || row?.manufactureDate || '',
+      expiryDate: expiryRaw,
+      quantity: 0,
+    };
+    prev.quantity += qty;
+    map.set(key, prev);
+  }
+  return Array.from(map.values())
+    .filter((r) => Number(r.quantity || 0) > 0)
+    .sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
+}
+
 export default function DamageStockScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -52,16 +80,19 @@ export default function DamageStockScreen() {
   const load = async () => {
     setLoading(true); setErr('');
     try {
-      const [productsRes, warehousesRes, txRes, nearRes] = await Promise.all([
+      const [productsRes, warehousesRes, txRes, nearRes, movementsRes] = await Promise.all([
         apiClient.get('/products'),
         apiClient.get('/warehouses'),
         apiClient.get('/inventory/transactions?transactionType=DAMAGE_STOCK'),
         apiClient.get('/inventory/near-expiry-products'),
+        apiClient.get('/inventory/movements'),
       ]);
       setProducts(productsRes.data?.products || []);
       setWarehouses(warehousesRes.data?.warehouses || []);
       setRows(txRes.data?.transactions || []);
-      setNearExpiry(nearRes.data?.products || nearRes.data?.nearExpiryProducts || nearRes.data?.rows || []);
+      const nearApiRows = nearRes.data?.products || nearRes.data?.nearExpiryProducts || nearRes.data?.rows || [];
+      const movementRows = movementsRes.data?.movements || [];
+      setNearExpiry(nearApiRows.length ? nearApiRows : buildNearExpiryFallbackFromMovements(movementRows));
     } catch (e) { setErr(e.message || 'Failed to load damage stock'); } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
