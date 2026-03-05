@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
 import apiClient from '../../../../api/client';
 import Card from '../../../../ui/Card';
 import Loader from '../../../../ui/Loader';
@@ -10,6 +11,32 @@ function toNum(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
 function formatDateInput(date) { return date ? new Date(date).toISOString().slice(0, 10) : ''; }
 function paginate(rows = [], page = 1) { const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE)); const safe = Math.min(Math.max(1, page), totalPages); const start = (safe - 1) * PAGE_SIZE; return { page: safe, totalPages, rows: rows.slice(start, start + PAGE_SIZE) }; }
 function vehicleLabel(vehicle) { return `${vehicle?.registrationNo || 'No-Reg'} · ${vehicle?.make || ''} ${vehicle?.model || ''}${vehicle?.assignedUserName ? ` · ${vehicle.assignedUserName}` : ''}`.trim(); }
+function makeRecordId(prefix) { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`; }
+
+async function uriToDataUrl(uri) {
+  const res = await fetch(uri);
+  const blob = await res.blob();
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Failed to read selected file'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function uploadProof({ uri, mimeType, vehicleId, entity, recordId, slot, date }) {
+  const fileBase64 = await uriToDataUrl(uri);
+  const res = await apiClient.post('/uploads/vehicle-proof', {
+    vehicleId,
+    entity,
+    recordId,
+    slot,
+    date,
+    contentType: mimeType || 'image/jpeg',
+    fileBase64,
+  });
+  return res?.data?.publicUrl || '';
+}
 
 export default function FuelManagementScreen() {
   const [loading, setLoading] = useState(true);
@@ -27,7 +54,11 @@ export default function FuelManagementScreen() {
   const [refuelFilters, setRefuelFilters] = useState({ search: '', vehicleId: '', from: '', to: '' });
 
   const [form, setForm] = useState({ vehicleId: '', tripType: 'company', tripDate: '', fromPlace: '', toPlace: '', startOdometer: '', endOdometer: '', startMeterUrl: '', endMeterUrl: '' });
+  const [startFileName, setStartFileName] = useState('');
+  const [endFileName, setEndFileName] = useState('');
+
   const [refuel, setRefuel] = useState({ vehicleId: '', date: '', liters: '', cost: '', vendor: '', receiptUrl: '' });
+  const [receiptFileName, setReceiptFileName] = useState('');
 
   const map = useMemo(() => new Map(vehicles.map((v) => [v._id, v])), [vehicles]);
 
@@ -76,13 +107,70 @@ export default function FuelManagementScreen() {
   const tripPageData = paginate(filteredTrips, tripPage);
   const refuelPageData = paginate(filteredRefuels, refuelPage);
 
+  const pickTripProof = async (slot) => {
+    if (!form.vehicleId) return setErr('Select vehicle before uploading proof.');
+    if (!form.tripDate) return setErr('Select trip date before uploading proof.');
+    try {
+      setErr('');
+      const result = await DocumentPicker.getDocumentAsync({ type: 'image/*', copyToCacheDirectory: true, multiple: false });
+      if (result.canceled) return;
+      const file = result.assets?.[0];
+      if (!file?.uri) return;
+      const url = await uploadProof({
+        uri: file.uri,
+        mimeType: file.mimeType,
+        vehicleId: form.vehicleId,
+        entity: 'fuel',
+        recordId: makeRecordId('trip'),
+        slot,
+        date: form.tripDate,
+      });
+      if (slot === 'start') {
+        setForm((s) => ({ ...s, startMeterUrl: url }));
+        setStartFileName(file.name || 'Selected file');
+      } else {
+        setForm((s) => ({ ...s, endMeterUrl: url }));
+        setEndFileName(file.name || 'Selected file');
+      }
+    } catch (e) {
+      setErr(e.message || 'Failed to upload proof file');
+    }
+  };
+
+  const pickRefuelReceipt = async () => {
+    if (!refuel.vehicleId) return setErr('Select vehicle before uploading receipt.');
+    if (!refuel.date) return setErr('Select refuel date before uploading receipt.');
+    try {
+      setErr('');
+      const result = await DocumentPicker.getDocumentAsync({ type: 'image/*', copyToCacheDirectory: true, multiple: false });
+      if (result.canceled) return;
+      const file = result.assets?.[0];
+      if (!file?.uri) return;
+      const url = await uploadProof({
+        uri: file.uri,
+        mimeType: file.mimeType,
+        vehicleId: refuel.vehicleId,
+        entity: 'fuel',
+        recordId: makeRecordId('refuel'),
+        slot: 'receipt',
+        date: refuel.date,
+      });
+      setRefuel((s) => ({ ...s, receiptUrl: url }));
+      setReceiptFileName(file.name || 'Selected file');
+    } catch (e) {
+      setErr(e.message || 'Failed to upload receipt file');
+    }
+  };
+
   const saveTrip = async () => {
     if (!form.vehicleId || !form.tripDate || !form.fromPlace || !form.toPlace) return setErr('Please fill required trip fields');
-    if (!form.startMeterUrl || !form.endMeterUrl) return setErr('Start Meter Proof URL and End Meter Proof URL are required.');
+    if (!form.startMeterUrl || !form.endMeterUrl) return setErr('Start and End meter proof files are required.');
     setSavingTrip(true); setErr('');
     try {
       await apiClient.post('/vehicle-management/trips', { ...form, startOdometer: toNum(form.startOdometer), endOdometer: toNum(form.endOdometer) });
       setForm({ vehicleId: '', tripType: 'company', tripDate: '', fromPlace: '', toPlace: '', startOdometer: '', endOdometer: '', startMeterUrl: '', endMeterUrl: '' });
+      setStartFileName('');
+      setEndFileName('');
       await load();
     } catch (e) { setErr(e.message || 'Failed to save trip'); }
     finally { setSavingTrip(false); }
@@ -90,11 +178,12 @@ export default function FuelManagementScreen() {
 
   const saveRefuel = async () => {
     if (!refuel.vehicleId || !refuel.date || !refuel.liters) return setErr('Please fill required refuel fields');
-    if (!refuel.receiptUrl) return setErr('Receipt URL is required.');
+    if (!refuel.receiptUrl) return setErr('Receipt file is required.');
     setSavingRefuel(true); setErr('');
     try {
       await apiClient.post('/vehicle-management/refuels', { ...refuel, liters: toNum(refuel.liters), cost: toNum(refuel.cost) });
       setRefuel({ vehicleId: '', date: '', liters: '', cost: '', vendor: '', receiptUrl: '' });
+      setReceiptFileName('');
       await load();
     } catch (e) { setErr(e.message || 'Failed to save refuel'); }
     finally { setSavingRefuel(false); }
@@ -107,7 +196,6 @@ export default function FuelManagementScreen() {
       <Card>
         <Text style={styles.title}>Fuel Management</Text>
         <Text style={styles.subtitle}>Trip entry, refuel entry, trip ledger and refuel ledger.</Text>
-        <Text style={styles.note}>Date fields now use a calendar picker. File picking/upload to R2 needs native picker dependency not currently available in this project environment.</Text>
         {err ? <Text style={styles.err}>{err}</Text> : null}
       </Card>
 
@@ -121,8 +209,12 @@ export default function FuelManagementScreen() {
           <TextInput style={styles.input} placeholder="To" value={form.toPlace} onChangeText={(v) => setForm((s) => ({ ...s, toPlace: v }))} />
           <TextInput style={styles.input} placeholder="Start Odometer" value={form.startOdometer} onChangeText={(v) => setForm((s) => ({ ...s, startOdometer: v }))} keyboardType="numeric" />
           <TextInput style={styles.input} placeholder="End Odometer" value={form.endOdometer} onChangeText={(v) => setForm((s) => ({ ...s, endOdometer: v }))} keyboardType="numeric" />
-          <TextInput style={styles.input} placeholder="Start Meter Proof URL (R2 URL)" value={form.startMeterUrl} onChangeText={(v) => setForm((s) => ({ ...s, startMeterUrl: v }))} />
-          <TextInput style={styles.input} placeholder="End Meter Proof URL (R2 URL)" value={form.endMeterUrl} onChangeText={(v) => setForm((s) => ({ ...s, endMeterUrl: v }))} />
+
+          <Pressable style={styles.btnAlt} onPress={() => pickTripProof('start')}><Text style={styles.btnAltTx}>Choose Start Meter Proof</Text></Pressable>
+          <Text style={styles.fileHint}>{startFileName || 'No start meter file selected'}</Text>
+          <Pressable style={styles.btnAlt} onPress={() => pickTripProof('end')}><Text style={styles.btnAltTx}>Choose End Meter Proof</Text></Pressable>
+          <Text style={styles.fileHint}>{endFileName || 'No end meter file selected'}</Text>
+
           <Pressable style={styles.btn} onPress={saveTrip} disabled={savingTrip}><Text style={styles.btnTx}>{savingTrip ? 'Saving...' : 'Save Trip'}</Text></Pressable>
         </Card>
 
@@ -133,7 +225,10 @@ export default function FuelManagementScreen() {
           <TextInput style={styles.input} placeholder="Liters" value={refuel.liters} onChangeText={(v) => setRefuel((s) => ({ ...s, liters: v }))} keyboardType="numeric" />
           <TextInput style={styles.input} placeholder="Cost" value={refuel.cost} onChangeText={(v) => setRefuel((s) => ({ ...s, cost: v }))} keyboardType="numeric" />
           <TextInput style={styles.input} placeholder="Vendor" value={refuel.vendor} onChangeText={(v) => setRefuel((s) => ({ ...s, vendor: v }))} />
-          <TextInput style={styles.input} placeholder="Receipt URL (R2 URL)" value={refuel.receiptUrl} onChangeText={(v) => setRefuel((s) => ({ ...s, receiptUrl: v }))} />
+
+          <Pressable style={styles.btnAlt} onPress={pickRefuelReceipt}><Text style={styles.btnAltTx}>Choose Receipt File</Text></Pressable>
+          <Text style={styles.fileHint}>{receiptFileName || 'No receipt file selected'}</Text>
+
           <Pressable style={styles.btn} onPress={saveRefuel} disabled={savingRefuel}><Text style={styles.btnTx}>{savingRefuel ? 'Saving...' : 'Save Refuel'}</Text></Pressable>
         </Card>
       </View>
@@ -160,47 +255,25 @@ export default function FuelManagementScreen() {
 function DatePickerField({ label, value, onChange }) {
   const [open, setOpen] = useState(false);
   const [cursor, setCursor] = useState(value ? new Date(value) : new Date());
-
   const days = useMemo(() => {
-    const year = cursor.getFullYear();
-    const month = cursor.getMonth();
-    const first = new Date(year, month, 1);
-    const startDay = first.getDay();
-    const total = new Date(year, month + 1, 0).getDate();
-    const arr = [];
-    for (let i = 0; i < startDay; i += 1) arr.push(null);
-    for (let d = 1; d <= total; d += 1) arr.push(new Date(year, month, d));
+    const y = cursor.getFullYear(); const m = cursor.getMonth();
+    const first = new Date(y, m, 1); const start = first.getDay(); const total = new Date(y, m + 1, 0).getDate();
+    const arr = []; for (let i = 0; i < start; i += 1) arr.push(null); for (let d = 1; d <= total; d += 1) arr.push(new Date(y, m, d));
     return arr;
   }, [cursor]);
-
   return (
     <View style={{ marginBottom: 8 }}>
       <Text style={styles.label}>{label}</Text>
       <Pressable style={styles.input} onPress={() => setOpen(true)}><Text>{value || 'Select date'}</Text></Pressable>
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <View style={styles.overlay}>
-          <View style={styles.modal}>
-            <View style={styles.monthRow}>
-              <Pressable onPress={() => setCursor((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}><Text>{'<'}</Text></Pressable>
-              <Text style={styles.monthTitle}>{cursor.toLocaleString(undefined, { month: 'long', year: 'numeric' })}</Text>
-              <Pressable onPress={() => setCursor((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))}><Text>{'>'}</Text></Pressable>
-            </View>
-            <View style={styles.daysGrid}>{days.map((d, idx) => <Pressable key={`${idx}-${d ? d.getDate() : 'x'}`} style={[styles.dayCell, d && formatDateInput(d) === value ? styles.active : null]} disabled={!d} onPress={() => { onChange(formatDateInput(d)); setOpen(false); }}><Text style={d && formatDateInput(d) === value ? styles.activeTx : null}>{d ? d.getDate() : ''}</Text></Pressable>)}</View>
-            <Pressable style={styles.closeBtn} onPress={() => setOpen(false)}><Text>Close</Text></Pressable>
-          </View>
-        </View>
+        <View style={styles.overlay}><View style={styles.modal}><View style={styles.monthRow}><Pressable onPress={() => setCursor((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}><Text>{'<'}</Text></Pressable><Text style={styles.monthTitle}>{cursor.toLocaleString(undefined, { month: 'long', year: 'numeric' })}</Text><Pressable onPress={() => setCursor((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))}><Text>{'>'}</Text></Pressable></View><View style={styles.daysGrid}>{days.map((d, idx) => <Pressable key={`${idx}-${d ? d.getDate() : 'x'}`} style={[styles.dayCell, d && formatDateInput(d) === value ? styles.active : null]} disabled={!d} onPress={() => { onChange(formatDateInput(d)); setOpen(false); }}><Text style={d && formatDateInput(d) === value ? styles.activeTx : null}>{d ? d.getDate() : ''}</Text></Pressable>)}</View><Pressable style={styles.closeBtn} onPress={() => setOpen(false)}><Text>Close</Text></Pressable></View></View>
       </Modal>
     </View>
   );
 }
 
 function VehicleSelector({ vehicles, value, onChange }) {
-  return (
-    <ScrollView horizontal contentContainerStyle={styles.wrap}>
-      <Pressable style={[styles.chip, !value ? styles.active : null]} onPress={() => onChange('')}><Text style={!value ? styles.activeTx : null}>Vehicle</Text></Pressable>
-      {vehicles.map((v) => <Pressable key={v._id} style={[styles.chip, value === v._id ? styles.active : null]} onPress={() => onChange(v._id)}><Text style={value === v._id ? styles.activeTx : null}>{vehicleLabel(v)}</Text></Pressable>)}
-    </ScrollView>
-  );
+  return <ScrollView horizontal contentContainerStyle={styles.wrap}><Pressable style={[styles.chip, !value ? styles.active : null]} onPress={() => onChange('')}><Text style={!value ? styles.activeTx : null}>Vehicle</Text></Pressable>{vehicles.map((v) => <Pressable key={v._id} style={[styles.chip, value === v._id ? styles.active : null]} onPress={() => onChange(v._id)}><Text style={value === v._id ? styles.activeTx : null}>{vehicleLabel(v)}</Text></Pressable>)}</ScrollView>;
 }
 
 function Filters({ vehicles, filters, setFilters, withTripType, withDates }) {
@@ -220,12 +293,13 @@ function Pager({ page, totalPages, onFirst, onPrev, onNext, onEnd }) { return <V
 function PagerBtn({ label, onPress, disabled }) { return <Pressable onPress={onPress} disabled={disabled} style={[styles.pagerBtn, disabled ? styles.disabled : null]}><Text style={styles.pagerTx}>{label}</Text></Pressable>; }
 
 const styles = StyleSheet.create({
-  content: { padding: 12, gap: 12, paddingBottom: 30 }, title: { fontSize: 20, fontWeight: '700' }, subtitle: { marginTop: 4, color: '#6b7280' }, note: { marginTop: 6, color: '#92400e', fontSize: 12 }, err: { marginTop: 6, color: '#b91c1c' },
+  content: { padding: 12, gap: 12, paddingBottom: 30 }, title: { fontSize: 20, fontWeight: '700' }, subtitle: { marginTop: 4, color: '#6b7280' }, err: { marginTop: 6, color: '#b91c1c' },
   grid: { gap: 12 }, h2: { fontSize: 16, fontWeight: '700', marginBottom: 8 }, sub: { fontSize: 12, color: '#6b7280', marginBottom: 8 }, label: { marginBottom: 5, color: '#6b7280', fontSize: 12 },
   input: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 8, backgroundColor: '#fff' },
   wrap: { flexDirection: 'row', gap: 8, marginBottom: 8, paddingVertical: 2 },
   chip: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: '#fff' }, active: { backgroundColor: '#059669', borderColor: '#059669' }, activeTx: { color: '#fff' },
   btn: { borderRadius: 10, backgroundColor: '#059669', paddingVertical: 10, alignItems: 'center' }, btnTx: { color: '#fff', fontWeight: '700' },
+  btnAlt: { borderRadius: 10, borderWidth: 1, borderColor: '#059669', paddingVertical: 10, alignItems: 'center', marginBottom: 4, backgroundColor: '#ecfdf5' }, btnAltTx: { color: '#047857', fontWeight: '700' }, fileHint: { fontSize: 12, color: '#6b7280', marginBottom: 8 },
   tableWrap: { minWidth: 1500, borderWidth: 1, borderColor: '#e4e4e7', borderRadius: 8, overflow: 'hidden' },
   tRow: { flexDirection: 'row', borderBottomWidth: 1, borderColor: '#f4f4f5' }, tHeadBg: { backgroundColor: '#f8fafc', borderColor: '#e4e4e7' }, tCell: { width: 150, paddingHorizontal: 8, paddingVertical: 8, fontSize: 12 }, tHead: { fontWeight: '700' },
   empty: { color: '#6b7280', padding: 10 }, pager: { flexDirection: 'row', gap: 6, marginTop: 10 }, pagerBtn: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }, pagerTx: { fontSize: 12, fontWeight: '600' }, disabled: { opacity: 0.5 },

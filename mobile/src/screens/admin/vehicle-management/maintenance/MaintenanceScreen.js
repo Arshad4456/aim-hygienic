@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
 import apiClient from '../../../../api/client';
 import Card from '../../../../ui/Card';
 import Loader from '../../../../ui/Loader';
@@ -11,6 +12,32 @@ function toNum(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
 function formatDateInput(date) { return date ? new Date(date).toISOString().slice(0, 10) : ''; }
 function paginate(rows = [], page = 1) { const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE)); const safe = Math.min(Math.max(1, page), totalPages); const start = (safe - 1) * PAGE_SIZE; return { page: safe, totalPages, rows: rows.slice(start, start + PAGE_SIZE) }; }
 function vehicleLabel(v) { return `${v?.registrationNo || 'No-Reg'} · ${v?.make || ''} ${v?.model || ''}${v?.assignedUserName ? ` · ${v.assignedUserName}` : ''}`.trim(); }
+function makeRecordId(prefix) { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`; }
+
+async function uriToDataUrl(uri) {
+  const res = await fetch(uri);
+  const blob = await res.blob();
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Failed to read selected file'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function uploadProof({ uri, mimeType, vehicleId, date, recordId }) {
+  const fileBase64 = await uriToDataUrl(uri);
+  const res = await apiClient.post('/uploads/vehicle-proof', {
+    vehicleId,
+    entity: 'vehicle-maintenance',
+    recordId,
+    slot: 'proof',
+    date,
+    contentType: mimeType || 'image/jpeg',
+    fileBase64,
+  });
+  return res?.data?.publicUrl || '';
+}
 
 export default function MaintenanceScreen() {
   const [loading, setLoading] = useState(true);
@@ -19,6 +46,7 @@ export default function MaintenanceScreen() {
   const [rows, setRows] = useState([]);
   const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(1);
+  const [proofFileName, setProofFileName] = useState('');
 
   const [filters, setFilters] = useState({ search: '', vehicleId: '', maintenanceType: '', from: '', to: '' });
   const [form, setForm] = useState({ vehicleId: '', date: '', maintenanceType: 'oil_change', cost: '', vendor: '', notes: '', proofUrl: '' });
@@ -53,13 +81,31 @@ export default function MaintenanceScreen() {
 
   const pageData = paginate(filtered, page);
 
+  const pickProofFile = async () => {
+    if (!form.vehicleId) return setErr('Select vehicle before uploading proof.');
+    if (!form.date) return setErr('Select maintenance date before uploading proof.');
+    try {
+      setErr('');
+      const result = await DocumentPicker.getDocumentAsync({ type: 'image/*', copyToCacheDirectory: true, multiple: false });
+      if (result.canceled) return;
+      const file = result.assets?.[0];
+      if (!file?.uri) return;
+      const url = await uploadProof({ uri: file.uri, mimeType: file.mimeType, vehicleId: form.vehicleId, date: form.date, recordId: makeRecordId('maintenance') });
+      setForm((s) => ({ ...s, proofUrl: url }));
+      setProofFileName(file.name || 'Selected file');
+    } catch (e) {
+      setErr(e.message || 'Failed to upload proof file');
+    }
+  };
+
   const save = async () => {
     if (!form.vehicleId || !form.date || !form.maintenanceType || !form.cost) return setErr('Please fill required fields');
-    if (['oil_change', 'car_wash'].includes(form.maintenanceType) && !form.proofUrl) return setErr('Proof file URL is required for Oil Change and Car Wash');
+    if (['oil_change', 'car_wash'].includes(form.maintenanceType) && !form.proofUrl) return setErr('Proof file is required for Oil Change and Car Wash');
     setSaving(true); setErr('');
     try {
       await apiClient.post('/vehicle-management/maintenance', { ...form, cost: toNum(form.cost) });
       setForm({ vehicleId: '', date: '', maintenanceType: 'oil_change', cost: '', vendor: '', notes: '', proofUrl: '' });
+      setProofFileName('');
       await load();
     } catch (e) { setErr(e.message || 'Failed to save maintenance'); }
     finally { setSaving(false); }
@@ -72,7 +118,6 @@ export default function MaintenanceScreen() {
       <Card>
         <Text style={styles.title}>Vehicle Maintenance</Text>
         <Text style={styles.subtitle}>Maintenance entry and maintenance ledger (website-like flow).</Text>
-        <Text style={styles.note}>Date fields now use date-picker. Maintenance Type now uses dropdown. File-picker/upload needs native picker dependency unavailable in this environment, so proof URL is captured after upload.</Text>
         {err ? <Text style={styles.err}>{err}</Text> : null}
 
         <Text style={styles.label}>Vehicle</Text>
@@ -82,7 +127,8 @@ export default function MaintenanceScreen() {
         <TextInput style={styles.input} placeholder="Cost" value={form.cost} onChangeText={(v) => setForm((s) => ({ ...s, cost: v }))} keyboardType="numeric" />
         <TextInput style={styles.input} placeholder="Vendor" value={form.vendor} onChangeText={(v) => setForm((s) => ({ ...s, vendor: v }))} />
         <TextInput style={styles.input} placeholder="Notes" value={form.notes} onChangeText={(v) => setForm((s) => ({ ...s, notes: v }))} />
-        <TextInput style={styles.input} placeholder="Proof File URL (after upload)" value={form.proofUrl} onChangeText={(v) => setForm((s) => ({ ...s, proofUrl: v }))} />
+        <Pressable style={styles.btnAlt} onPress={pickProofFile}><Text style={styles.btnAltTx}>Choose Proof File</Text></Pressable>
+        <Text style={styles.fileHint}>{proofFileName || 'No proof file selected'}</Text>
         <Pressable style={styles.btn} onPress={save} disabled={saving}><Text style={styles.btnTx}>{saving ? 'Saving...' : 'Save'}</Text></Pressable>
       </Card>
 
@@ -110,35 +156,18 @@ export default function MaintenanceScreen() {
 function DatePickerField({ label, value, onChange }) {
   const [open, setOpen] = useState(false);
   const [cursor, setCursor] = useState(value ? new Date(value) : new Date());
-
   const days = useMemo(() => {
-    const year = cursor.getFullYear();
-    const month = cursor.getMonth();
-    const first = new Date(year, month, 1);
-    const startDay = first.getDay();
-    const total = new Date(year, month + 1, 0).getDate();
-    const arr = [];
-    for (let i = 0; i < startDay; i += 1) arr.push(null);
-    for (let d = 1; d <= total; d += 1) arr.push(new Date(year, month, d));
+    const y = cursor.getFullYear(); const m = cursor.getMonth();
+    const first = new Date(y, m, 1); const start = first.getDay(); const total = new Date(y, m + 1, 0).getDate();
+    const arr = []; for (let i = 0; i < start; i += 1) arr.push(null); for (let d = 1; d <= total; d += 1) arr.push(new Date(y, m, d));
     return arr;
   }, [cursor]);
-
   return (
     <View style={{ marginBottom: 8 }}>
       <Text style={styles.label}>{label}</Text>
       <Pressable style={styles.input} onPress={() => setOpen(true)}><Text>{value || 'Select date'}</Text></Pressable>
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <View style={styles.overlay}>
-          <View style={styles.modal}>
-            <View style={styles.monthRow}>
-              <Pressable onPress={() => setCursor((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}><Text>{'<'}</Text></Pressable>
-              <Text style={styles.monthTitle}>{cursor.toLocaleString(undefined, { month: 'long', year: 'numeric' })}</Text>
-              <Pressable onPress={() => setCursor((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))}><Text>{'>'}</Text></Pressable>
-            </View>
-            <View style={styles.daysGrid}>{days.map((d, idx) => <Pressable key={`${idx}-${d ? d.getDate() : 'x'}`} style={[styles.dayCell, d && formatDateInput(d) === value ? styles.active : null]} disabled={!d} onPress={() => { onChange(formatDateInput(d)); setOpen(false); }}><Text style={d && formatDateInput(d) === value ? styles.activeTx : null}>{d ? d.getDate() : ''}</Text></Pressable>)}</View>
-            <Pressable style={styles.closeBtn} onPress={() => setOpen(false)}><Text>Close</Text></Pressable>
-          </View>
-        </View>
+        <View style={styles.overlay}><View style={styles.modal}><View style={styles.monthRow}><Pressable onPress={() => setCursor((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}><Text>{'<'}</Text></Pressable><Text style={styles.monthTitle}>{cursor.toLocaleString(undefined, { month: 'long', year: 'numeric' })}</Text><Pressable onPress={() => setCursor((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))}><Text>{'>'}</Text></Pressable></View><View style={styles.daysGrid}>{days.map((d, idx) => <Pressable key={`${idx}-${d ? d.getDate() : 'x'}`} style={[styles.dayCell, d && formatDateInput(d) === value ? styles.active : null]} disabled={!d} onPress={() => { onChange(formatDateInput(d)); setOpen(false); }}><Text style={d && formatDateInput(d) === value ? styles.activeTx : null}>{d ? d.getDate() : ''}</Text></Pressable>)}</View><Pressable style={styles.closeBtn} onPress={() => setOpen(false)}><Text>Close</Text></Pressable></View></View>
       </Modal>
     </View>
   );
@@ -151,15 +180,7 @@ function MaintenanceTypeDropdown({ value, onChange, allowClear }) {
       <Text style={styles.label}>Maintenance Type</Text>
       <Pressable style={styles.input} onPress={() => setOpen(true)}><Text>{value || 'Select maintenance type'}</Text></Pressable>
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <View style={styles.overlay}>
-          <View style={styles.modal}>
-            {allowClear ? <Pressable style={styles.opt} onPress={() => { onChange(''); setOpen(false); }}><Text>All Types</Text></Pressable> : null}
-            <ScrollView style={{ maxHeight: 280 }}>
-              {TYPES.map((t) => <Pressable key={t} style={[styles.opt, value === t ? styles.optActive : null]} onPress={() => { onChange(t); setOpen(false); }}><Text style={value === t ? styles.activeTx : null}>{t}</Text></Pressable>)}
-            </ScrollView>
-            <Pressable style={styles.closeBtn} onPress={() => setOpen(false)}><Text>Close</Text></Pressable>
-          </View>
-        </View>
+        <View style={styles.overlay}><View style={styles.modal}>{allowClear ? <Pressable style={styles.opt} onPress={() => { onChange(''); setOpen(false); }}><Text>All Types</Text></Pressable> : null}<ScrollView style={{ maxHeight: 280 }}>{TYPES.map((t) => <Pressable key={t} style={[styles.opt, value === t ? styles.optActive : null]} onPress={() => { onChange(t); setOpen(false); }}><Text style={value === t ? styles.activeTx : null}>{t}</Text></Pressable>)}</ScrollView><Pressable style={styles.closeBtn} onPress={() => setOpen(false)}><Text>Close</Text></Pressable></View></View>
       </Modal>
     </View>
   );
@@ -174,11 +195,12 @@ function Pager({ page, totalPages, onFirst, onPrev, onNext, onEnd }) { return <V
 function PagerBtn({ label, onPress, disabled }) { return <Pressable style={[styles.pagerBtn, disabled ? styles.disabled : null]} onPress={onPress} disabled={disabled}><Text style={styles.pagerTx}>{label}</Text></Pressable>; }
 
 const styles = StyleSheet.create({
-  content: { padding: 12, gap: 12, paddingBottom: 30 }, title: { fontSize: 20, fontWeight: '700' }, subtitle: { color: '#6b7280', marginTop: 4 }, note: { marginTop: 6, color: '#92400e', fontSize: 12 }, err: { color: '#b91c1c', marginTop: 6 },
+  content: { padding: 12, gap: 12, paddingBottom: 30 }, title: { fontSize: 20, fontWeight: '700' }, subtitle: { color: '#6b7280', marginTop: 4 }, err: { color: '#b91c1c', marginTop: 6 },
   h2: { fontSize: 16, fontWeight: '700' }, sub: { fontSize: 12, color: '#6b7280', marginTop: 4, marginBottom: 6 }, label: { marginBottom: 5, color: '#6b7280', fontSize: 12 },
   input: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 8, backgroundColor: '#fff' },
   wrap: { flexDirection: 'row', gap: 8, marginBottom: 8 }, chip: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: '#fff' }, active: { backgroundColor: '#059669', borderColor: '#059669' }, activeTx: { color: '#fff' },
   btn: { borderRadius: 10, backgroundColor: '#059669', paddingVertical: 10, alignItems: 'center' }, btnTx: { color: '#fff', fontWeight: '700' },
+  btnAlt: { borderRadius: 10, borderWidth: 1, borderColor: '#059669', paddingVertical: 10, alignItems: 'center', marginBottom: 4, backgroundColor: '#ecfdf5' }, btnAltTx: { color: '#047857', fontWeight: '700' }, fileHint: { fontSize: 12, color: '#6b7280', marginBottom: 8 },
   pager: { flexDirection: 'row', gap: 6, marginTop: 6, marginBottom: 2 }, pagerBtn: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }, pagerTx: { fontSize: 12, fontWeight: '600' }, disabled: { opacity: 0.5 },
   tableWrap: { minWidth: 1350, borderWidth: 1, borderColor: '#e4e4e7', borderRadius: 8, overflow: 'hidden' }, tRow: { flexDirection: 'row', borderBottomWidth: 1, borderColor: '#f4f4f5' }, tHeadBg: { backgroundColor: '#f8fafc', borderColor: '#e4e4e7' }, tCell: { width: 150, paddingHorizontal: 8, paddingVertical: 8, fontSize: 12 }, tHead: { fontWeight: '700' },
   empty: { color: '#6b7280', padding: 10 },
