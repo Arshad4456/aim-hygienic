@@ -163,6 +163,14 @@ export default function SaleStockScreen() {
     return regionMatch && zoneMatch && territoryMatch;
   }), [fields, form.regionId, form.zoneId, form.territoryName, regions, zones]);
 
+  const brandManagers = useMemo(() => users.filter((u) => String(u.role || '').toLowerCase() === 'brand manager'), [users]);
+  const distributors = useMemo(() => users.filter((u) => String(u.role || '').toLowerCase() === 'distributor'), [users]);
+  const brandBusinessUsers = useMemo(() => {
+    const selectedField = fieldsForTerritory.find((f) => f._id === form.fieldId);
+    return brandManagers.filter((u) => !selectedField || u.fieldId === selectedField.fieldId || u.fieldName === selectedField.name);
+  }, [brandManagers, fieldsForTerritory, form.fieldId]);
+  const distributorsForTerritory = useMemo(() => distributors.filter((u) => !form.territoryName || u.territoryName === form.territoryName), [distributors, form.territoryName]);
+
   const lineRows = useMemo(() => form.items.map((line, idx) => {
     const product = products.find((p) => p._id === line.productId);
     return { idx, line, product, calc: computeLine(line, product) };
@@ -277,10 +285,10 @@ export default function SaleStockScreen() {
             <Text style={styles.label}>Field</Text>
             <SelectDropdown placeholder="Select field" options={fieldsForTerritory.map((f) => ({ value: f._id, label: f.name }))} value={form.fieldId} onPick={(v) => setField('fieldId', v)} />
             <Text style={styles.label}>Business Name</Text>
-            <TextInput style={styles.input} value={form.businessName} onChangeText={(v) => setField('businessName', v)} />
+            <SelectDropdown placeholder="Select business name" options={brandBusinessUsers.map((u) => ({ value: u.businessName || u.fullName || '', label: u.businessName || u.fullName || '-' })).filter((x) => x.value)} value={form.businessName} onPick={(v) => setField('businessName', v)} />
           </>
         ) : null}
-        {form.toEntityType === 'DISTRIBUTOR' ? <><Text style={styles.label}>Distributor Name</Text><TextInput style={styles.input} value={form.distributorName} onChangeText={(v) => setField('distributorName', v)} /></> : null}
+        {form.toEntityType === 'DISTRIBUTOR' ? <><Text style={styles.label}>Distributor Name</Text><SelectDropdown placeholder="Select distributor" options={distributorsForTerritory.map((u) => ({ value: u.businessName || u.fullName || '', label: u.businessName || u.fullName || '-' })).filter((x) => x.value)} value={form.distributorName} onPick={(v) => setField('distributorName', v)} /></> : null}
         {form.toEntityType === 'SUB_DISTRIBUTOR' ? <><Text style={styles.label}>Sub Distributor Name</Text><TextInput style={styles.input} value={form.subDistributorName} onChangeText={(v) => setField('subDistributorName', v)} /></> : null}
         <Text style={styles.label}>Address</Text>
         <TextInput style={styles.input} value={form.address} onChangeText={(v) => setField('address', v)} />
