@@ -1,50 +1,22 @@
 import React from 'react';
-import ModulePlaceholderScreen from '../../../common/ModulePlaceholderScreen';
-
-const config = {
-  "route": "/dashboards/admin/order-management/returns",
-  "moduleKey": "admin:order-management/returns",
-  "title": "Returns",
-  "endpoints": [
-    {
-      "method": "GET",
-      "path": "/inventory/transactions?transactionType=RETURN_STOCK"
-    },
-    {
-      "method": "GET",
-      "path": "/warehouses"
-    },
-    {
-      "method": "GET",
-      "path": "/products"
-    },
-    {
-      "method": "GET",
-      "path": "/regions"
-    },
-    {
-      "method": "GET",
-      "path": "/zones"
-    },
-    {
-      "method": "PUT",
-      "path": "/inventory/transactions/${id}/mark-read"
-    },
-    {
-      "method": "PUT",
-      "path": "/inventory/transactions/${id}/request-status"
-    },
-    {
-      "method": "DELETE",
-      "path": "/inventory/transactions/${id}"
-    },
-    {
-      "method": "POST",
-      "path": "/inventory/transactions"
-    }
-  ]
-};
+import { ScrollView, StyleSheet, Text } from 'react-native';
+import Card from '../../../../ui/Card';
+import ReturnStockScreen from '../../inventory/return-stock/ReturnStockScreen';
 
 export default function ReturnsScreen() {
-  return <ModulePlaceholderScreen config={config} />;
+  return (
+    <ScrollView contentContainerStyle={styles.content}>
+      <Card>
+        <Text style={styles.title}>Returns & Claims</Text>
+        <Text style={styles.subtitle}>Return stock request workflow and return stock ledger (same backend flow).</Text>
+      </Card>
+      <ReturnStockScreen />
+    </ScrollView>
+  );
 }
+
+const styles = StyleSheet.create({
+  content: { padding: 14, backgroundColor: '#f5f6f8', gap: 10 },
+  title: { fontSize: 22, fontWeight: '700', color: '#111827' },
+  subtitle: { marginTop: 4, color: '#6b7280' },
+});
