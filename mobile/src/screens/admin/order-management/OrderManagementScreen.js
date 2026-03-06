@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Card from '../../../ui/Card';
 import SaleStockScreen from '../inventory/sale-stock/SaleStockScreen';
 import ReturnStockScreen from '../inventory/return-stock/ReturnStockScreen';
+import SecondaryOrdersScreen from './secondary-orders/SecondaryOrdersScreen';
 
 const ORDER_CARDS = [
   { key: 'primary', title: 'Primary Orders Card', subtitle: 'Open primary orders workflow and ledger.', panelTitle: 'Primary Orders', panelDesc: 'Create and manage primary sale orders like website flow.' },
@@ -40,7 +41,7 @@ export default function OrderManagementScreen() {
         <Text style={styles.panelText}>{current.panelDesc}</Text>
       </Card>
 
-      {active === 'returnStock' ? <ReturnStockScreen /> : <SaleStockScreen />}
+      {active === 'returnStock' ? <ReturnStockScreen /> : active === 'secondary' ? <SecondaryOrdersScreen /> : <SaleStockScreen />}
     </ScrollView>
   );
 }
