@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import apiClient from '../../../api/client';
 import Card from '../../../ui/Card';
 import Loader from '../../../ui/Loader';
@@ -277,27 +277,49 @@ export default function OrdersScreen() {
 
               <View style={styles.box}>
                 <Text style={styles.boxTitle}>Proof of Delivery</Text>
-                <Text style={styles.boxText}>Uploaded At: {previewRow?.podUploadedAt || previewRow?.proofOfDeliveryAt ? new Date(previewRow?.podUploadedAt || previewRow?.proofOfDeliveryAt).toLocaleString() : '-'}</Text>
-                <Text style={styles.boxText}>Uploaded By: {podUploaderName(previewRow)}</Text>
                 {previewRow?.podUrl || previewRow?.proofOfDeliveryImageUrl ? (
-                  <Pressable onPress={() => Linking.openURL(previewRow?.podUrl || previewRow?.proofOfDeliveryImageUrl)}>
-                    <Text style={styles.linkText}>Open Image</Text>
-                  </Pressable>
+                  <View style={styles.podGrid}>
+                    <Image source={{ uri: previewRow?.podUrl || previewRow?.proofOfDeliveryImageUrl }} style={styles.podImage} resizeMode="contain" />
+                    <View>
+                      <Text style={styles.boxText}>Uploaded At: {previewRow?.podUploadedAt || previewRow?.proofOfDeliveryAt ? new Date(previewRow?.podUploadedAt || previewRow?.proofOfDeliveryAt).toLocaleString() : '-'}</Text>
+                      <Text style={styles.boxText}>Uploaded By: {podUploaderName(previewRow)}</Text>
+                      <Pressable onPress={() => Linking.openURL(previewRow?.podUrl || previewRow?.proofOfDeliveryImageUrl)}>
+                        <Text style={styles.linkText}>Open Image</Text>
+                      </Pressable>
+                    </View>
+                  </View>
                 ) : <Text style={styles.help}>No proof of delivery uploaded yet.</Text>}
               </View>
 
               <View style={styles.box}>
                 <Text style={styles.boxTitle}>Product Detail</Text>
-                {(previewRow?.items || previewRow?.orderItems || []).map((item, idx) => {
-                  const notes = parseNoteMap(item.notes || item.note || '');
-                  return (
-                    <View key={`${idx}-${item.productId || item.productCode || item.productName || 'item'}`} style={styles.productRow}>
-                      <Text style={styles.boxText}>{idx + 1}. {item.productName || item.name || item.productCode || '-'}</Text>
-                      <Text style={styles.boxMuted}>Section: {item.section || previewRow?.saleType || 'secondary'} | Qty: {item.quantity || item.totalPacks || item.qty || 0} | Rate: {item.unitPrice || item.rate || 0} | TO: {notes.to || item.toValue || 0} | Disc: {notes.disc || item.discValue || 0} | Extra: {notes.extra || item.extraValue || 0} | Bons: {notes.bons || item.bonsValue || 0} | GST%: {item.gstPer || notes.gstPer || 0}</Text>
+                <ScrollView horizontal>
+                  <View style={styles.productTable}>
+                    <View style={styles.productHead}>
+                      {['S.No', 'Section', 'Product', 'Qty', 'Rate', 'TO', 'Disc', 'Extra', 'Bons', 'GST%'].map((h) => (
+                        <Text key={h} style={[styles.productCell, styles.productHeadCell]}>{h}</Text>
+                      ))}
                     </View>
-                  );
-                })}
-                {!(previewRow?.items || previewRow?.orderItems || []).length ? <Text style={styles.help}>No products found.</Text> : null}
+                    {(previewRow?.items || previewRow?.orderItems || []).map((item, idx) => {
+                      const notes = parseNoteMap(item.notes || item.note || '');
+                      return (
+                        <View key={`${idx}-${item.productId || item.productCode || item.productName || 'item'}`} style={styles.productDataRow}>
+                          <Text style={styles.productCell}>{idx + 1}</Text>
+                          <Text style={styles.productCell}>{item.section || previewRow?.saleType || 'secondary'}</Text>
+                          <Text style={styles.productCell}>{item.productName || item.name || item.productCode || '-'}</Text>
+                          <Text style={styles.productCell}>{item.quantity || item.totalPacks || item.qty || 0}</Text>
+                          <Text style={styles.productCell}>{item.unitPrice || item.rate || 0}</Text>
+                          <Text style={styles.productCell}>{notes.to || item.toValue || 0}</Text>
+                          <Text style={styles.productCell}>{notes.disc || item.discValue || 0}</Text>
+                          <Text style={styles.productCell}>{notes.extra || item.extraValue || 0}</Text>
+                          <Text style={styles.productCell}>{notes.bons || item.bonsValue || 0}</Text>
+                          <Text style={styles.productCell}>{item.gstPer || notes.gstPer || 0}</Text>
+                        </View>
+                      );
+                    })}
+                    {!(previewRow?.items || previewRow?.orderItems || []).length ? <Text style={styles.help}>No products found.</Text> : null}
+                  </View>
+                </ScrollView>
               </View>
             </ScrollView>
           </View>
@@ -371,6 +393,12 @@ const styles = StyleSheet.create({
   boxTitle: { fontSize: 14, fontWeight: '700', color: '#111827' },
   boxText: { marginTop: 6, fontSize: 12, color: '#374151' },
   boxMuted: { marginTop: 4, fontSize: 11, color: '#4b5563' },
-  productRow: { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderColor: '#f3f4f6' },
+  podGrid: { marginTop: 8, gap: 10 },
+  podImage: { width: '100%', height: 200, borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f8fafc' },
+  productTable: { marginTop: 8, minWidth: 900, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, overflow: 'hidden' },
+  productHead: { flexDirection: 'row', backgroundColor: '#f8fafc', borderBottomWidth: 1, borderColor: '#e5e7eb' },
+  productDataRow: { flexDirection: 'row', borderBottomWidth: 1, borderColor: '#f3f4f6' },
+  productCell: { width: 95, paddingHorizontal: 8, paddingVertical: 7, color: '#111827', fontSize: 11 },
+  productHeadCell: { fontWeight: '700' },
   linkText: { marginTop: 8, color: '#2563eb', textDecorationLine: 'underline' },
 });
