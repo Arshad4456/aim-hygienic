@@ -12,7 +12,7 @@ const dashboardLinks = [
 ];
 
 export default function DashboardScreen({ navigation }) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [query, setQuery] = useState('');
 
   const filtered = useMemo(() => {
@@ -26,15 +26,16 @@ export default function DashboardScreen({ navigation }) {
   const userInitials = useMemo(() => {
     const parts = String(userName).split(' ').filter(Boolean);
     const first = parts[0]?.[0] || 'C';
-    const second = parts[1]?.[0] || 'S';
+    const second = parts[1]?.[0] || 'U';
     return `${first}${second}`.toUpperCase();
   }, [userName]);
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <Card>
+        <Text style={styles.companyName}>AIM HYGIENICS (PVT) LIMITED</Text>
         <View style={styles.headerRow}>
-          <View>
+          <View style={styles.headerTextWrap}>
             <Text style={styles.title}>Customer Dashboard</Text>
             <Text style={styles.subtitle}>Use quick search to navigate all available items for your dashboard.</Text>
           </View>
@@ -52,6 +53,37 @@ export default function DashboardScreen({ navigation }) {
           placeholder="Search this dashboard..."
           placeholderTextColor="#6b7280"
         />
+
+        <View style={styles.statsRow}>
+          <View style={styles.statChip}>
+            <Text style={styles.statLabel}>Total modules</Text>
+            <Text style={styles.statValue}>{dashboardLinks.length}</Text>
+          </View>
+          <View style={styles.statChip}>
+            <Text style={styles.statLabel}>Matches</Text>
+            <Text style={styles.statValue}>{filtered.length}</Text>
+          </View>
+        </View>
+      </Card>
+
+      <Card>
+        <Text style={styles.sectionTitle}>Quick Actions</Text>
+        <View style={styles.quickWrap}>
+          <Pressable style={styles.quickBtn} onPress={() => navigation?.navigate?.('customer:settings')}>
+            <Text style={styles.quickText}>Account Settings</Text>
+          </Pressable>
+          <Pressable style={styles.quickBtn} onPress={() => navigation?.navigate?.('customer:settings/change-password')}>
+            <Text style={styles.quickText}>Change Password</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.quickBtn, styles.logoutBtn]}
+            onPress={async () => {
+              await logout();
+            }}
+          >
+            <Text style={styles.logoutText}>Logout</Text>
+          </Pressable>
+        </View>
       </Card>
 
       <Card>
@@ -72,15 +104,26 @@ export default function DashboardScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   content: { padding: 12, paddingBottom: 26, gap: 12 },
+  companyName: { fontSize: 10, color: '#6b7280', fontWeight: '600', letterSpacing: 0.4, marginBottom: 6 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
+  headerTextWrap: { flex: 1 },
   title: { fontSize: 22, fontWeight: '700', color: '#111827' },
   subtitle: { marginTop: 4, color: '#6b7280' },
   userMeta: { marginTop: 8, color: '#52525b', fontSize: 12 },
   avatar: { width: 40, height: 40, borderRadius: 999, backgroundColor: '#dbeafe', alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: '#1d4ed8', fontWeight: '700' },
   search: { marginTop: 12, borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 12, backgroundColor: '#fafafa', paddingHorizontal: 12, paddingVertical: 10, color: '#111827' },
+  statsRow: { marginTop: 10, flexDirection: 'row', gap: 8 },
+  statChip: { flex: 1, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, backgroundColor: '#fafafa', paddingHorizontal: 10, paddingVertical: 8 },
+  statLabel: { color: '#6b7280', fontSize: 11 },
+  statValue: { color: '#111827', fontSize: 14, fontWeight: '700', marginTop: 2 },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
   sectionHint: { marginTop: 4, fontSize: 12, color: '#6b7280' },
+  quickWrap: { marginTop: 10, gap: 8 },
+  quickBtn: { borderWidth: 1, borderColor: '#e4e4e7', borderRadius: 10, backgroundColor: '#fafafa', paddingHorizontal: 12, paddingVertical: 10 },
+  quickText: { fontSize: 12, color: '#111827', fontWeight: '600' },
+  logoutBtn: { borderColor: '#fecaca', backgroundColor: '#fef2f2' },
+  logoutText: { fontSize: 12, color: '#b91c1c', fontWeight: '700' },
   modulesWrap: { marginTop: 10, gap: 8 },
   moduleItem: { borderWidth: 1, borderColor: '#e4e4e7', borderRadius: 10, backgroundColor: '#fafafa', paddingHorizontal: 12, paddingVertical: 10 },
   moduleText: { color: '#111827', fontSize: 13 },
