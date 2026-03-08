@@ -1,13 +1,12 @@
 import React from 'react';
-import ModulePlaceholderScreen from '../../../common/ModulePlaceholderScreen';
-
-const config = {
-  "route": "/dashboards/distributor/payments/secondary",
-  "moduleKey": "distributor:payments/secondary",
-  "title": "Secondary",
-  "endpoints": []
-};
+import { DistributorPaymentsModule } from '../PaymentsScreen';
 
 export default function SecondaryScreen() {
-  return <ModulePlaceholderScreen config={config} />;
+  return (
+    <DistributorPaymentsModule
+      mode="secondary"
+      title="Secondary Payments (Paid Back)"
+      subtitle="Review all your settlement payments made against warehouse invoices."
+    />
+  );
 }
