@@ -12,6 +12,12 @@ function formatDateInput(date) {
   return `${y}-${m}-${d}`;
 }
 
+function idOf(value) {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  return String(value?._id || value?.id || value?.value || '');
+}
+
 const BASE_PRIMARY = { regionId: '', zoneId: '', territoryId: '', distributorId: '', warehouseId: '', amountTotal: '', payDate: '', returnDate: '', details: '' };
 const BASE_SECONDARY = { regionId: '', zoneId: '', territoryId: '', distributorId: '', warehouseId: '', amountPaid: '', paidDate: '', primaryInvoiceNo: '', details: '' };
 
@@ -46,13 +52,13 @@ export default function PaymentsScreen() {
 
   useEffect(() => { load(); }, []);
 
-  const primaryZones = useMemo(() => (masters.zones || []).filter((z) => !primaryForm.regionId || String(z.regionId) === String(primaryForm.regionId)), [masters.zones, primaryForm.regionId]);
-  const primaryTerritories = useMemo(() => (masters.territories || []).filter((t) => !primaryForm.zoneId || String(t.zoneId) === String(primaryForm.zoneId)), [masters.territories, primaryForm.zoneId]);
-  const primaryDistributors = useMemo(() => (masters.distributors || []).filter((d) => !primaryForm.territoryId || String(d.territoryId) === String(primaryForm.territoryId)), [masters.distributors, primaryForm.territoryId]);
+  const primaryZones = useMemo(() => (masters.zones || []).filter((z) => !primaryForm.regionId || idOf(z.regionId) === String(primaryForm.regionId) || idOf(z.region) === String(primaryForm.regionId)), [masters.zones, primaryForm.regionId]);
+  const primaryTerritories = useMemo(() => (masters.territories || []).filter((t) => !primaryForm.zoneId || idOf(t.zoneId) === String(primaryForm.zoneId) || idOf(t.zone) === String(primaryForm.zoneId)), [masters.territories, primaryForm.zoneId]);
+  const primaryDistributors = useMemo(() => (masters.distributors || []).filter((d) => !primaryForm.territoryId || idOf(d.territoryId) === String(primaryForm.territoryId) || idOf(d.territory) === String(primaryForm.territoryId)), [masters.distributors, primaryForm.territoryId]);
 
-  const secondaryZones = useMemo(() => (masters.zones || []).filter((z) => !secondaryForm.regionId || String(z.regionId) === String(secondaryForm.regionId)), [masters.zones, secondaryForm.regionId]);
-  const secondaryTerritories = useMemo(() => (masters.territories || []).filter((t) => !secondaryForm.zoneId || String(t.zoneId) === String(secondaryForm.zoneId)), [masters.territories, secondaryForm.zoneId]);
-  const secondaryDistributors = useMemo(() => (masters.distributors || []).filter((d) => !secondaryForm.territoryId || String(d.territoryId) === String(secondaryForm.territoryId)), [masters.distributors, secondaryForm.territoryId]);
+  const secondaryZones = useMemo(() => (masters.zones || []).filter((z) => !secondaryForm.regionId || idOf(z.regionId) === String(secondaryForm.regionId) || idOf(z.region) === String(secondaryForm.regionId)), [masters.zones, secondaryForm.regionId]);
+  const secondaryTerritories = useMemo(() => (masters.territories || []).filter((t) => !secondaryForm.zoneId || idOf(t.zoneId) === String(secondaryForm.zoneId) || idOf(t.zone) === String(secondaryForm.zoneId)), [masters.territories, secondaryForm.zoneId]);
+  const secondaryDistributors = useMemo(() => (masters.distributors || []).filter((d) => !secondaryForm.territoryId || idOf(d.territoryId) === String(secondaryForm.territoryId) || idOf(d.territory) === String(secondaryForm.territoryId)), [masters.distributors, secondaryForm.territoryId]);
 
   const matchingPrimaryInvoices = useMemo(() => {
     return primaryLedger.filter((row) => !secondaryForm.distributorId || String(row.businessUserId) === String(secondaryForm.distributorId) || String(row.distributorId) === String(secondaryForm.distributorId));
@@ -110,11 +116,11 @@ export default function PaymentsScreen() {
         <>
           <Card>
             <Text style={styles.h2}>Primary Payment</Text>
-            <Selector title="Region" value={primaryForm.regionId} items={(masters.regions || []).map((r) => [r._id, r.name])} onChange={(v) => setPrimaryForm((s) => ({ ...s, regionId: v, zoneId: '', territoryId: '', distributorId: '' }))} />
-            <Selector title="Zone" value={primaryForm.zoneId} items={primaryZones.map((z) => [z._id, z.name])} onChange={(v) => setPrimaryForm((s) => ({ ...s, zoneId: v, territoryId: '', distributorId: '' }))} />
-            <Selector title="Territory" value={primaryForm.territoryId} items={primaryTerritories.map((t) => [t._id, t.name])} onChange={(v) => setPrimaryForm((s) => ({ ...s, territoryId: v, distributorId: '' }))} />
-            <Selector title="Distributor Name" value={primaryForm.distributorId} items={primaryDistributors.map((d) => [d._id, d.fullName || d.name || d.username])} onChange={(v) => setPrimaryForm((s) => ({ ...s, distributorId: v }))} />
-            <Selector title="Warehouse Name" value={primaryForm.warehouseId} items={(masters.warehouses || []).map((w) => [w._id, w.name])} onChange={(v) => setPrimaryForm((s) => ({ ...s, warehouseId: v }))} />
+            <Selector title="Region" value={primaryForm.regionId} items={(masters.regions || []).map((r) => [idOf(r), r.name])} onChange={(v) => setPrimaryForm((s) => ({ ...s, regionId: v, zoneId: '', territoryId: '', distributorId: '' }))} />
+            <Selector title="Zone" value={primaryForm.zoneId} items={primaryZones.map((z) => [idOf(z), z.name])} onChange={(v) => setPrimaryForm((s) => ({ ...s, zoneId: v, territoryId: '', distributorId: '' }))} />
+            <Selector title="Territory" value={primaryForm.territoryId} items={primaryTerritories.map((t) => [idOf(t), t.name])} onChange={(v) => setPrimaryForm((s) => ({ ...s, territoryId: v, distributorId: '' }))} />
+            <Selector title="Distributor Name" value={primaryForm.distributorId} items={primaryDistributors.map((d) => [idOf(d), d.fullName || d.name || d.username])} onChange={(v) => setPrimaryForm((s) => ({ ...s, distributorId: v }))} />
+            <Selector title="Warehouse Name" value={primaryForm.warehouseId} items={(masters.warehouses || []).map((w) => [idOf(w), w.name])} onChange={(v) => setPrimaryForm((s) => ({ ...s, warehouseId: v }))} />
             <Input label="Amount Total" value={primaryForm.amountTotal} onChangeText={(v) => setPrimaryForm((s) => ({ ...s, amountTotal: v }))} keyboardType="numeric" />
             <DatePickerField label="Pay Date" value={primaryForm.payDate} onChange={(v) => setPrimaryForm((s) => ({ ...s, payDate: v }))} />
             <DatePickerField label="Return Date" value={primaryForm.returnDate} onChange={(v) => setPrimaryForm((s) => ({ ...s, returnDate: v }))} />
@@ -126,17 +132,17 @@ export default function PaymentsScreen() {
             <Text style={styles.h2}>Primary Payment Ledger</Text>
             <ScrollView horizontal>
               <View style={styles.table}>
-                <Row head cols={['Invoice-No', 'Amount', 'Pay Date', 'Return Date', 'Receipt', 'Action']} />
+                <Row head cols={['Invoice-No', 'Amount', 'Pay Date', 'Return Date', 'Action']} />
                 {primaryLedger.map((row) => (
                   <View key={row._id} style={styles.tRow}>
                     <Text style={styles.tCell}>{row.invoiceNo || '-'}</Text>
                     <Text style={styles.tCell}>{fmtAmount(row.amountTotal)}</Text>
                     <Text style={styles.tCell}>{String(row.payDate || '').slice(0, 10)}</Text>
                     <Text style={styles.tCell}>{String(row.returnDate || '').slice(0, 10)}</Text>
-                    <View style={styles.tCell}>
-                      {(row.receiptUrl || row.attachmentUrl) ? <Pressable style={styles.btnAlt} onPress={() => Linking.openURL(row.receiptUrl || row.attachmentUrl)}><Text>Receipt</Text></Pressable> : <Text>-</Text>}
+                    <View style={[styles.tCell, styles.actionCell]}>
+                      {(row.receiptUrl || row.attachmentUrl) ? <Pressable style={styles.btnAlt} onPress={() => Linking.openURL(row.receiptUrl || row.attachmentUrl)}><Text style={styles.btnAltTx}>Receipt</Text></Pressable> : <Text>-</Text>}
+                      <Pressable style={styles.btnDanger} onPress={() => deletePrimary(row._id)}><Text style={styles.btnDangerTx}>Delete</Text></Pressable>
                     </View>
-                    <View style={styles.tCell}><Pressable style={styles.btnDanger} onPress={() => deletePrimary(row._id)}><Text style={styles.btnDangerTx}>Delete</Text></Pressable></View>
                   </View>
                 ))}
                 {!primaryLedger.length ? <Text style={styles.empty}>No primary payments yet.</Text> : null}
@@ -148,11 +154,11 @@ export default function PaymentsScreen() {
         <>
           <Card>
             <Text style={styles.h2}>Secondary Payment</Text>
-            <Selector title="Region" value={secondaryForm.regionId} items={(masters.regions || []).map((r) => [r._id, r.name])} onChange={(v) => setSecondaryForm((s) => ({ ...s, regionId: v, zoneId: '', territoryId: '', distributorId: '' }))} />
-            <Selector title="Zone" value={secondaryForm.zoneId} items={secondaryZones.map((z) => [z._id, z.name])} onChange={(v) => setSecondaryForm((s) => ({ ...s, zoneId: v, territoryId: '', distributorId: '' }))} />
-            <Selector title="Territory" value={secondaryForm.territoryId} items={secondaryTerritories.map((t) => [t._id, t.name])} onChange={(v) => setSecondaryForm((s) => ({ ...s, territoryId: v, distributorId: '' }))} />
-            <Selector title="Distributor" value={secondaryForm.distributorId} items={secondaryDistributors.map((d) => [d._id, d.fullName || d.name || d.username])} onChange={(v) => setSecondaryForm((s) => ({ ...s, distributorId: v }))} />
-            <Selector title="Warehouse" value={secondaryForm.warehouseId} items={(masters.warehouses || []).map((w) => [w._id, w.name])} onChange={(v) => setSecondaryForm((s) => ({ ...s, warehouseId: v }))} />
+            <Selector title="Region" value={secondaryForm.regionId} items={(masters.regions || []).map((r) => [idOf(r), r.name])} onChange={(v) => setSecondaryForm((s) => ({ ...s, regionId: v, zoneId: '', territoryId: '', distributorId: '' }))} />
+            <Selector title="Zone" value={secondaryForm.zoneId} items={secondaryZones.map((z) => [idOf(z), z.name])} onChange={(v) => setSecondaryForm((s) => ({ ...s, zoneId: v, territoryId: '', distributorId: '' }))} />
+            <Selector title="Territory" value={secondaryForm.territoryId} items={secondaryTerritories.map((t) => [idOf(t), t.name])} onChange={(v) => setSecondaryForm((s) => ({ ...s, territoryId: v, distributorId: '' }))} />
+            <Selector title="Distributor" value={secondaryForm.distributorId} items={secondaryDistributors.map((d) => [idOf(d), d.fullName || d.name || d.username])} onChange={(v) => setSecondaryForm((s) => ({ ...s, distributorId: v }))} />
+            <Selector title="Warehouse" value={secondaryForm.warehouseId} items={(masters.warehouses || []).map((w) => [idOf(w), w.name])} onChange={(v) => setSecondaryForm((s) => ({ ...s, warehouseId: v }))} />
             <Input label="Amount Paid" value={secondaryForm.amountPaid} onChangeText={(v) => setSecondaryForm((s) => ({ ...s, amountPaid: v }))} keyboardType="numeric" />
             <DatePickerField label="Date of Paid" value={secondaryForm.paidDate} onChange={(v) => setSecondaryForm((s) => ({ ...s, paidDate: v }))} />
             <Selector title="Invoice-No of Primary Payment" value={secondaryForm.primaryInvoiceNo} items={matchingPrimaryInvoices.map((item) => [item.invoiceNo, `${item.invoiceNo} (Remaining: ${fmtAmount(item.amountRemaining)})`])} onChange={(v) => setSecondaryForm((s) => ({ ...s, primaryInvoiceNo: v }))} />
@@ -164,16 +170,16 @@ export default function PaymentsScreen() {
             <Text style={styles.h2}>Secondary Payment Ledger</Text>
             <ScrollView horizontal>
               <View style={styles.table}>
-                <Row head cols={['Invoice-No', 'Paid Amount', 'Date', 'Receipt', 'Action']} />
+                <Row head cols={['Invoice-No', 'Paid Amount', 'Date', 'Action']} />
                 {secondaryLedger.map((row) => (
                   <View key={row._id} style={styles.tRow}>
                     <Text style={styles.tCell}>{row.primaryInvoiceNo || '-'}</Text>
                     <Text style={styles.tCell}>{fmtAmount(row.amountPaid)}</Text>
                     <Text style={styles.tCell}>{String(row.paidDate || '').slice(0, 10)}</Text>
-                    <View style={styles.tCell}>
-                      {(row.receiptUrl || row.attachmentUrl) ? <Pressable style={styles.btnAlt} onPress={() => Linking.openURL(row.receiptUrl || row.attachmentUrl)}><Text>Receipt</Text></Pressable> : <Text>-</Text>}
+                    <View style={[styles.tCell, styles.actionCell]}>
+                      {(row.receiptUrl || row.attachmentUrl) ? <Pressable style={styles.btnAlt} onPress={() => Linking.openURL(row.receiptUrl || row.attachmentUrl)}><Text style={styles.btnAltTx}>Receipt</Text></Pressable> : <Text>-</Text>}
+                      <Pressable style={styles.btnDanger} onPress={() => deleteSecondary(row._id)}><Text style={styles.btnDangerTx}>Delete</Text></Pressable>
                     </View>
-                    <View style={styles.tCell}><Pressable style={styles.btnDanger} onPress={() => deleteSecondary(row._id)}><Text style={styles.btnDangerTx}>Delete</Text></Pressable></View>
                   </View>
                 ))}
                 {!secondaryLedger.length ? <Text style={styles.empty}>No secondary settlements yet.</Text> : null}
@@ -260,13 +266,15 @@ const styles = StyleSheet.create({
   hint: { color: '#6b7280', paddingVertical: 8 },
   btn: { borderRadius: 10, backgroundColor: '#059669', paddingVertical: 10, alignItems: 'center' },
   btnTx: { color: '#fff', fontWeight: '700' },
-  btnAlt: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, alignItems: 'center', backgroundColor: '#fff' },
+  btnAlt: { borderWidth: 1, borderColor: '#86efac', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, alignItems: 'center', backgroundColor: '#f0fdf4' },
+  btnAltTx: { color: '#166534', fontWeight: '600' },
   btnDanger: { borderWidth: 1, borderColor: '#fecaca', backgroundColor: '#fff1f2', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, alignItems: 'center' },
   btnDangerTx: { color: '#991b1b' },
   table: { minWidth: 980, borderWidth: 1, borderColor: '#e4e4e7', borderRadius: 8, overflow: 'hidden' },
   tRow: { flexDirection: 'row', borderBottomWidth: 1, borderColor: '#f4f4f5' },
   tHead: { backgroundColor: '#f8fafc' },
   tCell: { width: 160, paddingHorizontal: 8, paddingVertical: 8, fontSize: 12 },
+  actionCell: { flexDirection: 'row', gap: 6, alignItems: 'center' },
   empty: { color: '#6b7280', padding: 10 },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', padding: 16 },
   modal: { backgroundColor: '#fff', borderRadius: 12, padding: 12 },
