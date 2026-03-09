@@ -227,8 +227,10 @@ export default function UsersScreen({ navigation }) {
   const [page, setPage] = useState(1);
 
   const [err, setErr] = useState('');
+  const [fieldsWarning, setFieldsWarning] = useState('');
   const [editUser, setEditUser] = useState(null);
   const [editSaving, setEditSaving] = useState(false);
+  const [editShowPassword, setEditShowPassword] = useState(false);
 
   const load = useCallback(async () => {
     setErr('');
@@ -249,8 +251,10 @@ export default function UsersScreen({ navigation }) {
       try {
         const fieldsRes = await apiClient.get('/fields');
         setFields(fieldsRes.data?.fields || []);
-      } catch {
+        setFieldsWarning('');
+      } catch (fieldErr) {
         setFields([]);
+        setFieldsWarning(fieldErr?.message || 'Fields API unavailable');
       }
     } catch (e) {
       setErr(e.message || 'Failed to load users');
@@ -352,6 +356,7 @@ export default function UsersScreen({ navigation }) {
   };
 
   const openEdit = (user) => {
+    setEditShowPassword(false);
     setEditUser({ ...user, password: '' });
   };
 
@@ -366,7 +371,7 @@ export default function UsersScreen({ navigation }) {
       }
       const payload = { ...editUser };
       if (!payload.password) delete payload.password;
-      await apiClient.put(`/users/${editUser._id}`, payload);
+      await apiClient.put(`/users/${editUser._id}`, { ...payload, mobile: payload.mobileNumber || payload.mobile });
       setEditUser(null);
       await load();
     } catch (e) {
@@ -401,17 +406,13 @@ export default function UsersScreen({ navigation }) {
 
   const downloadPdf = async () => {
     try {
-      const htmlTable = buildPdfHtml(filteredSorted)
-        .replace(/\n\s+/g, ' ')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-
+      const pdf = buildTablePdf(filteredSorted);
+      const uri = `data:application/pdf;base64,${toBase64(pdf)}`;
       await Share.share({
         title: 'Users PDF Report',
-        message: htmlTable,
+        url: uri,
       });
-      Alert.alert('Downloaded Successfully', 'PDF report content generated. Use the share sheet to save it in your File Manager.');
+      Alert.alert('Downloaded Successfully', 'PDF report is ready. Save it from the share options to local File Manager.');
     } catch (e) {
       Alert.alert('Download Failed', e.message || 'Could not export PDF file.');
     }
@@ -458,6 +459,7 @@ export default function UsersScreen({ navigation }) {
         </View>
 
         {err ? <Text style={styles.error}>{err}</Text> : null}
+        {fieldsWarning ? <Text style={styles.warn}>{fieldsWarning} (User List still works; Field filter may remain empty.)</Text> : null}
       </Card>
 
       <Card>
@@ -529,7 +531,21 @@ export default function UsersScreen({ navigation }) {
                     onChangeText={(v) => setEditUser((s) => ({ ...s, [field]: v }))}
                   />
                 ))}
-                <Field label="Password (optional)" value={editUser.password || ''} secureTextEntry onChangeText={(v) => setEditUser((s) => ({ ...s, password: v }))} />
+                <View style={styles.fieldWrap}>
+                  <Text style={styles.fieldLabel}>Password (optional)</Text>
+                  <View style={styles.passwordRow}>
+                    <TextInput
+                      value={editUser.password || ''}
+                      secureTextEntry={!editShowPassword}
+                      onChangeText={(v) => setEditUser((s) => ({ ...s, password: v }))}
+                      style={styles.passwordInput}
+                      placeholderTextColor="#71717a"
+                    />
+                    <Pressable style={styles.eyeBtn} onPress={() => setEditShowPassword((prev) => !prev)}>
+                      <Text style={styles.eyeText}>{editShowPassword ? '🙈' : '👁️'}</Text>
+                    </Pressable>
+                  </View>
+                </View>
 
                 {(ROLE_EXTRA_FIELDS[editUser.role] || []).includes('businessType') ? <Field label="Business Type" value={editUser.businessType || ''} onChangeText={(v) => setEditUser((s) => ({ ...s, businessType: v }))} /> : null}
                 {(ROLE_EXTRA_FIELDS[editUser.role] || []).includes('businessName') ? <Field label="Business Name" value={editUser.businessName || ''} onChangeText={(v) => setEditUser((s) => ({ ...s, businessName: v }))} /> : null}
@@ -597,6 +613,7 @@ const styles = StyleSheet.create({
   exportBtnSecondary: { flex: 1, borderWidth: 1, borderColor: '#16a34a', borderRadius: 10, paddingVertical: 10, alignItems: 'center', backgroundColor: '#fff' },
   exportTextSecondary: { fontSize: 12, fontWeight: '700', color: '#15803d' },
   error: { marginTop: 8, color: '#b91c1c' },
+  warn: { marginTop: 8, color: '#b45309' },
   tableWrap: { minWidth: 1420 },
   tableHeader: { flexDirection: 'row', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, backgroundColor: '#f3f4f6', paddingVertical: 8, paddingHorizontal: 8 },
   headCell: { justifyContent: 'center' },
@@ -625,6 +642,26 @@ const styles = StyleSheet.create({
   formWrap: { gap: 8, paddingBottom: 8 },
   fieldWrap: { gap: 4 },
   fieldLabel: { fontSize: 12, color: '#374151', fontWeight: '600' },
+  passwordRow: {
+    borderWidth: 1,
+    borderColor: '#d4d4d8',
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 10,
+  },
+  passwordInput: { flex: 1, color: '#111827' },
+  eyeBtn: {
+    width: 42,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderLeftWidth: 1,
+    borderLeftColor: '#e5e7eb',
+  },
+  eyeText: { fontSize: 16 },
   modalActions: { flexDirection: 'row', gap: 8, marginTop: 10 },
   cancelBtn: { flex: 1, borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
   saveBtn: { flex: 1, backgroundColor: '#059669', borderRadius: 10, paddingVertical: 10, alignItems: 'center' },

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import apiClient from '../../../../api/client';
 import Card from '../../../../ui/Card';
 import Loader from '../../../../ui/Loader';
@@ -16,6 +16,7 @@ const LEDGER_FILTERS = [
 ];
 function toNum(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
 function normalizeRequestStatus(value) { const s = String(value || '').toUpperCase(); return s === 'DISPATCH' ? 'DISPATCHED' : s; }
+function escapeHtml(value) { return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 
 function getSizeMultiplier(product) {
   if (!product) return 1;
@@ -23,6 +24,53 @@ function getSizeMultiplier(product) {
   if (nums.length) return nums.reduce((a, b) => a * b, 1);
   return toNum(product.packSize) > 0 ? toNum(product.packSize) : 1;
 }
+
+function buildInvoiceHtml(txn) {
+  const logo = `
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="width:54px;height:54px;border-radius:10px;background:linear-gradient(135deg,#065f46,#10b981);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;">AH</div>
+      <div><div style="font-weight:700;font-size:16px;">AIM-HYGIENICS</div><div style="font-size:11px;color:#555;">PVT LIMITED</div></div>
+    </div>`;
+  const rows = (txn.items || []).map((i, idx) => {
+    const parts = Object.fromEntries(String(i.notes || '').split(',').map((seg) => seg.split(':')));
+    return `<tr><td>${idx + 1}</td><td>${escapeHtml(i.productName || '-')}</td><td>${toNum(i.totalPacks || 0)}</td><td>${toNum(i.onePackPrice || 0)}</td><td>${toNum(parts.gross || 0)}</td><td>${toNum(parts.to || 0)}</td><td>${toNum(parts.disc || 0)}</td><td>${toNum(parts.extra || 0)}</td><td>${toNum(parts.bons || 0)}</td><td>${toNum(parts.v4gst || 0)}</td><td>${toNum(parts.gst || 0)}</td><td>${toNum(parts.net || i.totalPrice || 0)}</td></tr>`;
+  });
+  const lineTotal = (txn.items || []).reduce((sum, i) => {
+    const parts = Object.fromEntries(String(i.notes || '').split(',').map((seg) => seg.split(':')));
+    return sum + toNum(parts.net || i.totalPrice);
+  }, 0);
+  const totalAmount = toNum(txn.subtotal || lineTotal);
+  const extraDiscPer = toNum(txn.extraDiscPer);
+  const advTaxPer = toNum(txn.advTaxPer);
+  const whTaxPer = toNum(txn.whTaxPer);
+  const expense = toNum(txn.expense);
+  const extraDiscAmt = (totalAmount * extraDiscPer) / 100;
+  const advTaxAmt = (totalAmount * advTaxPer) / 100;
+  const whTaxAmt = (totalAmount * whTaxPer) / 100;
+  const calculatedGrandTotal = totalAmount - extraDiscAmt + advTaxAmt + whTaxAmt + expense;
+
+  return `<html><body style="font-family: Arial; padding: 16px; position:relative;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">${logo}<div style="text-align:right;"><div style="font-size:13px;font-weight:700;">Return Stock</div></div></div>
+    <div style="margin-top:8px; display:flex; justify-content:space-between; font-size:12px;"><div>Date: ${escapeHtml(new Date(txn.transactionAt).toLocaleDateString())}</div><div>Invoice #: ${escapeHtml(txn.transactionCode || '-')}</div></div>
+    <div style="margin-top:8px;font-size:12px;">Invoice From: ${escapeHtml(txn.fromEntityName || '-')}</div>
+    <div style="font-size:12px;">Bill To: ${escapeHtml(txn.toEntityName || '-')}</div>
+    <div style="font-size:12px;">Status: ${escapeHtml(normalizeRequestStatus(txn.requestStatus || txn.status || '-'))}</div>
+    <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; width:100%; margin-top:10px; font-size:12px;">
+      <thead><tr><th>#</th><th>Product Name</th><th>Qty</th><th>Rate</th><th>Gross</th><th>TO</th><th>Disc</th><th>Extra</th><th>Bons</th><th>V4GST</th><th>GST</th><th>Net Amt</th></tr></thead>
+      <tbody>${rows.join('')}</tbody>
+    </table>
+    <div style="margin-top:12px; font-size:12px; display:flex; justify-content:flex-end;"><div style="min-width:280px;">
+      <div style="display:flex; justify-content:space-between;"><span>Total Amount:</span><strong>${totalAmount.toFixed(2)}</strong></div>
+      <div style="display:flex; justify-content:space-between;"><span>Extra Disc (${extraDiscPer}%):</span><span>${extraDiscAmt.toFixed(2)}</span></div>
+      <div style="display:flex; justify-content:space-between;"><span>Adv Tax (${advTaxPer}%):</span><span>${advTaxAmt.toFixed(2)}</span></div>
+      <div style="display:flex; justify-content:space-between;"><span>W.H Tax (${whTaxPer}%):</span><span>${whTaxAmt.toFixed(2)}</span></div>
+      <div style="display:flex; justify-content:space-between;"><span>Expense:</span><span>${expense.toFixed(2)}</span></div>
+      <div style="display:flex; justify-content:space-between; margin-top:4px; border-top:1px solid #ccc; padding-top:4px;"><span><strong>Grand Total:</strong></span><strong>${toNum(txn.grandTotal || calculatedGrandTotal).toFixed(2)}</strong></div>
+    </div></div>
+    <div style="margin-top:16px;text-align:center;font-size:13px;font-weight:600;">Thank you for bussiness with us</div>
+  </body></html>`;
+}
+
 function computeLine(line, product) {
   const sizeMultiplier = getSizeMultiplier(product);
   const qty = toNum(line.qty);
@@ -180,6 +228,15 @@ export default function ReturnStockScreen() {
     { text: 'Delete', style: 'destructive', onPress: async () => { try { await apiClient.delete(`/inventory/transactions/${id}`); await load(); } catch (e) { setErr(e.message || 'Failed'); } } },
   ]);
 
+
+  const onInvoice = async (row) => {
+    try {
+      await Linking.openURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildInvoiceHtml(row))}`);
+    } catch (_e) {
+      setPreviewRow(row);
+    }
+  };
+
   if (loading) return <Loader />;
 
   return (
@@ -302,7 +359,7 @@ export default function ReturnStockScreen() {
                   <Text style={[styles.cell, styles.colDataWide]}>{String(r.fromEntityType || '').toUpperCase() === 'BRAND' ? (r.brandName || r.fromEntityName || '-') : '-'}</Text>
                   <Text style={[styles.cell, styles.colDataWide]}>{r.transactionAt ? new Date(r.transactionAt).toLocaleString() : '-'}</Text>
                   <View style={[styles.actionCell, styles.colActionWide]}>
-                    <Pressable style={styles.actionBtn} onPress={() => setPreviewRow(r)}><Text style={styles.actionText}>Invoice/Receipt</Text></Pressable>
+                    <Pressable style={styles.actionBtn} onPress={() => onInvoice(r)}><Text style={styles.actionText}>Invoice/Receipt</Text></Pressable>
                     <Pressable style={styles.deleteBtn} onPress={() => onDelete(r._id)}><Text style={styles.deleteText}>Delete</Text></Pressable>
                   </View>
                 </View>

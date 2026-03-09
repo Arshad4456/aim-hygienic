@@ -39,6 +39,8 @@ export default function AddScreen({ navigation }) {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const [ok, setOk] = useState('');
+  const [fieldsWarning, setFieldsWarning] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const [users, setUsers] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
@@ -49,7 +51,7 @@ export default function AddScreen({ navigation }) {
 
   const [form, setForm] = useState({
     userId: '',
-    role: 'Salesman',
+    role: '',
     fullName: '',
     email: '',
     mobileNumber: '',
@@ -84,8 +86,10 @@ export default function AddScreen({ navigation }) {
         let f = { data: { fields: [] } };
         try {
           f = await apiClient.get('/fields');
-        } catch {
+          setFieldsWarning('');
+        } catch (fieldErr) {
           f = { data: { fields: [] } };
+          setFieldsWarning(fieldErr?.message || 'Fields API unavailable');
         }
 
         if (!mounted) return;
@@ -184,6 +188,7 @@ export default function AddScreen({ navigation }) {
 
         {err ? <Text style={styles.error}>{err}</Text> : null}
         {ok ? <Text style={styles.ok}>{ok}</Text> : null}
+        {fieldsWarning ? <Text style={styles.warn}>{fieldsWarning} (Add User still works; Field dropdown may remain empty.)</Text> : null}
 
         <View style={styles.formWrap}>
           <Text style={styles.fieldLabel}>Role</Text>
@@ -201,7 +206,21 @@ export default function AddScreen({ navigation }) {
             />
           ))}
 
-          <Field label="Password" value={form.password} onChangeText={(v) => setForm((s) => ({ ...s, password: v }))} secureTextEntry />
+          <View style={styles.fieldWrap}>
+            <Text style={styles.fieldLabel}>Password</Text>
+            <View style={styles.passwordRow}>
+              <TextInput
+                value={form.password}
+                onChangeText={(v) => setForm((s) => ({ ...s, password: v }))}
+                secureTextEntry={!showPassword}
+                style={styles.passwordInput}
+                placeholderTextColor="#71717a"
+              />
+              <Pressable style={styles.eyeBtn} onPress={() => setShowPassword((prev) => !prev)}>
+                <Text style={styles.eyeText}>{showPassword ? '🙈' : '👁️'}</Text>
+              </Pressable>
+            </View>
+          </View>
 
           {roleNeeds.includes('businessType') ? <Field label="Business Type" value={form.businessType} onChangeText={(v) => setForm((s) => ({ ...s, businessType: v }))} /> : null}
           {roleNeeds.includes('businessName') ? <Field label="Business Name" value={form.businessName} onChangeText={(v) => setForm((s) => ({ ...s, businessName: v }))} /> : null}
@@ -293,6 +312,7 @@ const styles = StyleSheet.create({
   subtitle: { marginTop: 6, color: '#6b7280', fontSize: 13 },
   error: { marginTop: 8, color: '#b91c1c' },
   ok: { marginTop: 8, color: '#047857' },
+  warn: { marginTop: 8, color: '#b45309' },
   formWrap: { marginTop: 12, gap: 8 },
   fieldWrap: { gap: 4 },
   fieldLabel: { fontSize: 12, fontWeight: '600', color: '#374151' },
@@ -307,6 +327,26 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   inputReadonly: { backgroundColor: '#f4f4f5' },
+  passwordRow: {
+    borderWidth: 1,
+    borderColor: '#d4d4d8',
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 10,
+  },
+  passwordInput: { flex: 1, color: '#111827' },
+  eyeBtn: {
+    width: 42,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderLeftWidth: 1,
+    borderLeftColor: '#e5e7eb',
+  },
+  eyeText: { fontSize: 16 },
   roleChip: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#fff' },
   roleChipActive: { borderColor: '#10b981', backgroundColor: '#ecfdf5' },
   roleChipText: { color: '#52525b', fontSize: 12 },

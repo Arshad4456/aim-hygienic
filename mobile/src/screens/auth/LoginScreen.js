@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../../auth/useAuth';
 import Button from '../../ui/Button';
 import Input from '../../ui/Input';
@@ -9,6 +9,7 @@ export default function LoginScreen() {
   const { login } = useAuth();
   const [mobile, setMobile] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -45,10 +46,22 @@ export default function LoginScreen() {
         <Toast message={error} />
 
         <View style={styles.form}>
-          <Input label="Mobile Number" value={mobile} onChangeText={setMobile} autoCapitalize="none" keyboardType="phone-pad" placeholder="03xx-xxxxxxx" />
-          <Input label="Password" value={password} onChangeText={setPassword} secureTextEntry placeholder="Enter Your Password" />
+          <Input label="Mobile Number" value={mobile} onChangeText={setMobile} autoCapitalize="none" keyboardType="phone-pad" placeholder="03xxxxxxxxx" />
+          <View>
+            <Input
+              label="Password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+              placeholder="Enter Your Password"
+              inputStyle={styles.passwordInput}
+            />
+            <Pressable onPress={() => setShowPassword((v) => !v)} style={styles.eyeButton} hitSlop={8}>
+              <Text style={styles.eyeText}>{showPassword ? '🙈' : '👁️'}</Text>
+            </Pressable>
+          </View>
           <Button title={loading ? 'Signing in...' : 'Login'} onPress={onSubmit} loading={loading} />
-          <Text style={styles.hint}>Admin creates users and assigns roles.</Text>
+          <Text style={styles.hint}>If Password forgot, Contact to the AIM Admin.</Text>
         </View>
       </View>
     </KeyboardAvoidingView>
@@ -64,5 +77,8 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontWeight: '700', color: '#18181b' },
   subtitle: { fontSize: 13, color: '#52525b', marginTop: 2 },
   form: { gap: 12 },
+  passwordInput: { paddingRight: 42 },
+  eyeButton: { position: 'absolute', right: 12, top: 24, height: 46, justifyContent: 'center' },
+  eyeText: { fontSize: 16 },
   hint: { textAlign: 'center', color: '#71717a', fontSize: 12, marginTop: 2 },
 });
