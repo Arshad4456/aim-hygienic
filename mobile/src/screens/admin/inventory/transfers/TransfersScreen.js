@@ -1,10 +1,31 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import apiClient from '../../../../api/client';
 import Card from '../../../../ui/Card';
 import Loader from '../../../../ui/Loader';
 
 const EMPTY_FORM = { productId: '', fromWarehouseId: '', toWarehouseId: '', quantity: '', note: '' };
+
+function buildTransferReceiptHtml(transfer) {
+  const logo = `
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="width:54px;height:54px;border-radius:10px;background:linear-gradient(135deg,#065f46,#10b981);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;">AH</div>
+      <div><div style="font-weight:700;font-size:16px;">AIM-HYGIENICS</div><div style="font-size:11px;color:#555;">PVT LIMITED</div></div>
+    </div>`;
+  const totalAmount = Number(transfer.totalAmount || transfer.amount || 0);
+  const expense = Number(transfer.expense || 0);
+  const grandTotal = totalAmount + expense;
+  return `<html><body style="font-family: Arial; padding: 16px; position:relative;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">${logo}<div style="text-align:right;"><div style="font-size:13px;font-weight:700;">Warehouse Transfer</div></div></div>
+    <div style="margin-top:8px; display:flex; justify-content:space-between; font-size:12px;"><div>Date: ${transfer.createdAt ? new Date(transfer.createdAt).toLocaleDateString() : '-'}</div><div>Receipt #: ${transfer._id || '-'}</div></div>
+    <div style="margin-top:8px;font-size:12px;">From: ${transfer.fromWarehouseName || transfer.fromWarehouseId || '-'}</div>
+    <div style="font-size:12px;">To: ${transfer.toWarehouseName || transfer.toWarehouseId || '-'}</div>
+    <div style="font-size:12px;">Company: AIM-HYGIENICS PVT LIMITED</div>
+    <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;font-size:12px; margin-top:8px;"><thead><tr><th>Product</th><th>From</th><th>To</th><th>Qty</th><th>Date</th><th>Status</th></tr></thead><tbody><tr><td>${transfer.productName || transfer.productId || '-'}</td><td>${transfer.fromWarehouseName || '-'}</td><td>${transfer.toWarehouseName || '-'}</td><td>${transfer.quantity || 0}</td><td>${transfer.createdAt ? new Date(transfer.createdAt).toLocaleString() : '-'}</td><td>${transfer.status || '-'}</td></tr></tbody></table>
+    <div style="margin-top:12px; font-size:12px; display:flex; justify-content:flex-end;"><div style="min-width:260px;"><div style="display:flex; justify-content:space-between;"><span>Total Amount:</span><strong>${totalAmount.toFixed(2)}</strong></div><div style="display:flex; justify-content:space-between;"><span>Expense:</span><span>${expense.toFixed(2)}</span></div><div style="display:flex; justify-content:space-between; margin-top:4px; border-top:1px solid #ccc; padding-top:4px;"><span><strong>Grand Total:</strong></span><strong>${grandTotal.toFixed(2)}</strong></div></div></div>
+    <div style="margin-top:16px;text-align:center;font-size:13px;font-weight:600;">Thank you for bussiness with us</div>
+  </body></html>`;
+}
 
 export default function TransfersScreen() {
   const [loading, setLoading] = useState(true);
@@ -48,6 +69,14 @@ export default function TransfersScreen() {
       setErr(e.message || 'Failed to create transfer');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const onReceipt = async (row) => {
+    try {
+      await Linking.openURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildTransferReceiptHtml(row))}`);
+    } catch (_e) {
+      Alert.alert('Receipt', `Transfer: ${row._id || '-'}\nDate: ${row.createdAt ? new Date(row.createdAt).toLocaleString() : '-'}\nFrom: ${row.fromWarehouseName || '-'}\nTo: ${row.toWarehouseName || '-'}\nQty: ${row.quantity || 0}`);
     }
   };
 
@@ -109,7 +138,7 @@ export default function TransfersScreen() {
                   <Text style={[styles.cell, styles.colData]}>{r.status || '-'}</Text>
                   <Text style={[styles.cell, styles.colData]}>{r.updatedAt ? new Date(r.updatedAt).toLocaleString() : '-'}</Text>
                   <Text style={[styles.cell, styles.colData]}>{r.note || '-'}</Text>
-                  <View style={styles.actionCell}><Pressable style={styles.editBtn} onPress={() => setEdit({ ...r })}><Text style={styles.editText}>Edit</Text></Pressable></View>
+                  <View style={styles.actionCell}><Pressable style={styles.actionBtn} onPress={() => onReceipt(r)}><Text style={styles.actionText}>Receipt</Text></Pressable><Pressable style={styles.editBtn} onPress={() => setEdit({ ...r })}><Text style={styles.editText}>Edit</Text></Pressable></View>
                 </View>
               ))}
             </View>
@@ -171,11 +200,13 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, backgroundColor: '#f3f4f6', padding: 8 },
   headCell: { fontSize: 12, fontWeight: '700', color: '#111827' },
   colData: { width: 170 },
-  colAction: { width: 120 },
+  colAction: { width: 220 },
   dataRow: { flexDirection: 'row', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, backgroundColor: '#fff', padding: 8, alignItems: 'center' },
   cell: { fontSize: 12, color: '#374151' },
-  actionCell: { width: 120 },
-  editBtn: { backgroundColor: '#e0f2fe', borderRadius: 8, paddingVertical: 7, alignItems: 'center' },
+  actionCell: { width: 220, flexDirection: 'row', gap: 6 },
+  actionBtn: { flex: 1, borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, paddingVertical: 7, alignItems: 'center', backgroundColor: '#f9fafb' },
+  actionText: { color: '#374151', fontWeight: '700', fontSize: 12 },
+  editBtn: { flex: 1, backgroundColor: '#e0f2fe', borderRadius: 8, paddingVertical: 7, alignItems: 'center' },
   editText: { color: '#075985', fontWeight: '700', fontSize: 12 },
   help: { color: '#6b7280' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' },

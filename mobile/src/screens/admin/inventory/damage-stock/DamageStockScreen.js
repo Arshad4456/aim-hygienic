@@ -31,12 +31,50 @@ function computeLine(line, product) {
   return { sizeText: product?.size || '-', sizeMultiplier, qty, rate, gross, toValue, discValue, extraValue, bonsValue, v4gst, gstPer, gstAmount, netAmt };
 }
 function buildInvoiceHtml(txn) {
+  const logo = `
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="width:54px;height:54px;border-radius:10px;background:linear-gradient(135deg,#065f46,#10b981);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;">AH</div>
+      <div><div style="font-weight:700;font-size:16px;">AIM-HYGIENICS</div><div style="font-size:11px;color:#555;">PVT LIMITED</div></div>
+    </div>`;
   const rows = (txn.items || []).map((i, idx) => {
     const parts = Object.fromEntries(String(i.notes || '').split(',').map((seg) => seg.split(':')));
-    return `<tr><td>${idx + 1}</td><td>${escapeHtml(i.productName || '-')}</td><td>${toNum(i.totalPacks || 0)}</td><td>${toNum(i.onePackPrice || 0)}</td><td>${toNum(parts.net || i.totalPrice || 0)}</td></tr>`;
+    return `<tr><td>${idx + 1}</td><td>${escapeHtml(i.productName || '-')}</td><td>${toNum(i.totalPacks || 0)}</td><td>${toNum(i.onePackPrice || 0)}</td><td>${toNum(parts.gross || 0)}</td><td>${toNum(parts.to || 0)}</td><td>${toNum(parts.disc || 0)}</td><td>${toNum(parts.extra || 0)}</td><td>${toNum(parts.bons || 0)}</td><td>${toNum(parts.v4gst || 0)}</td><td>${toNum(parts.gst || 0)}</td><td>${toNum(parts.net || i.totalPrice || 0)}</td></tr>`;
   });
-  return `<html><body style="font-family:Arial;padding:16px;"><h3>Damage Stock</h3><div>Date: ${new Date(txn.transactionAt).toLocaleDateString()}</div><div>Code: ${escapeHtml(txn.transactionCode || '-')}</div><table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin-top:8px;"><thead><tr><th>#</th><th>Product</th><th>Qty</th><th>Rate</th><th>Net</th></tr></thead><tbody>${rows.join('')}</tbody></table></body></html>`;
+  const lineTotal = (txn.items || []).reduce((sum, i) => {
+    const parts = Object.fromEntries(String(i.notes || '').split(',').map((seg) => seg.split(':')));
+    return sum + toNum(parts.net || i.totalPrice);
+  }, 0);
+  const totalAmount = toNum(txn.subtotal || lineTotal);
+  const extraDiscPer = toNum(txn.extraDiscPer);
+  const advTaxPer = toNum(txn.advTaxPer);
+  const whTaxPer = toNum(txn.whTaxPer);
+  const expense = toNum(txn.expense);
+  const extraDiscAmt = (totalAmount * extraDiscPer) / 100;
+  const advTaxAmt = (totalAmount * advTaxPer) / 100;
+  const whTaxAmt = (totalAmount * whTaxPer) / 100;
+  const calculatedGrandTotal = totalAmount - extraDiscAmt + advTaxAmt + whTaxAmt + expense;
+
+  return `<html><body style="font-family: Arial; padding: 16px; position:relative;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">${logo}<div style="text-align:right;"><div style="font-size:13px;font-weight:700;">Damage Stock</div></div></div>
+    <div style="margin-top:8px; display:flex; justify-content:space-between; font-size:12px;"><div>Date: ${escapeHtml(new Date(txn.transactionAt).toLocaleDateString())}</div><div>Invoice #: ${escapeHtml(txn.transactionCode || '-')}</div></div>
+    <div style="margin-top:8px;font-size:12px;">Invoice From: ${escapeHtml(txn.fromEntityName || txn.warehouseName || '-')}</div>
+    <div style="font-size:12px;">Bill To: ${escapeHtml(txn.toEntityName || 'Damage Stock')}</div>
+    <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; width:100%; margin-top:10px; font-size:12px;">
+      <thead><tr><th>#</th><th>Product Name</th><th>Qty</th><th>Rate</th><th>Gross</th><th>TO</th><th>Disc</th><th>Extra</th><th>Bons</th><th>V4GST</th><th>GST</th><th>Net Amt</th></tr></thead>
+      <tbody>${rows.join('')}</tbody>
+    </table>
+    <div style="margin-top:12px; font-size:12px; display:flex; justify-content:flex-end;"><div style="min-width:280px;">
+      <div style="display:flex; justify-content:space-between;"><span>Total Amount:</span><strong>${totalAmount.toFixed(2)}</strong></div>
+      <div style="display:flex; justify-content:space-between;"><span>Extra Disc (${extraDiscPer}%):</span><span>${extraDiscAmt.toFixed(2)}</span></div>
+      <div style="display:flex; justify-content:space-between;"><span>Adv Tax (${advTaxPer}%):</span><span>${advTaxAmt.toFixed(2)}</span></div>
+      <div style="display:flex; justify-content:space-between;"><span>W.H Tax (${whTaxPer}%):</span><span>${whTaxAmt.toFixed(2)}</span></div>
+      <div style="display:flex; justify-content:space-between;"><span>Expense:</span><span>${expense.toFixed(2)}</span></div>
+      <div style="display:flex; justify-content:space-between; margin-top:4px; border-top:1px solid #ccc; padding-top:4px;"><span><strong>Grand Total:</strong></span><strong>${toNum(txn.grandTotal || calculatedGrandTotal).toFixed(2)}</strong></div>
+    </div></div>
+    <div style="margin-top:16px;text-align:center;font-size:13px;font-weight:600;">Thank you for bussiness with us</div>
+  </body></html>`;
 }
+
 
 export default function DamageStockScreen() {
   const [loading, setLoading] = useState(true);
