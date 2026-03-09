@@ -4,11 +4,6 @@ import Card from '../../../ui/Card';
 
 const cards = [
   {
-    title: 'Module Overview',
-    description: 'Manage users, roles, and territory assignments across the organization.',
-    route: 'admin:hr',
-  },
-  {
     title: 'Add User',
     description: 'Create users for warehouses, sales, and suppliers.',
     route: 'admin:users/add',
