@@ -1,13 +1,3 @@
-import React from 'react';
-import ModulePlaceholderScreen from '../../common/ModulePlaceholderScreen';
+import PaymentsScreen from '../../admin/finance/payments/PaymentsScreen';
 
-const config = {
-  "route": "/dashboards/warehouseManager/payments",
-  "moduleKey": "warehouseManager:payments",
-  "title": "Payments",
-  "endpoints": []
-};
-
-export default function PaymentsScreen() {
-  return <ModulePlaceholderScreen config={config} />;
-}
+export default PaymentsScreen;
