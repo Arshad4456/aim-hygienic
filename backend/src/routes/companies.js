@@ -1,10 +1,13 @@
 const express = require("express");
 const Company = require("../models/Company");
+const { requireAuth, requirePermission } = require("../utils/auth");
 
 const router = express.Router();
 
+router.use(requireAuth);
+
 // CREATE
-router.post("/", async (req, res) => {
+router.post("/", requirePermission("users.manage"), async (req, res) => {
   try {
     const body = req.body || {};
     const existing = await Company.findOne().lean();
@@ -35,7 +38,7 @@ router.post("/", async (req, res) => {
 });
 
 // LIST
-router.get("/", async (req, res) => {
+router.get("/", requirePermission("dashboard.view"), async (req, res) => {
   try {
     const items = await Company.find().sort({ createdAt: -1 }).lean();
     return res.json({ ok: true, companies: items });
@@ -45,7 +48,7 @@ router.get("/", async (req, res) => {
 });
 
 // GET ONE
-router.get("/:id", async (req, res) => {
+router.get("/:id", requirePermission("dashboard.view"), async (req, res) => {
   try {
     const item = await Company.findById(req.params.id).lean();
     if (!item) return res.status(404).json({ ok: false, message: "Not found" });
@@ -56,7 +59,7 @@ router.get("/:id", async (req, res) => {
 });
 
 // UPDATE
-router.put("/:id", async (req, res) => {
+router.put("/:id", requirePermission("users.manage"), async (req, res) => {
   try {
     const body = req.body || {};
     const companyName = String(body.name || "").trim() || "AIM Hygienic (Pvt) Limited";

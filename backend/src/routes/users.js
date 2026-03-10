@@ -1,6 +1,6 @@
 const express = require("express");
 const User = require("../models/User");
-const { requireAuth, requireRole } = require("../utils/auth");
+const { requireAuth, requireRole, requirePermission } = require("../utils/auth");
 const { validatePassword } = require("../utils/password");
 const { hashPassword, verifyPassword } = require("../utils/passwordHash");
 
@@ -201,13 +201,13 @@ function buildRoleAwarePayload(body, fallbackRole = "") {
   return { payload, unset };
 }
 
-router.get("/me", requireAuth, async (req, res) => {
+router.get("/me", requireAuth, requirePermission("users.view"), async (req, res) => {
   const user = await User.findById(req.user.uid).select("-passwordHash").lean();
   if (!user) return res.status(404).json({ ok: false, message: "User not found" });
   return res.json({ ok: true, user });
 });
 
-router.put("/me", requireAuth, async (req, res) => {
+router.put("/me", requireAuth, requirePermission("users.view"), async (req, res) => {
   const body = req.body || {};
   const updated = await User.findByIdAndUpdate(
     req.user.uid,
@@ -222,7 +222,7 @@ router.put("/me", requireAuth, async (req, res) => {
   return res.json({ ok: true, user: updated });
 });
 
-router.put("/change-password", requireAuth, async (req, res) => {
+router.put("/change-password", requireAuth, requirePermission("users.view"), async (req, res) => {
   const { currentPassword, newPassword } = req.body || {};
   const validation = validatePassword(newPassword);
   if (!validation.ok) return res.status(400).json({ ok: false, message: validation.message });
@@ -270,7 +270,7 @@ router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
   return res.json({ ok: true, users });
 });
 
-router.get("/distributors", requireAuth, async (req, res) => {
+router.get("/distributors", requireAuth, requirePermission("users.view"), async (req, res) => {
   try {
     const territoryName = normalize(req.query.territoryName || req.user?.territoryName || req.user?.areaName);
     const limit = Math.min(Number(req.query.limit) || 100, 300);

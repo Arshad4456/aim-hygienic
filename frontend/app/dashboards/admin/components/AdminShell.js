@@ -5,6 +5,7 @@ import { clearAuthStorage } from "../../../lib/clientAuth";
 import { useRouter } from "next/navigation";
 import Sidebar from "./Sidebar";
 import { adminDashboardSearchItems } from "../../searchItems";
+import { apiFetch } from "../../../lib/api";
 
 export default function AdminShell({ children, user, title = "Dashboard" }) {
   const router = useRouter();
@@ -70,10 +71,13 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [mobileOpen, showSearchDropdown]);
 
-  function logout() {
+  async function logout() {
+    try {
+      await apiFetch("/auth/logout", { method: "POST", credentials: "include" });
+    } catch (_e) {
+      // Ignore logout API errors and still clear local client state.
+    }
     clearAuthStorage();
-    document.cookie = "aim_token=; Max-Age=0; path=/";
-    document.cookie = "aim_role=; Max-Age=0; path=/";
     setUserMenuOpen(false);
     setMobileOpen(false);
     router.push("/login");

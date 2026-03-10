@@ -4,7 +4,7 @@ const StockTransfer = require("../models/StockTransfer");
 const Product = require("../models/Product");
 const WarehouseTransaction = require("../models/WarehouseTransaction");
 const Message = require("../models/Message");
-const { requireAuth, requireRole } = require("../utils/auth");
+const { requireAuth, requireRole, requirePermission } = require("../utils/auth");
 
 const router = express.Router();
 
@@ -157,7 +157,7 @@ async function calculateProductBalanceMap(warehouseId, productIds) {
   }));
 }
 
-router.post("/transactions", requireAuth, async (req, res) => {
+router.post("/transactions", requireAuth, requirePermission("inventory.view"), async (req, res) => {
   try {
     const body = req.body || {};
     const transactionType = toTrimmedString(body.transactionType);
@@ -323,7 +323,7 @@ router.post("/transactions", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/transactions", requireAuth, async (req, res) => {
+router.get("/transactions", requireAuth, requirePermission("inventory.view"), async (req, res) => {
   try {
     const query = {};
     if (req.query.transactionType) query.transactionType = toTrimmedString(req.query.transactionType);
@@ -512,7 +512,7 @@ router.put("/transactions/:id/request-status", requireAuth, requireRole("admin",
   }
 });
 
-router.put("/transactions/:id/return-payment", requireAuth, async (req, res) => {
+router.put("/transactions/:id/return-payment", requireAuth, requirePermission("inventory.view"), async (req, res) => {
   try {
     const status = toTrimmedString(req.body?.status || "PAID");
     if (!["PENDING", "PAID", "OVERDUE"].includes(status)) {
@@ -537,7 +537,7 @@ router.put("/transactions/:id/return-payment", requireAuth, async (req, res) => 
   }
 });
 
-router.delete("/transactions/:id", requireAuth, async (req, res) => {
+router.delete("/transactions/:id", requireAuth, requirePermission("inventory.view"), async (req, res) => {
   try {
     const deleteFilter = { _id: req.params.id };
     if (isWarehouseManagerRole(req.user?.role)) {
@@ -564,7 +564,7 @@ router.delete("/transactions/clear", requireAuth, requireRole("admin"), async (r
   }
 });
 
-router.get("/near-expiry-products", requireAuth, async (req, res) => {
+router.get("/near-expiry-products", requireAuth, requirePermission("inventory.view"), async (req, res) => {
   try {
     const now = new Date();
     const threeMonthsLater = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
@@ -606,7 +606,7 @@ router.get("/near-expiry-products", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/analytics", requireAuth, async (req, res) => {
+router.get("/analytics", requireAuth, requirePermission("inventory.view"), async (req, res) => {
   try {
     const now = new Date();
     const dailyStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -690,7 +690,7 @@ router.get("/analytics", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/movements", requireAuth, async (req, res) => {
+router.post("/movements", requireAuth, requirePermission("inventory.view"), async (req, res) => {
   try {
     const body = req.body || {};
     const doc = await InventoryMovement.create({
@@ -716,7 +716,7 @@ router.post("/movements", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/movements", requireAuth, async (req, res) => {
+router.get("/movements", requireAuth, requirePermission("inventory.view"), async (req, res) => {
   try {
     const query = {};
     if (req.query.productId) query.productId = String(req.query.productId);
@@ -733,7 +733,7 @@ router.get("/movements", requireAuth, async (req, res) => {
   }
 });
 
-router.put("/movements/:id", requireAuth, async (req, res) => {
+router.put("/movements/:id", requireAuth, requirePermission("inventory.view"), async (req, res) => {
   try {
     const body = req.body || {};
     const updated = await InventoryMovement.findByIdAndUpdate(
@@ -772,7 +772,7 @@ router.delete("/movements/clear", requireAuth, requireRole("admin"), async (req,
   }
 });
 
-router.post("/transfers", requireAuth, async (req, res) => {
+router.post("/transfers", requireAuth, requirePermission("inventory.view"), async (req, res) => {
   try {
     const body = req.body || {};
     const doc = await StockTransfer.create({
@@ -823,7 +823,7 @@ router.post("/transfers", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/transfers", requireAuth, async (req, res) => {
+router.get("/transfers", requireAuth, requirePermission("inventory.view"), async (req, res) => {
   try {
     const transferQuery = {};
     if (isWarehouseManagerRole(req.user?.role)) {
@@ -837,7 +837,7 @@ router.get("/transfers", requireAuth, async (req, res) => {
   }
 });
 
-router.put("/transfers/:id", requireAuth, async (req, res) => {
+router.put("/transfers/:id", requireAuth, requirePermission("inventory.view"), async (req, res) => {
   try {
     const body = req.body || {};
     const transferScope = { _id: req.params.id };
@@ -895,7 +895,7 @@ router.put("/transfers/:id", requireAuth, async (req, res) => {
   }
 });
 
-router.delete("/transfers/:id", requireAuth, async (req, res) => {
+router.delete("/transfers/:id", requireAuth, requirePermission("inventory.view"), async (req, res) => {
   try {
     const deleteScope = { _id: req.params.id };
     if (isWarehouseManagerRole(req.user?.role)) {
@@ -911,7 +911,7 @@ router.delete("/transfers/:id", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/summary", requireAuth, async (req, res) => {
+router.get("/summary", requireAuth, requirePermission("inventory.view"), async (req, res) => {
   try {
     const match = {};
     if (req.query.warehouseId) match.warehouseId = String(req.query.warehouseId);
@@ -935,7 +935,7 @@ router.get("/summary", requireAuth, async (req, res) => {
 });
 
 
-router.get("/summary-detail", requireAuth, async (req, res) => {
+router.get("/summary-detail", requireAuth, requirePermission("inventory.view"), async (req, res) => {
   try {
     const productId = toTrimmedString(req.query.productId);
     let warehouseId = toTrimmedString(req.query.warehouseId);
@@ -984,7 +984,7 @@ router.get("/summary-detail", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/low-stock", requireAuth, async (req, res) => {
+router.get("/low-stock", requireAuth, requirePermission("inventory.view"), async (req, res) => {
   try {
     const lowStockMatch = {};
     applyWarehouseScope(lowStockMatch, req);

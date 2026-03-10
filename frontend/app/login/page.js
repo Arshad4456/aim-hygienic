@@ -24,25 +24,21 @@ export default function LoginPage() {
 
   const roleRedirect = (role) => {
     const map = {
-      admin: "/dashboards/admin",
-      CEO: "/dashboards/ceo",
-      "Managing Director": "/dashboards/manageDirector",
-      "Warehouse Manager": "/dashboards/warehouseManager",
-      "Account Officer": "/dashboards/accountOfficer",
-      "HR Assistant": "/dashboards/hrAssistant",
-      Cashier: "/dashboards/cashier",
-      KPO: "/dashboards/kpo",
-      "Brand Manager": "/dashboards/brandManager",
-      "National Sale Manager": "/dashboards/nationalSM",
-      "Regional Sale Manager": "/dashboards/regionalSM",
-      "Zone Sale Manager": "/dashboards/zoneSM",
-      "Territory Sale Manager": "/dashboards/territorySM",
-      Distributor: "/dashboards/distributor",
-      "Field Sale Manager": "/dashboards/fieldSM",
-      "Order Booker": "/dashboards/orderBooker",
-      Salesman: "/dashboards/salesman",
-      "Delivery Boy": "/dashboards/deliveryBoy",
-      customer: "/dashboards/customer",
+      superAdmin: "/dashboards/admin",
+      systemAdmin: "/dashboards/admin",
+      executive: "/dashboards/ceo",
+      salesManager: "/dashboards/regionalSM",
+      salesOps: "/dashboards/brandManager",
+      warehouseManager: "/dashboards/warehouseManager",
+      inventoryController: "/dashboards/warehouseManager",
+      financeOfficer: "/dashboards/accountOfficer",
+      cashier: "/dashboards/cashier",
+      hrOfficer: "/dashboards/hrAssistant",
+      logisticsCoordinator: "/dashboards/deliveryBoy",
+      distributor: "/dashboards/distributor",
+      orderBooker: "/dashboards/orderBooker",
+      salesman: "/dashboards/salesman",
+      deliveryExecutive: "/dashboards/deliveryBoy",
     };
     return map[role] || "/dashboards/admin";
   };
@@ -60,13 +56,9 @@ export default function LoginPage() {
       });
 
       // Save token + role (fast production approach)
-      setAuthSession({ token: data.token, role: data.user?.role || "", user: data.user || {} });
+      setAuthSession({ token: data.token, role: data.user?.roleCode || data.user?.role || "", user: data.user || {} });
 
-      // Cookie for middleware/protection (optional now, useful later)
-      document.cookie = `aim_token=${data.token}; path=/; Secure; SameSite=Lax`;
-      document.cookie = `aim_role=${data.user?.role || ""}; path=/; Secure; SameSite=Lax`;
-
-      const destination = roleRedirect(data.user?.role);
+      const destination = roleRedirect(data.user?.roleCode || data.user?.role);
       router.replace(destination);
     } catch (err) {
       setError(err.message || "Failed to login");

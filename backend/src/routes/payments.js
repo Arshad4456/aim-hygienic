@@ -7,7 +7,7 @@ const User = require("../models/User");
 const Warehouse = require("../models/Warehouse");
 const PrimaryPayment = require("../models/PrimaryPayment");
 const SecondaryPayment = require("../models/SecondaryPayment");
-const { requireAuth } = require("../utils/auth");
+const { requireAuth, requirePermission } = require("../utils/auth");
 
 const router = express.Router();
 
@@ -139,7 +139,7 @@ async function ensureWarehouseManagerHasWarehouse(req, res) {
 }
 
 
-router.get("/masters", requireAuth, async (req, res) => {
+router.get("/masters", requireAuth, requirePermission("payments.view"), async (req, res) => {
   try {
     const scopedWarehouse = isWarehouseManagerUser(req.user) ? await ensureWarehouseManagerHasWarehouse(req, res) : null;
     if (isWarehouseManagerUser(req.user) && !scopedWarehouse) return;
@@ -185,7 +185,7 @@ async function generateInvoiceNo() {
   throw new Error("Could not generate unique invoice number");
 }
 
-router.post("/primary", requireAuth, async (req, res) => {
+router.post("/primary", requireAuth, requirePermission("payments.view"), async (req, res) => {
   try {
     const body = req.body || {};
     const amountTotal = Number(body.amount);
@@ -256,7 +256,7 @@ router.post("/primary", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/primary", requireAuth, async (req, res) => {
+router.get("/primary", requireAuth, requirePermission("payments.view"), async (req, res) => {
   try {
     const query = {};
     const isDistributor = isDistributorUser(req.user);
@@ -303,7 +303,7 @@ router.get("/primary", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/primary/:invoiceNo", requireAuth, async (req, res) => {
+router.get("/primary/:invoiceNo", requireAuth, requirePermission("payments.view"), async (req, res) => {
   try {
     const primary = await PrimaryPayment.findOne({ invoiceNo: req.params.invoiceNo }).lean();
     if (!primary) return res.status(404).json({ ok: false, message: "Primary invoice not found" });
@@ -331,7 +331,7 @@ router.get("/primary/:invoiceNo", requireAuth, async (req, res) => {
   }
 });
 
-router.delete("/primary/:id", requireAuth, async (req, res) => {
+router.delete("/primary/:id", requireAuth, requirePermission("payments.view"), async (req, res) => {
   try {
     const primary = await PrimaryPayment.findById(req.params.id).lean();
     if (!primary) return res.status(404).json({ ok: false, message: "Primary payment not found" });
@@ -363,7 +363,7 @@ router.delete("/primary/:id", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/secondary", requireAuth, async (req, res) => {
+router.post("/secondary", requireAuth, requirePermission("payments.view"), async (req, res) => {
   const session = await mongoose.startSession();
   try {
     const body = req.body || {};
@@ -436,7 +436,7 @@ router.post("/secondary", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/secondary", requireAuth, async (req, res) => {
+router.get("/secondary", requireAuth, requirePermission("payments.view"), async (req, res) => {
   try {
     const query = {};
     const isDistributor = isDistributorUser(req.user);
@@ -473,7 +473,7 @@ router.get("/secondary", requireAuth, async (req, res) => {
   }
 });
 
-router.delete("/secondary/:id", requireAuth, async (req, res) => {
+router.delete("/secondary/:id", requireAuth, requirePermission("payments.view"), async (req, res) => {
   const session = await mongoose.startSession();
   try {
     const scopedWarehouseObjectId = isWarehouseManagerUser(req.user)

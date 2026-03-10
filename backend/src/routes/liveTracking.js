@@ -1,5 +1,5 @@
 const express = require("express");
-const { requireAuth } = require("../utils/auth");
+const { requireAuth, requirePermission } = require("../utils/auth");
 const User = require("../models/User");
 const Vehicle = require("../models/Vehicle");
 const SalesOrder = require("../models/SalesOrder");
@@ -11,7 +11,7 @@ function normalizeCoordinate(value) {
   return Number.isFinite(n) ? n : null;
 }
 
-router.get("/users", requireAuth, async (req, res) => {
+router.get("/users", requireAuth, requirePermission("liveTracking.view"), async (req, res) => {
   try {
     const users = await User.find({
       gpsLatitude: { $ne: "" },
@@ -33,7 +33,7 @@ router.get("/users", requireAuth, async (req, res) => {
   }
 });
 
-router.put("/users/me", requireAuth, async (req, res) => {
+router.put("/users/me", requireAuth, requirePermission("liveTracking.view"), async (req, res) => {
   try {
     const body = req.body || {};
     const gpsLatitude = normalizeCoordinate(body.gpsLatitude);
@@ -58,7 +58,7 @@ router.put("/users/me", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/summary", requireAuth, async (req, res) => {
+router.get("/summary", requireAuth, requirePermission("liveTracking.view"), async (req, res) => {
   try {
     const totalUsers = await User.countDocuments();
     const trackedUsers = await User.countDocuments({
@@ -89,7 +89,7 @@ router.get("/summary", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/vehicles", requireAuth, async (req, res) => {
+router.get("/vehicles", requireAuth, requirePermission("liveTracking.view"), async (req, res) => {
   try {
     const vehicles = await Vehicle.find({
       gpsLatitude: { $ne: "" },
@@ -111,7 +111,7 @@ router.get("/vehicles", requireAuth, async (req, res) => {
   }
 });
 
-router.put("/vehicles/:id", requireAuth, async (req, res) => {
+router.put("/vehicles/:id", requireAuth, requirePermission("liveTracking.view"), async (req, res) => {
   try {
     const gpsLatitude = normalizeCoordinate(req.body?.gpsLatitude);
     const gpsLongitude = normalizeCoordinate(req.body?.gpsLongitude);
@@ -139,7 +139,7 @@ router.put("/vehicles/:id", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/dispatches", requireAuth, async (req, res) => {
+router.get("/dispatches", requireAuth, requirePermission("liveTracking.view"), async (req, res) => {
   try {
     const orders = await SalesOrder.find({ status: "dispatched" })
       .sort({ dispatchedAt: -1 })
