@@ -1,5 +1,5 @@
 const express = require("express");
-const { requireAuth } = require("../utils/auth");
+const { requireAuth, requirePermission } = require("../utils/auth");
 const InventoryMovement = require("../models/InventoryMovement");
 const Expense = require("../models/Expense");
 const StockTransfer = require("../models/StockTransfer");
@@ -38,7 +38,7 @@ function formatYearKey(date) {
   return `${date.getFullYear()}`;
 }
 
-router.get("/overview", requireAuth, async (req, res) => {
+router.get("/overview", requireAuth, requirePermission("dashboard.view"), async (req, res) => {
   try {
     const startDate = new Date();
     startDate.setHours(0, 0, 0, 0);
@@ -370,7 +370,7 @@ router.get("/overview", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/sales-manager", requireAuth, async (req, res) => {
+router.get("/sales-manager", requireAuth, requirePermission("dashboard.view"), async (req, res) => {
   try {
     const currentUser = await User.findById(req.user?.uid).lean();
     if (!currentUser) {
@@ -449,7 +449,7 @@ router.get("/sales-manager", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/operations", requireAuth, async (req, res) => {
+router.get("/operations", requireAuth, requirePermission("dashboard.view"), async (req, res) => {
   try {
     const activityStart = new Date();
     activityStart.setHours(0, 0, 0, 0);

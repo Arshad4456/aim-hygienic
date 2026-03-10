@@ -5,7 +5,7 @@ const VehicleRefuel = require("../models/VehicleRefuel");
 const VehicleMaintenance = require("../models/VehicleMaintenance");
 const VehicleAssignment = require("../models/VehicleAssignment");
 const User = require("../models/User");
-const { requireAuth } = require("../utils/auth");
+const { requireAuth, requirePermission } = require("../utils/auth");
 
 const router = express.Router();
 
@@ -70,7 +70,7 @@ function validateVehiclePayload(payload) {
   return "";
 }
 
-router.post("/", requireAuth, async (req, res) => {
+router.post("/", requireAuth, requirePermission("vehicles.view"), async (req, res) => {
   try {
     const payload = parseVehiclePayload(req.body);
     const validationErr = validateVehiclePayload(payload);
@@ -94,7 +94,7 @@ router.post("/", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/", requireAuth, async (req, res) => {
+router.get("/", requireAuth, requirePermission("vehicles.view"), async (req, res) => {
   try {
     const q = {};
     if (req.query.type) q.type = req.query.type;
@@ -122,7 +122,7 @@ router.get("/", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/:id/detail", requireAuth, async (req, res) => {
+router.get("/:id/detail", requireAuth, requirePermission("vehicles.view"), async (req, res) => {
   try {
     const vehicle = await Vehicle.findById(req.params.id).lean();
     if (!vehicle) return res.status(404).json({ ok: false, message: "Vehicle not found" });
@@ -140,7 +140,7 @@ router.get("/:id/detail", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/:id", requireAuth, async (req, res) => {
+router.get("/:id", requireAuth, requirePermission("vehicles.view"), async (req, res) => {
   try {
     const vehicle = await Vehicle.findById(req.params.id).lean();
     if (!vehicle) return res.status(404).json({ ok: false, message: "Vehicle not found" });
@@ -150,7 +150,7 @@ router.get("/:id", requireAuth, async (req, res) => {
   }
 });
 
-router.put("/:id", requireAuth, async (req, res) => {
+router.put("/:id", requireAuth, requirePermission("vehicles.view"), async (req, res) => {
   try {
     const payload = parseVehiclePayload(req.body);
     const validationErr = validateVehiclePayload(payload);
@@ -165,7 +165,7 @@ router.put("/:id", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/:id/assign", requireAuth, async (req, res) => {
+router.post("/:id/assign", requireAuth, requirePermission("vehicles.view"), async (req, res) => {
   try {
     const { userId, startDate } = req.body || {};
     const vehicle = await Vehicle.findById(req.params.id);
@@ -195,7 +195,7 @@ router.post("/:id/assign", requireAuth, async (req, res) => {
   }
 });
 
-router.delete("/:id", requireAuth, async (req, res) => {
+router.delete("/:id", requireAuth, requirePermission("vehicles.view"), async (req, res) => {
   try {
     const deleted = await Vehicle.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ ok: false, message: "Vehicle not found" });

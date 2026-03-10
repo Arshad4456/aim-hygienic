@@ -1,5 +1,5 @@
 const express = require("express");
-const { requireAuth } = require("../utils/auth");
+const { requireAuth, requirePermission } = require("../utils/auth");
 const SalesOrder = require("../models/SalesOrder");
 const User = require("../models/User");
 
@@ -158,7 +158,7 @@ function canTransition(order, nextStatus) {
   return false;
 }
 
-router.get("/", requireAuth, async (req, res) => {
+router.get("/", requireAuth, requirePermission("orders.view"), async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 50, 200);
     const orders = await SalesOrder.find(roleMatchQuery(req.user)).sort({ createdAt: -1 }).limit(limit).lean();
@@ -168,7 +168,7 @@ router.get("/", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/my", requireAuth, async (req, res) => {
+router.get("/my", requireAuth, requirePermission("orders.view"), async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 50, 200);
     const orders = await SalesOrder.find(roleMatchQuery(req.user)).sort({ createdAt: -1 }).limit(limit).lean();
@@ -178,7 +178,7 @@ router.get("/my", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/secondary/distributor", requireAuth, async (req, res) => {
+router.get("/secondary/distributor", requireAuth, requirePermission("orders.view"), async (req, res) => {
   try {
     const role = String(req.user?.role || "").trim();
     if (role !== "Distributor") return res.status(403).json({ ok: false, message: "Forbidden" });
@@ -208,7 +208,7 @@ router.get("/secondary/distributor", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/approvals", requireAuth, async (req, res) => {
+router.get("/approvals", requireAuth, requirePermission("orders.view"), async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 50, 200);
     const orders = await SalesOrder.find({ ...roleMatchQuery(req.user), status: "pending" })
@@ -221,7 +221,7 @@ router.get("/approvals", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/dispatch", requireAuth, async (req, res) => {
+router.get("/dispatch", requireAuth, requirePermission("orders.view"), async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 50, 200);
     const orders = await SalesOrder.find({ ...roleMatchQuery(req.user), status: { $in: ["approved", "dispatched"] } })
@@ -234,7 +234,7 @@ router.get("/dispatch", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/salesman-deliveries", requireAuth, async (req, res) => {
+router.get("/salesman-deliveries", requireAuth, requirePermission("orders.view"), async (req, res) => {
   try {
     if (String(req.user?.role || "") !== "Salesman") {
       return res.status(403).json({ ok: false, message: "Only Salesman can access deliveries" });
@@ -259,7 +259,7 @@ router.get("/salesman-deliveries", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/summary", requireAuth, async (req, res) => {
+router.get("/summary", requireAuth, requirePermission("orders.view"), async (req, res) => {
   try {
     const match = roleMatchQuery(req.user);
     const [summary] = await SalesOrder.aggregate([
@@ -298,7 +298,7 @@ router.get("/summary", requireAuth, async (req, res) => {
   }
 });
 
-router.patch("/:id/mark-read", requireAuth, async (req, res) => {
+router.patch("/:id/mark-read", requireAuth, requirePermission("orders.view"), async (req, res) => {
   try {
     const order = await SalesOrder.findById(req.params.id);
     if (!order) return res.status(404).json({ ok: false, message: "Order not found" });
@@ -326,7 +326,7 @@ router.patch("/:id/mark-read", requireAuth, async (req, res) => {
   }
 });
 
-router.patch("/:id/receipt-agreement", requireAuth, async (req, res) => {
+router.patch("/:id/receipt-agreement", requireAuth, requirePermission("orders.view"), async (req, res) => {
   try {
     const agreement = String(req.body?.agreement || "").trim();
     if (!["agreed", "not_agreed"].includes(agreement)) {
@@ -350,7 +350,7 @@ router.patch("/:id/receipt-agreement", requireAuth, async (req, res) => {
   }
 });
 
-router.patch("/:id/proof-of-delivery", requireAuth, async (req, res) => {
+router.patch("/:id/proof-of-delivery", requireAuth, requirePermission("orders.view"), async (req, res) => {
   try {
     const proofOfDeliveryImageUrl = String(req.body?.proofOfDeliveryImageUrl || "").trim();
     if (!proofOfDeliveryImageUrl) {
@@ -374,7 +374,7 @@ router.patch("/:id/proof-of-delivery", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/:orderId/pod", requireAuth, async (req, res) => {
+router.post("/:orderId/pod", requireAuth, requirePermission("orders.view"), async (req, res) => {
   try {
     if (String(req.user?.role || "") !== "Salesman") {
       return res.status(403).json({ ok: false, message: "Only Salesman can upload POD" });
@@ -414,7 +414,7 @@ router.post("/:orderId/pod", requireAuth, async (req, res) => {
 });
 
 
-router.patch("/:id", requireAuth, async (req, res) => {
+router.patch("/:id", requireAuth, requirePermission("orders.view"), async (req, res) => {
   try {
     const query = { _id: req.params.id, ...roleMatchQuery(req.user) };
     const order = await SalesOrder.findOne(query);
@@ -448,7 +448,7 @@ router.patch("/:id", requireAuth, async (req, res) => {
   }
 });
 
-router.delete("/:id", requireAuth, async (req, res) => {
+router.delete("/:id", requireAuth, requirePermission("orders.view"), async (req, res) => {
   try {
     const removed = await SalesOrder.findOneAndDelete({ _id: req.params.id, ...roleMatchQuery(req.user) });
     if (!removed) return res.status(404).json({ ok: false, message: "Order not found" });
@@ -458,7 +458,7 @@ router.delete("/:id", requireAuth, async (req, res) => {
   }
 });
 
-router.patch("/:id/status", requireAuth, async (req, res) => {
+router.patch("/:id/status", requireAuth, requirePermission("orders.view"), async (req, res) => {
   try {
     const { status, dispatchTracking, dispatchVehicleId, dispatchVehicleName, dispatchDriverId, dispatchDriverName, rejectionReason } = req.body || {};
     if (!ALLOWED_STATUSES.includes(status)) {
@@ -542,7 +542,7 @@ router.patch("/:id/status", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/", requireAuth, async (req, res) => {
+router.post("/", requireAuth, requirePermission("orders.view"), async (req, res) => {
   try {
     const { orderNo, customerName, customerType, expectedDelivery, notes, saleType, sourceType } = req.body || {};
     const items = normalizeItems(req.body?.items || []);

@@ -34,6 +34,14 @@ const receiptsRoutes = require("./src/routes/receipts");
 const vehicleManagementRoutes = require("./src/routes/vehicleManagement");
 
 const app = express();
+app.set("trust proxy", 1);
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  next();
+});
 
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "80mb" }));
 

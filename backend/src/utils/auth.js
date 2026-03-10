@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { getPermissionsForRole, hasPermission, normalizeRoleCode } = require("../access/controlPlane");
 
 function base64UrlEncode(value) {
   return Buffer.from(value)
@@ -15,7 +16,10 @@ function base64UrlDecode(value) {
 }
 
 function getSecret() {
-  return process.env.JWT_SECRET || "dev-only-secret";
+  if (!process.env.JWT_SECRET || String(process.env.JWT_SECRET).trim().length < 32) {
+    throw new Error("JWT_SECRET must be set and at least 32 characters long");
+  }
+  return process.env.JWT_SECRET;
 }
 
 function signToken(user) {
@@ -30,6 +34,8 @@ function signToken(user) {
     warehouseId: String(user.warehouseId || "").trim(),
     userId: String(user.userId || "").trim(),
     distributorId,
+    roleCode: normalizeRoleCode(user.role),
+    permissions: getPermissionsForRole(user.role),
     exp: now + 7 * 24 * 60 * 60,
   };
 
@@ -72,7 +78,12 @@ function verifyToken(token) {
 function requireAuth(req, res, next) {
   try {
     const header = req.headers.authorization || "";
-    const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+    const cookieToken = String(req.headers.cookie || "")
+      .split(";")
+      .map((part) => part.trim())
+      .find((part) => part.startsWith("aim_token="))
+      ?.split("=")?.[1];
+    const token = header.startsWith("Bearer ") ? header.slice(7) : cookieToken;
     if (!token) return res.status(401).json({ ok: false, message: "No token" });
 
     req.user = verifyToken(token);
@@ -83,7 +94,7 @@ function requireAuth(req, res, next) {
 }
 
 function normalizeRole(role) {
-  return String(role || "").trim().toLowerCase();
+  return normalizeRoleCode(role);
 }
 
 function requireRole(...roles) {
@@ -96,4 +107,15 @@ function requireRole(...roles) {
   };
 }
 
-module.exports = { signToken, requireAuth, requireRole };
+function requirePermission(permission) {
+  return (req, res, next) => {
+    const roleCode = req.user?.roleCode || req.user?.role;
+    if (!roleCode) return res.status(401).json({ ok: false, message: "No user role" });
+    if (!hasPermission(roleCode, permission)) {
+      return res.status(403).json({ ok: false, message: `Forbidden: missing ${permission}` });
+    }
+    next();
+  };
+}
+
+module.exports = { signToken, requireAuth, requireRole, requirePermission };

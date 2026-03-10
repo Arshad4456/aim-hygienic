@@ -1,5 +1,5 @@
 const express = require("express");
-const { requireAuth } = require("../utils/auth");
+const { requireAuth, requirePermission } = require("../utils/auth");
 const InventoryMovement = require("../models/InventoryMovement");
 const Expense = require("../models/Expense");
 const Account = require("../models/Account");
@@ -16,7 +16,7 @@ function safeNumber(value) {
   return Number.isFinite(Number(value)) ? Number(value) : 0;
 }
 
-router.get("/overview", requireAuth, async (req, res) => {
+router.get("/overview", requireAuth, requirePermission("reports.view"), async (req, res) => {
   try {
     const [salesAgg] = await InventoryMovement.aggregate([
       { $match: { movementType: "SALE_OUT" } },
@@ -74,7 +74,7 @@ router.get("/overview", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/builder", requireAuth, async (req, res) => {
+router.get("/builder", requireAuth, requirePermission("reports.view"), async (req, res) => {
   try {
     const [salesAgg] = await InventoryMovement.aggregate([
       { $match: { movementType: "SALE_OUT" } },
@@ -176,7 +176,7 @@ router.get("/builder", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/sales", requireAuth, async (req, res) => {
+router.get("/sales", requireAuth, requirePermission("reports.view"), async (req, res) => {
   try {
     const rows = await InventoryMovement.aggregate([
       { $match: { movementType: "SALE_OUT" } },
@@ -205,7 +205,7 @@ router.get("/sales", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/inventory", requireAuth, async (req, res) => {
+router.get("/inventory", requireAuth, requirePermission("reports.view"), async (req, res) => {
   try {
     const inTypes = ["PURCHASE_IN", "TRANSFER_IN", "RETURN_IN"];
     const outTypes = ["SALE_OUT", "TRANSFER_OUT"];
@@ -250,7 +250,7 @@ router.get("/inventory", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/finance", requireAuth, async (req, res) => {
+router.get("/finance", requireAuth, requirePermission("reports.view"), async (req, res) => {
   try {
     const [expenseTotals] = await Expense.aggregate([
       {
@@ -300,7 +300,7 @@ router.get("/finance", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/hr", requireAuth, async (req, res) => {
+router.get("/hr", requireAuth, requirePermission("reports.view"), async (req, res) => {
   try {
     const roleCounts = await User.aggregate([
       { $group: { _id: { $ifNull: ["$role", "Unassigned"] }, count: { $sum: 1 } } },
@@ -324,7 +324,7 @@ router.get("/hr", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/logistics", requireAuth, async (req, res) => {
+router.get("/logistics", requireAuth, requirePermission("reports.view"), async (req, res) => {
   try {
     const transferCounts = await StockTransfer.aggregate([
       { $group: { _id: { $ifNull: ["$status", "unknown"] }, count: { $sum: 1 } } },
@@ -341,7 +341,7 @@ router.get("/logistics", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/compliance", requireAuth, async (req, res) => {
+router.get("/compliance", requireAuth, requirePermission("reports.view"), async (req, res) => {
   try {
     const adjustmentCount = await InventoryMovement.countDocuments({ movementType: "ADJUSTMENT" });
     const returnCount = await InventoryMovement.countDocuments({ movementType: "RETURN_IN" });
@@ -358,7 +358,7 @@ router.get("/compliance", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/procurement", requireAuth, async (req, res) => {
+router.get("/procurement", requireAuth, requirePermission("reports.view"), async (req, res) => {
   try {
     const startDate = new Date();
     startDate.setHours(0, 0, 0, 0);

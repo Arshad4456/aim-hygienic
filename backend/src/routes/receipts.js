@@ -5,7 +5,7 @@ const Account = require("../models/Account");
 const AccountTransaction = require("../models/AccountTransaction");
 const SalesOrder = require("../models/SalesOrder");
 const User = require("../models/User");
-const { requireAuth, requireRole } = require("../utils/auth");
+const { requireAuth, requireRole, requirePermission } = require("../utils/auth");
 
 const router = express.Router();
 
@@ -31,7 +31,7 @@ function canAccessOwn(role) {
   return ["customer", "distributor", "order booker", "orderbooker", "salesman"].includes(String(role || "").toLowerCase());
 }
 
-router.post("/", requireAuth, async (req, res) => {
+router.post("/", requireAuth, requirePermission("receipts.view"), async (req, res) => {
   try {
     const body = req.body || {};
     const role = String(req.user?.role || "").toLowerCase();
@@ -90,7 +90,7 @@ router.post("/", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/", requireAuth, async (req, res) => {
+router.get("/", requireAuth, requirePermission("receipts.view"), async (req, res) => {
   try {
     const role = String(req.user?.role || "").toLowerCase();
     const query = {};
@@ -123,7 +123,7 @@ router.get("/", requireAuth, async (req, res) => {
 });
 
 
-router.patch("/:id/attachment", requireAuth, async (req, res) => {
+router.patch("/:id/attachment", requireAuth, requirePermission("receipts.view"), async (req, res) => {
   try {
     const attachmentUrl = asText(req.body?.attachmentUrl);
     if (!attachmentUrl) return res.status(400).json({ ok: false, message: "attachmentUrl is required" });
