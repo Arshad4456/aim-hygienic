@@ -7,6 +7,7 @@ const ModuleTemplateSchema = new mongoose.Schema(
     description: { type: String, trim: true, default: "" },
     category: { type: String, trim: true, default: "general" },
     types: { type: [String], default: [] },
+    subtypes: { type: [String], default: [] },
     sections: { type: [String], default: [] },
     supportedActions: { type: [String], default: [] },
     isActive: { type: Boolean, default: true },

@@ -16,6 +16,10 @@ const {
   getCompanyDashboards,
   getCompanyDashboardByRole,
 } = require("../services/companyDashboardService");
+const {
+  assignModulesToRoleDashboard,
+  getRoleDashboardModules,
+} = require("../services/companyRoleModuleService");
 
 const router = express.Router();
 
@@ -199,6 +203,7 @@ router.post("/module-templates", async (req, res) => {
       description: body.description,
       category: body.category,
       types: Array.isArray(body.types) ? body.types : [],
+      subtypes: Array.isArray(body.subtypes) ? body.subtypes : [],
       sections: Array.isArray(body.sections) ? body.sections : [],
       supportedActions: Array.isArray(body.supportedActions) ? body.supportedActions : [],
       isActive: body.isActive !== undefined ? Boolean(body.isActive) : true,
@@ -220,6 +225,17 @@ router.get("/module-templates", async (_req, res) => {
     return res.json({ ok: true, moduleTemplates });
   } catch (_error) {
     return res.status(500).json({ ok: false, message: "Failed to load module templates" });
+  }
+});
+
+// 10b. GET /platform-admin/module-templates/:id
+router.get("/module-templates/:id", async (req, res) => {
+  try {
+    const moduleTemplate = await ModuleTemplate.findById(req.params.id).lean();
+    if (!moduleTemplate) return res.status(404).json({ success: false, message: "Module template not found" });
+    return res.json({ success: true, moduleTemplate });
+  } catch (_error) {
+    return res.status(400).json({ success: false, message: "Invalid module template id" });
   }
 });
 
@@ -429,6 +445,90 @@ router.get("/companies/:companyId/dashboards/:roleCode", async (req, res) => {
     });
   } catch (error) {
     return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load company dashboard" });
+  }
+});
+
+
+// 19. POST /platform-admin/companies/:companyId/dashboards/:roleCode/modules
+router.post("/companies/:companyId/dashboards/:roleCode/modules", async (req, res) => {
+  try {
+    const modules = req.body?.modules;
+    if (!Array.isArray(modules)) {
+      return res.status(400).json({ success: false, message: "modules must be an array" });
+    }
+
+    const { dashboard, modules: assignedModules } = await assignModulesToRoleDashboard(
+      req.params.companyId,
+      req.params.roleCode,
+      modules,
+      req.user?.uid
+    );
+
+    return res.json({
+      success: true,
+      dashboard: {
+        _id: dashboard._id,
+        roleCode: dashboard.roleCode,
+        roleName: dashboard.roleName,
+        sidebarItems: dashboard.sidebarItems,
+      },
+      modules: assignedModules.map((moduleItem) => ({
+        _id: moduleItem._id,
+        companyId: moduleItem.companyId,
+        companyRoleConfigId: moduleItem.companyRoleConfigId,
+        companyDashboardConfigId: moduleItem.companyDashboardConfigId,
+        moduleTemplateId: moduleItem.moduleTemplateId,
+        moduleCode: moduleItem.moduleCode,
+        moduleName: moduleItem.moduleName,
+        moduleType: moduleItem.moduleType,
+        selectedSubtypes: moduleItem.selectedSubtypes,
+        selectedSections: moduleItem.selectedSections,
+        sidebarLabel: moduleItem.sidebarLabel,
+        sidebarPath: moduleItem.sidebarPath,
+        sidebarOrder: moduleItem.sidebarOrder,
+        isActive: moduleItem.isActive,
+      })),
+    });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to assign modules to dashboard" });
+  }
+});
+
+// 20. GET /platform-admin/companies/:companyId/dashboards/:roleCode/modules
+router.get("/companies/:companyId/dashboards/:roleCode/modules", async (req, res) => {
+  try {
+    const modules = await getRoleDashboardModules(req.params.companyId, req.params.roleCode);
+
+    return res.json({
+      success: true,
+      modules: modules.map((moduleItem) => ({
+        _id: moduleItem._id,
+        moduleCode: moduleItem.moduleCode,
+        moduleName: moduleItem.moduleName,
+        moduleType: moduleItem.moduleType,
+        selectedSubtypes: moduleItem.selectedSubtypes,
+        selectedSections: moduleItem.selectedSections,
+        sidebarLabel: moduleItem.sidebarLabel,
+        sidebarPath: moduleItem.sidebarPath,
+        sidebarOrder: moduleItem.sidebarOrder,
+        isActive: moduleItem.isActive,
+      })),
+    });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load dashboard modules" });
+  }
+});
+
+// 21. GET /platform-admin/companies/:companyId/available-modules
+router.get("/companies/:companyId/available-modules", async (req, res) => {
+  try {
+    const company = await Company.findById(req.params.companyId).lean();
+    if (!company) return res.status(404).json({ success: false, message: "Company not found" });
+
+    const moduleTemplates = await ModuleTemplate.find({ isActive: true }).sort({ name: 1 }).lean();
+    return res.json({ success: true, moduleTemplates });
+  } catch (_error) {
+    return res.status(400).json({ success: false, message: "Invalid company id" });
   }
 });
 
