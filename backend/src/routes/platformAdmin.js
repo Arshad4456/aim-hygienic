@@ -24,6 +24,7 @@ const {
   assignPermissionsToRoleModule,
   getRoleModulePermissions,
 } = require("../services/companyRoleModulePermissionService");
+const { getRuntimeDashboardDefinition } = require("../services/runtimeDashboardService");
 
 const router = express.Router();
 
@@ -606,6 +607,36 @@ router.get("/companies/:companyId/dashboards/:roleCode/modules/:moduleCode/permi
     });
   } catch (error) {
     return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load module permissions" });
+  }
+});
+
+
+// 24. GET /platform-admin/companies/:companyId/dashboards/:roleCode/runtime
+router.get("/companies/:companyId/dashboards/:roleCode/runtime", async (req, res) => {
+  try {
+    const dashboard = await getRuntimeDashboardDefinition(req.params.companyId, req.params.roleCode);
+    return res.json({ success: true, dashboard });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load runtime dashboard definition" });
+  }
+});
+
+// 25. GET /platform-admin/companies/:companyId/runtime-dashboards
+router.get("/companies/:companyId/runtime-dashboards", async (req, res) => {
+  try {
+    const company = await Company.findById(req.params.companyId).lean();
+    if (!company) return res.status(404).json({ success: false, message: "Company not found" });
+
+    const roleConfigs = await CompanyRoleConfig.find({ companyId: company._id, isActive: true }).sort({ roleName: 1 }).lean();
+    const dashboards = [];
+    for (const roleConfig of roleConfigs) {
+      const dashboard = await getRuntimeDashboardDefinition(String(company._id), roleConfig.roleCode);
+      dashboards.push(dashboard);
+    }
+
+    return res.json({ success: true, dashboards });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load runtime dashboards" });
   }
 });
 
