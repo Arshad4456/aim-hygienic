@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import DynamicDashboardHome from './DynamicDashboardHome';
-import RuntimeModuleScreen from '../../features/common/RuntimeModuleScreen';
+import { resolveRuntimeModuleRenderer } from '../../runtime/moduleRegistry';
 
 function Header({ dashboard, onOpenDrawer, onBackHome }) {
   const company = dashboard?.company || {};
@@ -37,6 +37,7 @@ export default function DynamicDashboardShell({ dashboard }) {
   );
 
   const activeModule = modules.find((moduleItem) => moduleItem.moduleCode === activeModuleCode) || null;
+  const ActiveRenderer = resolveRuntimeModuleRenderer(activeModule?.moduleCode);
   const primaryColor = dashboard?.company?.primaryColor || '#059669';
 
   return (
@@ -49,7 +50,7 @@ export default function DynamicDashboardShell({ dashboard }) {
 
       <View style={styles.body}>
         {activeModule ? (
-          <RuntimeModuleScreen moduleItem={activeModule} />
+          <ActiveRenderer moduleItem={activeModule} dashboard={dashboard} />
         ) : (
           <DynamicDashboardHome dashboard={dashboard} onOpenModule={(moduleCode) => setActiveModuleCode(moduleCode)} />
         )}
