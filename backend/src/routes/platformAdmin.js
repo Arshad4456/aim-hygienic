@@ -20,6 +20,10 @@ const {
   assignModulesToRoleDashboard,
   getRoleDashboardModules,
 } = require("../services/companyRoleModuleService");
+const {
+  assignPermissionsToRoleModule,
+  getRoleModulePermissions,
+} = require("../services/companyRoleModulePermissionService");
 
 const router = express.Router();
 
@@ -236,6 +240,26 @@ router.get("/module-templates/:id", async (req, res) => {
     return res.json({ success: true, moduleTemplate });
   } catch (_error) {
     return res.status(400).json({ success: false, message: "Invalid module template id" });
+  }
+});
+
+// 10c. GET /platform-admin/module-templates/:moduleCode/actions
+router.get("/module-templates/:moduleCode/actions", async (req, res) => {
+  try {
+    const moduleTemplate = await ModuleTemplate.findOne({ code: String(req.params.moduleCode || "").trim().toLowerCase() }).lean();
+    if (!moduleTemplate) return res.status(404).json({ success: false, message: "Module template not found" });
+
+    return res.json({
+      success: true,
+      module: {
+        code: moduleTemplate.code,
+        name: moduleTemplate.name,
+        supportedActions: moduleTemplate.supportedActions || [],
+        sections: moduleTemplate.sections || [],
+      },
+    });
+  } catch (_error) {
+    return res.status(500).json({ success: false, message: "Failed to load module actions" });
   }
 });
 
@@ -529,6 +553,59 @@ router.get("/companies/:companyId/available-modules", async (req, res) => {
     return res.json({ success: true, moduleTemplates });
   } catch (_error) {
     return res.status(400).json({ success: false, message: "Invalid company id" });
+  }
+});
+
+
+// 22. POST /platform-admin/companies/:companyId/dashboards/:roleCode/modules/:moduleCode/permissions
+router.post("/companies/:companyId/dashboards/:roleCode/modules/:moduleCode/permissions", async (req, res) => {
+  try {
+    const permission = await assignPermissionsToRoleModule(
+      req.params.companyId,
+      req.params.roleCode,
+      req.params.moduleCode,
+      req.body || {},
+      req.user?.uid
+    );
+
+    return res.json({
+      success: true,
+      permission: {
+        _id: permission._id,
+        companyId: permission.companyId,
+        companyRoleConfigId: permission.companyRoleConfigId,
+        companyDashboardConfigId: permission.companyDashboardConfigId,
+        companyRoleModuleConfigId: permission.companyRoleModuleConfigId,
+        moduleCode: permission.moduleCode,
+        roleCode: permission.roleCode,
+        allowedActions: permission.allowedActions,
+        sectionPermissions: permission.sectionPermissions,
+        isActive: permission.isActive,
+      },
+    });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to assign module permissions" });
+  }
+});
+
+// 23. GET /platform-admin/companies/:companyId/dashboards/:roleCode/modules/:moduleCode/permissions
+router.get("/companies/:companyId/dashboards/:roleCode/modules/:moduleCode/permissions", async (req, res) => {
+  try {
+    const permission = await getRoleModulePermissions(req.params.companyId, req.params.roleCode, req.params.moduleCode);
+
+    return res.json({
+      success: true,
+      permission: {
+        _id: permission._id,
+        moduleCode: permission.moduleCode,
+        roleCode: permission.roleCode,
+        allowedActions: permission.allowedActions,
+        sectionPermissions: permission.sectionPermissions,
+        isActive: permission.isActive,
+      },
+    });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load module permissions" });
   }
 });
 

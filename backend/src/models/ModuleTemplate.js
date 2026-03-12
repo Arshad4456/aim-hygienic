@@ -10,6 +10,7 @@ const ModuleTemplateSchema = new mongoose.Schema(
     subtypes: { type: [String], default: [] },
     sections: { type: [String], default: [] },
     supportedActions: { type: [String], default: [] },
+    sectionActionMap: { type: mongoose.Schema.Types.Mixed, default: null },
     isActive: { type: Boolean, default: true },
   },
   { timestamps: true }
