@@ -7,6 +7,8 @@ import SettingsScreen from '../screens/common/SettingsScreen';
 import { getRoleModules } from './RoleMenuConfig';
 import { screenRegistry } from './ScreenRegistry';
 import RoleDrawerContent from './RoleDrawerContent';
+import { useRuntimeDashboard } from '../runtime/useRuntimeDashboard';
+import DynamicDashboardShell from '../shared/dashboard/DynamicDashboardShell';
 
 function Header({
   title,
@@ -76,7 +78,9 @@ function Header({
 export default function DrawerNavigator() {
   const insets = useSafeAreaInsets();
   const { roleKey, user, logout } = useAuth();
+  const { dashboard, loading, error, refresh } = useRuntimeDashboard();
   const modules = getRoleModules(roleKey);
+
 
   const screens = useMemo(() => {
     const base = {
@@ -142,6 +146,33 @@ export default function DrawerNavigator() {
     }),
     [defaultRoute, screens]
   );
+
+  if (dashboard) {
+    return <DynamicDashboardShell dashboard={dashboard} />;
+  }
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={[styles.body, { alignItems: 'center', justifyContent: 'center' }]}>
+          <Text style={{ color: '#6b7280' }}>Loading runtime dashboard...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={[styles.body, { alignItems: 'center', justifyContent: 'center', padding: 20, gap: 10 }]}>
+          <Text style={{ color: '#991b1b', textAlign: 'center' }}>{error}</Text>
+          <Pressable style={{ backgroundColor: '#059669', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8 }} onPress={() => refresh().catch(() => undefined)}>
+            <Text style={{ color: '#fff', fontWeight: '600' }}>Retry</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>

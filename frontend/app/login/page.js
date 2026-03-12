@@ -18,7 +18,7 @@ export default function LoginPage() {
     const token = typeof window !== "undefined" ? getAuthItem("aim_token") : null;
     const role = typeof window !== "undefined" ? getAuthItem("aim_role") : null;
     if (token && role) {
-      router.replace(roleRedirect(role));
+      router.replace("/runtime-dashboard");
     }
   }, [router]);
 
@@ -66,8 +66,7 @@ export default function LoginPage() {
       document.cookie = `aim_token=${data.token}; path=/; Secure; SameSite=Lax`;
       document.cookie = `aim_role=${data.user?.role || ""}; path=/; Secure; SameSite=Lax`;
 
-      const destination = roleRedirect(data.user?.role);
-      router.replace(destination);
+      router.replace("/runtime-dashboard");
     } catch (err) {
       setError(err.message || "Failed to login");
     } finally {
