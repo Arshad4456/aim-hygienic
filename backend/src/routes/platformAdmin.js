@@ -11,6 +11,11 @@ const {
   getCompanyRoles,
   getAvailableRoleTemplatesForCompany,
 } = require("../services/companyRoleService");
+const {
+  generateDashboardsForCompany,
+  getCompanyDashboards,
+  getCompanyDashboardByRole,
+} = require("../services/companyDashboardService");
 
 const router = express.Router();
 
@@ -344,6 +349,86 @@ router.get("/companies/:companyId/available-role-templates", async (req, res) =>
     return res.json({ success: true, roleTemplates });
   } catch (error) {
     return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load available role templates" });
+  }
+});
+
+
+// 16. POST /platform-admin/companies/:companyId/generate-dashboards
+router.post("/companies/:companyId/generate-dashboards", async (req, res) => {
+  try {
+    const { company, dashboards } = await generateDashboardsForCompany(req.params.companyId, req.user?.uid);
+
+    return res.json({
+      success: true,
+      company: {
+        _id: company._id,
+        name: company.name,
+        hasDashboardConfiguration: Boolean(company.hasDashboardConfiguration),
+      },
+      dashboards: dashboards.map((dashboard) => ({
+        _id: dashboard._id,
+        companyId: dashboard.companyId,
+        companyRoleConfigId: dashboard.companyRoleConfigId,
+        roleCode: dashboard.roleCode,
+        roleName: dashboard.roleName,
+        dashboardTitle: dashboard.dashboardTitle,
+        dashboardCode: dashboard.dashboardCode,
+        shellConfig: dashboard.shellConfig,
+        sidebarItems: dashboard.sidebarItems,
+        sharedFeatures: dashboard.sharedFeatures,
+        isActive: dashboard.isActive,
+      })),
+    });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to generate dashboards" });
+  }
+});
+
+// 17. GET /platform-admin/companies/:companyId/dashboards
+router.get("/companies/:companyId/dashboards", async (req, res) => {
+  try {
+    const dashboards = await getCompanyDashboards(req.params.companyId);
+
+    return res.json({
+      success: true,
+      dashboards: dashboards.map((dashboard) => ({
+        _id: dashboard._id,
+        companyId: dashboard.companyId,
+        roleCode: dashboard.roleCode,
+        roleName: dashboard.roleName,
+        dashboardTitle: dashboard.dashboardTitle,
+        dashboardCode: dashboard.dashboardCode,
+        shellConfig: dashboard.shellConfig,
+        sidebarItems: dashboard.sidebarItems,
+        sharedFeatures: dashboard.sharedFeatures,
+      })),
+    });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load company dashboards" });
+  }
+});
+
+// 18. GET /platform-admin/companies/:companyId/dashboards/:roleCode
+router.get("/companies/:companyId/dashboards/:roleCode", async (req, res) => {
+  try {
+    const dashboard = await getCompanyDashboardByRole(req.params.companyId, req.params.roleCode);
+
+    return res.json({
+      success: true,
+      dashboard: {
+        _id: dashboard._id,
+        companyId: dashboard.companyId,
+        roleCode: dashboard.roleCode,
+        roleName: dashboard.roleName,
+        dashboardTitle: dashboard.dashboardTitle,
+        dashboardCode: dashboard.dashboardCode,
+        shellConfig: dashboard.shellConfig,
+        sidebarItems: dashboard.sidebarItems,
+        sharedFeatures: dashboard.sharedFeatures,
+      },
+    });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load company dashboard" });
   }
 });
 

@@ -26,6 +26,7 @@ const CompanySchema = new mongoose.Schema(
     activeHierarchyCode: { type: String, trim: true, default: null },
     activeRoleCodes: { type: [String], default: [] },
     hasRoleConfiguration: { type: Boolean, default: false },
+    hasDashboardConfiguration: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
