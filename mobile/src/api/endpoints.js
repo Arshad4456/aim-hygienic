@@ -6,6 +6,9 @@ export const endpoints = {
   dashboard: {
     summary: '/dashboard/summary',
   },
+  runtime: {
+    dashboard: '/runtime/dashboard',
+  },
   uploads: {
     presign: '/uploads/presign',
     complete: '/uploads/complete',
