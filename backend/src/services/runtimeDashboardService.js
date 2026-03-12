@@ -12,6 +12,61 @@ function normalizeCode(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function isPlatformSuperAdmin(user, authUser) {
+  const tokenRole = normalizeCode(user?.role);
+  const dbRole = normalizeCode(authUser?.role);
+
+  return Boolean(user?.isSuperAdmin) || Boolean(authUser?.isSuperAdmin) || tokenRole === "super admin" || tokenRole === "superadmin" || dbRole === "super admin" || dbRole === "superadmin";
+}
+
+function buildPlatformSuperAdminDashboard(authUser) {
+  const roleName = String(authUser?.role || "Super Admin").trim() || "Super Admin";
+
+  return {
+    company: {
+      id: null,
+      name: "Platform",
+      slug: "platform",
+      logoUrl: "",
+      primaryColor: "#059669",
+      status: "active",
+    },
+    settings: {
+      appName: "AIM Hygienic ERP",
+      invoiceHeader: "",
+      invoiceFooter: "",
+      receiptHeader: "",
+      receiptFooter: "",
+      modules: {},
+    },
+    hierarchy: {
+      hierarchyCode: "platform",
+      hierarchyName: "Platform",
+      levels: [],
+    },
+    role: {
+      roleCode: normalizeCode(roleName) || "super admin",
+      roleName,
+      isMandatory: false,
+    },
+    shell: {
+      dashboardTitle: "Platform Super Admin Dashboard",
+      dashboardCode: "platform-super-admin",
+      shellConfig: {
+        hasNotifications: true,
+        hasSettingsShortcut: true,
+        hasProfileMenu: true,
+      },
+      sharedFeatures: [
+        { code: "global-config", title: "Global configuration access", isEnabled: true },
+        { code: "company-provisioning", title: "Company provisioning", isEnabled: true },
+      ],
+      sidebarItems: [],
+    },
+    modules: [],
+  };
+}
+
 async function resolveCompany(companyId) {
   const raw = String(companyId || "").trim();
   if (!raw) {
@@ -166,6 +221,10 @@ async function getRuntimeDashboardDefinitionForUser(user) {
     const error = new Error("Authenticated user not found");
     error.status = 404;
     throw error;
+  }
+
+  if (isPlatformSuperAdmin(user, authUser)) {
+    return buildPlatformSuperAdminDashboard(authUser);
   }
 
   const companyId = String(authUser.companyId || "").trim();
