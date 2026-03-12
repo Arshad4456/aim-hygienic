@@ -2,14 +2,25 @@ const mongoose = require("mongoose");
 
 const CompanySchema = new mongoose.Schema(
   {
-    companyId: { type: String, required: true, trim: true, unique: true },
     name: { type: String, required: true, trim: true },
+    slug: { type: String, required: true, trim: true, lowercase: true, unique: true },
+    status: {
+      type: String,
+      enum: ["active", "inactive", "suspended"],
+      default: "active",
+      required: true,
+    },
+    logoUrl: { type: String, trim: true, default: "" },
+    primaryColor: { type: String, trim: true, default: "" },
+    address: { type: String, trim: true, default: "" },
+    phone: { type: String, trim: true, default: "" },
+    email: { type: String, trim: true, lowercase: true, default: "" },
 
-    phone1: { type: String, trim: true },
-    phone2: { type: String, trim: true },
-    email: { type: String, trim: true, lowercase: true },
-    mainOfficeAddress: { type: String, trim: true },
-
+    // legacy compatibility fields
+    companyId: { type: String, trim: true, unique: true, sparse: true },
+    phone1: { type: String, trim: true, default: "" },
+    phone2: { type: String, trim: true, default: "" },
+    mainOfficeAddress: { type: String, trim: true, default: "" },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }

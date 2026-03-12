@@ -25,6 +25,7 @@ function signToken(user) {
   const payload = {
     uid: user._id.toString(),
     role: user.role,
+    isSuperAdmin: Boolean(user?.isSuperAdmin),
     username: user.username,
     warehouse_id: String(user.warehouseId || "").trim(),
     warehouseId: String(user.warehouseId || "").trim(),
