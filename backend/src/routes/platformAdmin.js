@@ -4,6 +4,15 @@ const CompanySettings = require("../models/CompanySettings");
 const HierarchyTemplate = require("../models/HierarchyTemplate");
 const RoleTemplate = require("../models/RoleTemplate");
 const ModuleTemplate = require("../models/ModuleTemplate");
+const CompanyRoleConfig = require("../models/CompanyRoleConfig");
+const DocumentTemplatePreset = require("../models/DocumentTemplatePreset");
+const {
+  createCompanyDocumentTemplate,
+  listCompanyDocumentTemplates,
+  getCompanyDocumentTemplate,
+  updateCompanyDocumentTemplate,
+  applyPresetToCompany,
+} = require("../services/companyDocumentTemplateService");
 const { requireSuperAdmin } = require("../middleware/requireSuperAdmin");
 const { assignHierarchyToCompany, getCompanyHierarchy } = require("../services/companyHierarchyService");
 const {
@@ -637,6 +646,175 @@ router.get("/companies/:companyId/runtime-dashboards", async (req, res) => {
     return res.json({ success: true, dashboards });
   } catch (error) {
     return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load runtime dashboards" });
+  }
+});
+
+
+// 26. POST /platform-admin/companies/:companyId/document-templates
+router.post("/companies/:companyId/document-templates", async (req, res) => {
+  try {
+    const template = await createCompanyDocumentTemplate(req.params.companyId, req.body || {}, req.user?.uid);
+    return res.status(201).json({ success: true, template });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to create company document template" });
+  }
+});
+
+// 27. GET /platform-admin/companies/:companyId/document-templates
+router.get("/companies/:companyId/document-templates", async (req, res) => {
+  try {
+    const templates = await listCompanyDocumentTemplates(req.params.companyId, { documentType: req.query.documentType });
+    return res.json({ success: true, templates });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load company document templates" });
+  }
+});
+
+// 28. GET /platform-admin/companies/:companyId/document-templates/:templateId
+router.get("/companies/:companyId/document-templates/:templateId", async (req, res) => {
+  try {
+    const template = await getCompanyDocumentTemplate(req.params.companyId, req.params.templateId);
+    return res.json({ success: true, template });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load company document template" });
+  }
+});
+
+// 29. PUT /platform-admin/companies/:companyId/document-templates/:templateId
+router.put("/companies/:companyId/document-templates/:templateId", async (req, res) => {
+  try {
+    const template = await updateCompanyDocumentTemplate(req.params.companyId, req.params.templateId, req.body || {});
+    return res.json({ success: true, template });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to update company document template" });
+  }
+});
+
+// 30. POST /platform-admin/companies/:companyId/document-templates/apply-preset
+router.post("/companies/:companyId/document-templates/apply-preset", async (req, res) => {
+  try {
+    const template = await applyPresetToCompany(req.params.companyId, req.body?.presetId, req.body?.isDefault, req.user?.uid);
+    return res.status(201).json({ success: true, template });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to apply preset to company" });
+  }
+});
+
+// 31. POST /platform-admin/document-template-presets
+router.post("/document-template-presets", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const documentType = String(body.documentType || "").trim().toLowerCase();
+    const templateCode = String(body.templateCode || "").trim().toLowerCase();
+    const templateName = String(body.templateName || "").trim();
+
+    if (!["invoice", "receipt"].includes(documentType)) {
+      return res.status(400).json({ success: false, message: "documentType must be invoice or receipt" });
+    }
+
+    if (!templateCode || !templateName) {
+      return res.status(400).json({ success: false, message: "templateCode and templateName are required" });
+    }
+
+    const preset = await DocumentTemplatePreset.create({
+      documentType,
+      templateCode,
+      templateName,
+      description: String(body.description || "").trim(),
+      layoutVariant: String(body.layoutVariant || "standard").trim(),
+      styleConfig: body.styleConfig && typeof body.styleConfig === "object" && !Array.isArray(body.styleConfig) ? body.styleConfig : {},
+      headerConfig: body.headerConfig && typeof body.headerConfig === "object" && !Array.isArray(body.headerConfig) ? body.headerConfig : {},
+      footerConfig: body.footerConfig && typeof body.footerConfig === "object" && !Array.isArray(body.footerConfig) ? body.footerConfig : {},
+      isActive: body.isActive !== undefined ? Boolean(body.isActive) : true,
+    });
+
+    return res.status(201).json({ success: true, preset });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(409).json({ success: false, message: "templateCode already exists" });
+    }
+    return res.status(500).json({ success: false, message: error.message || "Failed to create document template preset" });
+  }
+});
+
+// 32. GET /platform-admin/document-template-presets
+router.get("/document-template-presets", async (req, res) => {
+  try {
+    const query = {};
+    if (req.query.documentType) {
+      const dt = String(req.query.documentType).trim().toLowerCase();
+      if (!["invoice", "receipt"].includes(dt)) {
+        return res.status(400).json({ success: false, message: "documentType must be invoice or receipt" });
+      }
+      query.documentType = dt;
+    }
+
+    const presets = await DocumentTemplatePreset.find(query).sort({ documentType: 1, createdAt: -1 }).lean();
+    return res.json({ success: true, presets });
+  } catch (_error) {
+    return res.status(500).json({ success: false, message: "Failed to load document template presets" });
+  }
+});
+
+// 33. GET /platform-admin/document-template-presets/:presetId
+router.get("/document-template-presets/:presetId", async (req, res) => {
+  try {
+    const preset = await DocumentTemplatePreset.findById(req.params.presetId).lean();
+    if (!preset) return res.status(404).json({ success: false, message: "Preset not found" });
+    return res.json({ success: true, preset });
+  } catch (_error) {
+    return res.status(400).json({ success: false, message: "Invalid preset id" });
+  }
+});
+
+// 34. PUT /platform-admin/document-template-presets/:presetId
+router.put("/document-template-presets/:presetId", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const updates = {
+      documentType: body.documentType !== undefined ? String(body.documentType || "").trim().toLowerCase() : undefined,
+      templateCode: body.templateCode !== undefined ? String(body.templateCode || "").trim().toLowerCase() : undefined,
+      templateName: body.templateName !== undefined ? String(body.templateName || "").trim() : undefined,
+      description: body.description !== undefined ? String(body.description || "").trim() : undefined,
+      layoutVariant: body.layoutVariant !== undefined ? String(body.layoutVariant || "").trim() : undefined,
+      styleConfig: body.styleConfig,
+      headerConfig: body.headerConfig,
+      footerConfig: body.footerConfig,
+      isActive: body.isActive !== undefined ? Boolean(body.isActive) : undefined,
+    };
+
+    if (updates.documentType !== undefined && !["invoice", "receipt"].includes(updates.documentType)) {
+      return res.status(400).json({ success: false, message: "documentType must be invoice or receipt" });
+    }
+
+    if (updates.styleConfig !== undefined && (typeof updates.styleConfig !== "object" || Array.isArray(updates.styleConfig) || !updates.styleConfig)) {
+      return res.status(400).json({ success: false, message: "styleConfig must be an object" });
+    }
+
+    if (updates.headerConfig !== undefined && (typeof updates.headerConfig !== "object" || Array.isArray(updates.headerConfig) || !updates.headerConfig)) {
+      return res.status(400).json({ success: false, message: "headerConfig must be an object" });
+    }
+
+    if (updates.footerConfig !== undefined && (typeof updates.footerConfig !== "object" || Array.isArray(updates.footerConfig) || !updates.footerConfig)) {
+      return res.status(400).json({ success: false, message: "footerConfig must be an object" });
+    }
+
+    Object.keys(updates).forEach((key) => {
+      if (updates[key] === undefined) delete updates[key];
+    });
+
+    const preset = await DocumentTemplatePreset.findByIdAndUpdate(req.params.presetId, updates, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!preset) return res.status(404).json({ success: false, message: "Preset not found" });
+    return res.json({ success: true, preset });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(409).json({ success: false, message: "templateCode already exists" });
+    }
+    return res.status(500).json({ success: false, message: "Failed to update document template preset" });
   }
 });
 
