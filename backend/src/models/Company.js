@@ -22,6 +22,8 @@ const CompanySchema = new mongoose.Schema(
     phone2: { type: String, trim: true, default: "" },
     mainOfficeAddress: { type: String, trim: true, default: "" },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    activeHierarchyConfigId: { type: mongoose.Schema.Types.ObjectId, ref: "CompanyHierarchyConfig", default: null },
+    activeHierarchyCode: { type: String, trim: true, default: null },
   },
   { timestamps: true }
 );

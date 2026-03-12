@@ -5,6 +5,7 @@ const HierarchyTemplate = require("../models/HierarchyTemplate");
 const RoleTemplate = require("../models/RoleTemplate");
 const ModuleTemplate = require("../models/ModuleTemplate");
 const { requireSuperAdmin } = require("../middleware/requireSuperAdmin");
+const { assignHierarchyToCompany, getCompanyHierarchy } = require("../services/companyHierarchyService");
 
 const router = express.Router();
 
@@ -209,6 +210,66 @@ router.get("/module-templates", async (_req, res) => {
     return res.json({ ok: true, moduleTemplates });
   } catch (_error) {
     return res.status(500).json({ ok: false, message: "Failed to load module templates" });
+  }
+});
+
+
+// 11. POST /platform-admin/companies/:companyId/hierarchy
+router.post("/companies/:companyId/hierarchy", async (req, res) => {
+  try {
+    const { hierarchyTemplateId } = req.body || {};
+    if (!hierarchyTemplateId) {
+      return res.status(400).json({ success: false, message: "hierarchyTemplateId is required" });
+    }
+
+    const { company, hierarchyConfig } = await assignHierarchyToCompany(
+      req.params.companyId,
+      hierarchyTemplateId,
+      req.user?.uid
+    );
+
+    return res.json({
+      success: true,
+      company: {
+        _id: company._id,
+        name: company.name,
+        activeHierarchyCode: company.activeHierarchyCode,
+        activeHierarchyConfigId: company.activeHierarchyConfigId,
+      },
+      hierarchyConfig: {
+        _id: hierarchyConfig._id,
+        companyId: hierarchyConfig.companyId,
+        hierarchyTemplateId: hierarchyConfig.hierarchyTemplateId,
+        hierarchyCode: hierarchyConfig.hierarchyCode,
+        hierarchyName: hierarchyConfig.hierarchyName,
+        levels: hierarchyConfig.levels,
+        isActive: hierarchyConfig.isActive,
+      },
+    });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to assign hierarchy" });
+  }
+});
+
+// 12. GET /platform-admin/companies/:companyId/hierarchy
+router.get("/companies/:companyId/hierarchy", async (req, res) => {
+  try {
+    const hierarchyConfig = await getCompanyHierarchy(req.params.companyId);
+
+    return res.json({
+      success: true,
+      hierarchyConfig: {
+        _id: hierarchyConfig._id,
+        companyId: hierarchyConfig.companyId,
+        hierarchyTemplateId: hierarchyConfig.hierarchyTemplateId,
+        hierarchyCode: hierarchyConfig.hierarchyCode,
+        hierarchyName: hierarchyConfig.hierarchyName,
+        levels: hierarchyConfig.levels,
+        isActive: hierarchyConfig.isActive,
+      },
+    });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load hierarchy config" });
   }
 });
 
