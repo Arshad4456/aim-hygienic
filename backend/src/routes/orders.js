@@ -129,7 +129,30 @@ function roleMatchQuery(user) {
     const roleQuery = { orderBookerId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
     return authUid ? { $or: [roleQuery, { createdBy: authUid }] } : roleQuery;
   }
-  if (role === "Salesman") return { salesmanId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
+  if (role === "Salesman") {
+    const salesmanQuery = { salesmanId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
+    const territoryName = String(user?.territoryName || user?.areaName || "").trim();
+    const fieldId = String(user?.fieldId || "").trim();
+    const fieldName = String(user?.fieldName || "").trim();
+
+    if (!territoryName || (!fieldId && !fieldName)) return salesmanQuery;
+
+    const fieldFilters = [];
+    if (fieldId) fieldFilters.push({ fieldId });
+    if (fieldName) fieldFilters.push({ fieldName });
+
+    return {
+      $or: [
+        salesmanQuery,
+        {
+          saleType: "secondary",
+          status: { $in: ["approved", "dispatched", "delivered"] },
+          territoryName,
+          $or: fieldFilters,
+        },
+      ],
+    };
+  }
   if (role === "Delivery Boy") return { deliveryBoyId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
   if (role === "customer") {
     const roleQuery = { customerId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
