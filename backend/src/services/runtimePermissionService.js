@@ -7,6 +7,11 @@ function normalizeCode(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function isSuperAdminRole(roleValue) {
+  const normalized = normalizeCode(roleValue);
+  return normalized === "super admin" || normalized === "superadmin";
+}
+
 function parseAllowedActions(permissionDoc) {
   return new Set((permissionDoc?.allowedActions || []).map((action) => normalizeCode(action)).filter(Boolean));
 }
@@ -47,7 +52,7 @@ async function resolveUserRuntimePermissionContext(authUser) {
   return {
     roleCode,
     companyId,
-    allowAll: Boolean(authUser.isSuperAdmin),
+    allowAll: Boolean(authUser.isSuperAdmin) || Boolean(user.isSuperAdmin) || isSuperAdminRole(authUser.role) || isSuperAdminRole(user.role),
   };
 }
 
