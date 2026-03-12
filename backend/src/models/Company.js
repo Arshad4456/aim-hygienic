@@ -24,6 +24,8 @@ const CompanySchema = new mongoose.Schema(
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     activeHierarchyConfigId: { type: mongoose.Schema.Types.ObjectId, ref: "CompanyHierarchyConfig", default: null },
     activeHierarchyCode: { type: String, trim: true, default: null },
+    activeRoleCodes: { type: [String], default: [] },
+    hasRoleConfiguration: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

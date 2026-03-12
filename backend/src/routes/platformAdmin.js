@@ -6,6 +6,11 @@ const RoleTemplate = require("../models/RoleTemplate");
 const ModuleTemplate = require("../models/ModuleTemplate");
 const { requireSuperAdmin } = require("../middleware/requireSuperAdmin");
 const { assignHierarchyToCompany, getCompanyHierarchy } = require("../services/companyHierarchyService");
+const {
+  assignRolesToCompany,
+  getCompanyRoles,
+  getAvailableRoleTemplatesForCompany,
+} = require("../services/companyRoleService");
 
 const router = express.Router();
 
@@ -270,6 +275,75 @@ router.get("/companies/:companyId/hierarchy", async (req, res) => {
     });
   } catch (error) {
     return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load hierarchy config" });
+  }
+});
+
+
+// 13. POST /platform-admin/companies/:companyId/roles
+router.post("/companies/:companyId/roles", async (req, res) => {
+  try {
+    const roleTemplateIds = req.body?.roleTemplateIds;
+    if (!Array.isArray(roleTemplateIds)) {
+      return res.status(400).json({ success: false, message: "roleTemplateIds must be an array" });
+    }
+
+    const { company, roles } = await assignRolesToCompany(req.params.companyId, roleTemplateIds, req.user?.uid);
+
+    return res.json({
+      success: true,
+      company: {
+        _id: company._id,
+        name: company.name,
+        activeHierarchyCode: company.activeHierarchyCode,
+        activeRoleCodes: company.activeRoleCodes || [],
+        hasRoleConfiguration: Boolean(company.hasRoleConfiguration),
+      },
+      roles: roles.map((role) => ({
+        _id: role._id,
+        companyId: role.companyId,
+        roleTemplateId: role.roleTemplateId,
+        roleCode: role.roleCode,
+        roleName: role.roleName,
+        hierarchyCode: role.hierarchyCode,
+        isMandatory: role.isMandatory,
+        isActive: role.isActive,
+      })),
+    });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to assign company roles" });
+  }
+});
+
+// 14. GET /platform-admin/companies/:companyId/roles
+router.get("/companies/:companyId/roles", async (req, res) => {
+  try {
+    const roles = await getCompanyRoles(req.params.companyId);
+
+    return res.json({
+      success: true,
+      roles: roles.map((role) => ({
+        _id: role._id,
+        companyId: role.companyId,
+        roleTemplateId: role.roleTemplateId,
+        roleCode: role.roleCode,
+        roleName: role.roleName,
+        hierarchyCode: role.hierarchyCode,
+        isMandatory: role.isMandatory,
+        isActive: role.isActive,
+      })),
+    });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load company roles" });
+  }
+});
+
+// 15. GET /platform-admin/companies/:companyId/available-role-templates
+router.get("/companies/:companyId/available-role-templates", async (req, res) => {
+  try {
+    const roleTemplates = await getAvailableRoleTemplatesForCompany(req.params.companyId);
+    return res.json({ success: true, roleTemplates });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load available role templates" });
   }
 });
 
