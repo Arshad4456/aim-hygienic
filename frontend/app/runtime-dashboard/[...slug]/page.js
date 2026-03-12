@@ -2,6 +2,7 @@
 
 import DynamicDashboardShell from "../../dashboards/components/DynamicDashboardShell";
 import { RuntimeDashboardProvider, useRuntimeDashboardContext } from "../../lib/runtimeDashboardContext";
+import { RuntimeModuleRenderer } from "../moduleRegistry";
 
 function RuntimeModulePageContent({ params }) {
   const { dashboard, loading, error, refresh } = useRuntimeDashboardContext();
@@ -25,34 +26,12 @@ function RuntimeModulePageContent({ params }) {
   }
 
   const moduleItem = (dashboard.modules || []).find((item) => String(item.moduleCode || "").toLowerCase() === routeKey);
-
   return (
     <DynamicDashboardShell dashboard={dashboard}>
       {!moduleItem ? (
         <div className="rounded-xl border bg-white p-5 text-sm">Module not found for this role.</div>
       ) : (
-        <div className="space-y-4 rounded-xl border bg-white p-5">
-          <h1 className="text-xl font-semibold">{moduleItem.moduleName}</h1>
-          <p className="text-sm text-zinc-600">Code: {moduleItem.moduleCode}</p>
-          <p className="text-sm text-zinc-600">Type: {moduleItem.moduleType || "default"}</p>
-          <p className="text-sm text-zinc-600">Subtypes: {(moduleItem.selectedSubtypes || []).join(", ") || "-"}</p>
-          <p className="text-sm text-zinc-600">Sections: {(moduleItem.selectedSections || []).join(", ") || "-"}</p>
-          <p className="text-sm text-zinc-600">Allowed actions: {(moduleItem.allowedActions || []).join(", ") || "-"}</p>
-          <div>
-            <div className="text-sm font-medium mb-2">Section permissions</div>
-            {(moduleItem.sectionPermissions || []).length === 0 ? (
-              <div className="text-sm text-zinc-500">No section permissions configured.</div>
-            ) : (
-              <ul className="space-y-1 text-sm text-zinc-700">
-                {moduleItem.sectionPermissions.map((section) => (
-                  <li key={section.sectionCode}>
-                    {section.sectionCode}: {(section.allowedActions || []).join(", ") || "-"}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
+        <RuntimeModuleRenderer moduleItem={moduleItem} dashboard={dashboard} />
       )}
     </DynamicDashboardShell>
   );
