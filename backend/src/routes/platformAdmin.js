@@ -15,6 +15,7 @@ const CompanyDocumentTemplate = require("../models/CompanyDocumentTemplate");
 const CompanySetupTemplate = require("../models/CompanySetupTemplate");
 const Plan = require("../models/Plan");
 const Subscription = require("../models/Subscription");
+const PlatformAuditLog = require("../models/PlatformAuditLog");
 const {
   createCompanyDocumentTemplate,
   listCompanyDocumentTemplates,
@@ -62,6 +63,19 @@ const {
   getOnboardingStatusSummary,
   getCompanySnapshotHistory,
 } = require("../services/platformAnalyticsService");
+const {
+  createAuditLog,
+  logCompanyCreated,
+  logHierarchyAssigned,
+  logRolesAssigned,
+  logDashboardsGenerated,
+  logModulesAssigned,
+  logPermissionsUpdated,
+  logDocumentTemplateChange,
+  logSetupTemplateApplied,
+  logCompanyLifecycleChange,
+  logSubscriptionAssigned,
+} = require("../services/platformAuditLogService");
 
 const router = express.Router();
 
@@ -82,6 +96,21 @@ const ONBOARDING_STEP_KEYS = [
 ];
 
 const REQUIRED_COMPLETION_KEYS = ONBOARDING_STEP_KEYS.filter((key) => key !== "setupCompleted");
+
+
+function buildAuditContext(req) {
+  return {
+    actorUserId: req.user?.uid,
+    actorName: String(req.user?.username || req.user?.name || "").trim(),
+    actorRole: String(req.user?.role || "").trim(),
+    ipAddress: String(req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "").split(",")[0].trim(),
+    userAgent: String(req.headers["user-agent"] || ""),
+  };
+}
+
+function fireAndForgetAudit(promise) {
+  Promise.resolve(promise).catch(() => undefined);
+}
 
 function summarizeOnboardingState(state) {
   const steps = state?.steps || {};
@@ -161,6 +190,8 @@ router.post("/companies", async (req, res) => {
       receiptFooter: String(body.receiptFooter || "").trim(),
       modules: body.modules && typeof body.modules === "object" ? body.modules : {},
     });
+
+    fireAndForgetAudit(logCompanyCreated(buildAuditContext(req), company));
 
     return res.status(201).json({ ok: true, company, settings });
   } catch (error) {
@@ -1116,6 +1147,14 @@ router.get("/companies/:companyId/onboarding-summary", async (req, res) => {
 router.post("/companies/:companyId/save-as-template", async (req, res) => {
   try {
     const template = await createSetupTemplateFromCompany(req.params.companyId, req.body || {}, req.user?.uid);
+    fireAndForgetAudit(logSetupTemplateApplied(buildAuditContext(req), {
+      companyId: req.params.companyId,
+      targetId: template._id,
+      actionType: "setup_template_saved",
+      summary: `Saved setup template ${template.name}` ,
+      metadata: { code: template.code, sourceCompanyId: req.params.companyId },
+      afterSnapshot: { name: template.name, code: template.code },
+    }));
     return res.status(201).json({
       success: true,
       template: {
@@ -1168,6 +1207,13 @@ router.post("/companies/:companyId/apply-setup-template", async (req, res) => {
       req.user?.uid
     );
 
+    fireAndForgetAudit(logSetupTemplateApplied(buildAuditContext(req), {
+      companyId: req.params.companyId,
+      targetId: req.body?.templateId || req.params.companyId,
+      actionType: "setup_template_applied",
+      summary: `Applied setup template to company ${result.company?.name || req.params.companyId}` ,
+      metadata: { applied: result.applied },
+    }));
     return res.json({ success: true, company: result.company, applied: result.applied });
   } catch (error) {
     return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to apply setup template" });
@@ -1188,6 +1234,13 @@ router.post("/companies/:targetCompanyId/clone-from-company", async (req, res) =
       req.user?.uid
     );
 
+    fireAndForgetAudit(logSetupTemplateApplied(buildAuditContext(req), {
+      companyId: result.targetCompanyId,
+      targetId: result.targetCompanyId,
+      actionType: "company_cloned",
+      summary: `Cloned company configuration from ${result.sourceCompanyId} to ${result.targetCompanyId}`,
+      metadata: { sourceCompanyId: result.sourceCompanyId, targetCompanyId: result.targetCompanyId, applied: result.applied },
+    }));
     return res.json({
       success: true,
       sourceCompanyId: result.sourceCompanyId,
@@ -1338,6 +1391,14 @@ router.post("/companies/:companyId/subscription", async (req, res) => {
 
     const updatedCompany = await Company.findByIdAndUpdate(company._id, { $set: companyUpdates }, { new: true }).lean();
     const populatedSubscription = await Subscription.findById(subscription._id).populate("planId").lean();
+    fireAndForgetAudit(logSubscriptionAssigned(buildAuditContext(req), {
+      companyId: company._id,
+      targetId: subscription._id,
+      summary: `Assigned ${plan.name} subscription to company ${company.name}`,
+      beforeSnapshot: { subscriptionId: company.subscriptionId || null, lifecycleStatus: company.lifecycleStatus },
+      afterSnapshot: { subscriptionId: subscription._id, lifecycleStatus: updatedCompany.lifecycleStatus, status: subscription.status },
+      metadata: { planCode: plan.code, billingCycle: subscription.billingCycle },
+    }));
     return res.status(201).json({ success: true, company: updatedCompany, subscription: populatedSubscription });
   } catch (error) {
     return res.status(400).json({ success: false, message: error.message || "Failed to assign subscription" });
@@ -1378,8 +1439,17 @@ async function updateCompanyAndSubscriptionLifecycle(companyId, lifecycleStatus,
 // 51. POST /platform-admin/companies/:companyId/activate
 router.post("/companies/:companyId/activate", async (req, res) => {
   try {
+    const before = await Company.findById(req.params.companyId).lean();
     const result = await updateCompanyAndSubscriptionLifecycle(req.params.companyId, "active", "active");
     if (!result) return res.status(404).json({ success: false, message: "Company not found" });
+    fireAndForgetAudit(logCompanyLifecycleChange(buildAuditContext(req), {
+      companyId: result.company._id,
+      targetId: result.company._id,
+      actionType: "company_activated",
+      summary: `Activated company ${result.company.name}`,
+      beforeSnapshot: { lifecycleStatus: before?.lifecycleStatus || null },
+      afterSnapshot: { lifecycleStatus: result.company.lifecycleStatus },
+    }));
     return res.json({ success: true, ...result });
   } catch (error) {
     return res.status(400).json({ success: false, message: error.message || "Failed to activate company" });
@@ -1389,8 +1459,17 @@ router.post("/companies/:companyId/activate", async (req, res) => {
 // 52. POST /platform-admin/companies/:companyId/suspend
 router.post("/companies/:companyId/suspend", async (req, res) => {
   try {
+    const before = await Company.findById(req.params.companyId).lean();
     const result = await updateCompanyAndSubscriptionLifecycle(req.params.companyId, "suspended", "suspended");
     if (!result) return res.status(404).json({ success: false, message: "Company not found" });
+    fireAndForgetAudit(logCompanyLifecycleChange(buildAuditContext(req), {
+      companyId: result.company._id,
+      targetId: result.company._id,
+      actionType: "company_suspended",
+      summary: `Suspended company ${result.company.name}`,
+      beforeSnapshot: { lifecycleStatus: before?.lifecycleStatus || null },
+      afterSnapshot: { lifecycleStatus: result.company.lifecycleStatus },
+    }));
     return res.json({ success: true, ...result });
   } catch (error) {
     return res.status(400).json({ success: false, message: error.message || "Failed to suspend company" });
@@ -1400,8 +1479,17 @@ router.post("/companies/:companyId/suspend", async (req, res) => {
 // 53. POST /platform-admin/companies/:companyId/mark-expired
 router.post("/companies/:companyId/mark-expired", async (req, res) => {
   try {
+    const before = await Company.findById(req.params.companyId).lean();
     const result = await updateCompanyAndSubscriptionLifecycle(req.params.companyId, "expired", "expired");
     if (!result) return res.status(404).json({ success: false, message: "Company not found" });
+    fireAndForgetAudit(logCompanyLifecycleChange(buildAuditContext(req), {
+      companyId: result.company._id,
+      targetId: result.company._id,
+      actionType: "company_expired",
+      summary: `Marked company ${result.company.name} as expired`,
+      beforeSnapshot: { lifecycleStatus: before?.lifecycleStatus || null },
+      afterSnapshot: { lifecycleStatus: result.company.lifecycleStatus },
+    }));
     return res.json({ success: true, ...result });
   } catch (error) {
     return res.status(400).json({ success: false, message: error.message || "Failed to mark company expired" });
@@ -1429,6 +1517,15 @@ router.post("/companies/:companyId/reactivate", async (req, res) => {
     ).lean();
 
     const updatedSubscription = await Subscription.findById(subscription._id).populate("planId").lean();
+    fireAndForgetAudit(logCompanyLifecycleChange(buildAuditContext(req), {
+      companyId: updatedCompany._id,
+      targetId: updatedCompany._id,
+      actionType: "company_activated",
+      summary: `Reactivated company ${updatedCompany.name}`,
+      beforeSnapshot: { lifecycleStatus: company.lifecycleStatus },
+      afterSnapshot: { lifecycleStatus: updatedCompany.lifecycleStatus },
+      metadata: { previousSubscriptionStatus: subscription.status, newSubscriptionStatus: updatedSubscription.status },
+    }));
     return res.json({ success: true, company: updatedCompany, subscription: updatedSubscription });
   } catch (error) {
     return res.status(400).json({ success: false, message: error.message || "Failed to reactivate company" });
@@ -1527,5 +1624,84 @@ router.get("/analytics/onboarding-status", async (_req, res) => {
     return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load onboarding analytics" });
   }
 });
+
+
+// 62. GET /platform-admin/audit-logs
+router.get("/audit-logs", async (req, res) => {
+  try {
+    const query = {};
+    if (req.query.companyId) query.companyId = req.query.companyId;
+    if (req.query.actionType) query.actionType = String(req.query.actionType).trim();
+    if (req.query.actorUserId) query.actorUserId = req.query.actorUserId;
+    if (req.query.targetType) query.targetType = String(req.query.targetType).trim();
+
+    if (req.query.dateFrom || req.query.dateTo) {
+      query.createdAt = {};
+      if (req.query.dateFrom) query.createdAt.$gte = new Date(req.query.dateFrom);
+      if (req.query.dateTo) query.createdAt.$lte = new Date(req.query.dateTo);
+    }
+
+    if (req.query.search) {
+      const regex = { $regex: String(req.query.search).trim(), $options: "i" };
+      query.$or = [{ summary: regex }, { actorName: regex }, { "metadata.companyName": regex }];
+    }
+
+    const page = Math.max(Number(req.query.page || 1), 1);
+    const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);
+    const skip = (page - 1) * limit;
+
+    const [total, logs] = await Promise.all([
+      PlatformAuditLog.countDocuments(query),
+      PlatformAuditLog.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    ]);
+
+    return res.json({ success: true, total, page, limit, logs });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message || "Failed to load audit logs" });
+  }
+});
+
+// 63. GET /platform-admin/audit-logs/:logId
+router.get("/audit-logs/:logId", async (req, res) => {
+  try {
+    const log = await PlatformAuditLog.findById(req.params.logId).lean();
+    if (!log) return res.status(404).json({ success: false, message: "Audit log not found" });
+    return res.json({ success: true, log });
+  } catch (_error) {
+    return res.status(400).json({ success: false, message: "Invalid audit log id" });
+  }
+});
+
+// 64. GET /platform-admin/companies/:companyId/audit-logs
+router.get("/companies/:companyId/audit-logs", async (req, res) => {
+  try {
+    const page = Math.max(Number(req.query.page || 1), 1);
+    const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 200);
+    const skip = (page - 1) * limit;
+    const query = { companyId: req.params.companyId };
+    if (req.query.actionType) query.actionType = String(req.query.actionType).trim();
+
+    const [total, logs] = await Promise.all([
+      PlatformAuditLog.countDocuments(query),
+      PlatformAuditLog.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    ]);
+
+    return res.json({ success: true, total, page, limit, logs });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message || "Failed to load company audit logs" });
+  }
+});
+
+// 65. GET /platform-admin/activity-feed
+router.get("/activity-feed", async (req, res) => {
+  try {
+    const limit = Math.min(Math.max(Number(req.query.limit || 30), 1), 100);
+    const activity = await PlatformAuditLog.find({}).sort({ createdAt: -1 }).limit(limit).lean();
+    return res.json({ success: true, activity });
+  } catch (_error) {
+    return res.status(500).json({ success: false, message: "Failed to load activity feed" });
+  }
+});
+
 
 module.exports = router;
