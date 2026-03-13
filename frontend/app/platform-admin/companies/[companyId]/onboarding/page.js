@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { apiFetch } from "../../../../lib/api";
-
+import OnboardingLayout from "../../../components/OnboardingLayout";
+import OnboardingStepper from "../../../components/OnboardingStepper";
 import CompanyCreateStep from "../../../components/onboarding/CompanyCreateStep";
 import CompanySettingsStep from "../../../components/onboarding/CompanySettingsStep";
 import HierarchySelectionStep from "../../../components/onboarding/HierarchySelectionStep";
