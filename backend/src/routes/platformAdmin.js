@@ -12,6 +12,7 @@ const CompanyDashboardConfig = require("../models/CompanyDashboardConfig");
 const CompanyRoleModuleConfig = require("../models/CompanyRoleModuleConfig");
 const CompanyRoleModulePermission = require("../models/CompanyRoleModulePermission");
 const CompanyDocumentTemplate = require("../models/CompanyDocumentTemplate");
+const CompanySetupTemplate = require("../models/CompanySetupTemplate");
 const {
   createCompanyDocumentTemplate,
   listCompanyDocumentTemplates,
@@ -40,6 +41,11 @@ const {
   getRoleModulePermissions,
 } = require("../services/companyRoleModulePermissionService");
 const { getRuntimeDashboardDefinition } = require("../services/runtimeDashboardService");
+const {
+  createSetupTemplateFromCompany,
+  applySetupTemplateToCompany,
+  cloneCompanyConfiguration,
+} = require("../services/companySetupTemplateService");
 
 const router = express.Router();
 
@@ -1086,6 +1092,94 @@ router.get("/companies/:companyId/onboarding-summary", async (req, res) => {
     });
   } catch (error) {
     return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load onboarding summary" });
+  }
+});
+
+
+// 40. POST /platform-admin/companies/:companyId/save-as-template
+router.post("/companies/:companyId/save-as-template", async (req, res) => {
+  try {
+    const template = await createSetupTemplateFromCompany(req.params.companyId, req.body || {}, req.user?.uid);
+    return res.status(201).json({
+      success: true,
+      template: {
+        _id: template._id,
+        name: template.name,
+        code: template.code,
+        description: template.description,
+        category: template.category,
+        sourceCompanyId: template.sourceCompanyId,
+        isActive: template.isActive,
+      },
+    });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to save company setup as template" });
+  }
+});
+
+// 41. GET /platform-admin/setup-templates
+router.get("/setup-templates", async (_req, res) => {
+  try {
+    const templates = await CompanySetupTemplate.find({}).sort({ createdAt: -1 }).lean();
+    return res.json({ success: true, templates });
+  } catch (_error) {
+    return res.status(500).json({ success: false, message: "Failed to load setup templates" });
+  }
+});
+
+// 42. GET /platform-admin/setup-templates/:templateId
+router.get("/setup-templates/:templateId", async (req, res) => {
+  try {
+    const template = await CompanySetupTemplate.findById(req.params.templateId).lean();
+    if (!template) return res.status(404).json({ success: false, message: "Setup template not found" });
+    return res.json({ success: true, template });
+  } catch (_error) {
+    return res.status(400).json({ success: false, message: "Invalid template id" });
+  }
+});
+
+// 43. POST /platform-admin/companies/:companyId/apply-setup-template
+router.post("/companies/:companyId/apply-setup-template", async (req, res) => {
+  try {
+    const result = await applySetupTemplateToCompany(
+      req.params.companyId,
+      req.body?.templateId,
+      {
+        overwriteExisting: req.body?.overwriteExisting,
+        cloneBranding: req.body?.cloneBranding,
+        cloneDocuments: req.body?.cloneDocuments,
+      },
+      req.user?.uid
+    );
+
+    return res.json({ success: true, company: result.company, applied: result.applied });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to apply setup template" });
+  }
+});
+
+// 44. POST /platform-admin/companies/:targetCompanyId/clone-from-company
+router.post("/companies/:targetCompanyId/clone-from-company", async (req, res) => {
+  try {
+    const result = await cloneCompanyConfiguration(
+      req.body?.sourceCompanyId,
+      req.params.targetCompanyId,
+      {
+        overwriteExisting: req.body?.overwriteExisting,
+        cloneBranding: req.body?.cloneBranding !== false,
+        cloneDocuments: req.body?.cloneDocuments !== false,
+      },
+      req.user?.uid
+    );
+
+    return res.json({
+      success: true,
+      sourceCompanyId: result.sourceCompanyId,
+      targetCompanyId: result.targetCompanyId,
+      applied: result.applied,
+    });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to clone company configuration" });
   }
 });
 
