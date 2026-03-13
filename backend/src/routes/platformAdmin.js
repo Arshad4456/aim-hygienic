@@ -16,6 +16,7 @@ const CompanySetupTemplate = require("../models/CompanySetupTemplate");
 const Plan = require("../models/Plan");
 const Subscription = require("../models/Subscription");
 const PlatformAuditLog = require("../models/PlatformAuditLog");
+const CompanyConfigSnapshot = require("../models/CompanyConfigSnapshot");
 const {
   createCompanyDocumentTemplate,
   listCompanyDocumentTemplates,
@@ -63,6 +64,12 @@ const {
   getOnboardingStatusSummary,
   getCompanySnapshotHistory,
 } = require("../services/platformAnalyticsService");
+const {
+  createCompanyConfigSnapshot,
+  listCompanyConfigSnapshots,
+  getCompanyConfigSnapshot,
+  restoreCompanyConfigSnapshot,
+} = require("../services/companyConfigSnapshotService");
 const {
   createAuditLog,
   logCompanyCreated,
@@ -1067,8 +1074,28 @@ router.put("/companies/:companyId/onboarding/step", async (req, res) => {
 
     await Company.findByIdAndUpdate(company._id, { $set: { onboardingStatus: "in_progress" } });
 
+    const snapshot = await createCompanyConfigSnapshot(
+      company._id,
+      {
+        versionLabel: "Onboarding Complete",
+        snapshotType: "onboarding_complete",
+        summary: "Automatic snapshot created after onboarding completion",
+      },
+      req.user?.uid
+    );
+
+    fireAndForgetAudit(createAuditLog({
+      ...buildAuditContext(req),
+      companyId: company._id,
+      actionType: "config_snapshot_created",
+      targetType: "company_config_snapshot",
+      targetId: snapshot._id,
+      summary: `Created configuration snapshot v${snapshot.versionNumber} for company ${company.name}`,
+      metadata: { versionNumber: snapshot.versionNumber, versionLabel: snapshot.versionLabel, snapshotType: snapshot.snapshotType },
+    }));
+
     const doc = state.toObject();
-    return res.json({ success: true, onboardingState: doc, summary: summarizeOnboardingState(doc) });
+    return res.json({ success: true, onboardingState: doc, summary: summarizeOnboardingState(doc), snapshot: { _id: snapshot._id, versionNumber: snapshot.versionNumber } });
   } catch (error) {
     return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to update onboarding step" });
   }
@@ -1196,6 +1223,26 @@ router.get("/setup-templates/:templateId", async (req, res) => {
 // 43. POST /platform-admin/companies/:companyId/apply-setup-template
 router.post("/companies/:companyId/apply-setup-template", async (req, res) => {
   try {
+    const beforeApplySnapshot = await createCompanyConfigSnapshot(
+      req.params.companyId,
+      {
+        versionLabel: "Before Setup Template Apply",
+        snapshotType: "before_template_apply",
+        summary: "Automatic safety snapshot before applying setup template",
+      },
+      req.user?.uid
+    );
+
+    fireAndForgetAudit(createAuditLog({
+      ...buildAuditContext(req),
+      companyId: req.params.companyId,
+      actionType: "config_snapshot_created",
+      targetType: "company_config_snapshot",
+      targetId: beforeApplySnapshot._id,
+      summary: `Created configuration snapshot v${beforeApplySnapshot.versionNumber} for company ${req.params.companyId}`,
+      metadata: { versionNumber: beforeApplySnapshot.versionNumber, versionLabel: beforeApplySnapshot.versionLabel, snapshotType: beforeApplySnapshot.snapshotType },
+    }));
+
     const result = await applySetupTemplateToCompany(
       req.params.companyId,
       req.body?.templateId,
@@ -1214,7 +1261,7 @@ router.post("/companies/:companyId/apply-setup-template", async (req, res) => {
       summary: `Applied setup template to company ${result.company?.name || req.params.companyId}` ,
       metadata: { applied: result.applied },
     }));
-    return res.json({ success: true, company: result.company, applied: result.applied });
+    return res.json({ success: true, company: result.company, applied: result.applied, safetySnapshot: { _id: beforeApplySnapshot._id, versionNumber: beforeApplySnapshot.versionNumber } });
   } catch (error) {
     return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to apply setup template" });
   }
@@ -1223,6 +1270,26 @@ router.post("/companies/:companyId/apply-setup-template", async (req, res) => {
 // 44. POST /platform-admin/companies/:targetCompanyId/clone-from-company
 router.post("/companies/:targetCompanyId/clone-from-company", async (req, res) => {
   try {
+    const beforeCloneSnapshot = await createCompanyConfigSnapshot(
+      req.params.targetCompanyId,
+      {
+        versionLabel: "Before Company Clone",
+        snapshotType: "before_clone",
+        summary: "Automatic safety snapshot before cloning company configuration",
+      },
+      req.user?.uid
+    );
+
+    fireAndForgetAudit(createAuditLog({
+      ...buildAuditContext(req),
+      companyId: req.params.targetCompanyId,
+      actionType: "config_snapshot_created",
+      targetType: "company_config_snapshot",
+      targetId: beforeCloneSnapshot._id,
+      summary: `Created configuration snapshot v${beforeCloneSnapshot.versionNumber} for company ${req.params.targetCompanyId}`,
+      metadata: { versionNumber: beforeCloneSnapshot.versionNumber, versionLabel: beforeCloneSnapshot.versionLabel, snapshotType: beforeCloneSnapshot.snapshotType },
+    }));
+
     const result = await cloneCompanyConfiguration(
       req.body?.sourceCompanyId,
       req.params.targetCompanyId,
@@ -1246,6 +1313,7 @@ router.post("/companies/:targetCompanyId/clone-from-company", async (req, res) =
       sourceCompanyId: result.sourceCompanyId,
       targetCompanyId: result.targetCompanyId,
       applied: result.applied,
+      safetySnapshot: { _id: beforeCloneSnapshot._id, versionNumber: beforeCloneSnapshot.versionNumber },
     });
   } catch (error) {
     return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to clone company configuration" });
@@ -1700,6 +1768,87 @@ router.get("/activity-feed", async (req, res) => {
     return res.json({ success: true, activity });
   } catch (_error) {
     return res.status(500).json({ success: false, message: "Failed to load activity feed" });
+  }
+});
+
+
+
+// 66. POST /platform-admin/companies/:companyId/config-snapshots
+router.post("/companies/:companyId/config-snapshots", async (req, res) => {
+  try {
+    const snapshot = await createCompanyConfigSnapshot(req.params.companyId, req.body || {}, req.user?.uid);
+    const company = await Company.findById(req.params.companyId).lean();
+
+    fireAndForgetAudit(createAuditLog({
+      ...buildAuditContext(req),
+      companyId: req.params.companyId,
+      actionType: "config_snapshot_created",
+      targetType: "company_config_snapshot",
+      targetId: snapshot._id,
+      summary: `Created configuration snapshot v${snapshot.versionNumber} for company ${company?.name || req.params.companyId}`,
+      metadata: {
+        versionNumber: snapshot.versionNumber,
+        versionLabel: snapshot.versionLabel,
+        snapshotType: snapshot.snapshotType,
+      },
+    }));
+
+    return res.status(201).json({ success: true, snapshot });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to create configuration snapshot" });
+  }
+});
+
+// 67. GET /platform-admin/companies/:companyId/config-snapshots
+router.get("/companies/:companyId/config-snapshots", async (req, res) => {
+  try {
+    const snapshots = await listCompanyConfigSnapshots(req.params.companyId);
+    return res.json({ success: true, snapshots });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load configuration snapshots" });
+  }
+});
+
+// 68. GET /platform-admin/companies/:companyId/config-snapshots/:snapshotId
+router.get("/companies/:companyId/config-snapshots/:snapshotId", async (req, res) => {
+  try {
+    const snapshot = await getCompanyConfigSnapshot(req.params.companyId, req.params.snapshotId);
+    return res.json({ success: true, snapshot });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load configuration snapshot" });
+  }
+});
+
+// 69. POST /platform-admin/companies/:companyId/config-snapshots/:snapshotId/restore
+router.post("/companies/:companyId/config-snapshots/:snapshotId/restore", async (req, res) => {
+  try {
+    const result = await restoreCompanyConfigSnapshot(
+      req.params.companyId,
+      req.params.snapshotId,
+      { restoreSubscription: req.body?.restoreSubscription === true },
+      req.user?.uid
+    );
+
+    fireAndForgetAudit(createAuditLog({
+      ...buildAuditContext(req),
+      companyId: req.params.companyId,
+      actionType: "config_snapshot_restored",
+      targetType: "company_config_snapshot",
+      targetId: req.params.snapshotId,
+      summary: `Restored configuration snapshot v${result.restoredFrom.versionNumber} for company ${result.company.name}`,
+      metadata: {
+        versionNumber: result.restoredFrom.versionNumber,
+        versionLabel: result.restoredFrom.versionLabel,
+        safetySnapshotVersion: result.safetySnapshot.versionNumber,
+        restoreSubscription: req.body?.restoreSubscription === true,
+      },
+      beforeSnapshot: { lifecycleStatus: null },
+      afterSnapshot: { restored: result.restored },
+    }));
+
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to restore configuration snapshot" });
   }
 });
 

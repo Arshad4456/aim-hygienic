@@ -26,7 +26,7 @@ async function requireSuperAdmin(req, res, next) {
         return res.status(403).json({ ok: false, message: "Forbidden" });
       }
 
-      req.user.role === "Super Admin";
+      req.user.isSuperAdmin = true;
       return next();
     } catch (_error) {
       return res.status(500).json({ ok: false, message: "Authorization check failed" });
