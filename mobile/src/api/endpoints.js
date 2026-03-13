@@ -8,6 +8,9 @@ export const endpoints = {
   },
   runtime: {
     dashboard: '/runtime/dashboard',
+    documentTemplatesDefault: '/runtime/document-templates/default',
+    invoiceDocument: (id) => `/runtime/documents/invoice/${id}`,
+    receiptDocument: (id) => `/runtime/documents/receipt/${id}`,
   },
   uploads: {
     presign: '/uploads/presign',

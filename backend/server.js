@@ -34,6 +34,7 @@ const receiptsRoutes = require("./src/routes/receipts");
 const vehicleManagementRoutes = require("./src/routes/vehicleManagement");
 const platformAdminRoutes = require("./src/routes/platformAdmin");
 const runtimeDashboardRoutes = require("./src/routes/runtimeDashboard");
+const runtimeDocumentsRoutes = require("./src/routes/runtimeDocuments");
 
 const app = express();
 
@@ -84,6 +85,7 @@ app.use("/api/receipts", receiptsRoutes);
 app.use("/api/vehicle-management", vehicleManagementRoutes);
 app.use("/api/platform-admin", platformAdminRoutes);
 app.use("/api/runtime", runtimeDashboardRoutes);
+app.use("/api/runtime", runtimeDocumentsRoutes);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true, service: "aim-api", time: new Date().toISOString() });

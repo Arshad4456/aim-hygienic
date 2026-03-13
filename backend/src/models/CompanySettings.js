@@ -16,6 +16,8 @@ const CompanySettingsSchema = new mongoose.Schema(
     invoiceFooter: { type: String, trim: true, default: "" },
     receiptHeader: { type: String, trim: true, default: "" },
     receiptFooter: { type: String, trim: true, default: "" },
+    defaultInvoiceTemplateCode: { type: String, trim: true, default: "" },
+    defaultReceiptTemplateCode: { type: String, trim: true, default: "" },
     modules: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
   { timestamps: true }
