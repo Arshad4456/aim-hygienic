@@ -3,6 +3,7 @@ import { Alert, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInp
 import apiClient from '../../../../api/client';
 import Card from '../../../../ui/Card';
 import Loader from '../../../../ui/Loader';
+import DocumentPreviewScreen from '../../../../features/documents/DocumentPreviewScreen';
 
 const statusColors = {
   pending: { bg: '#fef3c7', tx: '#92400e' },
@@ -18,6 +19,7 @@ export default function ReceiptsScreen() {
   const [rejecting, setRejecting] = useState(null);
   const [reason, setReason] = useState('');
   const [receiptView, setReceiptView] = useState(null);
+  const [previewId, setPreviewId] = useState('');
 
   const load = async () => {
     setLoading(true); setError('');
@@ -140,6 +142,8 @@ export default function ReceiptsScreen() {
           </View>
         </View></View>
       </Modal>
+
+      <DocumentPreviewScreen visible={Boolean(previewId)} onClose={() => setPreviewId('')} documentType="receipt" documentId={previewId} />
 
       <Modal visible={Boolean(rejecting)} transparent animationType="fade" onRequestClose={() => setRejecting(null)}>
         <View style={styles.overlay}><View style={styles.modal}>

@@ -103,7 +103,7 @@ function InvoiceTable({ title, rows, loading }) {
                 <td className="px-3 py-2 border-b">PKR {Number(o.totalAmount || 0).toLocaleString()}</td>
                 <td className="px-3 py-2 border-b">{o.updatedAt ? new Date(o.updatedAt).toLocaleDateString() : "-"}</td>
                 <td className="px-3 py-2 border-b"><span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700">Delivered</span></td>
-                <td className="px-3 py-2 border-b"><button type="button" onClick={() => printOrderInvoice(o)} className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100">Invoice</button></td>
+                <td className="px-3 py-2 border-b"><button type="button" onClick={() => openRuntimeInvoicePreview(o)} className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100">Invoice</button></td>
               </tr>
             ))
           )}
@@ -113,70 +113,18 @@ function InvoiceTable({ title, rows, loading }) {
   );
 }
 
-function printOrderInvoice(order) {
-  const popup = window.open("", "_blank", "width=950,height=700");
-  if (!popup) {
-    alert("Please allow popups to print invoice.");
-    return;
-  }
-
-  const itemRows = (order.items || [])
-    .map((item, idx) => {
-      const qty = Number(item.totalPacks || item.quantity || 0);
-      const rate = Number(item.onePackPrice || item.unitPrice || 0);
-      const gross = qty * rate;
-      return `<tr><td>${idx + 1}</td><td>${escapeHtml(item.productName || "-")}</td><td>${qty}</td><td>${rate.toFixed(2)}</td><td>${gross.toFixed(2)}</td></tr>`;
-    })
-    .join("");
-
-  const html = `
-    <html><body style="font-family:Arial,sans-serif;padding:16px;color:#111;">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <div style="width:54px;height:54px;border-radius:10px;background:linear-gradient(135deg,#065f46,#10b981);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;">AH</div>
-          <div>
-            <div style="font-weight:700;font-size:18px;">AIM Hygienic (Pvt) Limited</div>
-            <div style="font-size:11px;color:#555;">Sales Invoice</div>
-          </div>
-        </div>
-        <div style="font-size:12px;text-align:right;">
-          <div><b>Invoice #:</b> ${escapeHtml(order.orderNo || order.invoiceNo || order._id || "-")}</div>
-          <div><b>Date:</b> ${order.updatedAt ? new Date(order.updatedAt).toLocaleDateString() : "-"}</div>
-        </div>
-      </div>
-
-      <div style="margin-top:10px;font-size:12px;"><b>Invoice From:</b> ${escapeHtml(order.toWarehouseName || order.fromEntityName || "AIM Hygienic")}</div>
-      <div style="font-size:12px;"><b>Bill To:</b> ${escapeHtml(order.distributorName || order.customerName || order.distributorId || "-")}</div>
-      <div style="font-size:12px;"><b>Territory:</b> ${escapeHtml(order.territoryName || order.areaName || "-")}</div>
-
-      <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin-top:12px;font-size:12px;">
-        <thead><tr><th>#</th><th>Product</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
-        <tbody>${itemRows || '<tr><td colspan="5">No item details available</td></tr>'}</tbody>
-      </table>
-
-      <div style="margin-top:12px;display:flex;justify-content:flex-end;font-size:12px;">
-        <div style="min-width:260px;">
-          <div style="display:flex;justify-content:space-between;"><span>Total Amount:</span><strong>${Number(order.totalAmount || 0).toFixed(2)}</strong></div>
-        </div>
-      </div>
-
-      <div style="margin-top:16px;text-align:center;font-size:12px;">Thank you for business with AIM Hygienic (Pvt) Limited.</div>
-    </body></html>`;
-
-  popup.document.write(html);
-  popup.document.close();
-  popup.print();
+function openRuntimeInvoicePreview(order) {
+  const id = order?._id;
+  if (!id) return;
+  window.open(`/runtime-documents/invoice/${id}`, "_blank", "width=1100,height=820");
 }
 
-function escapeHtml(value) {
-  return String(value || "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
 
 function StatCard({ label, value }) {
-  return <div className="rounded-xl border p-3"><div className="text-xs text-zinc-500">{label}</div><div className="mt-1 text-lg font-semibold text-zinc-900">{value}</div></div>;
+  return (
+    <div className="rounded-xl border p-3">
+      <div className="text-xs text-zinc-500">{label}</div>
+      <div className="mt-1 text-lg font-semibold">{value}</div>
+    </div>
+  );
 }
