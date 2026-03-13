@@ -27,6 +27,8 @@ const CompanySchema = new mongoose.Schema(
     activeRoleCodes: { type: [String], default: [] },
     hasRoleConfiguration: { type: Boolean, default: false },
     hasDashboardConfiguration: { type: Boolean, default: false },
+    onboardingStatus: { type: String, enum: ["not_started", "in_progress", "completed"], default: "not_started" },
+    setupCompletedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

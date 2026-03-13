@@ -6,6 +6,12 @@ const RoleTemplate = require("../models/RoleTemplate");
 const ModuleTemplate = require("../models/ModuleTemplate");
 const CompanyRoleConfig = require("../models/CompanyRoleConfig");
 const DocumentTemplatePreset = require("../models/DocumentTemplatePreset");
+const CompanyOnboardingState = require("../models/CompanyOnboardingState");
+const CompanyHierarchyConfig = require("../models/CompanyHierarchyConfig");
+const CompanyDashboardConfig = require("../models/CompanyDashboardConfig");
+const CompanyRoleModuleConfig = require("../models/CompanyRoleModuleConfig");
+const CompanyRoleModulePermission = require("../models/CompanyRoleModulePermission");
+const CompanyDocumentTemplate = require("../models/CompanyDocumentTemplate");
 const {
   createCompanyDocumentTemplate,
   listCompanyDocumentTemplates,
@@ -38,6 +44,62 @@ const { getRuntimeDashboardDefinition } = require("../services/runtimeDashboardS
 const router = express.Router();
 
 router.use(requireSuperAdmin);
+
+
+
+const ONBOARDING_STEP_KEYS = [
+  "companyCreated",
+  "settingsConfigured",
+  "hierarchyAssigned",
+  "rolesAssigned",
+  "dashboardsGenerated",
+  "modulesAssigned",
+  "permissionsConfigured",
+  "documentTemplatesConfigured",
+  "setupCompleted",
+];
+
+const REQUIRED_COMPLETION_KEYS = ONBOARDING_STEP_KEYS.filter((key) => key !== "setupCompleted");
+
+function summarizeOnboardingState(state) {
+  const steps = state?.steps || {};
+  const completedCount = REQUIRED_COMPLETION_KEYS.filter((key) => steps[key]).length;
+  const pending = REQUIRED_COMPLETION_KEYS.filter((key) => !steps[key]);
+
+  return {
+    totalRequired: REQUIRED_COMPLETION_KEYS.length,
+    completedCount,
+    pendingCount: pending.length,
+    pendingSteps: pending,
+    isComplete: Boolean(steps.setupCompleted),
+  };
+}
+
+function isObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function getMaxAllowedStepFromState(state) {
+  const steps = state?.steps || {};
+  if (!steps.settingsConfigured) return 2;
+  if (!steps.hierarchyAssigned) return 3;
+  if (!steps.rolesAssigned) return 4;
+  if (!steps.dashboardsGenerated) return 5;
+  if (!steps.modulesAssigned) return 6;
+  if (!steps.permissionsConfigured) return 7;
+  if (!steps.documentTemplatesConfigured) return 8;
+  return 9;
+}
+
+async function ensureCompanyOrThrow(companyId) {
+  const company = await Company.findById(companyId).lean();
+  if (!company) {
+    const error = new Error("Company not found");
+    error.status = 404;
+    throw error;
+  }
+  return company;
+}
 
 function slugify(value) {
   return String(value || "")
@@ -141,6 +203,64 @@ router.put("/companies/:id", async (req, res) => {
       return res.status(409).json({ ok: false, message: "Company slug already exists" });
     }
     return res.status(500).json({ ok: false, message: "Failed to update company" });
+  }
+});
+
+
+// 4.1 GET /platform-admin/companies/:id/settings
+router.get("/companies/:id/settings", async (req, res) => {
+  try {
+    const company = await Company.findById(req.params.id).lean();
+    if (!company) return res.status(404).json({ ok: false, message: "Company not found" });
+
+    const settings = await CompanySettings.findOne({ companyId: req.params.id }).lean();
+    if (!settings) return res.status(404).json({ ok: false, message: "Company settings not found" });
+
+    return res.json({ ok: true, settings });
+  } catch (_error) {
+    return res.status(400).json({ ok: false, message: "Invalid company id" });
+  }
+});
+
+// 4.2 PUT /platform-admin/companies/:id/settings
+router.put("/companies/:id/settings", async (req, res) => {
+  try {
+    const company = await Company.findById(req.params.id).lean();
+    if (!company) return res.status(404).json({ ok: false, message: "Company not found" });
+
+    const body = req.body || {};
+    const updates = {
+      appName: body.appName !== undefined ? String(body.appName || "").trim() : undefined,
+      logoUrl: body.logoUrl !== undefined ? String(body.logoUrl || "").trim() : undefined,
+      primaryColor: body.primaryColor !== undefined ? String(body.primaryColor || "").trim() : undefined,
+      invoiceHeader: body.invoiceHeader !== undefined ? String(body.invoiceHeader || "").trim() : undefined,
+      invoiceFooter: body.invoiceFooter !== undefined ? String(body.invoiceFooter || "").trim() : undefined,
+      receiptHeader: body.receiptHeader !== undefined ? String(body.receiptHeader || "").trim() : undefined,
+      receiptFooter: body.receiptFooter !== undefined ? String(body.receiptFooter || "").trim() : undefined,
+      modules: body.modules !== undefined ? (isObject(body.modules) ? body.modules : {}) : undefined,
+    };
+
+    Object.keys(updates).forEach((key) => {
+      if (updates[key] === undefined) delete updates[key];
+    });
+
+    const settings = await CompanySettings.findOneAndUpdate(
+      { companyId: req.params.id },
+      { $set: updates },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+
+    await Company.findByIdAndUpdate(req.params.id, {
+      $set: {
+        logoUrl: settings.logoUrl,
+        primaryColor: settings.primaryColor,
+        onboardingStatus: "in_progress",
+      },
+    });
+
+    return res.json({ ok: true, settings });
+  } catch (_error) {
+    return res.status(500).json({ ok: false, message: "Failed to update company settings" });
   }
 });
 
@@ -815,6 +935,157 @@ router.put("/document-template-presets/:presetId", async (req, res) => {
       return res.status(409).json({ success: false, message: "templateCode already exists" });
     }
     return res.status(500).json({ success: false, message: "Failed to update document template preset" });
+  }
+});
+
+
+// 35. POST /platform-admin/companies/:companyId/onboarding/start
+router.post("/companies/:companyId/onboarding/start", async (req, res) => {
+  try {
+    const company = await ensureCompanyOrThrow(req.params.companyId);
+
+    const onboardingState = await CompanyOnboardingState.findOneAndUpdate(
+      { companyId: company._id },
+      {
+        $setOnInsert: {
+          companyId: company._id,
+          startedBy: req.user?.uid,
+        },
+        $set: {
+          currentStep: 1,
+          "steps.companyCreated": true,
+        },
+      },
+      {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true,
+      }
+    ).lean();
+
+    await Company.findByIdAndUpdate(company._id, { $set: { onboardingStatus: "in_progress" } });
+
+    return res.json({ success: true, onboardingState, summary: summarizeOnboardingState(onboardingState) });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to initialize onboarding" });
+  }
+});
+
+// 36. GET /platform-admin/companies/:companyId/onboarding
+router.get("/companies/:companyId/onboarding", async (req, res) => {
+  try {
+    const company = await ensureCompanyOrThrow(req.params.companyId);
+
+    const onboardingState = await CompanyOnboardingState.findOne({ companyId: company._id }).lean();
+    if (!onboardingState) {
+      return res.status(404).json({ success: false, message: "Onboarding not started for this company" });
+    }
+
+    return res.json({ success: true, onboardingState, summary: summarizeOnboardingState(onboardingState) });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load onboarding state" });
+  }
+});
+
+// 37. PUT /platform-admin/companies/:companyId/onboarding/step
+router.put("/companies/:companyId/onboarding/step", async (req, res) => {
+  try {
+    const company = await ensureCompanyOrThrow(req.params.companyId);
+
+    const state = await CompanyOnboardingState.findOne({ companyId: company._id });
+    if (!state) return res.status(404).json({ success: false, message: "Onboarding not started for this company" });
+
+    const stepKey = String(req.body?.stepKey || "").trim();
+    const requestedStep = Number(req.body?.currentStep || state.currentStep || 1);
+
+    if (!ONBOARDING_STEP_KEYS.includes(stepKey)) {
+      return res.status(400).json({ success: false, message: "Invalid stepKey" });
+    }
+
+    const maxAllowed = getMaxAllowedStepFromState(state);
+    if (requestedStep > maxAllowed + 1) {
+      return res.status(400).json({ success: false, message: "Cannot skip required previous steps" });
+    }
+
+    state.steps[stepKey] = true;
+    state.currentStep = Math.min(9, Math.max(1, requestedStep));
+
+    await state.save();
+
+    await Company.findByIdAndUpdate(company._id, { $set: { onboardingStatus: "in_progress" } });
+
+    const doc = state.toObject();
+    return res.json({ success: true, onboardingState: doc, summary: summarizeOnboardingState(doc) });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to update onboarding step" });
+  }
+});
+
+// 38. POST /platform-admin/companies/:companyId/onboarding/complete
+router.post("/companies/:companyId/onboarding/complete", async (req, res) => {
+  try {
+    const company = await ensureCompanyOrThrow(req.params.companyId);
+
+    const state = await CompanyOnboardingState.findOne({ companyId: company._id });
+    if (!state) return res.status(404).json({ success: false, message: "Onboarding not started for this company" });
+
+    const missing = REQUIRED_COMPLETION_KEYS.filter((key) => !state.steps?.[key]);
+    if (missing.length) {
+      return res.status(400).json({ success: false, message: `Cannot complete onboarding. Pending steps: ${missing.join(", ")}` });
+    }
+
+    state.steps.setupCompleted = true;
+    state.currentStep = 9;
+    state.completedBy = req.user?.uid || null;
+    state.completedAt = new Date();
+    await state.save();
+
+    await Company.findByIdAndUpdate(company._id, {
+      $set: {
+        onboardingStatus: "completed",
+        setupCompletedAt: new Date(),
+      },
+    });
+
+    const doc = state.toObject();
+    return res.json({ success: true, onboardingState: doc, summary: summarizeOnboardingState(doc) });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to complete onboarding" });
+  }
+});
+
+// 39. GET /platform-admin/companies/:companyId/onboarding-summary
+router.get("/companies/:companyId/onboarding-summary", async (req, res) => {
+  try {
+    const company = await ensureCompanyOrThrow(req.params.companyId);
+
+    const [settings, hierarchy, roles, dashboards, modules, permissions, documents, onboardingState] = await Promise.all([
+      CompanySettings.findOne({ companyId: company._id }).lean(),
+      CompanyHierarchyConfig.findOne({ companyId: company._id, isActive: true }).lean(),
+      CompanyRoleConfig.find({ companyId: company._id, isActive: true }).sort({ roleName: 1 }).lean(),
+      CompanyDashboardConfig.find({ companyId: company._id, isActive: true }).sort({ roleCode: 1 }).lean(),
+      CompanyRoleModuleConfig.find({ companyId: company._id, isActive: true }).sort({ roleCode: 1, sidebarOrder: 1 }).lean(),
+      CompanyRoleModulePermission.find({ companyId: company._id, isActive: true }).sort({ roleCode: 1, moduleCode: 1 }).lean(),
+      CompanyDocumentTemplate.find({ companyId: company._id, isActive: true }).sort({ documentType: 1, isDefault: -1, createdAt: -1 }).lean(),
+      CompanyOnboardingState.findOne({ companyId: company._id }).lean(),
+    ]);
+
+    return res.json({
+      success: true,
+      summary: {
+        company,
+        settings,
+        hierarchy,
+        roles,
+        dashboards,
+        modules,
+        permissions,
+        documents,
+        onboardingState,
+      },
+    });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load onboarding summary" });
   }
 });
 
