@@ -2,44 +2,52 @@
 
 import Link from "next/link";
 
-export default function DynamicDashboardHome({ dashboard }) {
-  const appName = dashboard?.settings?.appName || dashboard?.company?.name || "ERP";
-  const roleName = dashboard?.role?.roleName || "Role";
-  const shared = (dashboard?.shell?.sharedFeatures || []).filter((item) => item?.isEnabled);
-  const modules = dashboard?.modules || [];
+export default function DynamicDashboardShell({ dashboard, children }) {
+  const company = dashboard?.company || {};
+  const settings = dashboard?.settings || {};
+  const role = dashboard?.role || {};
+  const shell = dashboard?.shell || {};
+  const sidebarItems = (shell.sidebarItems || []).filter((item) => item?.isActive !== false);
+  const brandColor = company.primaryColor || "#059669";
+  const subscription = company.subscription || null;
+  const lifecycleStatus = String(company.lifecycleStatus || "").toLowerCase();
 
   return (
-    <div className="space-y-5">
-      <div className="rounded-2xl border bg-white p-4 shadow-sm">
-        <h2 className="text-xl font-semibold">Welcome to {appName}</h2>
-        <p className="text-sm text-zinc-600 mt-1">Role: {roleName}</p>
-      </div>
+    <div className="min-h-screen bg-zinc-50" style={{ "--brand": brandColor }}>
+      <header className="border-b bg-white px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {company.logoUrl ? <img src={company.logoUrl} alt="Company" className="h-10 w-10 rounded-full object-cover" /> : <div className="h-10 w-10 rounded-full bg-emerald-100" />}
+          <div>
+            <div className="font-semibold">{settings.appName || company.name}</div>
+            <div className="text-xs text-zinc-500">{role.roleName}</div>
+          </div>
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        {shared.map((feature) => (
-          <div key={feature.code} className="rounded-xl border bg-white p-3 text-sm font-medium">
-            {feature.title}
-          </div>
-        ))}
-      </div>
+        <div className="flex items-center gap-2 text-sm">
+          {shell.shellConfig?.hasNotifications ? <span className="rounded border px-2 py-1">Notifications</span> : null}
+          {shell.shellConfig?.hasSettingsShortcut ? <span className="rounded border px-2 py-1">Settings</span> : null}
+          {shell.shellConfig?.hasProfileMenu ? <span className="rounded border px-2 py-1">Profile</span> : null}
+          {subscription?.planName ? <span className="rounded border px-2 py-1">Plan: {subscription.planName}</span> : null}
+          {lifecycleStatus === "trial" ? <span className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-amber-700">Trial</span> : null}
+        </div>
+      </header>
 
-      <div>
-        <h3 className="text-lg font-semibold mb-3">Assigned Modules</h3>
-        {modules.length === 0 ? (
-          <div className="rounded-xl border border-dashed bg-white p-4 text-sm text-zinc-600">
-            No modules assigned for this role yet.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {modules.map((mod) => (
-              <Link key={mod.moduleCode} href={`/runtime-dashboard/${mod.moduleCode}`} className="rounded-xl border bg-white p-4 hover:border-emerald-300">
-                <div className="font-semibold text-zinc-900">{mod.moduleName}</div>
-                <div className="text-xs text-zinc-500 mt-1">Type: {mod.moduleType || "default"}</div>
-                <div className="text-xs text-zinc-500 mt-1">Path: {mod.sidebarPath}</div>
-              </Link>
-            ))}
-          </div>
-        )}
+      <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] min-h-[calc(100vh-65px)]">
+        <aside className="border-r bg-white p-3">
+          <div className="text-xs text-zinc-500 mb-3">Modules</div>
+          <nav className="space-y-2">
+            <Link href="/runtime-dashboard" className="block rounded-lg border px-3 py-2 text-sm hover:border-emerald-300">Dashboard Home</Link>
+            {sidebarItems
+              .sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
+              .map((item) => (
+                <Link key={item.code} href={`/runtime-dashboard/${item.code}`} className="block rounded-lg border px-3 py-2 text-sm hover:border-emerald-300">
+                  {item.label}
+                </Link>
+              ))}
+          </nav>
+        </aside>
+
+        <main className="p-4 md:p-6">{children}</main>
       </div>
     </div>
   );

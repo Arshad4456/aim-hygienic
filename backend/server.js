@@ -35,6 +35,8 @@ const vehicleManagementRoutes = require("./src/routes/vehicleManagement");
 const platformAdminRoutes = require("./src/routes/platformAdmin");
 const runtimeDashboardRoutes = require("./src/routes/runtimeDashboard");
 const runtimeDocumentsRoutes = require("./src/routes/runtimeDocuments");
+const { requireAuth } = require("./src/utils/auth");
+const requireActiveCompany = require("./src/middleware/requireActiveCompany");
 
 const app = express();
 
@@ -70,22 +72,22 @@ app.use("/api/vehicles", vehiclesRoutes);
 app.use("/api/products", productsRoutes);
 app.use("/api/inventory", inventoryRoutes);
 app.use("/api/messages", messagesRoutes);
-app.use("/api/expenses", expensesRoutes);
-app.use("/api/accounts", accountsRoutes);
-app.use("/api/reports", reportsRoutes);
+app.use("/api/expenses", requireAuth, requireActiveCompany, expensesRoutes);
+app.use("/api/accounts", requireAuth, requireActiveCompany, accountsRoutes);
+app.use("/api/reports", requireAuth, requireActiveCompany, reportsRoutes);
 app.use("/api/live-tracking", liveTrackingRoutes);
-app.use("/api/dashboard", dashboardRoutes);
-app.use("/api/sales-kpi", salesKpiRoutes);
-app.use("/api/orders", ordersRoutes);
-app.use("/api/returns", returnsRoutes);
-app.use("/api/payments", paymentsRoutes);
+app.use("/api/dashboard", requireAuth, requireActiveCompany, dashboardRoutes);
+app.use("/api/sales-kpi", requireAuth, requireActiveCompany, salesKpiRoutes);
+app.use("/api/orders", requireAuth, requireActiveCompany, ordersRoutes);
+app.use("/api/returns", requireAuth, requireActiveCompany, returnsRoutes);
+app.use("/api/payments", requireAuth, requireActiveCompany, paymentsRoutes);
 app.use("/api/uploads", uploadsRoutes);
-app.use("/api/loans", loansRoutes);
-app.use("/api/receipts", receiptsRoutes);
-app.use("/api/vehicle-management", vehicleManagementRoutes);
+app.use("/api/loans", requireAuth, requireActiveCompany, loansRoutes);
+app.use("/api/receipts", requireAuth, requireActiveCompany, receiptsRoutes);
+app.use("/api/vehicle-management", requireAuth, requireActiveCompany, vehicleManagementRoutes);
 app.use("/api/platform-admin", platformAdminRoutes);
-app.use("/api/runtime", runtimeDashboardRoutes);
-app.use("/api/runtime", runtimeDocumentsRoutes);
+app.use("/api/runtime", requireAuth, requireActiveCompany, runtimeDashboardRoutes);
+app.use("/api/runtime", requireAuth, requireActiveCompany, runtimeDocumentsRoutes);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true, service: "aim-api", time: new Date().toISOString() });

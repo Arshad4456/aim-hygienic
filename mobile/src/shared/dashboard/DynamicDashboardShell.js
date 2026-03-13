@@ -9,6 +9,8 @@ function Header({ dashboard, onOpenDrawer, onBackHome }) {
   const role = dashboard?.role || {};
   const shell = dashboard?.shell || {};
   const appName = settings.appName || company.name || 'ERP';
+  const subscription = company.subscription || null;
+  const isTrial = String(company.lifecycleStatus || "").toLowerCase() === "trial";
 
   return (
     <View style={styles.headerWrap}>
@@ -20,6 +22,8 @@ function Header({ dashboard, onOpenDrawer, onBackHome }) {
       <View style={styles.headerActions}>
         {shell.shellConfig?.hasNotifications ? <Text style={styles.actionChip}>🔔</Text> : null}
         {shell.shellConfig?.hasSettingsShortcut ? <Text style={styles.actionChip}>⚙️</Text> : null}
+        {subscription?.planName ? <Text style={styles.planChip}>{subscription.planName}</Text> : null}
+        {isTrial ? <Text style={styles.trialChip}>TRIAL</Text> : null}
         <Pressable onPress={onBackHome}><Text style={styles.actionChip}>🏠</Text></Pressable>
       </View>
     </View>
@@ -101,6 +105,8 @@ const styles = StyleSheet.create({
   headerSubtitle: { fontSize: 12, color: '#6b7280', marginTop: 2 },
   headerActions: { flexDirection: 'row', gap: 6, alignItems: 'center' },
   actionChip: { fontSize: 16 },
+  planChip: { fontSize: 10, color: '#1f2937', borderWidth: 1, borderColor: '#d1d5db', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  trialChip: { fontSize: 10, color: '#92400e', backgroundColor: '#fef3c7', borderWidth: 1, borderColor: '#fcd34d', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   body: { flex: 1 },
   drawerOverlay: { flex: 1, flexDirection: 'row' },
   drawerPanel: { width: 270, backgroundColor: '#fff', paddingTop: 28, paddingHorizontal: 12 },

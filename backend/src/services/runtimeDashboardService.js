@@ -7,6 +7,7 @@ const CompanyRoleConfig = require("../models/CompanyRoleConfig");
 const CompanyDashboardConfig = require("../models/CompanyDashboardConfig");
 const CompanyRoleModuleConfig = require("../models/CompanyRoleModuleConfig");
 const CompanyRoleModulePermission = require("../models/CompanyRoleModulePermission");
+const { getCurrentCompanySubscription, syncCompanyLifecycleWithSubscription } = require("./subscriptionLifecycleService");
 
 function normalizeCode(value) {
   return String(value || "").trim().toLowerCase();
@@ -30,6 +31,8 @@ function buildPlatformSuperAdminDashboard(authUser) {
       logoUrl: "",
       primaryColor: "#059669",
       status: "active",
+      lifecycleStatus: "active",
+      subscription: null,
     },
     settings: {
       appName: "AIM Hygienic ERP",
@@ -90,8 +93,34 @@ async function resolveCompany(companyId) {
   return company;
 }
 
+
+
+function getAllowedPlanModuleCodes(subscription) {
+  const includedModules = Array.isArray(subscription?.planId?.includedModules) ? subscription.planId.includedModules : [];
+  return new Set(includedModules.map((item) => normalizeCode(item)).filter(Boolean));
+}
+
+function summarizeSubscription(subscription) {
+  if (!subscription) return null;
+  return {
+    planCode: normalizeCode(subscription?.planId?.code),
+    planName: subscription?.planId?.name || "",
+    billingCycle: subscription.billingCycle,
+    startDate: subscription.startDate,
+    endDate: subscription.endDate,
+    status: subscription.status,
+    paymentStatus: subscription.paymentStatus,
+    includedModules: Array.isArray(subscription?.planId?.includedModules) ? subscription.planId.includedModules : [],
+    includedFeatures: Array.isArray(subscription?.planId?.includedFeatures) ? subscription.planId.includedFeatures : [],
+  };
+}
+
 async function getRuntimeDashboardDefinition(companyId, roleCode) {
   const company = await resolveCompany(companyId);
+  const lifecycle = await syncCompanyLifecycleWithSubscription(company._id);
+  const subscription = await getCurrentCompanySubscription(company._id);
+  const allowedPlanModuleCodes = getAllowedPlanModuleCodes(subscription);
+
   const normalizedRoleCode = normalizeCode(roleCode);
   if (!normalizedRoleCode) {
     const error = new Error("roleCode is required");
@@ -132,7 +161,7 @@ async function getRuntimeDashboardDefinition(companyId, roleCode) {
     throw error;
   }
 
-  const assignedModules = await CompanyRoleModuleConfig.find({
+  const assignedModulesRaw = await CompanyRoleModuleConfig.find({
     companyId: company._id,
     companyRoleConfigId: role._id,
     companyDashboardConfigId: dashboard._id,
@@ -140,6 +169,11 @@ async function getRuntimeDashboardDefinition(companyId, roleCode) {
   })
     .sort({ sidebarOrder: 1, moduleName: 1 })
     .lean();
+
+  const assignedModules = assignedModulesRaw.filter((moduleDoc) => {
+    if (!allowedPlanModuleCodes.size) return false;
+    return allowedPlanModuleCodes.has(normalizeCode(moduleDoc.moduleCode));
+  });
 
   const permissionDocs = assignedModules.length
     ? await CompanyRoleModulePermission.find({
@@ -179,6 +213,8 @@ async function getRuntimeDashboardDefinition(companyId, roleCode) {
       logoUrl: company.logoUrl,
       primaryColor: company.primaryColor,
       status: company.status,
+      lifecycleStatus: lifecycle?.lifecycleStatus || company.lifecycleStatus,
+      subscription: summarizeSubscription(subscription),
     },
     settings: {
       appName: settings.appName,
