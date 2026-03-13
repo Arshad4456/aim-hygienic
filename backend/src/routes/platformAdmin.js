@@ -52,6 +52,16 @@ const {
   getCurrentCompanySubscription,
   getLifecycleStatusFromSubscriptionStatus,
 } = require("../services/subscriptionLifecycleService");
+const {
+  getCompanyUsageSummary,
+  createCompanyUsageSnapshot,
+  getPlatformOverviewSummary,
+  getCompanyUsageList,
+  getCompanyUsageAgainstPlan,
+  getModuleAdoptionSummary,
+  getOnboardingStatusSummary,
+  getCompanySnapshotHistory,
+} = require("../services/platformAnalyticsService");
 
 const router = express.Router();
 
@@ -1425,5 +1435,97 @@ router.post("/companies/:companyId/reactivate", async (req, res) => {
   }
 });
 
+
+
+// 55. GET /platform-admin/analytics/overview
+router.get("/analytics/overview", async (_req, res) => {
+  try {
+    const overview = await getPlatformOverviewSummary();
+    return res.json({ success: true, overview });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load platform overview" });
+  }
+});
+
+// 56. GET /platform-admin/analytics/companies
+router.get("/analytics/companies", async (req, res) => {
+  try {
+    const rows = await getCompanyUsageList({
+      lifecycleStatus: req.query.lifecycleStatus,
+      onboardingCompleted: req.query.onboardingCompleted,
+      planCode: req.query.planCode,
+      search: req.query.search,
+    });
+    return res.json({ success: true, companies: rows });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load company usage list" });
+  }
+});
+
+// 57. GET /platform-admin/analytics/companies/:companyId
+router.get("/analytics/companies/:companyId", async (req, res) => {
+  try {
+    const [summary, limitComparison, snapshots] = await Promise.all([
+      getCompanyUsageSummary(req.params.companyId),
+      getCompanyUsageAgainstPlan(req.params.companyId),
+      getCompanySnapshotHistory(req.params.companyId, Number(req.query.snapshotLimit || 10)),
+    ]);
+
+    return res.json({
+      success: true,
+      company: summary.company,
+      subscription: summary.subscription,
+      onboarding: summary.onboarding,
+      counts: summary.counts,
+      moduleAdoption: {
+        assignedModuleCount: summary.counts.assignedModuleCount,
+      },
+      limitComparison,
+      snapshots,
+    });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load company analytics detail" });
+  }
+});
+
+// 58. POST /platform-admin/analytics/companies/:companyId/snapshot
+router.post("/analytics/companies/:companyId/snapshot", async (req, res) => {
+  try {
+    const snapshot = await createCompanyUsageSnapshot(req.params.companyId);
+    return res.status(201).json({ success: true, snapshot });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to create usage snapshot" });
+  }
+});
+
+// 59. GET /platform-admin/analytics/companies/:companyId/snapshots
+router.get("/analytics/companies/:companyId/snapshots", async (req, res) => {
+  try {
+    const snapshots = await getCompanySnapshotHistory(req.params.companyId, Number(req.query.limit || 50));
+    return res.json({ success: true, snapshots });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load usage snapshots" });
+  }
+});
+
+// 60. GET /platform-admin/analytics/module-adoption
+router.get("/analytics/module-adoption", async (_req, res) => {
+  try {
+    const moduleAdoption = await getModuleAdoptionSummary();
+    return res.json({ success: true, moduleAdoption });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load module adoption analytics" });
+  }
+});
+
+// 61. GET /platform-admin/analytics/onboarding-status
+router.get("/analytics/onboarding-status", async (_req, res) => {
+  try {
+    const onboarding = await getOnboardingStatusSummary();
+    return res.json({ success: true, onboarding });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to load onboarding analytics" });
+  }
+});
 
 module.exports = router;
