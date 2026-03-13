@@ -9,6 +9,8 @@ export default function DynamicDashboardShell({ dashboard, children }) {
   const shell = dashboard?.shell || {};
   const sidebarItems = (shell.sidebarItems || []).filter((item) => item?.isActive !== false);
   const brandColor = company.primaryColor || "#059669";
+  const subscription = company.subscription || null;
+  const lifecycleStatus = String(company.lifecycleStatus || "").toLowerCase();
 
   return (
     <div className="min-h-screen bg-zinc-50" style={{ "--brand": brandColor }}>
@@ -25,6 +27,8 @@ export default function DynamicDashboardShell({ dashboard, children }) {
           {shell.shellConfig?.hasNotifications ? <span className="rounded border px-2 py-1">Notifications</span> : null}
           {shell.shellConfig?.hasSettingsShortcut ? <span className="rounded border px-2 py-1">Settings</span> : null}
           {shell.shellConfig?.hasProfileMenu ? <span className="rounded border px-2 py-1">Profile</span> : null}
+          {subscription?.planName ? <span className="rounded border px-2 py-1">Plan: {subscription.planName}</span> : null}
+          {lifecycleStatus === "trial" ? <span className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-amber-700">Trial</span> : null}
         </div>
       </header>
 

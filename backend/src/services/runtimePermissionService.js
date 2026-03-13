@@ -1,7 +1,7 @@
-const mongoose = require("mongoose");
-
 const User = require("../models/User");
 const CompanyRoleModulePermission = require("../models/CompanyRoleModulePermission");
+const Company = require("../models/Company");
+const { getCurrentCompanySubscription } = require("./subscriptionLifecycleService");
 
 function normalizeCode(value) {
   return String(value || "").trim().toLowerCase();
@@ -73,12 +73,24 @@ async function hasRuntimePermission(authUser, moduleCode, action, sectionCode) {
     return { allowed: true, reason: "super-admin override" };
   }
 
-  if (!context.roleCode || !context.companyId || !mongoose.Types.ObjectId.isValid(context.companyId)) {
+  if (!context.roleCode || !context.companyId) {
     return { allowed: false, reason: "role or company missing for runtime permission lookup" };
   }
 
+  const company = await Company.findOne({ $or: [{ _id: context.companyId }, { companyId: context.companyId }, { slug: context.companyId }] }).lean();
+  if (!company) {
+    return { allowed: false, reason: "company not found" };
+  }
+
+
+  const subscription = await getCurrentCompanySubscription(company._id);
+  const includedModules = new Set((subscription?.planId?.includedModules || []).map((item) => normalizeCode(item)).filter(Boolean));
+  if (!includedModules.has(normalizedModuleCode)) {
+    return { allowed: false, reason: "module not included in company plan" };
+  }
+
   const permissionDoc = await CompanyRoleModulePermission.findOne({
-    companyId: context.companyId,
+    companyId: company._id,
     roleCode: context.roleCode,
     moduleCode: normalizedModuleCode,
     isActive: true,

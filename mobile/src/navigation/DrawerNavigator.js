@@ -162,10 +162,13 @@ export default function DrawerNavigator() {
   }
 
   if (error) {
+    const blocked = /suspended|expired|inactive|currently suspended/i.test(String(error || ""));
     return (
       <SafeAreaView style={styles.container}>
         <View style={[styles.body, { alignItems: 'center', justifyContent: 'center', padding: 20, gap: 10 }]}>
-          <Text style={{ color: '#991b1b', textAlign: 'center' }}>{error}</Text>
+          <Text style={{ color: blocked ? "#92400e" : "#991b1b", textAlign: 'center' }}>
+            {blocked ? "Your company subscription is not currently active. Please contact platform admin." : error}
+          </Text>
           <Pressable style={{ backgroundColor: '#059669', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8 }} onPress={() => refresh().catch(() => undefined)}>
             <Text style={{ color: '#fff', fontWeight: '600' }}>Retry</Text>
           </Pressable>

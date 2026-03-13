@@ -13,6 +13,8 @@ const CompanyRoleModuleConfig = require("../models/CompanyRoleModuleConfig");
 const CompanyRoleModulePermission = require("../models/CompanyRoleModulePermission");
 const CompanyDocumentTemplate = require("../models/CompanyDocumentTemplate");
 const CompanySetupTemplate = require("../models/CompanySetupTemplate");
+const Plan = require("../models/Plan");
+const Subscription = require("../models/Subscription");
 const {
   createCompanyDocumentTemplate,
   listCompanyDocumentTemplates,
@@ -46,6 +48,10 @@ const {
   applySetupTemplateToCompany,
   cloneCompanyConfiguration,
 } = require("../services/companySetupTemplateService");
+const {
+  getCurrentCompanySubscription,
+  getLifecycleStatusFromSubscriptionStatus,
+} = require("../services/subscriptionLifecycleService");
 
 const router = express.Router();
 
@@ -1182,5 +1188,242 @@ router.post("/companies/:targetCompanyId/clone-from-company", async (req, res) =
     return res.status(error.status || 500).json({ success: false, message: error.message || "Failed to clone company configuration" });
   }
 });
+
+
+function normalizeCode(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizeIncludedList(value) {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(value.map((item) => normalizeCode(item)).filter(Boolean)));
+}
+
+// 45. POST /platform-admin/plans
+router.post("/plans", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const name = String(body.name || "").trim();
+    const code = normalizeCode(body.code);
+    if (!name || !code) return res.status(400).json({ success: false, message: "name and code are required" });
+
+    const plan = await Plan.create({
+      name,
+      code,
+      description: String(body.description || "").trim(),
+      billingType: body.billingType,
+      monthlyPrice: Number(body.monthlyPrice || 0),
+      yearlyPrice: Number(body.yearlyPrice || 0),
+      maxUsers: Number(body.maxUsers || 0),
+      maxWarehouses: Number(body.maxWarehouses || 0),
+      maxVehicles: Number(body.maxVehicles || 0),
+      includedModules: normalizeIncludedList(body.includedModules),
+      includedFeatures: normalizeIncludedList(body.includedFeatures),
+      status: body.status || "active",
+      isDefault: Boolean(body.isDefault),
+    });
+
+    return res.status(201).json({ success: true, plan });
+  } catch (error) {
+    if (error?.code === 11000) return res.status(409).json({ success: false, message: "Plan code already exists" });
+    return res.status(400).json({ success: false, message: error.message || "Failed to create plan" });
+  }
+});
+
+// 46. GET /platform-admin/plans
+router.get("/plans", async (_req, res) => {
+  try {
+    const plans = await Plan.find({}).sort({ createdAt: -1 }).lean();
+    return res.json({ success: true, plans });
+  } catch (_error) {
+    return res.status(500).json({ success: false, message: "Failed to load plans" });
+  }
+});
+
+// 47. GET /platform-admin/plans/:planId
+router.get("/plans/:planId", async (req, res) => {
+  try {
+    const plan = await Plan.findById(req.params.planId).lean();
+    if (!plan) return res.status(404).json({ success: false, message: "Plan not found" });
+    return res.json({ success: true, plan });
+  } catch (_error) {
+    return res.status(400).json({ success: false, message: "Invalid plan id" });
+  }
+});
+
+// 48. PUT /platform-admin/plans/:planId
+router.put("/plans/:planId", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const updates = {
+      ...(body.name !== undefined ? { name: String(body.name || "").trim() } : {}),
+      ...(body.code !== undefined ? { code: normalizeCode(body.code) } : {}),
+      ...(body.description !== undefined ? { description: String(body.description || "").trim() } : {}),
+      ...(body.billingType !== undefined ? { billingType: body.billingType } : {}),
+      ...(body.monthlyPrice !== undefined ? { monthlyPrice: Number(body.monthlyPrice || 0) } : {}),
+      ...(body.yearlyPrice !== undefined ? { yearlyPrice: Number(body.yearlyPrice || 0) } : {}),
+      ...(body.maxUsers !== undefined ? { maxUsers: Number(body.maxUsers || 0) } : {}),
+      ...(body.maxWarehouses !== undefined ? { maxWarehouses: Number(body.maxWarehouses || 0) } : {}),
+      ...(body.maxVehicles !== undefined ? { maxVehicles: Number(body.maxVehicles || 0) } : {}),
+      ...(body.includedModules !== undefined ? { includedModules: normalizeIncludedList(body.includedModules) } : {}),
+      ...(body.includedFeatures !== undefined ? { includedFeatures: normalizeIncludedList(body.includedFeatures) } : {}),
+      ...(body.status !== undefined ? { status: body.status } : {}),
+      ...(body.isDefault !== undefined ? { isDefault: Boolean(body.isDefault) } : {}),
+    };
+
+    const plan = await Plan.findByIdAndUpdate(req.params.planId, { $set: updates }, { new: true, runValidators: true }).lean();
+    if (!plan) return res.status(404).json({ success: false, message: "Plan not found" });
+    return res.json({ success: true, plan });
+  } catch (error) {
+    if (error?.code === 11000) return res.status(409).json({ success: false, message: "Plan code already exists" });
+    return res.status(400).json({ success: false, message: error.message || "Failed to update plan" });
+  }
+});
+
+function buildCompanyLifecycleUpdate(status) {
+  const normalized = normalizeCode(status);
+  const now = new Date();
+  const next = { lifecycleStatus: getLifecycleStatusFromSubscriptionStatus(normalized) };
+  if (next.lifecycleStatus === "active") next.activatedAt = now;
+  if (next.lifecycleStatus === "suspended") next.suspendedAt = now;
+  if (next.lifecycleStatus === "expired") next.expiredAt = now;
+  return next;
+}
+
+// 49. POST /platform-admin/companies/:companyId/subscription
+router.post("/companies/:companyId/subscription", async (req, res) => {
+  try {
+    const company = await Company.findById(req.params.companyId).lean();
+    if (!company) return res.status(404).json({ success: false, message: "Company not found" });
+
+    const body = req.body || {};
+    const plan = await Plan.findById(body.planId).lean();
+    if (!plan || plan.status !== "active") {
+      return res.status(400).json({ success: false, message: "Active plan is required" });
+    }
+
+    if (!body.startDate || !body.endDate) return res.status(400).json({ success: false, message: "startDate and endDate are required" });
+
+    await Subscription.updateMany(
+      { companyId: company._id, status: { $in: ["active", "trial", "suspended"] } },
+      { $set: { status: "cancelled" } }
+    );
+
+    const subscription = await Subscription.create({
+      companyId: company._id,
+      planId: plan._id,
+      billingCycle: body.billingCycle,
+      startDate: new Date(body.startDate),
+      endDate: new Date(body.endDate),
+      status: body.status,
+      paymentStatus: body.paymentStatus || "pending",
+      notes: String(body.notes || "").trim(),
+      createdBy: req.user?.uid || undefined,
+    });
+
+    const companyUpdates = {
+      subscriptionId: subscription._id,
+      ...buildCompanyLifecycleUpdate(subscription.status),
+    };
+
+    const updatedCompany = await Company.findByIdAndUpdate(company._id, { $set: companyUpdates }, { new: true }).lean();
+    const populatedSubscription = await Subscription.findById(subscription._id).populate("planId").lean();
+    return res.status(201).json({ success: true, company: updatedCompany, subscription: populatedSubscription });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: error.message || "Failed to assign subscription" });
+  }
+});
+
+// 50. GET /platform-admin/companies/:companyId/subscription
+router.get("/companies/:companyId/subscription", async (req, res) => {
+  try {
+    const company = await Company.findById(req.params.companyId).lean();
+    if (!company) return res.status(404).json({ success: false, message: "Company not found" });
+
+    const subscription = await getCurrentCompanySubscription(company._id);
+    return res.json({ success: true, companyId: company._id, lifecycleStatus: company.lifecycleStatus, subscription });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: error.message || "Failed to load subscription" });
+  }
+});
+
+async function updateCompanyAndSubscriptionLifecycle(companyId, lifecycleStatus, subscriptionStatus) {
+  const now = new Date();
+  const companyUpdates = { lifecycleStatus };
+  if (lifecycleStatus === "active") companyUpdates.activatedAt = now;
+  if (lifecycleStatus === "suspended") companyUpdates.suspendedAt = now;
+  if (lifecycleStatus === "expired") companyUpdates.expiredAt = now;
+
+  const company = await Company.findByIdAndUpdate(companyId, { $set: companyUpdates }, { new: true }).lean();
+  if (!company) return null;
+
+  if (company.subscriptionId) {
+    await Subscription.findByIdAndUpdate(company.subscriptionId, { $set: { status: subscriptionStatus } });
+  }
+
+  const subscription = company.subscriptionId ? await Subscription.findById(company.subscriptionId).populate("planId").lean() : null;
+  return { company, subscription };
+}
+
+// 51. POST /platform-admin/companies/:companyId/activate
+router.post("/companies/:companyId/activate", async (req, res) => {
+  try {
+    const result = await updateCompanyAndSubscriptionLifecycle(req.params.companyId, "active", "active");
+    if (!result) return res.status(404).json({ success: false, message: "Company not found" });
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: error.message || "Failed to activate company" });
+  }
+});
+
+// 52. POST /platform-admin/companies/:companyId/suspend
+router.post("/companies/:companyId/suspend", async (req, res) => {
+  try {
+    const result = await updateCompanyAndSubscriptionLifecycle(req.params.companyId, "suspended", "suspended");
+    if (!result) return res.status(404).json({ success: false, message: "Company not found" });
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: error.message || "Failed to suspend company" });
+  }
+});
+
+// 53. POST /platform-admin/companies/:companyId/mark-expired
+router.post("/companies/:companyId/mark-expired", async (req, res) => {
+  try {
+    const result = await updateCompanyAndSubscriptionLifecycle(req.params.companyId, "expired", "expired");
+    if (!result) return res.status(404).json({ success: false, message: "Company not found" });
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: error.message || "Failed to mark company expired" });
+  }
+});
+
+// 54. POST /platform-admin/companies/:companyId/reactivate
+router.post("/companies/:companyId/reactivate", async (req, res) => {
+  try {
+    const company = await Company.findById(req.params.companyId).lean();
+    if (!company) return res.status(404).json({ success: false, message: "Company not found" });
+
+    const subscription = company.subscriptionId ? await Subscription.findById(company.subscriptionId).lean() : null;
+    if (!subscription) return res.status(400).json({ success: false, message: "Company has no subscription to reactivate" });
+    if (new Date(subscription.endDate) < new Date()) {
+      return res.status(400).json({ success: false, message: "Subscription has expired; assign/renew subscription before reactivation" });
+    }
+
+    const nextStatus = subscription.status === "trial" ? "trial" : "active";
+    await Subscription.findByIdAndUpdate(subscription._id, { $set: { status: nextStatus } });
+    const updatedCompany = await Company.findByIdAndUpdate(
+      company._id,
+      { $set: { lifecycleStatus: nextStatus, activatedAt: new Date() } },
+      { new: true }
+    ).lean();
+
+    const updatedSubscription = await Subscription.findById(subscription._id).populate("planId").lean();
+    return res.json({ success: true, company: updatedCompany, subscription: updatedSubscription });
+  } catch (error) {
+    return res.status(400).json({ success: false, message: error.message || "Failed to reactivate company" });
+  }
+});
+
 
 module.exports = router;

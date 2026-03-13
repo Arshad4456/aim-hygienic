@@ -28,6 +28,11 @@ const CompanySchema = new mongoose.Schema(
     hasRoleConfiguration: { type: Boolean, default: false },
     hasDashboardConfiguration: { type: Boolean, default: false },
     onboardingStatus: { type: String, enum: ["not_started", "in_progress", "completed"], default: "not_started" },
+    lifecycleStatus: { type: String, enum: ["active", "trial", "suspended", "expired", "inactive"], default: "active" },
+    subscriptionId: { type: mongoose.Schema.Types.ObjectId, ref: "Subscription", default: null },
+    activatedAt: { type: Date, default: null },
+    suspendedAt: { type: Date, default: null },
+    expiredAt: { type: Date, default: null },
     setupCompletedAt: { type: Date, default: null },
   },
   { timestamps: true }
