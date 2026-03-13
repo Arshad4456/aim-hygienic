@@ -24,6 +24,7 @@ export default function OnboardingStepper({ onboardingState, currentStep, onStep
           const active = Number(currentStep) === step.index;
           const disabled = step.index > Number(onboardingState?.currentStep || 1);
 
+          
           return (
             <button
               key={step.key}
