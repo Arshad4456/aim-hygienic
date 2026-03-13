@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import InvoiceRenderer, { FALLBACK_INVOICE_TEMPLATE } from "../../../components/documents/InvoiceRenderer";
+import InvoiceRenderer, { FALLBACK_INVOICE_TEMPLATE } from "../../../../app/";
 import DocumentPreviewShell from "../../../components/documents/DocumentPreviewShell";
 import { fetchDefaultTemplate, fetchRuntimeInvoiceDocument } from "../../../lib/runtimeDocuments";
 import { apiFetch } from "../../../lib/api";
