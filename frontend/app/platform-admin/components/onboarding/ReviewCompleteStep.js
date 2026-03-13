@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "../../../lib/api";
 import OnboardingReview from "../OnboardingReview";
 
+
 export default function ReviewCompleteStep({ companyId, onCompleted }) {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(false);
