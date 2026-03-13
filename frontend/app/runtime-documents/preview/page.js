@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { apiFetch } from "../../lib/api";
 import DocumentPreviewShell from "../../components/documents/DocumentPreviewShell";
@@ -31,7 +31,7 @@ const SAMPLE_RECEIPT = {
   notes: "Sample receipt preview",
 };
 
-export default function RuntimeDocumentTemplatePreviewPage() {
+function RuntimeDocumentTemplatePreviewContent() {
   const query = useSearchParams();
   const documentType = String(query.get("documentType") || "invoice").toLowerCase();
   const templateId = query.get("templateId");
@@ -100,5 +100,13 @@ export default function RuntimeDocumentTemplatePreviewPage() {
         <InvoiceRenderer documentData={documentData} templateConfig={template} company={company} settings={settings} />
       )}
     </DocumentPreviewShell>
+  );
+}
+
+export default function RuntimeDocumentTemplatePreviewPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm">Loading preview...</div>}>
+      <RuntimeDocumentTemplatePreviewContent />
+    </Suspense>
   );
 }
