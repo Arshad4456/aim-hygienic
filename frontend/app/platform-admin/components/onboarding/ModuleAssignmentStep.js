@@ -17,7 +17,7 @@ export default function ModuleAssignmentStep({ companyId, onMarkedDone }) {
       const d = dRes.dashboards || [];
       setDashboards(d);
       setRoleCode(d[0]?.roleCode || "");
-      setTemplates(tRes.moduleTemplates || []);
+      setTemplates(tRes.templates || []);
     }).catch(() => undefined);
   }, [companyId]);
 

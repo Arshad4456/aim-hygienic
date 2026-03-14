@@ -32,7 +32,7 @@ export default function PermissionConfigurationStep({ companyId, onMarkedDone })
       .catch(() => undefined);
   }, [companyId, roleCode]);
 
-  const candidateActions = useMemo(() => ["view", "create", "update", "delete", "approve", "dispatch"], []);
+  const candidateActions = useMemo(() => ["read", "create", "update", "delete", "approve", "dispatch", "print", "export", "upload_proof"], []);
 
   function toggle(action) {
     setAllowedActions((prev) => (prev.includes(action) ? prev.filter((a) => a !== action) : [...prev, action]));

@@ -9,7 +9,7 @@ export default function HierarchySelectionStep({ companyId, onMarkedDone }) {
 
   useEffect(() => {
     apiFetch("/platform-admin/hierarchy-templates")
-      .then((data) => setTemplates(data.hierarchyTemplates || []))
+      .then((data) => setTemplates(data.templates || []))
       .catch(() => undefined);
   }, []);
 

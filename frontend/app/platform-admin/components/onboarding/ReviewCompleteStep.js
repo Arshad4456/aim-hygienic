@@ -10,7 +10,7 @@ export default function ReviewCompleteStep({ companyId, onCompleted }) {
 
   const loadSummary = useCallback(async () => {
     const data = await apiFetch(`/platform-admin/companies/${companyId}/onboarding-summary`);
-    setSummary(data.summary || null);
+    setSummary(data.onboardingSummary || null);
   }, [companyId]);
 
   useEffect(() => {

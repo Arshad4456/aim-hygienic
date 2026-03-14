@@ -9,7 +9,7 @@ export default function RoleSelectionStep({ companyId, onMarkedDone }) {
 
   useEffect(() => {
     apiFetch(`/platform-admin/companies/${companyId}/available-role-templates`)
-      .then((data) => setTemplates(data.roleTemplates || []))
+      .then((data) => setTemplates(data.templates || []))
       .catch(() => undefined);
   }, [companyId]);
 
