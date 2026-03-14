@@ -96,8 +96,6 @@ router.post("/login", async (req, res) => {
         username: user.username,
         fullName: user.fullName,
         role: user.role,
-        roleCode: user.roleCode || undefined,
-        isSuperAdmin: Boolean(user.isSuperAdmin),
         companyId: user.companyId,
         companyName: user.companyName,
         mobile: user.mobile || user.mobileNumber,

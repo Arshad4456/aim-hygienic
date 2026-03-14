@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import DynamicDashboardShell from "../../../dashboards/components/DynamicDashboardShell";
 import DynamicDashboardHome from "../../../dashboards/components/DynamicDashboardHome";
 import { apiFetch } from "../../../lib/api";
 
 export default function SuperAdminRuntimePreviewPage() {
+  const searchParams = useSearchParams();
   const [companies, setCompanies] = useState([]);
-  const [companyId, setCompanyId] = useState("");
+  const [companyId, setCompanyId] = useState(searchParams.get("companyId") || "");
   const [roles, setRoles] = useState([]);
   const [roleCode, setRoleCode] = useState("");
   const [dashboard, setDashboard] = useState(null);
@@ -17,20 +20,21 @@ export default function SuperAdminRuntimePreviewPage() {
   useEffect(() => {
     apiFetch("/platform-admin/companies")
       .then((data) => {
-        const list = data?.companies || data?.data || [];
+        const list = data?.companies || [];
         setCompanies(list);
-        if (list[0]?._id) setCompanyId(String(list[0]._id));
+        if (!companyId && list[0]?._id) setCompanyId(String(list[0]._id));
       })
       .catch((err) => setError(err.message || "Failed to load companies"));
   }, []);
 
   useEffect(() => {
     if (!companyId) return;
+    setDashboard(null);
     apiFetch(`/platform-admin/companies/${companyId}/roles`)
       .then((data) => {
         const list = data?.roles || [];
         setRoles(list);
-        if (list[0]?.roleCode) setRoleCode(String(list[0].roleCode));
+        setRoleCode(list[0]?.roleCode || "");
       })
       .catch((err) => setError(err.message || "Failed to load company roles"));
   }, [companyId]);
@@ -62,14 +66,16 @@ export default function SuperAdminRuntimePreviewPage() {
               <option value="">Select Company</option>
               {companies.map((company) => <option key={company._id} value={company._id}>{company.name}</option>)}
             </select>
-            <select className="rounded-xl border px-3 py-2" value={roleCode} onChange={(e) => setRoleCode(e.target.value)}>
-              <option value="">Select Role</option>
+            <select className="rounded-xl border px-3 py-2" value={roleCode} onChange={(e) => setRoleCode(e.target.value)} disabled={!roles.length}>
+              <option value="">{roles.length ? "Select Role" : "No roles configured yet"}</option>
               {roles.map((role) => <option key={role._id || role.roleCode} value={role.roleCode}>{role.roleName || role.roleCode}</option>)}
             </select>
             <button className="rounded-xl bg-emerald-600 text-white px-4 py-2 disabled:opacity-50" disabled={!canPreview || loading} onClick={loadPreview}>
               {loading ? "Loading..." : "Preview Dashboard"}
             </button>
+            {companyId ? <Link href={`/platform-admin/companies/${companyId}/onboarding`} className="rounded-xl border px-4 py-2 text-sm font-medium text-center">Open Company Setup</Link> : <div />}
           </div>
+          {!roles.length && companyId ? <div className="mt-3 text-sm text-amber-700">This company does not have role dashboards yet. Complete onboarding first, then return here for preview.</div> : null}
           {error ? <div className="mt-3 text-sm text-red-600">{error}</div> : null}
         </div>
 

@@ -34,25 +34,19 @@ export default function CompanyOnboardingWizardPage() {
   const [state, setState] = useState(null);
   const [currentStep, setCurrentStep] = useState(1);
 
-  const applyOnboardingPayload = useCallback((data) => {
-    const onboarding = data?.onboardingState || data?.onboarding || null;
-    setState(onboarding);
-    setCurrentStep(Number(onboarding?.currentStep || 1));
-  }, []);
-
   const loadState = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
       const data = await apiFetch(`/platform-admin/companies/${companyId}/onboarding`);
-      applyOnboardingPayload(data);
+      setState(data.onboarding || null);
+      setCurrentStep(Number(data.onboarding?.currentStep || 1));
     } catch (e) {
-      setState(null);
       setError(e.message || "Onboarding not started");
     } finally {
       setLoading(false);
     }
-  }, [applyOnboardingPayload, companyId]);
+  }, [companyId]);
 
   useEffect(() => {
     if (!companyId) return;
@@ -61,21 +55,32 @@ export default function CompanyOnboardingWizardPage() {
 
   async function startOnboarding() {
     const data = await apiFetch(`/platform-admin/companies/${companyId}/onboarding/start`, { method: "POST", body: {} });
-    applyOnboardingPayload(data);
+    setState(data.onboarding || null);
+    setCurrentStep(1);
     setError("");
   }
 
   const activeStep = useMemo(() => {
     switch (currentStep) {
-      case 1: return <CompanyCreateStep companyId={companyId} onMarkedDone={loadState} />;
-      case 2: return <CompanySettingsStep companyId={companyId} onMarkedDone={loadState} />;
-      case 3: return <HierarchySelectionStep companyId={companyId} onMarkedDone={loadState} />;
-      case 4: return <RoleSelectionStep companyId={companyId} onMarkedDone={loadState} />;
-      case 5: return <DashboardGenerationStep companyId={companyId} onMarkedDone={loadState} />;
-      case 6: return <ModuleAssignmentStep companyId={companyId} onMarkedDone={loadState} />;
-      case 7: return <PermissionConfigurationStep companyId={companyId} onMarkedDone={loadState} />;
-      case 8: return <DocumentTemplateStep companyId={companyId} onMarkedDone={loadState} />;
-      default: return <ReviewCompleteStep companyId={companyId} onCompleted={loadState} />;
+      case 1:
+        return <CompanyCreateStep companyId={companyId} onMarkedDone={loadState} />;
+      case 2:
+        return <CompanySettingsStep companyId={companyId} onMarkedDone={loadState} />;
+      case 3:
+        return <HierarchySelectionStep companyId={companyId} onMarkedDone={loadState} />;
+      case 4:
+        return <RoleSelectionStep companyId={companyId} onMarkedDone={loadState} />;
+      case 5:
+        return <DashboardGenerationStep companyId={companyId} onMarkedDone={loadState} />;
+      case 6:
+        return <ModuleAssignmentStep companyId={companyId} onMarkedDone={loadState} />;
+      case 7:
+        return <PermissionConfigurationStep companyId={companyId} onMarkedDone={loadState} />;
+      case 8:
+        return <DocumentTemplateStep companyId={companyId} onMarkedDone={loadState} />;
+      case 9:
+      default:
+        return <ReviewCompleteStep companyId={companyId} onCompleted={loadState} />;
     }
   }, [companyId, currentStep, loadState]);
 
@@ -85,7 +90,7 @@ export default function CompanyOnboardingWizardPage() {
     return (
       <div className="min-h-screen p-6 flex items-center justify-center">
         <div className="rounded-xl border bg-white p-6 max-w-lg">
-          <div className="font-semibold text-xl">Company Onboarding Wizard</div>
+          <div className="font-semibold">Company Onboarding Wizard</div>
           <p className="text-sm text-zinc-600 mt-2">{error || "Start guided onboarding for this company."}</p>
           <button onClick={startOnboarding} className="mt-4 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white">Start Onboarding</button>
         </div>
