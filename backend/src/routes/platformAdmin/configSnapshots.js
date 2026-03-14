@@ -1,0 +1,8 @@
+const express = require("express");
+const { createCompanyConfigSnapshot, listCompanyConfigSnapshots, getCompanyConfigSnapshot, restoreCompanyConfigSnapshot } = require("../../services/companyConfigSnapshotService");
+const router = express.Router();
+router.post('/companies/:companyId/config-snapshots', async (req,res)=>{ try{ const snapshot=await createCompanyConfigSnapshot(req.params.companyId, req.body||{}, req.user?.uid||req.user?._id); return res.status(201).json({ success:true, snapshot }); } catch(error){ return res.status(error.status||500).json({ success:false, message:error.message||'Failed to create snapshot' }); } });
+router.get('/companies/:companyId/config-snapshots', async (req,res)=>{ try{ return res.json({ success:true, snapshots: await listCompanyConfigSnapshots(req.params.companyId) }); } catch(error){ return res.status(error.status||500).json({ success:false, message:error.message||'Failed to list snapshots' }); } });
+router.get('/companies/:companyId/config-snapshots/:snapshotId', async (req,res)=>{ try{ return res.json({ success:true, snapshot: await getCompanyConfigSnapshot(req.params.companyId, req.params.snapshotId) }); } catch(error){ return res.status(error.status||500).json({ success:false, message:error.message||'Failed to load snapshot' }); } });
+router.post('/companies/:companyId/config-snapshots/:snapshotId/restore', async (req,res)=>{ try{ const result=await restoreCompanyConfigSnapshot(req.params.companyId, req.params.snapshotId, req.body||{}, req.user?.uid||req.user?._id); return res.json({ success:true, ...result }); } catch(error){ return res.status(error.status||500).json({ success:false, message:error.message||'Failed to restore snapshot' }); } });
+module.exports = router;

@@ -1,3 +1,6 @@
+// LEGACY COMPATIBILITY ROUTER: no longer mounted as the primary platform admin entry point.
+// Split routers under backend/src/routes/platformAdmin/ are now the active structure.
+
 const express = require("express");
 const Company = require("../models/Company");
 const CompanySettings = require("../models/CompanySettings");

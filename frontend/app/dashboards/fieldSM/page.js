@@ -1,13 +1,5 @@
-import UserDashboardShell from "../components/userDashboardShell";
-import { userDashboardSearchItems } from "../searchItems";
+import RoleRuntimeBridge from "../components/RoleRuntimeBridge";
 
 export default function Page() {
-  return (
-    <UserDashboardShell
-      title="Field Sale Manager Dashboard"
-      subtitle="Use quick search to navigate all available items for your dashboard."
-      roleKey="Field Sale Manager"
-      links={userDashboardSearchItems.fieldSM || []}
-    />
-  );
+  return <RoleRuntimeBridge title="Field Sale Manager Dashboard" subtitle="Use the runtime dashboard engine to navigate the modules assigned to this role." />;
 }

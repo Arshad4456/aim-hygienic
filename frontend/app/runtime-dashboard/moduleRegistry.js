@@ -7,18 +7,21 @@ import FinanceAccountsRuntimeModule from "./modules/FinanceAccountsRuntimeModule
 import VehicleManagementRuntimeModule from "./modules/VehicleManagementRuntimeModule";
 import GenericRuntimeModuleRenderer from "./modules/GenericRuntimeModuleRenderer";
 
-export function RuntimeModuleRenderer({ moduleItem, dashboard }) {
-  const moduleCode = String(moduleItem?.moduleCode || "").trim().toLowerCase();
+export const RUNTIME_MODULE_REGISTRY = {
+  territory_assets: TerritoryAssetsRuntimeModule,
+  hr_role_management: HRRoleManagementRuntimeModule,
+  order_management: OrderManagementRuntimeModule,
+  payment_management: PaymentManagementRuntimeModule,
+  expense_management: ExpenseManagementRuntimeModule,
+  finance_accounts: FinanceAccountsRuntimeModule,
+  vehicle_management: VehicleManagementRuntimeModule,
+};
 
-  if (moduleCode === "territory_assets") return <TerritoryAssetsRuntimeModule moduleItem={moduleItem} dashboard={dashboard} />;
-  if (moduleCode === "hr_role_management") return <HRRoleManagementRuntimeModule moduleItem={moduleItem} dashboard={dashboard} />;
-  if (moduleCode === "order_management") return <OrderManagementRuntimeModule moduleItem={moduleItem} dashboard={dashboard} />;
-  if (moduleCode === "payment_management") return <PaymentManagementRuntimeModule moduleItem={moduleItem} dashboard={dashboard} />;
-  if (moduleCode === "expense_management") return <ExpenseManagementRuntimeModule moduleItem={moduleItem} dashboard={dashboard} />;
-  if (moduleCode === "finance_accounts") return <FinanceAccountsRuntimeModule moduleItem={moduleItem} dashboard={dashboard} />;
-  if (moduleCode === "vehicle_management") return <VehicleManagementRuntimeModule moduleItem={moduleItem} dashboard={dashboard} />;
-
-  return <GenericRuntimeModuleRenderer moduleItem={moduleItem} dashboard={dashboard} />;
+export function resolveRuntimeModuleRenderer(moduleCode) {
+  return RUNTIME_MODULE_REGISTRY[String(moduleCode || '').trim().toLowerCase()] || GenericRuntimeModuleRenderer;
 }
 
-export { GenericRuntimeModuleRenderer };
+export function RuntimeModuleRenderer({ moduleItem, dashboard }) {
+  const Renderer = resolveRuntimeModuleRenderer(moduleItem?.moduleCode);
+  return <Renderer moduleItem={moduleItem} dashboard={dashboard} />;
+}

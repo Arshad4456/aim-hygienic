@@ -1,54 +1,55 @@
 "use client";
 
 import Link from "next/link";
+import { getModuleMeta } from "../../lib/platform/moduleCatalog";
 
-export default function DynamicDashboardShell({ dashboard, children }) {
+export default function DynamicDashboardHome({ dashboard }) {
   const company = dashboard?.company || {};
   const settings = dashboard?.settings || {};
   const role = dashboard?.role || {};
-  const shell = dashboard?.shell || {};
-  const sidebarItems = (shell.sidebarItems || []).filter((item) => item?.isActive !== false);
-  const brandColor = company.primaryColor || "#059669";
-  const subscription = company.subscription || null;
-  const lifecycleStatus = String(company.lifecycleStatus || "").toLowerCase();
+  const modules = (dashboard?.modules || []).filter((item) => item?.isActive !== false);
+  const sharedFeatures = (dashboard?.shell?.sharedFeatures || []).filter((item) => item?.isEnabled !== false);
 
   return (
-    <div className="min-h-screen bg-zinc-50" style={{ "--brand": brandColor }}>
-      <header className="border-b bg-white px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          {company.logoUrl ? <img src={company.logoUrl} alt="Company" className="h-10 w-10 rounded-full object-cover" /> : <div className="h-10 w-10 rounded-full bg-emerald-100" />}
-          <div>
-            <div className="font-semibold">{settings.appName || company.name}</div>
-            <div className="text-xs text-zinc-500">{role.roleName}</div>
-          </div>
+    <div className="space-y-6">
+      <section className="rounded-2xl border bg-white p-5">
+        <div className="text-sm text-zinc-500">Runtime Dashboard</div>
+        <h1 className="text-2xl font-bold text-zinc-900 mt-1">{settings.appName || company.name || "Company Dashboard"}</h1>
+        <p className="text-sm text-zinc-600 mt-2">Signed in as {role.roleName || role.roleCode || "Role"}. This dashboard is assembled from the runtime configuration engine.</p>
+      </section>
+
+      {sharedFeatures.length ? (
+        <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {sharedFeatures.map((feature) => (
+            <div key={feature.code} className="rounded-2xl border bg-white p-4">
+              <div className="font-medium text-zinc-900">{feature.title}</div>
+              <div className="text-xs text-zinc-500 mt-1">Shared dashboard feature</div>
+            </div>
+          ))}
+        </section>
+      ) : null}
+
+      <section className="space-y-3">
+        <div className="text-sm font-semibold text-zinc-700">Assigned Modules</div>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {modules.length ? modules.map((moduleItem) => {
+            const meta = getModuleMeta(moduleItem.moduleCode);
+            return (
+              <Link key={`${moduleItem.moduleCode}-${moduleItem.sidebarOrder || 0}`} href={`/runtime-dashboard/${moduleItem.moduleCode}`} className="rounded-2xl border bg-white p-4 hover:border-emerald-300 transition">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-semibold text-zinc-900">{moduleItem.moduleName || meta.label}</div>
+                    <div className="text-xs text-zinc-500 mt-1">{moduleItem.moduleType || "default"}</div>
+                  </div>
+                  <div className="text-xl">{meta.icon}</div>
+                </div>
+                {moduleItem.selectedSections?.length ? <div className="text-xs text-zinc-600 mt-3">Sections: {moduleItem.selectedSections.join(", ")}</div> : null}
+                {moduleItem.allowedActions?.length ? <div className="text-xs text-zinc-500 mt-1">Actions: {moduleItem.allowedActions.join(", ")}</div> : null}
+              </Link>
+            );
+          }) : <div className="rounded-2xl border bg-white p-4 text-sm text-zinc-600">No modules have been assigned to this role yet.</div>}
         </div>
-
-        <div className="flex items-center gap-2 text-sm">
-          {shell.shellConfig?.hasNotifications ? <span className="rounded border px-2 py-1">Notifications</span> : null}
-          {shell.shellConfig?.hasSettingsShortcut ? <span className="rounded border px-2 py-1">Settings</span> : null}
-          {shell.shellConfig?.hasProfileMenu ? <span className="rounded border px-2 py-1">Profile</span> : null}
-          {subscription?.planName ? <span className="rounded border px-2 py-1">Plan: {subscription.planName}</span> : null}
-          {lifecycleStatus === "trial" ? <span className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-amber-700">Trial</span> : null}
-        </div>
-      </header>
-
-      <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] min-h-[calc(100vh-65px)]">
-        <aside className="border-r bg-white p-3">
-          <div className="text-xs text-zinc-500 mb-3">Modules</div>
-          <nav className="space-y-2">
-            <Link href="/runtime-dashboard" className="block rounded-lg border px-3 py-2 text-sm hover:border-emerald-300">Dashboard Home</Link>
-            {sidebarItems
-              .sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
-              .map((item) => (
-                <Link key={item.code} href={`/runtime-dashboard/${item.code}`} className="block rounded-lg border px-3 py-2 text-sm hover:border-emerald-300">
-                  {item.label}
-                </Link>
-              ))}
-          </nav>
-        </aside>
-
-        <main className="p-4 md:p-6">{children}</main>
-      </div>
+      </section>
     </div>
   );
 }

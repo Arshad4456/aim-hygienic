@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { normalizeRoleCode } = require("../config/roleCatalog");
 
 function base64UrlEncode(value) {
   return Buffer.from(value)
@@ -20,13 +21,15 @@ function getSecret() {
 
 function signToken(user) {
   const now = Math.floor(Date.now() / 1000);
-  const normalizedRole = String(user?.role || "").trim().toLowerCase();
-  const distributorId = normalizedRole === "distributor" ? String(user?._id || "").trim() : String(user?.distributorId || "").trim();
+  const roleCode = normalizeRoleCode(user?.role);
+  const distributorId = roleCode === "distributor" ? String(user?._id || "").trim() : String(user?.distributorId || "").trim();
   const payload = {
     uid: user._id.toString(),
     role: user.role,
+    roleCode,
     isSuperAdmin: Boolean(user?.isSuperAdmin),
     username: user.username,
+    companyId: String(user?.companyId || "").trim(),
     warehouse_id: String(user.warehouseId || "").trim(),
     warehouseId: String(user.warehouseId || "").trim(),
     userId: String(user.userId || "").trim(),
@@ -35,14 +38,7 @@ function signToken(user) {
   };
 
   const encodedPayload = base64UrlEncode(JSON.stringify(payload));
-  const signature = crypto
-    .createHmac("sha256", getSecret())
-    .update(encodedPayload)
-    .digest("base64")
-    .replace(/=/g, "")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_");
-
+  const signature = crypto.createHmac("sha256", getSecret()).update(encodedPayload).digest("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
   return `${encodedPayload}.${signature}`;
 }
 
@@ -50,23 +46,12 @@ function verifyToken(token) {
   const [encodedPayload, signature] = String(token || "").split(".");
   if (!encodedPayload || !signature) throw new Error("Malformed token");
 
-  const expected = crypto
-    .createHmac("sha256", getSecret())
-    .update(encodedPayload)
-    .digest("base64")
-    .replace(/=/g, "")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_");
-
-  if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
-    throw new Error("Invalid signature");
-  }
+  const expected = crypto.createHmac("sha256", getSecret()).update(encodedPayload).digest("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+  if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) throw new Error("Invalid signature");
 
   const decoded = JSON.parse(base64UrlDecode(encodedPayload));
-  if (!decoded.exp || decoded.exp < Math.floor(Date.now() / 1000)) {
-    throw new Error("Token expired");
-  }
-
+  if (!decoded.exp || decoded.exp < Math.floor(Date.now() / 1000)) throw new Error("Token expired");
+  decoded.roleCode = normalizeRoleCode(decoded.roleCode || decoded.role);
   return decoded;
 }
 
@@ -75,7 +60,6 @@ function requireAuth(req, res, next) {
     const header = req.headers.authorization || "";
     const token = header.startsWith("Bearer ") ? header.slice(7) : null;
     if (!token) return res.status(401).json({ ok: false, message: "No token" });
-
     req.user = verifyToken(token);
     next();
   } catch (_error) {
@@ -83,18 +67,14 @@ function requireAuth(req, res, next) {
   }
 }
 
-function normalizeRole(role) {
-  return String(role || "").trim().toLowerCase();
-}
-
 function requireRole(...roles) {
   return (req, res, next) => {
-    if (!req.user?.role) return res.status(401).json({ ok: false, message: "No user role" });
-    const allowedRoles = roles.map((r) => normalizeRole(r));
-    const userRole = normalizeRole(req.user.role);
+    const userRole = normalizeRoleCode(req.user?.roleCode || req.user?.role);
+    if (!userRole) return res.status(401).json({ ok: false, message: "No user role" });
+    const allowedRoles = roles.map((r) => normalizeRoleCode(r));
     if (!allowedRoles.includes(userRole)) return res.status(403).json({ ok: false, message: "Forbidden" });
     next();
   };
 }
 
-module.exports = { signToken, requireAuth, requireRole };
+module.exports = { signToken, requireAuth, requireRole, verifyToken };

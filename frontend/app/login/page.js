@@ -25,6 +25,10 @@ export default function LoginPage() {
   const roleRedirect = (role) => {
     const map = {
       admin: "/dashboards/admin",
+      Admin: "/dashboards/admin",
+      super_admin: "/dashboards/superadmin",
+      "Super Admin": "/dashboards/superadmin",
+      super_admin: "/dashboards/superadmin",
       CEO: "/dashboards/ceo",
       "Managing Director": "/dashboards/manageDirector",
       "Warehouse Manager": "/dashboards/warehouseManager",

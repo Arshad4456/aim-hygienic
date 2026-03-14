@@ -1,13 +1,5 @@
-import UserDashboardShell from "../components/userDashboardShell";
-import { userDashboardSearchItems } from "../searchItems";
+import RoleRuntimeBridge from "../components/RoleRuntimeBridge";
 
 export default function Page() {
-  return (
-    <UserDashboardShell
-      title="Account Officer Dashboard"
-      subtitle="Use quick search to navigate all available items for your dashboard."
-      roleKey="Account Officer"
-      links={userDashboardSearchItems.accountOfficer || []}
-    />
-  );
+  return <RoleRuntimeBridge title="Account Officer Dashboard" subtitle="Use the runtime dashboard engine to navigate the modules assigned to this role." />;
 }
