@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "../lib/api";
 import { getAuthItem, setAuthSession } from "../lib/clientAuth";
@@ -13,22 +13,12 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // If already logged in
-  useEffect(() => {
-    const token = typeof window !== "undefined" ? getAuthItem("aim_token") : null;
-    const role = typeof window !== "undefined" ? getAuthItem("aim_role") : null;
-    if (token && role) {
-      router.replace("/runtime-dashboard");
-    }
-  }, [router]);
-
-  const roleRedirect = (role) => {
+  const roleRedirect = useCallback((role) => {
+    const normalizedRole = String(role || "").trim().toLowerCase().replace(/\s+/g, "_");
     const map = {
       admin: "/dashboards/admin",
-      Admin: "/dashboards/admin",
       super_admin: "/dashboards/superadmin",
-      "Super Admin": "/dashboards/superadmin",
-      super_admin: "/dashboards/superadmin",
+      superadmin: "/dashboards/superadmin",
       CEO: "/dashboards/ceo",
       "Managing Director": "/dashboards/manageDirector",
       "Warehouse Manager": "/dashboards/warehouseManager",
@@ -48,8 +38,20 @@ export default function LoginPage() {
       "Delivery Boy": "/dashboards/deliveryBoy",
       customer: "/dashboards/customer",
     };
-    return map[role] || "/dashboards/admin";
-  };
+
+    if (map[role]) return map[role];
+    if (map[normalizedRole]) return map[normalizedRole];
+    return "/runtime-dashboard";
+  }, []);
+
+  // If already logged in
+  useEffect(() => {
+    const token = typeof window !== "undefined" ? getAuthItem("aim_token") : null;
+    const role = typeof window !== "undefined" ? getAuthItem("aim_role") : null;
+    if (token && role) {
+      router.replace(roleRedirect(role));
+    }
+  }, [roleRedirect, router]);
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -70,7 +72,7 @@ export default function LoginPage() {
       document.cookie = `aim_token=${data.token}; path=/; Secure; SameSite=Lax`;
       document.cookie = `aim_role=${data.user?.role || ""}; path=/; Secure; SameSite=Lax`;
 
-      router.replace("/runtime-dashboard");
+      router.replace(roleRedirect(data.user?.role));
     } catch (err) {
       setError(err.message || "Failed to login");
     } finally {
