@@ -17,6 +17,23 @@ const { buildAuditContext, fireAndForgetAudit, ensureCompanyOrThrow, slugify, ge
 
 const router = express.Router();
 
+function isLegacyCompanyCodeDuplicateKey(error) {
+  if (!error || error.code !== 11000) return false;
+  const keyPattern = error.keyPattern || {};
+  const keyValue = error.keyValue || {};
+  return keyPattern.code === 1 || Object.prototype.hasOwnProperty.call(keyValue, 'code') || /code_1/.test(String(error.message || ''));
+}
+
+async function createCompanyWithLegacyIndexRecovery(payload) {
+  try {
+    return await Company.create(payload);
+  } catch (error) {
+    if (!isLegacyCompanyCodeDuplicateKey(error)) throw error;
+    await Company.collection.dropIndex('code_1').catch(() => null);
+    return Company.create(payload);
+  }
+}
+
 function pickCompanyFields(body = {}) {
   return {
     name: String(body.name || '').trim(),
@@ -56,7 +73,7 @@ router.post('/companies', async (req, res) => {
     if (!companyFields.name) return res.status(400).json({ ok: false, message: 'Company name is required' });
     const requestedSlug = slugify(body.slug || companyFields.name);
     const uniqueSlug = await generateUniqueCompanySlug(requestedSlug || companyFields.name);
-    const company = await Company.create({
+    const company = await createCompanyWithLegacyIndexRecovery({
       ...companyFields,
       slug: uniqueSlug,
       createdBy: req.user?.uid || req.user?._id,
