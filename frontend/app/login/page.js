@@ -17,9 +17,9 @@ export default function LoginPage() {
   useEffect(() => {
     const token = typeof window !== "undefined" ? getAuthItem("aim_token") : null;
     const role = typeof window !== "undefined" ? getAuthItem("aim_role") : null;
-    if (token && role) {
-      router.replace("/runtime-dashboard");
-    }
+    // if (token && role) {
+    //   router.replace("/runtime-dashboard");
+    // }
   }, [router]);
 
   const roleRedirect = (role) => {
