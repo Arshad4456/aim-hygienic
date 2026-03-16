@@ -3,14 +3,6 @@ const Company = require("../models/Company");
 const HierarchyTemplate = require("../models/HierarchyTemplate");
 const CompanyHierarchyConfig = require("../models/CompanyHierarchyConfig");
 
-function slugify(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
-
 async function assignHierarchyToCompany(companyId, hierarchyTemplateId, userId) {
   if (!mongoose.Types.ObjectId.isValid(companyId)) {
     const error = new Error("Invalid company id");
@@ -86,14 +78,6 @@ async function assignHierarchyToCompany(companyId, hierarchyTemplateId, userId) 
 
   company.activeHierarchyConfigId = hierarchyConfig._id;
   company.activeHierarchyCode = hierarchyConfig.hierarchyCode;
-
-  // Some legacy company records were created without slug. Saving a hydrated document
-  // runs full schema validation and can fail during hierarchy assignment.
-  if (!String(company.slug || "").trim()) {
-    const baseSlug = slugify(company.name);
-    company.slug = baseSlug ? `${baseSlug}-${company._id}` : `company-${company._id}`;
-  }
-
   await company.save();
 
   return { company, hierarchyConfig };
