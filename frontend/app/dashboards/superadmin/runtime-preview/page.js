@@ -1,16 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import DynamicDashboardShell from "../../../dashboards/components/DynamicDashboardShell";
 import DynamicDashboardHome from "../../../dashboards/components/DynamicDashboardHome";
 import { apiFetch } from "../../../lib/api";
 
-export default function SuperAdminRuntimePreviewPage() {
-  const searchParams = useSearchParams();
+function RuntimePreviewContent() {
   const [companies, setCompanies] = useState([]);
-  const [companyId, setCompanyId] = useState(searchParams.get("companyId") || "");
+  const [companyId, setCompanyId] = useState("");
   const [roles, setRoles] = useState([]);
   const [roleCode, setRoleCode] = useState("");
   const [dashboard, setDashboard] = useState(null);
@@ -18,11 +16,18 @@ export default function SuperAdminRuntimePreviewPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const requestedCompanyId = params.get("companyId");
+    if (requestedCompanyId) setCompanyId(requestedCompanyId);
+  }, []);
+
+  useEffect(() => {
     apiFetch("/platform-admin/companies")
       .then((data) => {
         const list = data?.companies || [];
         setCompanies(list);
-        if (!companyId && list[0]?._id) setCompanyId(String(list[0]._id));
+        setCompanyId((prev) => prev || String(list[0]?._id || ""));
       })
       .catch((err) => setError(err.message || "Failed to load companies"));
   }, []);
@@ -87,4 +92,8 @@ export default function SuperAdminRuntimePreviewPage() {
       </div>
     </div>
   );
+}
+
+export default function SuperAdminRuntimePreviewPage() {
+  return <RuntimePreviewContent />;
 }
