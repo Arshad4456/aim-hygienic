@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import DynamicDashboardShell from "../../../dashboards/components/DynamicDashboardShell";
 import DynamicDashboardHome from "../../../dashboards/components/DynamicDashboardHome";
 import { apiFetch } from "../../../lib/api";
 
-function RuntimePreviewContent() {
+export default function SuperAdminRuntimePreviewPage() {
+  const searchParams = useSearchParams();
   const [companies, setCompanies] = useState([]);
   const [companyId, setCompanyId] = useState("");
   const [roles, setRoles] = useState([]);
@@ -16,30 +17,24 @@ function RuntimePreviewContent() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    const requestedCompanyId = params.get("companyId");
-    if (requestedCompanyId) setCompanyId(requestedCompanyId);
-  }, []);
-
-  useEffect(() => {
     apiFetch("/platform-admin/companies")
       .then((data) => {
-        const list = data?.companies || [];
+        const list = data?.companies || data?.data || [];
         setCompanies(list);
-        setCompanyId((prev) => prev || String(list[0]?._id || ""));
+        const requestedCompanyId = searchParams.get("companyId");
+        if (requestedCompanyId && list.some((item) => String(item._id) === String(requestedCompanyId))) setCompanyId(String(requestedCompanyId));
+        else if (list[0]?._id) setCompanyId(String(list[0]._id));
       })
       .catch((err) => setError(err.message || "Failed to load companies"));
-  }, []);
+  }, [searchParams]);
 
   useEffect(() => {
     if (!companyId) return;
-    setDashboard(null);
     apiFetch(`/platform-admin/companies/${companyId}/roles`)
       .then((data) => {
         const list = data?.roles || [];
         setRoles(list);
-        setRoleCode(list[0]?.roleCode || "");
+        if (list[0]?.roleCode) setRoleCode(String(list[0].roleCode));
       })
       .catch((err) => setError(err.message || "Failed to load company roles"));
   }, [companyId]);
@@ -71,18 +66,18 @@ function RuntimePreviewContent() {
               <option value="">Select Company</option>
               {companies.map((company) => <option key={company._id} value={company._id}>{company.name}</option>)}
             </select>
-            <select className="rounded-xl border px-3 py-2" value={roleCode} onChange={(e) => setRoleCode(e.target.value)} disabled={!roles.length}>
-              <option value="">{roles.length ? "Select Role" : "No roles configured yet"}</option>
+            <select className="rounded-xl border px-3 py-2" value={roleCode} onChange={(e) => setRoleCode(e.target.value)}>
+              <option value="">Select Role</option>
               {roles.map((role) => <option key={role._id || role.roleCode} value={role.roleCode}>{role.roleName || role.roleCode}</option>)}
             </select>
             <button className="rounded-xl bg-emerald-600 text-white px-4 py-2 disabled:opacity-50" disabled={!canPreview || loading} onClick={loadPreview}>
               {loading ? "Loading..." : "Preview Dashboard"}
             </button>
-            {companyId ? <Link href={`/platform-admin/companies/${companyId}/onboarding`} className="rounded-xl border px-4 py-2 text-sm font-medium text-center">Open Company Setup</Link> : <div />}
           </div>
-          {!roles.length && companyId ? <div className="mt-3 text-sm text-amber-700">This company does not have role dashboards yet. Complete onboarding first, then return here for preview.</div> : null}
           {error ? <div className="mt-3 text-sm text-red-600">{error}</div> : null}
         </div>
+
+        {!dashboard && !loading && roleCode && !error ? <div className="rounded-xl border bg-white p-4 text-sm text-zinc-600">Select a role and click Preview Dashboard.</div> : null}
 
         {dashboard ? (
           <DynamicDashboardShell dashboard={dashboard}>
@@ -92,8 +87,4 @@ function RuntimePreviewContent() {
       </div>
     </div>
   );
-}
-
-export default function SuperAdminRuntimePreviewPage() {
-  return <RuntimePreviewContent />;
 }

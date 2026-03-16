@@ -39,8 +39,8 @@ export default function CompanyOnboardingWizardPage() {
     setError("");
     try {
       const data = await apiFetch(`/platform-admin/companies/${companyId}/onboarding`);
-      setState(data.onboarding || null);
-      setCurrentStep(Number(data.onboarding?.currentStep || 1));
+      setState(data.onboarding || data.onboardingState || null);
+      setCurrentStep(Number((data.onboarding || data.onboardingState)?.currentStep || 1));
     } catch (e) {
       setError(e.message || "Onboarding not started");
     } finally {
@@ -55,7 +55,7 @@ export default function CompanyOnboardingWizardPage() {
 
   async function startOnboarding() {
     const data = await apiFetch(`/platform-admin/companies/${companyId}/onboarding/start`, { method: "POST", body: {} });
-    setState(data.onboarding || null);
+    setState(data.onboarding || data.onboardingState || null);
     setCurrentStep(1);
     setError("");
   }
