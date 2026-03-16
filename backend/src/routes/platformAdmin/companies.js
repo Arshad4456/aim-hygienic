@@ -16,24 +16,53 @@ const { ensureHierarchyTemplates, ensureRoleTemplates, ensureModuleTemplates } =
 
 const router = express.Router();
 
+function getDuplicateField(error) {
+  if (!error || error.code !== 11000) return null;
+  const keyValue = error.keyValue && typeof error.keyValue === "object" ? Object.keys(error.keyValue)[0] : null;
+  if (keyValue) return keyValue;
+  const keyPattern = error.keyPattern && typeof error.keyPattern === "object" ? Object.keys(error.keyPattern)[0] : null;
+  if (keyPattern) return keyPattern;
+  return null;
+}
+
+function getDuplicateFieldMessage(error, fallbackMessage) {
+  const field = getDuplicateField(error);
+  if (field === "slug") return "Company slug already exists. Try another slug.";
+  if (field) return `Company ${field} already exists.`;
+  return fallbackMessage;
+}
+
 router.post('/companies', async (req, res) => {
   try {
     const body = req.body || {};
     const name = String(body.name || '').trim();
     if (!name) return res.status(400).json({ ok: false, message: 'Company name is required' });
     const requestedSlug = slugify(body.slug || name);
-    const slug = await generateUniqueCompanySlug(requestedSlug || name);
-    const company = await Company.create({
-      name,
-      slug,
-      status: body.status || 'active',
-      logoUrl: String(body.logoUrl || '').trim(),
-      primaryColor: String(body.primaryColor || '').trim(),
-      address: String(body.address || '').trim(),
-      phone: String(body.phone || '').trim(),
-      email: String(body.email || '').trim(),
-      createdBy: req.user?.uid || req.user?._id,
-    });
+    let company = null;
+    let createAttempts = 0;
+    while (!company && createAttempts < 2) {
+      createAttempts += 1;
+      const slug = await generateUniqueCompanySlug(requestedSlug || name);
+      try {
+        company = await Company.create({
+          name,
+          slug,
+          status: body.status || 'active',
+          logoUrl: String(body.logoUrl || '').trim(),
+          primaryColor: String(body.primaryColor || '').trim(),
+          address: String(body.address || '').trim(),
+          phone: String(body.phone || '').trim(),
+          email: String(body.email || '').trim(),
+          createdBy: req.user?.uid || req.user?._id,
+        });
+      } catch (error) {
+        if (error?.code === 11000 && getDuplicateField(error) === 'slug' && createAttempts < 2) {
+          continue;
+        }
+        throw error;
+      }
+    }
+
     const settings = await CompanySettings.create({
       companyId: company._id,
       appName: String(body.appName || name).trim(),
@@ -48,7 +77,7 @@ router.post('/companies', async (req, res) => {
     fireAndForgetAudit(logCompanyCreated(buildAuditContext(req), company));
     return res.status(201).json({ ok: true, company, settings });
   } catch (error) {
-    if (error?.code === 11000) return res.status(409).json({ ok: false, message: 'Company slug already exists. Try another slug.' });
+    if (error?.code === 11000) return res.status(409).json({ ok: false, message: getDuplicateFieldMessage(error, 'Company already exists.') });
     return res.status(500).json({ ok: false, message: error.message || 'Failed to create company' });
   }
 });
@@ -85,7 +114,7 @@ router.put('/companies/:id', async (req, res) => {
     if (!company) return res.status(404).json({ ok: false, message: 'Company not found' });
     return res.json({ ok: true, company });
   } catch (error) {
-    if (error?.code === 11000) return res.status(409).json({ ok: false, message: 'Company slug already exists. Try another slug.' });
+    if (error?.code === 11000) return res.status(409).json({ ok: false, message: getDuplicateFieldMessage(error, 'Company already exists.') });
     return res.status(400).json({ ok: false, message: error.message || 'Failed to update company' });
   }
 });
