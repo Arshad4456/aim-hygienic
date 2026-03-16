@@ -9,10 +9,18 @@ export default function HierarchySelectionStep({ companyId, onMarkedDone }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  async function loadTemplates() {
+    setError("");
+    try {
+      const data = await apiFetch("/platform-admin/hierarchy-templates");
+      setTemplates(data.templates || []);
+    } catch (err) {
+      setError(err.message || "Failed to load hierarchy templates");
+    }
+  }
+
   useEffect(() => {
-    apiFetch("/platform-admin/hierarchy-templates")
-      .then((data) => setTemplates(data.templates || []))
-      .catch((err) => setError(err.message || "Failed to load hierarchy templates"));
+    loadTemplates();
   }, []);
 
   const selectedTemplate = useMemo(() => templates.find((item) => item._id === selectedId), [templates, selectedId]);
@@ -56,6 +64,7 @@ export default function HierarchySelectionStep({ companyId, onMarkedDone }) {
           </div>
         </div>
       ) : null}
+      {templates.length === 0 ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">No hierarchy templates were found. The platform will auto-seed defaults on first load; click reload if this is the first time you opened onboarding. <button type="button" onClick={loadTemplates} className="ml-2 font-semibold underline">Reload</button></div> : null}
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
       <button disabled={!selectedId || saving} onClick={assign} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Assigning..." : "Assign Hierarchy"}</button>
     </div>

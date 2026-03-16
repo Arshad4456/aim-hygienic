@@ -35,6 +35,7 @@ export default function PlatformCompaniesPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [slugTouched, setSlugTouched] = useState(false);
 
   async function loadCompanies() {
     setLoading(true);
@@ -55,6 +56,12 @@ export default function PlatformCompaniesPage() {
 
   const canSubmit = useMemo(() => form.name.trim().length > 0, [form.name]);
 
+  useEffect(() => {
+    if (slugTouched) return;
+    const suggested = String(form.name || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    setForm((prev) => (prev.slug === suggested ? prev : { ...prev, slug: suggested }));
+  }, [form.name, slugTouched]);
+
   async function createCompany(e) {
     e.preventDefault();
     if (!canSubmit) return;
@@ -63,6 +70,7 @@ export default function PlatformCompaniesPage() {
     try {
       await apiFetch("/platform-admin/companies", { method: "POST", body: form });
       setForm(EMPTY_FORM);
+      setSlugTouched(false);
       setShowCreate(false);
       await loadCompanies();
     } catch (err) {
@@ -91,7 +99,7 @@ export default function PlatformCompaniesPage() {
             <form onSubmit={createCompany} className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
               {Object.entries({
                 name: "Company Name",
-                slug: "Slug (optional)",
+                slug: "Slug (optional, must be unique)",
                 appName: "App Name",
                 logoUrl: "Logo URL",
                 primaryColor: "Primary Color",
@@ -101,7 +109,17 @@ export default function PlatformCompaniesPage() {
               }).map(([key, label]) => (
                 <label key={key} className="text-sm">
                   <div className="mb-1 font-medium text-zinc-700">{label}</div>
-                  <input value={form[key]} onChange={(e) => setForm((prev) => ({ ...prev, [key]: e.target.value }))} className="w-full rounded-xl border px-3 py-2" />
+                  <input
+                    value={form[key]}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (key === "slug") setSlugTouched(true);
+                      setForm((prev) => ({ ...prev, [key]: value }));
+                    }}
+                    className="w-full rounded-xl border px-3 py-2"
+                    placeholder={key === "slug" ? "example-company" : ""}
+                  />
+                  {key === "slug" ? <div className="mt-1 text-xs text-zinc-500">This is used as a unique URL key, for example: aim-hygienics-demo</div> : null}
                 </label>
               ))}
               <label className="text-sm">

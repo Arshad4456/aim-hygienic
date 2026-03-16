@@ -11,7 +11,8 @@ const { assignModulesToRoleDashboard, getRoleDashboardModules } = require("../..
 const { assignPermissionsToRoleModule, getRoleModulePermissions } = require("../../services/companyRoleModulePermissionService");
 const { getRuntimeDashboardDefinition } = require("../../services/runtimeDashboardService");
 const { logCompanyCreated, logHierarchyAssigned, logRolesAssigned, logDashboardsGenerated, logModulesAssigned, logPermissionsUpdated } = require("../../services/platformAuditLogService");
-const { buildAuditContext, fireAndForgetAudit, ensureCompanyOrThrow, slugify } = require("./common");
+const { buildAuditContext, fireAndForgetAudit, ensureCompanyOrThrow, slugify, generateUniqueCompanySlug } = require("./common");
+const { ensureHierarchyTemplates, ensureRoleTemplates, ensureModuleTemplates } = require("../../services/platformTemplateBootstrapService");
 
 const router = express.Router();
 
@@ -20,9 +21,11 @@ router.post('/companies', async (req, res) => {
     const body = req.body || {};
     const name = String(body.name || '').trim();
     if (!name) return res.status(400).json({ ok: false, message: 'Company name is required' });
+    const requestedSlug = slugify(body.slug || name);
+    const slug = await generateUniqueCompanySlug(requestedSlug || name);
     const company = await Company.create({
       name,
-      slug: slugify(body.slug || name),
+      slug,
       status: body.status || 'active',
       logoUrl: String(body.logoUrl || '').trim(),
       primaryColor: String(body.primaryColor || '').trim(),
@@ -45,7 +48,7 @@ router.post('/companies', async (req, res) => {
     fireAndForgetAudit(logCompanyCreated(buildAuditContext(req), company));
     return res.status(201).json({ ok: true, company, settings });
   } catch (error) {
-    if (error?.code === 11000) return res.status(409).json({ ok: false, message: 'Company slug already exists' });
+    if (error?.code === 11000) return res.status(409).json({ ok: false, message: 'Company slug already exists. Try another slug.' });
     return res.status(500).json({ ok: false, message: error.message || 'Failed to create company' });
   }
 });
@@ -74,7 +77,7 @@ router.put('/companies/:id', async (req, res) => {
   try {
     const body = req.body || {};
     const updates = {
-      name: body.name, slug: body.slug ? slugify(body.slug) : undefined, status: body.status,
+      name: body.name, slug: body.slug ? await generateUniqueCompanySlug(body.slug, req.params.id) : undefined, status: body.status,
       logoUrl: body.logoUrl, primaryColor: body.primaryColor, address: body.address, phone: body.phone, email: body.email,
     };
     Object.keys(updates).forEach((key) => updates[key] === undefined && delete updates[key]);
@@ -82,7 +85,7 @@ router.put('/companies/:id', async (req, res) => {
     if (!company) return res.status(404).json({ ok: false, message: 'Company not found' });
     return res.json({ ok: true, company });
   } catch (error) {
-    if (error?.code === 11000) return res.status(409).json({ ok: false, message: 'Company slug already exists' });
+    if (error?.code === 11000) return res.status(409).json({ ok: false, message: 'Company slug already exists. Try another slug.' });
     return res.status(400).json({ ok: false, message: error.message || 'Failed to update company' });
   }
 });
@@ -136,7 +139,7 @@ router.post('/hierarchy-templates', async (req, res) => {
     return res.status(500).json({ ok: false, message: error.message || 'Failed to create hierarchy template' });
   }
 });
-router.get('/hierarchy-templates', async (_req, res) => res.json({ ok: true, templates: await HierarchyTemplate.find().sort({ name: 1 }).lean() }));
+router.get('/hierarchy-templates', async (_req, res) => { await ensureHierarchyTemplates(); return res.json({ ok: true, templates: await HierarchyTemplate.find({ isActive: true }).sort({ name: 1 }).lean() }); });
 
 router.post('/role-templates', async (req, res) => {
   try {
@@ -152,7 +155,7 @@ router.post('/role-templates', async (req, res) => {
     return res.status(500).json({ ok: false, message: error.message || 'Failed to create role template' });
   }
 });
-router.get('/role-templates', async (_req, res) => res.json({ ok: true, templates: await RoleTemplate.find().sort({ isMandatory: -1, name: 1 }).lean() }));
+router.get('/role-templates', async (_req, res) => { await ensureRoleTemplates(); return res.json({ ok: true, templates: await RoleTemplate.find({ isActive: true }).sort({ isMandatory: -1, name: 1 }).lean() }); });
 
 router.post('/module-templates', async (req, res) => {
   try {
@@ -168,7 +171,7 @@ router.post('/module-templates', async (req, res) => {
     return res.status(500).json({ ok: false, message: error.message || 'Failed to create module template' });
   }
 });
-router.get('/module-templates', async (_req, res) => res.json({ ok: true, templates: await ModuleTemplate.find().sort({ category: 1, name: 1 }).lean() }));
+router.get('/module-templates', async (_req, res) => { await ensureModuleTemplates(); return res.json({ ok: true, templates: await ModuleTemplate.find({ isActive: true }).sort({ category: 1, name: 1 }).lean() }); });
 router.get('/module-templates/:id', async (req, res) => {
   const template = await ModuleTemplate.findById(req.params.id).lean();
   if (!template) return res.status(404).json({ ok: false, message: 'Module template not found' });
@@ -221,7 +224,7 @@ router.post('/companies/:companyId/dashboards/:roleCode/modules', async (req, re
   } catch (error) { return res.status(error.status || 500).json({ success: false, message: error.message || 'Failed to assign modules' }); }
 });
 router.get('/companies/:companyId/dashboards/:roleCode/modules', async (req, res) => { try { return res.json({ success: true, modules: await getRoleDashboardModules(req.params.companyId, req.params.roleCode) }); } catch (error) { return res.status(error.status || 500).json({ success: false, message: error.message || 'Failed to load modules' }); } });
-router.get('/companies/:companyId/available-modules', async (_req, res) => res.json({ success: true, templates: await ModuleTemplate.find({ isActive: true }).sort({ category: 1, name: 1 }).lean() }));
+router.get('/companies/:companyId/available-modules', async (_req, res) => { await ensureModuleTemplates(); return res.json({ success: true, templates: await ModuleTemplate.find({ isActive: true }).sort({ category: 1, name: 1 }).lean() }); });
 router.post('/companies/:companyId/dashboards/:roleCode/modules/:moduleCode/permissions', async (req, res) => {
   try {
     const permission = await assignPermissionsToRoleModule(req.params.companyId, req.params.roleCode, req.params.moduleCode, req.body || {}, req.user?.uid || req.user?._id);

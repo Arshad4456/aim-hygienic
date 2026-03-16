@@ -2,12 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../../../lib/api";
+import { getSuggestedModulesForRole } from "../../../lib/platform/roleModuleSuggestions";
 
 export default function ModuleAssignmentStep({ companyId, onMarkedDone }) {
   const [dashboards, setDashboards] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [roleCode, setRoleCode] = useState("");
   const [selectedIds, setSelectedIds] = useState([]);
+  const [savedSelections, setSavedSelections] = useState({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -18,13 +20,31 @@ export default function ModuleAssignmentStep({ companyId, onMarkedDone }) {
     ]).then(([dRes, tRes]) => {
       const d = dRes.dashboards || [];
       setDashboards(d);
-      setRoleCode(d[0]?.roleCode || "");
-      setTemplates(tRes.moduleTemplates || tRes.templates || []);
+      const templateList = tRes.moduleTemplates || tRes.templates || [];
+      setTemplates(templateList);
+      const initialRole = d[0]?.roleCode || "";
+      setRoleCode(initialRole);
+      const suggested = getSuggestedModulesForRole(initialRole);
+      setSelectedIds(templateList.filter((item) => suggested.includes(item.code)).map((item) => item._id));
     }).catch((err) => setError(err.message || "Failed to load dashboards/modules"));
   }, [companyId]);
 
+  useEffect(() => {
+    if (!roleCode) return;
+    if (savedSelections[roleCode]) {
+      setSelectedIds(savedSelections[roleCode]);
+      return;
+    }
+    const suggested = getSuggestedModulesForRole(roleCode);
+    setSelectedIds(templates.filter((item) => suggested.includes(item.code)).map((item) => item._id));
+  }, [roleCode, templates, savedSelections]);
+
   function toggle(id) {
-    setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+    setSelectedIds((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+      setSavedSelections((current) => ({ ...current, [roleCode]: next }));
+      return next;
+    });
   }
 
   const selectedModules = useMemo(() => templates.filter((t) => selectedIds.includes(t._id)).map((t, idx) => ({
@@ -66,10 +86,16 @@ export default function ModuleAssignmentStep({ companyId, onMarkedDone }) {
             {dashboards.map((d) => <option key={d._id} value={d.roleCode}>{d.roleName} ({d.roleCode})</option>)}
           </select>
         </div>
-        <div className="text-sm text-zinc-600 self-end">Choose module families for this role. Selected module types, subtypes, and sections will be saved automatically using current template defaults.</div>
+        <div className="text-sm text-zinc-600 self-end">Choose module families for this role. Suggested modules are pre-selected based on the role, and template defaults will be used for types, subtypes, and sections.</div>
       </div>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        {templates.map((m) => {
+        {[...templates].sort((a, b) => {
+          const suggestions = getSuggestedModulesForRole(roleCode);
+          const aSuggested = suggestions.includes(a.code) ? 0 : 1;
+          const bSuggested = suggestions.includes(b.code) ? 0 : 1;
+          if (aSuggested !== bSuggested) return aSuggested - bSuggested;
+          return String(a.name).localeCompare(String(b.name));
+        }).map((m) => {
           const checked = selectedIds.includes(m._id);
           return (
             <label key={m._id} className={`rounded-xl border p-4 text-sm ${checked ? "border-emerald-400 bg-emerald-50" : "bg-white"}`}>

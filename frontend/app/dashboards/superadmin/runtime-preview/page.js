@@ -1,13 +1,13 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import DynamicDashboardShell from "../../../dashboards/components/DynamicDashboardShell";
 import DynamicDashboardHome from "../../../dashboards/components/DynamicDashboardHome";
 import { apiFetch } from "../../../lib/api";
 
-function RuntimePreviewContent() {
+export default function SuperAdminRuntimePreviewPage() {
   const searchParams = useSearchParams();
   const [companies, setCompanies] = useState([]);
   const [companyId, setCompanyId] = useState(searchParams.get("companyId") || "");
@@ -86,13 +86,5 @@ function RuntimePreviewContent() {
         ) : null}
       </div>
     </div>
-  );
-}
-
-export default function SuperAdminRuntimePreviewPage() {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-zinc-50 p-4 md:p-6" />}>
-      <RuntimePreviewContent />
-    </Suspense>
   );
 }

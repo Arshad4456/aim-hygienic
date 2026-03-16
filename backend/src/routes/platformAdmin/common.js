@@ -32,4 +32,16 @@ function slugify(value) {
     .replace(/(^-|-$)/g, "");
 }
 
-module.exports = { buildAuditContext, fireAndForgetAudit, ensureCompanyOrThrow, slugify };
+async function generateUniqueCompanySlug(baseValue, excludeCompanyId = null) {
+  const base = slugify(baseValue) || "company";
+  let candidate = base;
+  let counter = 2;
+  while (true) {
+    const existing = await Company.findOne({ slug: candidate, ...(excludeCompanyId ? { _id: { $ne: excludeCompanyId } } : {}) }).lean();
+    if (!existing) return candidate;
+    candidate = `${base}-${counter}`;
+    counter += 1;
+  }
+}
+
+module.exports = { buildAuditContext, fireAndForgetAudit, ensureCompanyOrThrow, slugify, generateUniqueCompanySlug };
