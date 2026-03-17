@@ -40,7 +40,8 @@ export default function CompanyOnboardingWizardPage() {
     try {
       const data = await apiFetch(`/platform-admin/companies/${companyId}/onboarding`);
       setState(data.onboarding || data.onboardingState || null);
-      setCurrentStep(Number((data.onboarding || data.onboardingState)?.currentStep || 1));
+      const nextState = data.onboarding || data.onboardingState || null;
+      setCurrentStep(Number(nextState?.currentStep || 1));
     } catch (e) {
       setError(e.message || "Onboarding not started");
     } finally {

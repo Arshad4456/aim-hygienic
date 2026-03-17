@@ -1,6 +1,5 @@
-import UserOrderCenter from "../../components/UserOrderCenter";
-import { userDashboardSearchItems } from "../../searchItems";
+import LegacyRuntimeModuleBridge from "../../components/LegacyRuntimeModuleBridge";
 
 export default function Page() {
-  return <UserOrderCenter title="Warehouse Order Queue" roleKey="Warehouse Manager" links={userDashboardSearchItems.warehouseManager || []} />;
+  return <LegacyRuntimeModuleBridge moduleCode="order_management" emptyMessage="Warehouse Manager order modules will appear here when assigned." />;
 }

@@ -3,28 +3,60 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "../../lib/api";
 
-export default function Page() {
+export default function SetupTemplatesPage() {
   const [templates, setTemplates] = useState([]);
   const [companies, setCompanies] = useState([]);
-  const [selectedCompany, setSelectedCompany] = useState('');
-  const [name, setName] = useState('');
-  const [code, setCode] = useState('');
-  const [error, setError] = useState('');
+  const [selectedCompanyId, setSelectedCompanyId] = useState("");
+  const [message, setMessage] = useState("");
 
-  async function load() {
-    const [t, c] = await Promise.all([apiFetch('/platform-admin/setup-templates'), apiFetch('/platform-admin/companies')]);
-    setTemplates(t.templates || []);
-    const list = c.companies || [];
-    setCompanies(list);
-    if (list[0]?._id) setSelectedCompany(list[0]._id);
-  }
-  useEffect(() => { load().catch((e) => setError(e.message || 'Failed to load setup templates')); }, []);
-
-  async function save(e) {
-    e.preventDefault();
-    if (!selectedCompany) return;
-    try { await apiFetch(`/platform-admin/companies/${selectedCompany}/save-as-template`, { method: 'POST', body: { name, code, description: `${name} reusable setup`, category: 'general' } }); setName(''); setCode(''); await load(); } catch (e2) { setError(e2.message || 'Failed to save setup template'); }
+  async function loadData() {
+    const [templateRes, companyRes] = await Promise.all([
+      apiFetch('/platform-admin/setup-templates'),
+      apiFetch('/platform-admin/companies'),
+    ]);
+    setTemplates(templateRes.templates || []);
+    setCompanies(companyRes.companies || []);
+    setSelectedCompanyId((companyRes.companies || [])[0]?._id || "");
   }
 
-  return <div className="min-h-screen bg-zinc-50 p-6 md:p-8"><div className="max-w-6xl mx-auto space-y-6"><div className="rounded-2xl border bg-white p-6"><div className="text-xs uppercase tracking-wide text-emerald-700 font-semibold">Platform Management</div><h1 className="text-2xl font-bold text-zinc-900 mt-2">Setup Templates</h1><p className="text-zinc-600 mt-2">Browse and reuse company setup templates for faster onboarding.</p></div>{error ? <div className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}<form onSubmit={save} className="rounded-2xl border bg-white p-6 grid grid-cols-1 md:grid-cols-3 gap-4"><select className="rounded-xl border px-3 py-2" value={selectedCompany} onChange={(e)=>setSelectedCompany(e.target.value)}>{companies.map((company)=><option key={company._id} value={company._id}>{company.name}</option>)}</select><input className="rounded-xl border px-3 py-2" placeholder="Template name" value={name} onChange={(e)=>setName(e.target.value)} /><input className="rounded-xl border px-3 py-2" placeholder="code" value={code} onChange={(e)=>setCode(e.target.value.toLowerCase().replace(/[^a-z0-9_\-]+/g,'-'))} /><div className="md:col-span-3 flex justify-end"><button className="rounded-xl bg-emerald-600 px-4 py-2 text-white font-semibold">Save Current Company As Template</button></div></form><div className="grid gap-4">{templates.map((tpl)=><div key={tpl._id} className="rounded-2xl border bg-white p-5"><div className="font-semibold">{tpl.name}</div><div className="text-sm text-zinc-500 mt-1">{tpl.code} · {tpl.category}</div></div>)}</div></div></div>;
+  useEffect(() => { loadData().catch((error) => setMessage(error?.message || 'Failed to load setup templates')); }, []);
+
+  async function applyTemplate(templateId) {
+    if (!selectedCompanyId) return;
+    try {
+      await apiFetch(`/platform-admin/companies/${selectedCompanyId}/apply-setup-template`, { method: 'POST', body: { templateId, overwriteExisting: true } });
+      setMessage('Setup template applied successfully.');
+    } catch (error) {
+      setMessage(error?.message || 'Failed to apply setup template');
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-zinc-50 p-6 md:p-8">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <div className="text-xs uppercase tracking-wide text-emerald-700 font-semibold">Platform Management</div>
+          <h1 className="mt-2 text-2xl font-bold text-zinc-900">Setup Templates</h1>
+          <p className="mt-2 text-zinc-600">Save a finished company setup as a reusable template, then apply it to another company.</p>
+          <div className="mt-4 max-w-sm">
+            <select value={selectedCompanyId} onChange={(e) => setSelectedCompanyId(e.target.value)} className="w-full rounded-xl border px-3 py-2">
+              <option value="">Select target company</option>
+              {companies.map((company) => <option key={company._id} value={company._id}>{company.name}</option>)}
+            </select>
+          </div>
+          {message ? <div className="mt-3 text-sm text-zinc-700">{message}</div> : null}
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {templates.map((template) => (
+            <div key={template._id} className="rounded-2xl border bg-white p-5 shadow-sm">
+              <div className="text-lg font-semibold text-zinc-900">{template.name}</div>
+              <div className="mt-1 text-xs text-zinc-500">{template.code} • {template.category}</div>
+              <div className="mt-3 text-sm text-zinc-600">{template.description || 'Reusable configuration template.'}</div>
+              <button onClick={() => applyTemplate(template._id)} disabled={!selectedCompanyId} className="mt-4 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Apply to Selected Company</button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }

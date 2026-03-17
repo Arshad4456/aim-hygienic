@@ -4,8 +4,7 @@ const CompanySettings = require("../../models/CompanySettings");
 const HierarchyTemplate = require("../../models/HierarchyTemplate");
 const RoleTemplate = require("../../models/RoleTemplate");
 const ModuleTemplate = require("../../models/ModuleTemplate");
-const CompanyOnboardingState = require("../../models/CompanyOnboardingState");
-const CompanyDocumentTemplate = require("../../models/CompanyDocumentTemplate");
+const CompanyRoleModuleConfig = require("../../models/CompanyRoleModuleConfig");
 const { assignHierarchyToCompany, getCompanyHierarchy } = require("../../services/companyHierarchyService");
 const { assignRolesToCompany, getCompanyRoles, getAvailableRoleTemplatesForCompany } = require("../../services/companyRoleService");
 const { generateDashboardsForCompany, getCompanyDashboards, getCompanyDashboardByRole } = require("../../services/companyDashboardService");
@@ -13,103 +12,50 @@ const { assignModulesToRoleDashboard, getRoleDashboardModules } = require("../..
 const { assignPermissionsToRoleModule, getRoleModulePermissions } = require("../../services/companyRoleModulePermissionService");
 const { getRuntimeDashboardDefinition } = require("../../services/runtimeDashboardService");
 const { logCompanyCreated, logHierarchyAssigned, logRolesAssigned, logDashboardsGenerated, logModulesAssigned, logPermissionsUpdated } = require("../../services/platformAuditLogService");
-const { buildAuditContext, fireAndForgetAudit, ensureCompanyOrThrow, slugify, generateUniqueCompanySlug, ensurePlatformSeedData } = require("./common");
+const { buildAuditContext, fireAndForgetAudit, ensureCompanyOrThrow, slugify, generateUniqueSlug } = require("./common");
 
 const router = express.Router();
 
-function isLegacyCompanyCodeDuplicateKey(error) {
-  if (!error || error.code !== 11000) return false;
-  const keyPattern = error.keyPattern || {};
-  const keyValue = error.keyValue || {};
-  return keyPattern.code === 1 || Object.prototype.hasOwnProperty.call(keyValue, 'code') || /code_1/.test(String(error.message || ''));
-}
-
-async function createCompanyWithLegacyIndexRecovery(payload) {
-  try {
-    return await Company.create(payload);
-  } catch (error) {
-    if (!isLegacyCompanyCodeDuplicateKey(error)) throw error;
-    await Company.collection.dropIndex('code_1').catch(() => null);
-    return Company.create(payload);
-  }
-}
-
-function pickCompanyFields(body = {}) {
-  return {
-    name: String(body.name || '').trim(),
-    status: body.status || 'active',
-    logoUrl: String(body.logoUrl || '').trim(),
-    primaryColor: String(body.primaryColor || '#10b981').trim(),
-    address: String(body.address || '').trim(),
-    phone: String(body.phone || '').trim(),
-    email: String(body.email || '').trim(),
-  };
-}
-
-async function buildCompanySummary(companyDoc) {
-  const company = companyDoc.toObject ? companyDoc.toObject() : companyDoc;
-  const [settings, onboarding, hierarchy, roles, docs] = await Promise.all([
-    CompanySettings.findOne({ companyId: company._id }).lean(),
-    CompanyOnboardingState.findOne({ companyId: company._id }).lean(),
-    getCompanyHierarchy(company._id).catch(() => null),
-    getCompanyRoles(company._id).catch(() => []),
-    CompanyDocumentTemplate.countDocuments({ companyId: company._id }),
-  ]);
-  return {
-    ...company,
-    settings,
-    onboardingState: onboarding,
-    hierarchy,
-    roleCount: roles.length,
-    documentTemplateCount: docs,
-  };
-}
-
 router.post('/companies', async (req, res) => {
   try {
-    await ensurePlatformSeedData();
     const body = req.body || {};
-    const companyFields = pickCompanyFields(body);
-    if (!companyFields.name) return res.status(400).json({ ok: false, message: 'Company name is required' });
-    const requestedSlug = slugify(body.slug || companyFields.name);
-    const uniqueSlug = await generateUniqueCompanySlug(requestedSlug || companyFields.name);
-    const company = await createCompanyWithLegacyIndexRecovery({
-      ...companyFields,
-      slug: uniqueSlug,
+    const name = String(body.name || '').trim();
+    if (!name) return res.status(400).json({ ok: false, message: 'Company name is required' });
+    const slug = await generateUniqueSlug(body.slug || name);
+    const company = await Company.create({
+      name,
+      slug,
+      status: body.status || 'active',
+      logoUrl: String(body.logoUrl || '').trim(),
+      primaryColor: String(body.primaryColor || '').trim(),
+      address: String(body.address || '').trim(),
+      phone: String(body.phone || '').trim(),
+      email: String(body.email || '').trim(),
       createdBy: req.user?.uid || req.user?._id,
-      lifecycleStatus: body.status === 'active' ? 'active' : 'inactive',
-      onboardingStatus: 'not_started',
     });
     const settings = await CompanySettings.create({
       companyId: company._id,
-      appName: String(body.appName || companyFields.name).trim(),
-      logoUrl: companyFields.logoUrl,
-      primaryColor: companyFields.primaryColor,
+      appName: String(body.appName || name).trim(),
+      logoUrl: String(body.logoUrl || '').trim(),
+      primaryColor: String(body.primaryColor || '').trim(),
       invoiceHeader: String(body.invoiceHeader || '').trim(),
       invoiceFooter: String(body.invoiceFooter || '').trim(),
       receiptHeader: String(body.receiptHeader || '').trim(),
       receiptFooter: String(body.receiptFooter || '').trim(),
       modules: body.modules && typeof body.modules === 'object' ? body.modules : {},
     });
-    await CompanyOnboardingState.findOneAndUpdate(
-      { companyId: company._id },
-      { companyId: company._id, currentStep: 2, steps: { companyCreated: true, settingsConfigured: true, hierarchyAssigned: false, rolesAssigned: false, dashboardsGenerated: false, modulesAssigned: false, permissionsConfigured: false, documentTemplatesConfigured: false, setupCompleted: false }, startedBy: req.user?.uid || req.user?._id },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
     fireAndForgetAudit(logCompanyCreated(buildAuditContext(req), company));
-    return res.status(201).json({ ok: true, company: await buildCompanySummary(company), settings, generatedSlug: uniqueSlug });
+    return res.status(201).json({ ok: true, company, settings });
   } catch (error) {
+    if (error?.code === 11000) return res.status(409).json({ ok: false, message: 'Company slug already exists' });
     return res.status(500).json({ ok: false, message: error.message || 'Failed to create company' });
   }
 });
 
 router.get('/companies', async (_req, res) => {
   try {
-    await ensurePlatformSeedData();
-    const companies = await Company.find().sort({ createdAt: -1 });
-    const enriched = [];
-    for (const company of companies) enriched.push(await buildCompanySummary(company));
-    return res.json({ ok: true, companies: enriched });
+    const companies = await Company.find().sort({ createdAt: -1 }).lean();
+    return res.json({ ok: true, companies });
   } catch (error) {
     return res.status(500).json({ ok: false, message: 'Failed to load companies' });
   }
@@ -117,9 +63,10 @@ router.get('/companies', async (_req, res) => {
 
 router.get('/companies/:id', async (req, res) => {
   try {
-    const company = await Company.findById(req.params.id);
+    const company = await Company.findById(req.params.id).lean();
     if (!company) return res.status(404).json({ ok: false, message: 'Company not found' });
-    return res.json({ ok: true, company: await buildCompanySummary(company) });
+    const settings = await CompanySettings.findOne({ companyId: company._id }).lean();
+    return res.json({ ok: true, company: { ...company, settings } });
   } catch (error) {
     return res.status(400).json({ ok: false, message: 'Invalid company id' });
   }
@@ -128,34 +75,17 @@ router.get('/companies/:id', async (req, res) => {
 router.put('/companies/:id', async (req, res) => {
   try {
     const body = req.body || {};
-    const company = await Company.findById(req.params.id);
+    const updates = {
+      name: body.name, status: body.status,
+      logoUrl: body.logoUrl, primaryColor: body.primaryColor, address: body.address, phone: body.phone, email: body.email,
+    };
+    if (body.slug !== undefined) updates.slug = await generateUniqueSlug(body.slug || body.name || 'company', req.params.id);
+    Object.keys(updates).forEach((key) => updates[key] === undefined && delete updates[key]);
+    const company = await Company.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
     if (!company) return res.status(404).json({ ok: false, message: 'Company not found' });
-    const updates = pickCompanyFields(body);
-    if (body.slug !== undefined) {
-      const desired = slugify(body.slug || body.name || company.name);
-      updates.slug = desired && desired !== company.slug ? await generateUniqueCompanySlug(desired) : company.slug;
-    }
-    Object.assign(company, updates);
-    await company.save();
-    if (body.appName || body.logoUrl || body.primaryColor || body.invoiceHeader !== undefined || body.invoiceFooter !== undefined || body.receiptHeader !== undefined || body.receiptFooter !== undefined) {
-      await CompanySettings.findOneAndUpdate(
-        { companyId: company._id },
-        {
-          companyId: company._id,
-          appName: String(body.appName || company.name).trim(),
-          logoUrl: String(body.logoUrl || company.logoUrl || '').trim(),
-          primaryColor: String(body.primaryColor || company.primaryColor || '#10b981').trim(),
-          invoiceHeader: String(body.invoiceHeader || '').trim(),
-          invoiceFooter: String(body.invoiceFooter || '').trim(),
-          receiptHeader: String(body.receiptHeader || '').trim(),
-          receiptFooter: String(body.receiptFooter || '').trim(),
-          modules: body.modules && typeof body.modules === 'object' ? body.modules : undefined,
-        },
-        { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
-      );
-    }
-    return res.json({ ok: true, company: await buildCompanySummary(company) });
+    return res.json({ ok: true, company });
   } catch (error) {
+    if (error?.code === 11000) return res.status(409).json({ ok: false, message: 'Company slug already exists' });
     return res.status(400).json({ ok: false, message: error.message || 'Failed to update company' });
   }
 });
@@ -180,7 +110,7 @@ router.put('/companies/:id/settings', async (req, res) => {
         companyId: req.params.id,
         appName: String(body.appName || '').trim(),
         logoUrl: String(body.logoUrl || '').trim(),
-        primaryColor: String(body.primaryColor || '#10b981').trim(),
+        primaryColor: String(body.primaryColor || '').trim(),
         invoiceHeader: String(body.invoiceHeader || '').trim(),
         invoiceFooter: String(body.invoiceFooter || '').trim(),
         receiptHeader: String(body.receiptHeader || '').trim(),
@@ -209,7 +139,7 @@ router.post('/hierarchy-templates', async (req, res) => {
     return res.status(500).json({ ok: false, message: error.message || 'Failed to create hierarchy template' });
   }
 });
-router.get('/hierarchy-templates', async (_req, res) => { await ensurePlatformSeedData(); return res.json({ ok: true, templates: await HierarchyTemplate.find().sort({ name: 1 }).lean() }); });
+router.get('/hierarchy-templates', async (_req, res) => res.json({ ok: true, templates: await HierarchyTemplate.find().sort({ name: 1 }).lean() }));
 
 router.post('/role-templates', async (req, res) => {
   try {
@@ -225,7 +155,7 @@ router.post('/role-templates', async (req, res) => {
     return res.status(500).json({ ok: false, message: error.message || 'Failed to create role template' });
   }
 });
-router.get('/role-templates', async (_req, res) => { await ensurePlatformSeedData(); return res.json({ ok: true, templates: await RoleTemplate.find().sort({ isMandatory: -1, name: 1 }).lean() }); });
+router.get('/role-templates', async (_req, res) => res.json({ ok: true, templates: await RoleTemplate.find().sort({ isMandatory: -1, name: 1 }).lean() }));
 
 router.post('/module-templates', async (req, res) => {
   try {
@@ -241,7 +171,7 @@ router.post('/module-templates', async (req, res) => {
     return res.status(500).json({ ok: false, message: error.message || 'Failed to create module template' });
   }
 });
-router.get('/module-templates', async (_req, res) => { await ensurePlatformSeedData(); return res.json({ ok: true, templates: await ModuleTemplate.find().sort({ category: 1, name: 1 }).lean() }); });
+router.get('/module-templates', async (_req, res) => res.json({ ok: true, templates: await ModuleTemplate.find().sort({ category: 1, name: 1 }).lean() }));
 router.get('/module-templates/:id', async (req, res) => {
   const template = await ModuleTemplate.findById(req.params.id).lean();
   if (!template) return res.status(404).json({ ok: false, message: 'Module template not found' });
@@ -262,8 +192,10 @@ router.post('/companies/:companyId/hierarchy', async (req, res) => {
     return res.status(error.status || 500).json({ success: false, message: error.message || 'Failed to assign hierarchy' });
   }
 });
-router.get('/companies/:companyId/hierarchy', async (req, res) => { try { return res.json({ success: true, hierarchyConfig: await getCompanyHierarchy(req.params.companyId) }); }
-  catch (error) { return res.status(error.status || 500).json({ success: false, message: error.message || 'Failed to load hierarchy' }); } });
+router.get('/companies/:companyId/hierarchy', async (req, res) => {
+  try { return res.json({ success: true, hierarchyConfig: await getCompanyHierarchy(req.params.companyId) }); }
+  catch (error) { return res.status(error.status || 500).json({ success: false, message: error.message || 'Failed to load hierarchy' }); }
+});
 router.post('/companies/:companyId/roles', async (req, res) => {
   try {
     const result = await assignRolesToCompany(req.params.companyId, req.body?.roleTemplateIds, req.user?.uid || req.user?._id);
@@ -292,7 +224,7 @@ router.post('/companies/:companyId/dashboards/:roleCode/modules', async (req, re
   } catch (error) { return res.status(error.status || 500).json({ success: false, message: error.message || 'Failed to assign modules' }); }
 });
 router.get('/companies/:companyId/dashboards/:roleCode/modules', async (req, res) => { try { return res.json({ success: true, modules: await getRoleDashboardModules(req.params.companyId, req.params.roleCode) }); } catch (error) { return res.status(error.status || 500).json({ success: false, message: error.message || 'Failed to load modules' }); } });
-router.get('/companies/:companyId/available-modules', async (_req, res) => { await ensurePlatformSeedData(); return res.json({ success: true, templates: await ModuleTemplate.find({ isActive: true }).sort({ category: 1, name: 1 }).lean() }); });
+router.get('/companies/:companyId/available-modules', async (_req, res) => res.json({ success: true, templates: await ModuleTemplate.find({ isActive: true }).sort({ category: 1, name: 1 }).lean() }));
 router.post('/companies/:companyId/dashboards/:roleCode/modules/:moduleCode/permissions', async (req, res) => {
   try {
     const permission = await assignPermissionsToRoleModule(req.params.companyId, req.params.roleCode, req.params.moduleCode, req.body || {}, req.user?.uid || req.user?._id);
@@ -309,6 +241,52 @@ router.get('/companies/:companyId/runtime-dashboards', async (req, res) => {
     for (const role of roles.filter((item) => item.isActive)) dashboards.push(await getRuntimeDashboardDefinition(req.params.companyId, role.roleCode));
     return res.json({ success: true, dashboards });
   } catch (error) { return res.status(error.status || 500).json({ success: false, message: error.message || 'Failed to load runtime dashboards' }); }
+});
+
+
+router.get('/companies/:id/workspace-summary', async (req, res) => {
+  try {
+    const company = await ensureCompanyOrThrow(req.params.id);
+    const Subscription = require('../../models/Subscription');
+    const [settings, hierarchy, roles, dashboards, modules, permissions, documents, onboardingState, subscription] = await Promise.all([
+      CompanySettings.findOne({ companyId: req.params.id }).lean(),
+      getCompanyHierarchy(req.params.id).catch(() => null),
+      getCompanyRoles(req.params.id).catch(() => []),
+      getCompanyDashboards(req.params.id).catch(() => []),
+      CompanyRoleModuleConfig.find({ companyId: req.params.id, isActive: true }).lean(),
+      CompanyRoleModulePermission.find({ companyId: req.params.id, isActive: true }).lean(),
+      require('../../models/CompanyDocumentTemplate').find({ companyId: req.params.id, isActive: true }).lean(),
+      require('../../models/CompanyOnboardingState').findOne({ companyId: req.params.id }).lean(),
+      company.subscriptionId ? Subscription.findById(company.subscriptionId).lean() : null,
+    ]);
+    return res.json({ success: true, company, settings, hierarchyConfig: hierarchy, roles, dashboards, modules, permissions, documents, onboardingState, subscription });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || 'Failed to load company workspace' });
+  }
+});
+
+router.get('/companies/:id/role-module-matrix', async (req, res) => {
+  try {
+    await ensureCompanyOrThrow(req.params.id);
+    const [roles, dashboards, templates] = await Promise.all([
+      getCompanyRoles(req.params.id),
+      getCompanyDashboards(req.params.id),
+      ModuleTemplate.find({ isActive: true }).sort({ category: 1, name: 1 }).lean(),
+    ]);
+    const matrix = [];
+    for (const role of roles.filter((item) => item.isActive !== false)) {
+      const assigned = await getRoleDashboardModules(req.params.id, role.roleCode).catch(() => []);
+      matrix.push({
+        roleCode: role.roleCode,
+        roleName: role.roleName,
+        dashboard: dashboards.find((d) => d.roleCode === role.roleCode) || null,
+        assignedModules: assigned,
+      });
+    }
+    return res.json({ success: true, templates, matrix });
+  } catch (error) {
+    return res.status(error.status || 500).json({ success: false, message: error.message || 'Failed to load role module matrix' });
+  }
 });
 
 module.exports = router;

@@ -3,7 +3,7 @@ const DocumentTemplatePreset = require("../../models/DocumentTemplatePreset");
 const CompanySetupTemplate = require("../../models/CompanySetupTemplate");
 const { createCompanyDocumentTemplate, listCompanyDocumentTemplates, getCompanyDocumentTemplate, updateCompanyDocumentTemplate, applyPresetToCompany } = require("../../services/companyDocumentTemplateService");
 const { createSetupTemplateFromCompany, applySetupTemplateToCompany, cloneCompanyConfiguration } = require("../../services/companySetupTemplateService");
-const { buildAuditContext, fireAndForgetAudit, ensureCompanyOrThrow, ensurePlatformSeedData } = require("./common");
+const { buildAuditContext, fireAndForgetAudit, ensureCompanyOrThrow } = require("./common");
 const { logDocumentTemplateChange, logSetupTemplateApplied } = require("../../services/platformAuditLogService");
 
 const router = express.Router();
@@ -43,7 +43,7 @@ router.post('/document-template-presets', async (req, res) => {
     return res.status(500).json({ success: false, message: error.message || 'Failed to create preset' });
   }
 });
-router.get('/document-template-presets', async (_req, res) => { await ensurePlatformSeedData(); return res.json({ success: true, presets: await DocumentTemplatePreset.find().sort({ documentType: 1, templateName: 1 }).lean() }); });
+router.get('/document-template-presets', async (_req, res) => res.json({ success: true, presets: await DocumentTemplatePreset.find().sort({ documentType: 1, templateName: 1 }).lean() }));
 router.get('/document-template-presets/:presetId', async (req, res) => { const preset = await DocumentTemplatePreset.findById(req.params.presetId).lean(); if (!preset) return res.status(404).json({ success: false, message: 'Preset not found' }); return res.json({ success: true, preset }); });
 router.put('/document-template-presets/:presetId', async (req, res) => { const preset = await DocumentTemplatePreset.findByIdAndUpdate(req.params.presetId, req.body || {}, { new: true, runValidators: true }); if (!preset) return res.status(404).json({ success: false, message: 'Preset not found' }); return res.json({ success: true, preset }); });
 
@@ -54,7 +54,7 @@ router.post('/companies/:companyId/save-as-template', async (req, res) => {
     return res.status(201).json({ success: true, template });
   } catch (error) { return res.status(error.status || 500).json({ success: false, message: error.message || 'Failed to save setup template' }); }
 });
-router.get('/setup-templates', async (_req, res) => { await ensurePlatformSeedData(); return res.json({ success: true, templates: await CompanySetupTemplate.find({ isActive: true }).sort({ createdAt: -1 }).lean() }); });
+router.get('/setup-templates', async (_req, res) => res.json({ success: true, templates: await CompanySetupTemplate.find({ isActive: true }).sort({ createdAt: -1 }).lean() }));
 router.get('/setup-templates/:templateId', async (req, res) => { const template = await CompanySetupTemplate.findById(req.params.templateId).lean(); if (!template) return res.status(404).json({ success: false, message: 'Setup template not found' }); return res.json({ success: true, template }); });
 router.post('/companies/:companyId/apply-setup-template', async (req, res) => {
   try {

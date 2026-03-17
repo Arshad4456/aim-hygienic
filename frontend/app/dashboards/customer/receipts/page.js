@@ -1,15 +1,5 @@
-"use client";
-
-import ReceiptCenter from "../../components/ReceiptCenter";
-import { userDashboardSearchItems } from "../../searchItems";
+import LegacyRuntimeModuleBridge from "../../components/LegacyRuntimeModuleBridge";
 
 export default function Page() {
-  return (
-    <ReceiptCenter
-      title="Customer Receipts"
-      subtitle="Generate payment receipts and track admin approval status."
-      roleKey="Customer"
-      links={userDashboardSearchItems.customer || []}
-    />
-  );
+  return <LegacyRuntimeModuleBridge moduleCode="finance_accounts" emptyMessage="Customer receipt modules will appear here when assigned." />;
 }

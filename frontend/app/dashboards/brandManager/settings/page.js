@@ -1,17 +1,5 @@
-import UserSettingsView from "../../components/UserSettingsView";
-import UserDashboardShell from "../../components/userDashboardShell";
-import { userDashboardSearchItems } from "../../searchItems";
+import LegacyRuntimeModuleBridge from "../../components/LegacyRuntimeModuleBridge";
 
 export default function Page() {
-  return (
-    <UserDashboardShell
-      title="Brand Manager Dashboard"
-      subtitle="Manage brand modules from the sidebar."
-      roleKey="Brand Manager"
-      links={userDashboardSearchItems.brandManager || []}
-      showAccountCards
-    >
-      <UserSettingsView titlePrefix="Brand Manager" />
-    </UserDashboardShell>
-  );
+  return <LegacyRuntimeModuleBridge moduleCode="settings" emptyMessage="Settings will appear here when assigned." />;
 }

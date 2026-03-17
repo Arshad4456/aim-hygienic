@@ -4,135 +4,223 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { apiFetch } from "../../../lib/api";
+import RoleModuleMatrix from "../../components/RoleModuleMatrix";
+import ApplySetupTemplatePanel from "../../components/ApplySetupTemplatePanel";
 
-const DEFAULT_SETTINGS = { appName: "", logoUrl: "", primaryColor: "#10b981", invoiceHeader: "", invoiceFooter: "", receiptHeader: "", receiptFooter: "" };
+const TABS = [
+  ["overview", "Overview"],
+  ["matrix", "Role / Module Matrix"],
+  ["templates", "Templates"],
+  ["subscription", "Plan & Lifecycle"],
+];
 
 export default function CompanyWorkspacePage() {
   const { companyId } = useParams();
-  const [company, setCompany] = useState(null);
-  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [activeTab, setActiveTab] = useState("overview");
+  const [workspace, setWorkspace] = useState(null);
+  const [matrixData, setMatrixData] = useState({ templates: [], matrix: [] });
+  const [templates, setTemplates] = useState([]);
   const [plans, setPlans] = useState([]);
-  const [subscription, setSubscription] = useState(null);
+  const [selectedPlanId, setSelectedPlanId] = useState("");
+  const [companyForm, setCompanyForm] = useState({ name: "", slug: "", email: "", phone: "", primaryColor: "#10b981" });
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
 
-  async function load() {
-    setLoading(true); setError("");
+  async function loadAll() {
+    setLoading(true);
+    setMessage("");
     try {
-      const [companyRes, settingsRes, plansRes, subRes] = await Promise.all([
-        apiFetch(`/platform-admin/companies/${companyId}`),
-        apiFetch(`/platform-admin/companies/${companyId}/settings`),
-        apiFetch('/platform-admin/plans').catch(() => ({ plans: [] })),
-        apiFetch(`/platform-admin/companies/${companyId}/subscription`).catch(() => ({ subscription: null })),
+      const [workspaceRes, matrixRes, templatesRes, plansRes] = await Promise.all([
+        apiFetch(`/platform-admin/companies/${companyId}/workspace-summary`),
+        apiFetch(`/platform-admin/companies/${companyId}/role-module-matrix`).catch(() => ({ templates: [], matrix: [] })),
+        apiFetch("/platform-admin/setup-templates").catch(() => ({ templates: [] })),
+        apiFetch("/platform-admin/plans").catch(() => ({ plans: [] })),
       ]);
-      setCompany(companyRes.company || null);
-      setSettings({ ...DEFAULT_SETTINGS, ...(settingsRes.settings || companyRes.company?.settings || {}) });
+      setWorkspace(workspaceRes);
+      setMatrixData({ templates: matrixRes.templates || [], matrix: matrixRes.matrix || [] });
+      setTemplates(templatesRes.templates || []);
       setPlans(plansRes.plans || []);
-      setSubscription(subRes.subscription || null);
-    } catch (e) {
-      setError(e.message || 'Failed to load company workspace');
-    } finally { setLoading(false); }
+      setSelectedPlanId(workspaceRes.subscription?.planId || workspaceRes.subscription?.plan?._id || "");
+      setCompanyForm({
+        name: workspaceRes.company?.name || "",
+        slug: workspaceRes.company?.slug || "",
+        email: workspaceRes.company?.email || "",
+        phone: workspaceRes.company?.phone || "",
+        primaryColor: workspaceRes.company?.primaryColor || "#10b981",
+      });
+    } catch (error) {
+      setMessage(error?.message || "Failed to load company workspace");
+    } finally {
+      setLoading(false);
+    }
   }
 
-  useEffect(() => { if (companyId) load(); }, [companyId]);
+  useEffect(() => {
+    if (companyId) loadAll().catch(() => undefined);
+  }, [companyId]);
 
-  async function saveSettings(e) {
-    e.preventDefault();
-    setSaving(true); setMessage(""); setError("");
+  const company = workspace?.company;
+  const overviewCards = useMemo(
+    () => [
+      ["Roles", workspace?.roles?.length || 0],
+      ["Dashboards", workspace?.dashboards?.length || 0],
+      ["Modules", workspace?.modules?.length || 0],
+      ["Documents", workspace?.documents?.length || 0],
+    ],
+    [workspace]
+  );
+
+  async function saveCompanyDetails() {
     try {
-      await apiFetch(`/platform-admin/companies/${companyId}/settings`, { method: 'PUT', body: settings });
-      setMessage('Company settings saved.');
-      await load();
-    } catch (e2) { setError(e2.message || 'Failed to save settings'); } finally { setSaving(false); }
+      await apiFetch(`/platform-admin/companies/${companyId}`, { method: "PUT", body: companyForm });
+      setMessage("Company details updated successfully.");
+      await loadAll();
+    } catch (error) {
+      setMessage(error?.message || "Failed to update company details");
+    }
   }
 
-  async function assignPlan(planId) {
-    const startDate = new Date();
-    const endDate = new Date();
-    endDate.setMonth(endDate.getMonth() + 1);
-    await apiFetch(`/platform-admin/companies/${companyId}/subscription`, { method: 'POST', body: { planId, billingCycle: 'monthly', startDate, endDate, status: 'active', paymentStatus: 'paid' } });
-    await load();
+  async function assignPlan() {
+    if (!selectedPlanId) return;
+    try {
+      await apiFetch(`/platform-admin/companies/${companyId}/subscription`, {
+        method: "POST",
+        body: {
+          planId: selectedPlanId,
+          billingCycle: "monthly",
+          startDate: new Date().toISOString(),
+          endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          status: "active",
+          paymentStatus: "paid",
+        },
+      });
+      setMessage("Plan assigned successfully.");
+      await loadAll();
+    } catch (error) {
+      setMessage(error?.message || "Failed to assign plan");
+    }
   }
 
-  async function lifecycle(action) {
-    await apiFetch(`/platform-admin/companies/${companyId}/${action}`, { method: 'POST', body: {} });
-    await load();
+  async function lifecycleAction(action) {
+    try {
+      await apiFetch(`/platform-admin/companies/${companyId}/${action}`, { method: "POST", body: {} });
+      setMessage(`Company ${action.replace("-", " ")} successful.`);
+      await loadAll();
+    } catch (error) {
+      setMessage(error?.message || "Failed lifecycle action");
+    }
   }
 
-  const summary = useMemo(() => ({
-    roleCount: company?.roleCount || 0,
-    moduleCount: company?.settings?.modules ? Object.keys(company.settings.modules).length : 0,
-    hierarchy: company?.hierarchy?.hierarchyName || company?.hierarchy?.hierarchyCode || 'Not assigned',
-  }), [company]);
-
-  if (loading) return <div className="p-6 text-sm text-zinc-500">Loading company workspace...</div>;
-  if (!company) return <div className="p-6 text-sm text-red-600">Company not found.</div>;
+  if (loading) return <div className="p-6 text-sm">Loading company workspace...</div>;
+  if (!company) return <div className="p-6 text-sm text-red-600">{message || "Company not found."}</div>;
 
   return (
     <div className="min-h-screen bg-zinc-50 p-6 md:p-8">
-      <div className="max-w-6xl mx-auto space-y-6">
-        <div className="rounded-2xl border bg-white p-6">
-          <div className="text-xs uppercase tracking-wide text-emerald-700 font-semibold">Platform Management</div>
-          <h1 className="text-3xl font-bold text-zinc-900 mt-2">{company.name}</h1>
-          <p className="text-zinc-600 mt-2">Manage company details, onboarding, roles, modules, plans, and lifecycle state.</p>
-          <div className="mt-4 flex flex-wrap gap-2 text-sm">
-            <span className="rounded-full border px-3 py-1">Slug: {company.slug}</span>
-            <span className="rounded-full border px-3 py-1 capitalize">Lifecycle: {company.lifecycleStatus || 'inactive'}</span>
-            <span className="rounded-full border px-3 py-1">Onboarding: {company.onboardingStatus || 'not_started'}</span>
-            <span className="rounded-full border px-3 py-1">Hierarchy: {summary.hierarchy}</span>
-            <span className="rounded-full border px-3 py-1">Roles: {summary.roleCount}</span>
+      <div className="mx-auto max-w-7xl space-y-6">
+        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="text-xs uppercase tracking-wide text-emerald-700 font-semibold">Company Workspace</div>
+              <h1 className="mt-2 text-2xl font-bold text-zinc-900">{company.name}</h1>
+              <div className="mt-2 flex flex-wrap gap-2 text-sm text-zinc-600">
+                <span>Slug: {company.slug}</span>
+                <span>•</span>
+                <span>Lifecycle: {company.lifecycleStatus || company.status}</span>
+                <span>•</span>
+                <span>Onboarding: {workspace?.onboardingState?.steps?.setupCompleted ? "completed" : company.onboardingStatus || "not_started"}</span>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link href={`/platform-admin/companies/${companyId}/onboarding`} className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-zinc-50">Open Onboarding</Link>
+              <Link href={`/dashboards/superadmin/runtime-preview?companyId=${companyId}`} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white">Runtime Preview</Link>
+            </div>
           </div>
         </div>
 
-        {message ? <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</div> : null}
-        {error ? <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
+        <div className="flex flex-wrap gap-2">
+          {TABS.map(([key, label]) => (
+            <button key={key} onClick={() => setActiveTab(key)} className={`rounded-xl px-4 py-2 text-sm font-medium ${activeTab === key ? "bg-emerald-600 text-white" : "border bg-white text-zinc-700"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          <div className="xl:col-span-2 rounded-2xl border bg-white p-6">
-            <div className="font-semibold text-zinc-900 text-lg">Company Detail Editor</div>
-            <form className="mt-4 space-y-4" onSubmit={saveSettings}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div><label className="block text-sm mb-1">App Name</label><input className="w-full rounded-xl border px-3 py-2" value={settings.appName || ''} onChange={(e)=>setSettings((p)=>({...p, appName:e.target.value}))} /></div>
-                <div><label className="block text-sm mb-1">Logo URL</label><input className="w-full rounded-xl border px-3 py-2" value={settings.logoUrl || ''} onChange={(e)=>setSettings((p)=>({...p, logoUrl:e.target.value}))} /></div>
-                <div><label className="block text-sm mb-1">Primary Color</label><input className="w-full rounded-xl border px-3 py-2" value={settings.primaryColor || '#10b981'} onChange={(e)=>setSettings((p)=>({...p, primaryColor:e.target.value}))} /></div>
-                <div><label className="block text-sm mb-1">Invoice Header</label><input className="w-full rounded-xl border px-3 py-2" value={settings.invoiceHeader || ''} onChange={(e)=>setSettings((p)=>({...p, invoiceHeader:e.target.value}))} /></div>
-                <div><label className="block text-sm mb-1">Invoice Footer</label><input className="w-full rounded-xl border px-3 py-2" value={settings.invoiceFooter || ''} onChange={(e)=>setSettings((p)=>({...p, invoiceFooter:e.target.value}))} /></div>
-                <div><label className="block text-sm mb-1">Receipt Header</label><input className="w-full rounded-xl border px-3 py-2" value={settings.receiptHeader || ''} onChange={(e)=>setSettings((p)=>({...p, receiptHeader:e.target.value}))} /></div>
-                <div className="md:col-span-2"><label className="block text-sm mb-1">Receipt Footer</label><input className="w-full rounded-xl border px-3 py-2" value={settings.receiptFooter || ''} onChange={(e)=>setSettings((p)=>({...p, receiptFooter:e.target.value}))} /></div>
-              </div>
-              <div className="flex gap-3"><button disabled={saving} className="rounded-xl bg-emerald-600 px-4 py-2 text-white font-semibold">{saving ? 'Saving...' : 'Save Company Details'}</button><Link href={`/platform-admin/companies/${companyId}/onboarding`} className="rounded-xl border px-4 py-2 font-semibold">Open Onboarding</Link></div>
-            </form>
-          </div>
+        {message ? <div className="rounded-xl border bg-white p-4 text-sm text-zinc-700">{message}</div> : null}
 
+        {activeTab === "overview" ? (
           <div className="space-y-6">
-            <div className="rounded-2xl border bg-white p-6">
-              <div className="font-semibold text-zinc-900">Lifecycle Actions</div>
-              <div className="mt-4 grid gap-2">
-                <button onClick={()=>lifecycle('activate')} className="rounded-xl bg-emerald-600 px-4 py-2 text-white font-semibold">Activate</button>
-                <button onClick={()=>lifecycle('suspend')} className="rounded-xl border px-4 py-2 font-semibold">Suspend</button>
-                <button onClick={()=>lifecycle('reactivate')} className="rounded-xl border px-4 py-2 font-semibold">Reactivate</button>
-                <button onClick={()=>lifecycle('mark-expired')} className="rounded-xl border px-4 py-2 font-semibold">Mark Expired</button>
-              </div>
+            <div className="grid gap-4 md:grid-cols-4">
+              {overviewCards.map(([label, value]) => (
+                <div key={label} className="rounded-2xl border bg-white p-5 shadow-sm">
+                  <div className="text-sm text-zinc-500">{label}</div>
+                  <div className="mt-2 text-2xl font-bold text-zinc-900">{value}</div>
+                </div>
+              ))}
             </div>
-            <div className="rounded-2xl border bg-white p-6">
-              <div className="font-semibold text-zinc-900">Plan Assignment</div>
-              <div className="text-sm text-zinc-600 mt-1">Current plan: {subscription?.planId?.name || 'None assigned'}</div>
-              <div className="mt-4 grid gap-2">
-                {plans.length ? plans.map((plan)=><button key={plan._id} onClick={()=>assignPlan(plan._id)} className="rounded-xl border px-4 py-2 text-left"><div className="font-semibold">{plan.name}</div><div className="text-xs text-zinc-500">{plan.code} · {plan.billingType}</div></button>) : <div className="text-sm text-zinc-500">No plans available yet.</div>}
+            <div className="grid gap-6 xl:grid-cols-2">
+              <div className="rounded-2xl border bg-white p-5 shadow-sm">
+                <div className="text-lg font-semibold text-zinc-900">Company Detail Editor</div>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <input className="rounded-xl border px-3 py-2" value={companyForm.name} onChange={(e) => setCompanyForm((prev) => ({ ...prev, name: e.target.value }))} placeholder="Company name" />
+                  <input className="rounded-xl border px-3 py-2" value={companyForm.slug} onChange={(e) => setCompanyForm((prev) => ({ ...prev, slug: e.target.value }))} placeholder="Slug" />
+                  <input className="rounded-xl border px-3 py-2" value={companyForm.email} onChange={(e) => setCompanyForm((prev) => ({ ...prev, email: e.target.value }))} placeholder="Email" />
+                  <input className="rounded-xl border px-3 py-2" value={companyForm.phone} onChange={(e) => setCompanyForm((prev) => ({ ...prev, phone: e.target.value }))} placeholder="Phone" />
+                </div>
+                <div className="mt-3 flex items-center gap-3">
+                  <input type="color" className="h-10 w-20 rounded-lg border" value={companyForm.primaryColor} onChange={(e) => setCompanyForm((prev) => ({ ...prev, primaryColor: e.target.value }))} />
+                  <button onClick={saveCompanyDetails} className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-zinc-50">Save Details</button>
+                </div>
+                <div className="mt-4 space-y-2 text-sm text-zinc-700">
+                  <div>Hierarchy: {workspace?.hierarchyConfig?.hierarchyName || "Not configured"}</div>
+                  <div>Roles: {(workspace?.roles || []).map((role) => role.roleName).join(", ") || "None"}</div>
+                  <div>Current Plan: {workspace?.subscription?.planCode || "No plan assigned"}</div>
+                </div>
               </div>
-            </div>
-            <div className="rounded-2xl border bg-white p-6">
-              <div className="font-semibold text-zinc-900">Quick Links</div>
-              <div className="mt-4 grid gap-2">
-                <Link href={`/dashboards/superadmin/runtime-preview?companyId=${companyId}`} className="rounded-xl border px-4 py-2 font-semibold">Runtime Preview</Link>
-                <Link href={`/platform-admin/companies/${companyId}/config-snapshots`} className="rounded-xl border px-4 py-2 font-semibold">Config Snapshots</Link>
-                <Link href={`/platform-admin/companies/${companyId}/audit-logs`} className="rounded-xl border px-4 py-2 font-semibold">Audit Logs</Link>
+              <div className="rounded-2xl border bg-white p-5 shadow-sm">
+                <div className="text-lg font-semibold text-zinc-900">Lifecycle Actions</div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button onClick={() => lifecycleAction("activate")} className="rounded-xl border px-4 py-2 text-sm">Activate</button>
+                  <button onClick={() => lifecycleAction("suspend")} className="rounded-xl border px-4 py-2 text-sm">Suspend</button>
+                  <button onClick={() => lifecycleAction("mark-expired")} className="rounded-xl border px-4 py-2 text-sm">Mark Expired</button>
+                  <button onClick={() => lifecycleAction("reactivate")} className="rounded-xl border px-4 py-2 text-sm">Reactivate</button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        ) : null}
+
+        {activeTab === "matrix" ? (
+          <RoleModuleMatrix companyId={companyId} matrix={matrixData.matrix || []} templates={matrixData.templates || []} onChanged={loadAll} />
+        ) : null}
+
+        {activeTab === "templates" ? (
+          <ApplySetupTemplatePanel companyId={companyId} templates={templates} onApplied={loadAll} />
+        ) : null}
+
+        {activeTab === "subscription" ? (
+          <div className="rounded-2xl border bg-white p-5 shadow-sm">
+            <div className="text-lg font-semibold text-zinc-900">Plan & Subscription</div>
+            <div className="mt-1 text-sm text-zinc-600">Assign a plan and manage company access lifecycle.</div>
+            <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center">
+              <select value={selectedPlanId} onChange={(e) => setSelectedPlanId(e.target.value)} className="flex-1 rounded-xl border px-3 py-2">
+                <option value="">Select plan</option>
+                {plans.map((plan) => (
+                  <option key={plan._id} value={plan._id}>{plan.name} ({plan.code})</option>
+                ))}
+              </select>
+              <button onClick={assignPlan} disabled={!selectedPlanId} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Assign Plan</button>
+            </div>
+            {workspace?.subscription ? (
+              <div className="mt-4 rounded-xl border p-4 text-sm text-zinc-700">
+                <div>Plan: {workspace.subscription.planCode || workspace.subscription.planId}</div>
+                <div>Status: {workspace.subscription.status}</div>
+                <div>Payment: {workspace.subscription.paymentStatus}</div>
+              </div>
+            ) : (
+              <div className="mt-4 text-sm text-zinc-500">No current subscription assigned.</div>
+            )}
+          </div>
+        ) : null}
       </div>
     </div>
   );

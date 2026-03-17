@@ -1,6 +1,5 @@
-import SecondaryOrderRequestModule from "../../components/SecondaryOrderRequestModule";
-import { userDashboardSearchItems } from "../../searchItems";
+import LegacyRuntimeModuleBridge from "../../components/LegacyRuntimeModuleBridge";
 
 export default function Page() {
-  return <SecondaryOrderRequestModule title="Order Management" roleKey="Order Booker" links={userDashboardSearchItems.orderBooker || []} />;
+  return <LegacyRuntimeModuleBridge moduleCode="order_management" emptyMessage="Order Booker order modules will appear here when assigned." />;
 }

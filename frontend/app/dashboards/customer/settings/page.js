@@ -1,17 +1,5 @@
-import UserSettingsView from "../../components/UserSettingsView";
-import UserDashboardShell from "../../components/userDashboardShell";
-import { userDashboardSearchItems } from "../../searchItems";
+import LegacyRuntimeModuleBridge from "../../components/LegacyRuntimeModuleBridge";
 
 export default function Page() {
-  return (
-    <UserDashboardShell
-      title="Customer Dashboard"
-      subtitle="Manage customer modules from the sidebar."
-      roleKey="Customer"
-      links={userDashboardSearchItems.customer || []}
-      showAccountCards
-    >
-      <UserSettingsView titlePrefix="Customer" />
-    </UserDashboardShell>
-  );
+  return <LegacyRuntimeModuleBridge moduleCode="settings" emptyMessage="Settings will appear here when assigned." />;
 }
