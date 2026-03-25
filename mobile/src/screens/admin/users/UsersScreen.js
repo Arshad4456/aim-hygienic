@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Linking, Modal, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import apiClient from '../../../api/client';
 import Card from '../../../ui/Card';
@@ -383,7 +383,18 @@ export default function UsersScreen({ navigation }) {
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
       const base64 = await fileToBase64FromUri(asset.uri);
-      setEditUser((s) => ({ ...s, documentPdf: base64, documentPdfName: asset.name || 'document.pdf' }));
+      const uploadRes = await apiClient.post('/uploads/user-document', {
+        userId: editUser.userId || editUser._id || 'unknown',
+        contentType: 'application/pdf',
+        fileBase64: base64,
+        fileName: asset.name || 'document.pdf',
+      });
+      setEditUser((s) => ({
+        ...s,
+        documentPdfUrl: uploadRes?.data?.publicUrl || '',
+        documentPdfObjectKey: uploadRes?.data?.objectKey || '',
+        documentPdfName: asset.name || 'document.pdf',
+      }));
       setErr('');
     } catch (e) {
       setErr(e.message || 'Failed to read PDF file');
@@ -393,7 +404,7 @@ export default function UsersScreen({ navigation }) {
   const removeEditDocumentPdf = () => {
     Alert.alert('Delete Document', 'Are you sure, to delete this document pdf', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => setEditUser((s) => ({ ...s, documentPdf: '', documentPdfName: '' })) },
+      { text: 'Delete', style: 'destructive', onPress: () => setEditUser((s) => ({ ...s, documentPdf: '', documentPdfUrl: '', documentPdfObjectKey: '', documentPdfName: '' })) },
     ]);
   };
 
@@ -534,7 +545,7 @@ export default function UsersScreen({ navigation }) {
                     <Text style={[styles.cell, styles.colData]}>{u.email || '-'}</Text>
                     <View style={[styles.colData, styles.docCell]}>
                       <Pressable style={styles.docInlineBtn} onPress={() => openEdit(u)}>
-                        <Text style={styles.docInlineText}>{u.documentPdf ? 'View / Edit' : 'Upload'}</Text>
+                        <Text style={styles.docInlineText}>{u.documentPdfUrl || u.documentPdf ? 'View / Edit' : 'Upload'}</Text>
                       </Pressable>
                     </View>
                     <View style={styles.actionCell}>
@@ -595,9 +606,14 @@ export default function UsersScreen({ navigation }) {
                   <Text style={styles.fieldLabel}>User Document PDF</Text>
                   <View style={styles.docActions}>
                     <Pressable style={styles.docBtn} onPress={pickEditDocumentPdf}>
-                      <Text style={styles.docBtnText}>{editUser.documentPdf ? 'Replace PDF' : 'Upload PDF'}</Text>
+                      <Text style={styles.docBtnText}>Upload PDF</Text>
                     </Pressable>
-                    {editUser.documentPdf ? (
+                    {editUser.documentPdfUrl || editUser.documentPdf ? (
+                      <Pressable style={styles.docBtn} onPress={() => Linking.openURL(editUser.documentPdfUrl || editUser.documentPdf)}>
+                        <Text style={styles.docBtnText}>Open PDF</Text>
+                      </Pressable>
+                    ) : null}
+                    {editUser.documentPdfUrl || editUser.documentPdf ? (
                       <Pressable style={styles.docDeleteBtn} onPress={removeEditDocumentPdf}>
                         <Text style={styles.docDeleteText}>Delete Document</Text>
                       </Pressable>

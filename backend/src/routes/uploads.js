@@ -317,6 +317,63 @@ function extensionFromContentType(contentType = "") {
   return "jpg";
 }
 
+function sanitizeFileLabel(value) {
+  const clean = String(value || "")
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, "_")
+    .replace(/_+/g, "_");
+  return clean || "document";
+}
+
+router.post("/user-document", requireAuth, async (req, res) => {
+  try {
+    const { userId, contentType, fileBase64, fileName } = req.body || {};
+    if (!userId || !contentType || !fileBase64) {
+      return res.status(400).json({ ok: false, message: "userId, contentType and fileBase64 are required" });
+    }
+
+    const normalizedType = String(contentType || "").toLowerCase().trim();
+    if (!normalizedType.includes("pdf")) {
+      return res.status(400).json({ ok: false, message: "Only PDF files are allowed" });
+    }
+
+    const { bucket, accountId, accessKeyId, secretAccessKey, endpoint, jurisdiction, missing } = readR2Config();
+    if (missing.length) {
+      return res.status(500).json({
+        ok: false,
+        message: `R2 storage is not configured (${missing.join(", ")}). Configure S3-compatible Access Key + Secret (API token is not used for presigned S3 uploads).`,
+      });
+    }
+
+    const base64Payload = normalizeBase64Payload(fileBase64);
+    const fileBuffer = Buffer.from(base64Payload, "base64");
+    if (!fileBuffer.length) {
+      return res.status(400).json({ ok: false, message: "Invalid base64 file payload" });
+    }
+
+    const safeUserId = sanitizeFileLabel(userId);
+    const safeName = sanitizeFileLabel(fileName || "document.pdf").replace(/\.pdf$/i, "");
+    const objectKey = `User Documents/${safeUserId}/${safeName}-${Date.now()}.pdf`;
+    const publicUrl = `${resolvePublicBaseUrl()}/${objectKey}`;
+    const uploadUrl = getPresignedPutUrl({ accountId, accessKeyId, secretAccessKey, bucket, key: objectKey, endpoint, jurisdiction });
+    assertR2UploadHost(uploadUrl);
+
+    const cloudRes = await uploadBufferToPresignedUrl(uploadUrl, {
+      contentType: "application/pdf",
+      body: fileBuffer,
+    });
+
+    if (!cloudRes.ok) {
+      return res.status(502).json({ ok: false, message: `R2 upload failed (${cloudRes.status})` });
+    }
+
+    return res.json({ ok: true, objectKey, publicUrl });
+  } catch (error) {
+    const message = String(error?.message || "").trim();
+    return res.status(500).json({ ok: false, message: message ? `Failed to upload user document: ${message}` : "Failed to upload user document" });
+  }
+});
+
 router.post("/payment-proof", requireAuth, async (req, res) => {
   try {
     const { contentType, fileBase64 } = req.body || {};

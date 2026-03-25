@@ -34,6 +34,7 @@ export default function AddUserPage() {
   const [showPassword, setShowPassword] = useState(false);
 
   const [saving, setSaving] = useState(false);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
   const [fieldsWarning, setFieldsWarning] = useState("");
@@ -212,12 +213,25 @@ export default function AddUserPage() {
       return;
     }
     try {
+      setUploadingDocument(true);
       const base64File = await readFileAsDataUrl(file);
-      setField("documentPdf", base64File);
+      const uploadRes = await apiFetch("/uploads/user-document", {
+        method: "POST",
+        body: {
+          userId: form.userId || "unknown",
+          contentType: "application/pdf",
+          fileBase64: base64File,
+          fileName: file.name || "document.pdf",
+        },
+      });
+      setField("documentPdfUrl", uploadRes.publicUrl || "");
+      setField("documentPdfObjectKey", uploadRes.objectKey || "");
       setField("documentPdfName", file.name || "document.pdf");
       setErr("");
     } catch (uploadErr) {
       setErr(uploadErr.message || "Failed to read PDF file");
+    } finally {
+      setUploadingDocument(false);
     }
   }
 
@@ -349,14 +363,21 @@ export default function AddUserPage() {
           <div className="md:col-span-2">
             <Label>User Document PDF</Label>
             <input type="file" accept="application/pdf" onChange={onSelectDocument} className="mt-1 block w-full text-sm" />
+            {uploadingDocument ? <div className="mt-1 text-xs text-zinc-500">Uploading PDF...</div> : null}
             {form.documentPdfName ? (
               <div className="mt-2 flex items-center gap-3 text-sm">
                 <span className="text-zinc-700">{form.documentPdfName}</span>
+                {form.documentPdfUrl ? (
+                  <a href={form.documentPdfUrl} target="_blank" rel="noreferrer" className="rounded-lg border px-2 py-1 text-xs hover:bg-zinc-50">
+                    Open PDF
+                  </a>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => {
                     if (!confirm("Are you sure, to delete this document pdf")) return;
-                    setField("documentPdf", "");
+                    setField("documentPdfUrl", "");
+                    setField("documentPdfObjectKey", "");
                     setField("documentPdfName", "");
                   }}
                   className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
@@ -372,7 +393,7 @@ export default function AddUserPage() {
           <div className="md:col-span-2">
             <button
               type="submit"
-              disabled={saving || !role}
+              disabled={saving || uploadingDocument || !role}
               className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
             >
               {saving ? "Saving..." : "Save User"}

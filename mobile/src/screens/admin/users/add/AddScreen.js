@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import apiClient from '../../../../api/client';
 import Card from '../../../../ui/Card';
@@ -83,6 +83,8 @@ export default function AddScreen({ navigation }) {
     fieldId: '',
     fieldName: '',
     documentPdf: '',
+    documentPdfUrl: '',
+    documentPdfObjectKey: '',
     documentPdfName: '',
   });
 
@@ -202,7 +204,18 @@ export default function AddScreen({ navigation }) {
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
       const base64 = await fileToBase64FromUri(asset.uri);
-      setForm((s) => ({ ...s, documentPdf: base64, documentPdfName: asset.name || 'document.pdf' }));
+      const uploadRes = await apiClient.post('/uploads/user-document', {
+        userId: form.userId || 'unknown',
+        contentType: 'application/pdf',
+        fileBase64: base64,
+        fileName: asset.name || 'document.pdf',
+      });
+      setForm((s) => ({
+        ...s,
+        documentPdfUrl: uploadRes?.data?.publicUrl || '',
+        documentPdfObjectKey: uploadRes?.data?.objectKey || '',
+        documentPdfName: asset.name || 'document.pdf',
+      }));
       setErr('');
     } catch (e) {
       setErr(e.message || 'Failed to read PDF file');
@@ -330,15 +343,20 @@ export default function AddScreen({ navigation }) {
             <Text style={styles.fieldLabel}>User Document PDF</Text>
             <View style={styles.docActions}>
               <Pressable style={styles.docBtn} onPress={pickDocumentPdf}>
-                <Text style={styles.docBtnText}>{form.documentPdf ? 'Replace PDF' : 'Upload PDF'}</Text>
+                <Text style={styles.docBtnText}>Upload PDF</Text>
               </Pressable>
-              {form.documentPdf ? (
+              {form.documentPdfUrl ? (
+                <Pressable style={styles.docBtn} onPress={() => Linking.openURL(form.documentPdfUrl)}>
+                  <Text style={styles.docBtnText}>Open PDF</Text>
+                </Pressable>
+              ) : null}
+              {form.documentPdfUrl ? (
                 <Pressable
                   style={styles.docDeleteBtn}
                   onPress={() => {
                     Alert.alert('Delete Document', 'Are you sure, to delete this document pdf', [
                       { text: 'Cancel', style: 'cancel' },
-                      { text: 'Delete', style: 'destructive', onPress: () => setForm((s) => ({ ...s, documentPdf: '', documentPdfName: '' })) },
+                      { text: 'Delete', style: 'destructive', onPress: () => setForm((s) => ({ ...s, documentPdf: '', documentPdfUrl: '', documentPdfObjectKey: '', documentPdfName: '' })) },
                     ]);
                   }}
                 >
