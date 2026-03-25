@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
 import apiClient from '../../../api/client';
 import Card from '../../../ui/Card';
 import Loader from '../../../ui/Loader';
@@ -206,6 +207,17 @@ function toBase64(str) {
   return output;
 }
 
+async function fileToBase64FromUri(uri) {
+  const response = await fetch(uri);
+  const blob = await response.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Failed to read PDF file'));
+    reader.readAsDataURL(blob);
+  });
+}
+
 export default function UsersScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
@@ -360,6 +372,31 @@ export default function UsersScreen({ navigation }) {
     setEditUser({ ...user, password: '' });
   };
 
+  const pickEditDocumentPdf = async () => {
+    if (!editUser) return;
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf'],
+        multiple: false,
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      const base64 = await fileToBase64FromUri(asset.uri);
+      setEditUser((s) => ({ ...s, documentPdf: base64, documentPdfName: asset.name || 'document.pdf' }));
+      setErr('');
+    } catch (e) {
+      setErr(e.message || 'Failed to read PDF file');
+    }
+  };
+
+  const removeEditDocumentPdf = () => {
+    Alert.alert('Delete Document', 'Are you sure, to delete this document pdf', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => setEditUser((s) => ({ ...s, documentPdf: '', documentPdfName: '' })) },
+    ]);
+  };
+
   const updateUser = async () => {
     if (!editUser) return;
     setEditSaving(true);
@@ -472,7 +509,7 @@ export default function UsersScreen({ navigation }) {
               <Pressable onPress={() => onSortColumn('fullName')} style={[styles.headCell, styles.colData, styles.sortableHead]}>
                 <Text style={styles.headText}>Name {sortBy === 'fullName' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}</Text>
               </Pressable>
-              {['Role', 'Warehouse', 'Region', 'Zone', 'Territory', 'Field', 'Mobile', 'Email', 'Actions'].map((h) => (
+              {['Role', 'Warehouse', 'Region', 'Zone', 'Territory', 'Field', 'Mobile', 'Email', 'Documents', 'Actions'].map((h) => (
                 <View key={h} style={[styles.headCell, h === 'Actions' ? styles.colAction : styles.colData]}>
                   <Text style={styles.headText}>{h}</Text>
                 </View>
@@ -495,6 +532,11 @@ export default function UsersScreen({ navigation }) {
                     <Text style={[styles.cell, styles.colData]}>{u.fieldName || '-'}</Text>
                     <Text style={[styles.cell, styles.colData]}>{u.mobileNumber || '-'}</Text>
                     <Text style={[styles.cell, styles.colData]}>{u.email || '-'}</Text>
+                    <View style={[styles.colData, styles.docCell]}>
+                      <Pressable style={styles.docInlineBtn} onPress={() => openEdit(u)}>
+                        <Text style={styles.docInlineText}>{u.documentPdf ? 'View / Edit' : 'Upload'}</Text>
+                      </Pressable>
+                    </View>
                     <View style={styles.actionCell}>
                       <Pressable style={styles.editBtn} onPress={() => openEdit(u)}><Text style={styles.editBtnText}>Edit</Text></Pressable>
                       <Pressable style={styles.deleteBtn} onPress={() => onDelete(u._id)}><Text style={styles.deleteBtnText}>Delete</Text></Pressable>
@@ -549,6 +591,20 @@ export default function UsersScreen({ navigation }) {
 
                 {(ROLE_EXTRA_FIELDS[editUser.role] || []).includes('businessType') ? <Field label="Business Type" value={editUser.businessType || ''} onChangeText={(v) => setEditUser((s) => ({ ...s, businessType: v }))} /> : null}
                 {(ROLE_EXTRA_FIELDS[editUser.role] || []).includes('businessName') ? <Field label="Business Name" value={editUser.businessName || ''} onChangeText={(v) => setEditUser((s) => ({ ...s, businessName: v }))} /> : null}
+                <View style={styles.fieldWrap}>
+                  <Text style={styles.fieldLabel}>User Document PDF</Text>
+                  <View style={styles.docActions}>
+                    <Pressable style={styles.docBtn} onPress={pickEditDocumentPdf}>
+                      <Text style={styles.docBtnText}>{editUser.documentPdf ? 'Replace PDF' : 'Upload PDF'}</Text>
+                    </Pressable>
+                    {editUser.documentPdf ? (
+                      <Pressable style={styles.docDeleteBtn} onPress={removeEditDocumentPdf}>
+                        <Text style={styles.docDeleteText}>Delete Document</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                  <Text style={styles.docName}>{editUser.documentPdfName || 'No document selected.'}</Text>
+                </View>
 
                 <View style={styles.modalActions}>
                   <Pressable style={styles.cancelBtn} onPress={() => setEditUser(null)}><Text style={styles.cancelText}>Cancel</Text></Pressable>
@@ -625,6 +681,9 @@ const styles = StyleSheet.create({
   colData: { width: 120 },
   colAction: { width: 220 },
   actionCell: { width: 220, flexDirection: 'row', gap: 8 },
+  docCell: { justifyContent: 'center' },
+  docInlineBtn: { borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, paddingVertical: 6, alignItems: 'center', backgroundColor: '#fff' },
+  docInlineText: { color: '#111827', fontWeight: '600', fontSize: 12 },
   editBtn: { flex: 1, borderRadius: 8, backgroundColor: '#e0f2fe', paddingVertical: 7, alignItems: 'center' },
   editBtnText: { color: '#075985', fontWeight: '700', fontSize: 12 },
   deleteBtn: { flex: 1, borderRadius: 8, backgroundColor: '#fee2e2', paddingVertical: 7, alignItems: 'center' },
@@ -662,6 +721,12 @@ const styles = StyleSheet.create({
     borderLeftColor: '#e5e7eb',
   },
   eyeText: { fontSize: 16 },
+  docActions: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  docBtn: { borderWidth: 1, borderColor: '#059669', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#ecfdf5' },
+  docBtnText: { color: '#047857', fontWeight: '700', fontSize: 12 },
+  docDeleteBtn: { borderWidth: 1, borderColor: '#fecaca', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#fff1f2' },
+  docDeleteText: { color: '#b91c1c', fontWeight: '700', fontSize: 12 },
+  docName: { marginTop: 5, fontSize: 12, color: '#52525b' },
   modalActions: { flexDirection: 'row', gap: 8, marginTop: 10 },
   cancelBtn: { flex: 1, borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
   saveBtn: { flex: 1, backgroundColor: '#059669', borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
