@@ -624,7 +624,7 @@ export default function UserListPage() {
                     <td className="border-b px-3 py-2">{row.fieldName || "-"}</td>
                     <td className="border-b px-3 py-2">
                       <button onClick={() => openEdit(row)} className="rounded-lg border px-3 py-1.5 text-xs hover:bg-zinc-50">
-                        {row.documentPdf ? "View / Edit" : "Upload"}
+                        {row.documentPdfUrl || row.documentPdf ? "View / Edit" : "Upload"}
                       </button>
                     </td>
                     <td className="border-b px-3 py-2">
@@ -828,10 +828,12 @@ function EditUserModal({
               setShow={setShowPassword}
             />
             <DocumentPdfField
+              userId={user.userId || user._id || "unknown"}
               fileName={user.documentPdfName || ""}
-              fileData={user.documentPdf || ""}
-              onSetFile={(fileData, fileName) => {
-                setField("documentPdf", fileData);
+              fileUrl={user.documentPdfUrl || user.documentPdf || ""}
+              onSetFile={(fileUrl, fileName, objectKey) => {
+                setField("documentPdfUrl", fileUrl);
+                setField("documentPdfObjectKey", objectKey || "");
                 setField("documentPdfName", fileName);
               }}
             />
@@ -908,7 +910,7 @@ function PasswordField({ label, value, onChange, show, setShow }) {
   );
 }
 
-function DocumentPdfField({ fileName, fileData, onSetFile }) {
+function DocumentPdfField({ userId, fileName, fileUrl, onSetFile }) {
   async function onSelectFile(event) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -918,7 +920,16 @@ function DocumentPdfField({ fileName, fileData, onSetFile }) {
     }
     try {
       const data = await readFileAsDataUrl(file);
-      onSetFile(data, file.name || "document.pdf");
+      const uploadRes = await apiFetch("/uploads/user-document", {
+        method: "POST",
+        body: {
+          userId: userId || "unknown",
+          contentType: "application/pdf",
+          fileBase64: data,
+          fileName: file.name || "document.pdf",
+        },
+      });
+      onSetFile(uploadRes.publicUrl || "", file.name || "document.pdf", uploadRes.objectKey || "");
     } catch (error) {
       alert(error.message || "Failed to read PDF file");
     }
@@ -931,8 +942,8 @@ function DocumentPdfField({ fileName, fileData, onSetFile }) {
       {fileName ? (
         <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
           <span className="text-zinc-700">{fileName}</span>
-          {fileData ? (
-            <a href={fileData} target="_blank" rel="noreferrer" className="rounded-lg border px-2 py-1 text-xs hover:bg-zinc-50">
+          {fileUrl ? (
+            <a href={fileUrl} target="_blank" rel="noreferrer" className="rounded-lg border px-2 py-1 text-xs hover:bg-zinc-50">
               Open PDF
             </a>
           ) : null}
@@ -940,7 +951,7 @@ function DocumentPdfField({ fileName, fileData, onSetFile }) {
             type="button"
             onClick={() => {
               if (!confirm("Are you sure, to delete this document pdf")) return;
-              onSetFile("", "");
+              onSetFile("", "", "");
             }}
             className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
           >
