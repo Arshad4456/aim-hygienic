@@ -1,9 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
 import apiClient from '../../../../api/client';
 import Card from '../../../../ui/Card';
 import Loader from '../../../../ui/Loader';
 import { AIM_USER_ROLES, COMMON_USER_FIELDS, FIELD_LABELS, ROLE_EXTRA_FIELDS, validatePassword } from '../roleConfig';
+
+async function fileToBase64FromUri(uri) {
+  const response = await fetch(uri);
+  const blob = await response.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Failed to read PDF file'));
+    reader.readAsDataURL(blob);
+  });
+}
 
 function SelectPills({ options, value, onChange }) {
   return (
@@ -70,6 +82,8 @@ export default function AddScreen({ navigation }) {
     territoryName: '',
     fieldId: '',
     fieldName: '',
+    documentPdf: '',
+    documentPdfName: '',
   });
 
   useEffect(() => {
@@ -175,6 +189,23 @@ export default function AddScreen({ navigation }) {
       setErr(e.message || 'Failed to create user');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const pickDocumentPdf = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf'],
+        multiple: false,
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      const base64 = await fileToBase64FromUri(asset.uri);
+      setForm((s) => ({ ...s, documentPdf: base64, documentPdfName: asset.name || 'document.pdf' }));
+      setErr('');
+    } catch (e) {
+      setErr(e.message || 'Failed to read PDF file');
     }
   };
 
@@ -295,6 +326,29 @@ export default function AddScreen({ navigation }) {
             </>
           ) : null}
 
+          <View style={styles.fieldWrap}>
+            <Text style={styles.fieldLabel}>User Document PDF</Text>
+            <View style={styles.docActions}>
+              <Pressable style={styles.docBtn} onPress={pickDocumentPdf}>
+                <Text style={styles.docBtnText}>{form.documentPdf ? 'Replace PDF' : 'Upload PDF'}</Text>
+              </Pressable>
+              {form.documentPdf ? (
+                <Pressable
+                  style={styles.docDeleteBtn}
+                  onPress={() => {
+                    Alert.alert('Delete Document', 'Are you sure, to delete this document pdf', [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Delete', style: 'destructive', onPress: () => setForm((s) => ({ ...s, documentPdf: '', documentPdfName: '' })) },
+                    ]);
+                  }}
+                >
+                  <Text style={styles.docDeleteText}>Delete Document</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            <Text style={styles.docName}>{form.documentPdfName || 'No document selected.'}</Text>
+          </View>
+
           <View style={styles.actions}>
             <Pressable style={styles.primaryBtn} onPress={save} disabled={saving}>
               <Text style={styles.primaryText}>{saving ? 'Saving...' : 'Save User'}</Text>
@@ -351,6 +405,12 @@ const styles = StyleSheet.create({
   roleChipActive: { borderColor: '#10b981', backgroundColor: '#ecfdf5' },
   roleChipText: { color: '#52525b', fontSize: 12 },
   roleChipTextActive: { color: '#047857', fontWeight: '700' },
+  docActions: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  docBtn: { borderWidth: 1, borderColor: '#059669', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#ecfdf5' },
+  docBtnText: { color: '#047857', fontWeight: '700', fontSize: 12 },
+  docDeleteBtn: { borderWidth: 1, borderColor: '#fecaca', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#fff1f2' },
+  docDeleteText: { color: '#b91c1c', fontWeight: '700', fontSize: 12 },
+  docName: { marginTop: 5, fontSize: 12, color: '#52525b' },
   actions: { marginTop: 10 },
   primaryBtn: { backgroundColor: '#059669', borderRadius: 10, paddingVertical: 11, alignItems: 'center' },
   primaryText: { color: '#fff', fontWeight: '700', fontSize: 13 },

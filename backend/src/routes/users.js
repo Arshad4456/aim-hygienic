@@ -6,7 +6,7 @@ const { hashPassword, verifyPassword } = require("../utils/passwordHash");
 
 const router = express.Router();
 
-const COMMON_PROFILE_FIELDS = ["email", "address", "cnicNo", "mobileNumber", "phoneNumber"];
+const COMMON_PROFILE_FIELDS = ["email", "address", "cnicNo", "mobileNumber", "phoneNumber", "documentPdf", "documentPdfName"];
 const ROLE_PROFILE_FIELDS = {
   admin: [],
   CEO: [],
@@ -162,6 +162,8 @@ const OPTIONAL_PROFILE_FIELDS = [
   "fieldName",
   "businessType",
   "businessName",
+  "documentPdf",
+  "documentPdfName",
 ];
 
 function normalize(value) {

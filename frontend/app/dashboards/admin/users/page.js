@@ -7,6 +7,14 @@ import { listFieldsCompat } from "../../../lib/fieldApi";
 import { AIM_USER_ROLES, FIELD_LABELS, ROLE_EXTRA_FIELDS, validatePassword } from "./roleConfig";
 
 const BASE_EDIT_FIELDS = ["fullName", "email", "mobileNumber", "cnicNo", "address", "businessType", "businessName"];
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Failed to read PDF file"));
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function UserListPage() {
   const [rows, setRows] = useState([]);
@@ -593,14 +601,15 @@ export default function UserListPage() {
                 <th className="border-b px-3 py-2 text-left">Zone</th>
                 <th className="border-b px-3 py-2 text-left">Territory</th>
                 <th className="border-b px-3 py-2 text-left">Field</th>
+                <th className="border-b px-3 py-2 text-left">Documents</th>
                 <th className="border-b px-3 py-2 text-left">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={10} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
+                <tr><td colSpan={11} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
               ) : sortedRows.length === 0 ? (
-                <tr><td colSpan={10} className="px-3 py-6 text-center text-zinc-500">No users found</td></tr>
+                <tr><td colSpan={11} className="px-3 py-6 text-center text-zinc-500">No users found</td></tr>
               ) : (
                 sortedRows.map((row) => (
                   <tr key={row._id} className="hover:bg-zinc-50">
@@ -613,6 +622,11 @@ export default function UserListPage() {
                     <td className="border-b px-3 py-2">{row.zoneName || "-"}</td>
                     <td className="border-b px-3 py-2">{row.territoryName || "-"}</td>
                     <td className="border-b px-3 py-2">{row.fieldName || "-"}</td>
+                    <td className="border-b px-3 py-2">
+                      <button onClick={() => openEdit(row)} className="rounded-lg border px-3 py-1.5 text-xs hover:bg-zinc-50">
+                        {row.documentPdf ? "View / Edit" : "Upload"}
+                      </button>
+                    </td>
                     <td className="border-b px-3 py-2">
                       <div className="flex gap-2">
                         <button onClick={() => openEdit(row)} className="rounded-lg border px-3 py-1.5 text-xs hover:bg-zinc-50">Edit</button>
@@ -813,6 +827,14 @@ function EditUserModal({
               show={showPassword}
               setShow={setShowPassword}
             />
+            <DocumentPdfField
+              fileName={user.documentPdfName || ""}
+              fileData={user.documentPdf || ""}
+              onSetFile={(fileData, fileName) => {
+                setField("documentPdf", fileData);
+                setField("documentPdfName", fileName);
+              }}
+            />
           </div>
         </div>
 
@@ -882,6 +904,52 @@ function PasswordField({ label, value, onChange, show, setShow }) {
           {show ? "Hide" : "Show"}
         </button>
       </div>
+    </div>
+  );
+}
+
+function DocumentPdfField({ fileName, fileData, onSetFile }) {
+  async function onSelectFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.type !== "application/pdf") {
+      alert("Only PDF documents are allowed.");
+      return;
+    }
+    try {
+      const data = await readFileAsDataUrl(file);
+      onSetFile(data, file.name || "document.pdf");
+    } catch (error) {
+      alert(error.message || "Failed to read PDF file");
+    }
+  }
+
+  return (
+    <div className="md:col-span-2">
+      <Label>User Document PDF</Label>
+      <input type="file" accept="application/pdf" onChange={onSelectFile} className="mt-1 block w-full text-sm" />
+      {fileName ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-zinc-700">{fileName}</span>
+          {fileData ? (
+            <a href={fileData} target="_blank" rel="noreferrer" className="rounded-lg border px-2 py-1 text-xs hover:bg-zinc-50">
+              Open PDF
+            </a>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => {
+              if (!confirm("Are you sure, to delete this document pdf")) return;
+              onSetFile("", "");
+            }}
+            className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+          >
+            Delete Document
+          </button>
+        </div>
+      ) : (
+        <div className="mt-1 text-xs text-zinc-500">No document uploaded.</div>
+      )}
     </div>
   );
 }

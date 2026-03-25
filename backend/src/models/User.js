@@ -65,6 +65,8 @@ const UserSchema = new mongoose.Schema(
     fieldName: { type: String, trim: true },
     businessType: { type: String, trim: true },
     businessName: { type: String, trim: true },
+    documentPdf: { type: String, trim: true },
+    documentPdfName: { type: String, trim: true },
   },
   { timestamps: true }
 );

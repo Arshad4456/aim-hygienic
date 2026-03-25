@@ -12,6 +12,15 @@ import {
   validatePassword,
 } from "../roleConfig";
 
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Failed to read PDF file"));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function AddUserPage() {
   const [users, setUsers] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
@@ -195,6 +204,22 @@ export default function AddUserPage() {
   }
 
   const roleNeeds = ROLE_EXTRA_FIELDS[role] || [];
+  async function onSelectDocument(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.type !== "application/pdf") {
+      setErr("Only PDF documents are allowed.");
+      return;
+    }
+    try {
+      const base64File = await readFileAsDataUrl(file);
+      setField("documentPdf", base64File);
+      setField("documentPdfName", file.name || "document.pdf");
+      setErr("");
+    } catch (uploadErr) {
+      setErr(uploadErr.message || "Failed to read PDF file");
+    }
+  }
 
   return (
     <AdminShell title="Add User" user={null}>
@@ -321,6 +346,28 @@ export default function AddUserPage() {
             show={showPassword}
             setShow={setShowPassword}
           />
+          <div className="md:col-span-2">
+            <Label>User Document PDF</Label>
+            <input type="file" accept="application/pdf" onChange={onSelectDocument} className="mt-1 block w-full text-sm" />
+            {form.documentPdfName ? (
+              <div className="mt-2 flex items-center gap-3 text-sm">
+                <span className="text-zinc-700">{form.documentPdfName}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!confirm("Are you sure, to delete this document pdf")) return;
+                    setField("documentPdf", "");
+                    setField("documentPdfName", "");
+                  }}
+                  className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+                >
+                  Delete Document
+                </button>
+              </div>
+            ) : (
+              <div className="mt-1 text-xs text-zinc-500">Upload a PDF document for this user (optional).</div>
+            )}
+          </div>
 
           <div className="md:col-span-2">
             <button
