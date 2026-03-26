@@ -6,7 +6,7 @@ const { hashPassword, verifyPassword } = require("../utils/passwordHash");
 
 const router = express.Router();
 
-const COMMON_PROFILE_FIELDS = ["email", "address", "cnicNo", "mobileNumber", "phoneNumber", "documentPdf", "documentPdfName", "documentPdfUrl", "documentPdfObjectKey"];
+const COMMON_PROFILE_FIELDS = ["email", "address", "cnicNo", "mobileNumber", "phoneNumber", "companyId", "companyName", "documentPdf", "documentPdfName", "documentPdfUrl", "documentPdfObjectKey"];
 const ROLE_PROFILE_FIELDS = {
   admin: [],
   CEO: [],
@@ -180,6 +180,11 @@ function isCompanyAdmin(role) {
   return normalizeRole(role) === "company admin";
 }
 
+function isSystemLevelAdmin(role) {
+  const normalized = normalizeRole(role);
+  return normalized === "admin" || normalized === "system admin";
+}
+
 function getValueFromBody(body, key) {
   if (key === "mobile") return normalize(body.mobile || body.mobileNumber);
   return normalize(body[key]);
@@ -266,12 +271,19 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
     if (existingUserId) return res.status(409).json({ ok: false, message: "User ID already exists" });
   }
 
+  const targetRole = normalizeRole(body.role);
+  const requiresCompany = targetRole && !isSystemLevelAdmin(targetRole);
+
   const { payload } = buildRoleAwarePayload(body);
   if (isCompanyAdmin(req.user?.role)) {
     payload.companyId = normalize(req.user?.companyId);
     payload.companyName = normalize(req.user?.companyName);
     if (!payload.companyId) {
       return res.status(400).json({ ok: false, message: "Company admin must belong to a company." });
+    }
+  } else if (requiresCompany) {
+    if (!normalize(payload.companyId)) {
+      return res.status(400).json({ ok: false, message: "Company is required for this role." });
     }
   }
   payload.username = payload.username || payload.mobile;
