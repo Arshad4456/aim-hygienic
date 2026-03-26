@@ -19,12 +19,14 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     const token = getAuthItem("aim_token");
     const role = getAuthItem("aim_role");
+    const normalizedRole = String(role || "").trim().toLowerCase();
+    const allowedAdminRoles = new Set(["admin", "system admin", "company admin"]);
 
     if (!token) {
       router.replace("/login");
       return;
     }
-    if (role !== "admin") {
+    if (!allowedAdminRoles.has(normalizedRole)) {
       router.replace("/login");
       return;
     }
