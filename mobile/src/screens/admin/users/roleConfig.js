@@ -1,5 +1,7 @@
 export const AIM_USER_ROLES = [
   'admin',
+  'system admin',
+  'company admin',
   'CEO',
   'Managing Director',
   'Warehouse Manager',
@@ -24,6 +26,8 @@ export const COMMON_USER_FIELDS = ['fullName', 'email', 'mobileNumber', 'cnicNo'
 
 export const ROLE_EXTRA_FIELDS = {
   admin: [],
+  'system admin': [],
+  'company admin': [],
   CEO: [],
   'Managing Director': [],
   'Warehouse Manager': ['warehouse'],

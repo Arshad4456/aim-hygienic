@@ -30,6 +30,8 @@ function signToken(user) {
     warehouseId: String(user.warehouseId || "").trim(),
     userId: String(user.userId || "").trim(),
     distributorId,
+    companyId: String(user.companyId || "").trim(),
+    companyName: String(user.companyName || "").trim(),
     exp: now + 7 * 24 * 60 * 60,
   };
 
@@ -91,7 +93,17 @@ function requireRole(...roles) {
     if (!req.user?.role) return res.status(401).json({ ok: false, message: "No user role" });
     const allowedRoles = roles.map((r) => normalizeRole(r));
     const userRole = normalizeRole(req.user.role);
-    if (!allowedRoles.includes(userRole)) return res.status(403).json({ ok: false, message: "Forbidden" });
+    const roleAliases = {
+      admin: ["admin", "system admin", "company admin"],
+    };
+    const expandedAllowed = new Set(allowedRoles);
+    for (const role of allowedRoles) {
+      for (const alias of roleAliases[role] || []) {
+        expandedAllowed.add(alias);
+      }
+    }
+
+    if (!expandedAllowed.has(userRole)) return res.status(403).json({ ok: false, message: "Forbidden" });
     next();
   };
 }
