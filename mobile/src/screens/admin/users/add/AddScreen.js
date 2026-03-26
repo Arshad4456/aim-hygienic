@@ -55,6 +55,7 @@ export default function AddScreen({ navigation }) {
   const [showPassword, setShowPassword] = useState(false);
 
   const [users, setUsers] = useState([]);
+  const [companies, setCompanies] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [regions, setRegions] = useState([]);
   const [zones, setZones] = useState([]);
@@ -71,6 +72,8 @@ export default function AddScreen({ navigation }) {
     address: '',
     businessType: '',
     businessName: '',
+    companyId: '',
+    companyName: '',
     password: '',
     warehouseId: '',
     warehouseName: '',
@@ -92,8 +95,9 @@ export default function AddScreen({ navigation }) {
     let mounted = true;
     (async () => {
       try {
-        const [u, w, r, z, a] = await Promise.all([
+        const [u, c, w, r, z, a] = await Promise.all([
           apiClient.get('/users'),
+          apiClient.get('/companies'),
           apiClient.get('/warehouses'),
           apiClient.get('/regions'),
           apiClient.get('/zones'),
@@ -112,6 +116,7 @@ export default function AddScreen({ navigation }) {
 
         const userRows = u.data?.users || [];
         setUsers(userRows);
+        setCompanies(c.data?.companies || []);
         setWarehouses(w.data?.warehouses || []);
         setRegions(r.data?.regions || []);
         setZones(z.data?.zones || []);
@@ -133,6 +138,10 @@ export default function AddScreen({ navigation }) {
   }, []);
 
   const roleNeeds = useMemo(() => ROLE_EXTRA_FIELDS[form.role] || [], [form.role]);
+  const requiresCompany = useMemo(() => {
+    const normalizedRole = String(form.role || '').trim().toLowerCase();
+    return Boolean(normalizedRole && normalizedRole !== 'admin' && normalizedRole !== 'system admin');
+  }, [form.role]);
 
   const filteredRegions = useMemo(() => {
     if (!form.warehouseId) return regions;
@@ -179,6 +188,10 @@ export default function AddScreen({ navigation }) {
     }
     if (!form.role || !form.fullName.trim() || !form.mobileNumber.trim()) {
       setErr('Role, Name, and Mobile Number are required.');
+      return;
+    }
+    if (requiresCompany && !String(form.companyId || '').trim()) {
+      setErr('Company is required for this role.');
       return;
     }
 
@@ -236,9 +249,31 @@ export default function AddScreen({ navigation }) {
 
         <View style={styles.formWrap}>
           <Text style={styles.fieldLabel}>Role</Text>
-          <SelectPills options={AIM_USER_ROLES} value={form.role} onChange={(role) => setForm((s) => ({ ...s, role }))} />
+          <SelectPills options={AIM_USER_ROLES} value={form.role} onChange={(role) => {
+            const normalizedRole = String(role || '').trim().toLowerCase();
+            setForm((s) => ({
+              ...s,
+              role,
+              companyId: normalizedRole === 'admin' || normalizedRole === 'system admin' ? '' : s.companyId,
+              companyName: normalizedRole === 'admin' || normalizedRole === 'system admin' ? '' : s.companyName,
+            }));
+          }} />
 
           <Field label="Auto User ID" value={form.userId} onChangeText={() => {}} readOnly />
+
+          {requiresCompany ? (
+            <>
+              <Text style={styles.fieldLabel}>Company</Text>
+              <SelectPills
+                options={companies.map((c) => `${c.name} (${c.companyId})`)}
+                value={form.companyName && form.companyId ? `${form.companyName} (${form.companyId})` : ''}
+                onChange={(label) => {
+                  const picked = companies.find((c) => `${c.name} (${c.companyId})` === label);
+                  setForm((s) => ({ ...s, companyId: picked?.companyId || '', companyName: picked?.name || '' }));
+                }}
+              />
+            </>
+          ) : null}
 
           {COMMON_USER_FIELDS.map((field) => (
             <Field

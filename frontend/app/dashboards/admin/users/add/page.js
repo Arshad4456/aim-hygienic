@@ -23,6 +23,7 @@ function readFileAsDataUrl(file) {
 
 export default function AddUserPage() {
   const [users, setUsers] = useState([]);
+  const [companies, setCompanies] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [regions, setRegions] = useState([]);
   const [zones, setZones] = useState([]);
@@ -41,14 +42,16 @@ export default function AddUserPage() {
 
   useEffect(() => {
     (async () => {
-      const [usersRes, warehousesRes, regionsRes, zonesRes, areasRes] = await Promise.all([
+      const [usersRes, companiesRes, warehousesRes, regionsRes, zonesRes, areasRes] = await Promise.all([
         apiFetch("/users"),
+        apiFetch("/companies"),
         apiFetch("/warehouses"),
         apiFetch("/regions"),
         apiFetch("/zones"),
         apiFetch("/areas"),
       ]);
       setUsers(usersRes.users || []);
+      setCompanies(companiesRes.companies || []);
       setWarehouses(warehousesRes.warehouses || []);
       setRegions(regionsRes.regions || []);
       setZones(zonesRes.zones || []);
@@ -172,6 +175,10 @@ export default function AddUserPage() {
       setErr("Please select a role.");
       return;
     }
+    if (requiresCompany && !String(form.companyId || "").trim()) {
+      setErr("Please select a company for this role.");
+      return;
+    }
 
     const passError = validatePassword(form.password);
     if (passError) {
@@ -205,6 +212,10 @@ export default function AddUserPage() {
   }
 
   const roleNeeds = ROLE_EXTRA_FIELDS[role] || [];
+  const requiresCompany = useMemo(() => {
+    const normalizedRole = String(role || "").trim().toLowerCase();
+    return Boolean(normalizedRole && normalizedRole !== "admin" && normalizedRole !== "system admin");
+  }, [role]);
   async function onSelectDocument(event) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -246,8 +257,37 @@ export default function AddUserPage() {
         {fieldsWarning ? <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">{fieldsWarning} (Add User still works; Field dropdown will remain empty until backend /api/fields is deployed.)</div> : null}
 
         <form onSubmit={onSubmit} className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
-          <SelectField label="Role" value={role} onChange={setRole} options={AIM_USER_ROLES.map((r) => ({ value: r, label: r }))} required />
+          <SelectField
+            label="Role"
+            value={role}
+            onChange={(nextRole) => {
+              setRole(nextRole);
+              const normalizedRole = String(nextRole || "").trim().toLowerCase();
+              if (normalizedRole === "admin" || normalizedRole === "system admin") {
+                setForm((prev) => ({ ...prev, companyId: "", companyName: "" }));
+              }
+            }}
+            options={AIM_USER_ROLES.map((r) => ({ value: r, label: r }))}
+            required
+          />
           <InputField label="Auto User ID" value={form.userId || ""} readOnly />
+
+          {requiresCompany ? (
+            <SelectField
+              label="Company"
+              value={form.companyId || ""}
+              onChange={(companyId) => {
+                const item = companies.find((c) => c.companyId === companyId);
+                setForm((prev) => ({
+                  ...prev,
+                  companyId: item?.companyId || "",
+                  companyName: item?.name || "",
+                }));
+              }}
+              options={companies.map((c) => ({ value: c.companyId, label: `${c.name} (${c.companyId})` }))}
+              required
+            />
+          ) : null}
 
           {roleNeeds.includes("warehouse") ? (
             <SelectField
