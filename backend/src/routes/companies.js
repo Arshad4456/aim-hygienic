@@ -19,7 +19,22 @@ function duplicateKeyMessage(error) {
   if (!duplicateField) return "Duplicate value already exists";
   if (duplicateField === "companyId") return "Company ID already exists";
   if (duplicateField === "name") return "Company name already exists";
+  if (duplicateField === "slug") return "Company slug already exists";
   return `${duplicateField} already exists`;
+}
+
+async function buildUniqueCompanySlug(baseValue, excludeId = null) {
+  const baseSlug = toTenantDatabaseName(baseValue, "company");
+  let candidate = baseSlug;
+  let counter = 1;
+  while (true) {
+    const query = { slug: candidate };
+    if (excludeId) query._id = { $ne: excludeId };
+    const exists = await Company.findOne(query).select("_id").lean();
+    if (!exists) return candidate;
+    counter += 1;
+    candidate = `${baseSlug}-${counter}`;
+  }
 }
 
 // CREATE
@@ -38,8 +53,10 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
     if (exists) {
       return res.status(409).json({ ok: false, message: "Company ID already exists" });
     }
+    const slug = await buildUniqueCompanySlug(companyId || companyName);
     const doc = await Company.create({
       companyId,
+      slug,
       name: companyName,
 
       phone1: String(body.phone1 || "").trim(),
@@ -115,11 +132,13 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
     if (duplicate) {
       return res.status(409).json({ ok: false, message: "Company ID already exists" });
     }
+    const slug = await buildUniqueCompanySlug(companyId || companyName, req.params.id);
 
     const updated = await Company.findByIdAndUpdate(
       req.params.id,
       {
         companyId,
+        slug,
         name: companyName,
 
         phone1: String(body.phone1 || "").trim(),
