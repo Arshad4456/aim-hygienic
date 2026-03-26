@@ -11,13 +11,14 @@ export default function CompanyListPage() {
 
   const [editId, setEditId] = useState(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState("");
 
   async function load() {
     setErr("");
     setLoading(true);
     try {
       const data = await apiFetch("/companies");
-    setRows(data?.companies || []);
+      setRows(data?.companies || []);
     } catch (e) {
       setErr(e.message || "Failed to load companies");
     } finally {
@@ -27,7 +28,19 @@ export default function CompanyListPage() {
 
   useEffect(() => { load(); }, []);
 
-
+  async function onDelete(id) {
+    if (!confirm("Delete this company? This cannot be undone.")) return;
+    setErr("");
+    setDeletingId(id);
+    try {
+      await apiFetch(`/companies/${id}`, { method: "DELETE" });
+      await load();
+    } catch (e) {
+      setErr(e.message || "Failed to delete company");
+    } finally {
+      setDeletingId("");
+    }
+  }
 
   return (
     <AdminShell title="Company List" user={null}>
@@ -35,7 +48,7 @@ export default function CompanyListPage() {
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-xl font-semibold text-zinc-900">Companies</div>
-            <div className="text-sm text-zinc-500 mt-1">Single-company mode enabled: AIM Hygienic (Pvt) Limited.</div>
+            <div className="text-sm text-zinc-500 mt-1">Multi-company mode enabled. System admin can add or remove companies.</div>
           </div>
         </div>
 
@@ -72,7 +85,14 @@ export default function CompanyListPage() {
                         >
                           Edit
                         </button>
-                                              </div>
+                        <button
+                          onClick={() => onDelete(c._id)}
+                          disabled={deletingId === c._id}
+                          className="rounded-lg border border-red-300 text-red-700 px-3 py-1.5 text-xs hover:bg-red-50 disabled:opacity-50"
+                        >
+                          {deletingId === c._id ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

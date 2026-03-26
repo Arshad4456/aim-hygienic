@@ -172,6 +172,14 @@ function normalize(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function normalizeRole(role) {
+  return String(role || "").trim().toLowerCase();
+}
+
+function isCompanyAdmin(role) {
+  return normalizeRole(role) === "company admin";
+}
+
 function getValueFromBody(body, key) {
   if (key === "mobile") return normalize(body.mobile || body.mobileNumber);
   return normalize(body[key]);
@@ -259,6 +267,13 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
   }
 
   const { payload } = buildRoleAwarePayload(body);
+  if (isCompanyAdmin(req.user?.role)) {
+    payload.companyId = normalize(req.user?.companyId);
+    payload.companyName = normalize(req.user?.companyName);
+    if (!payload.companyId) {
+      return res.status(400).json({ ok: false, message: "Company admin must belong to a company." });
+    }
+  }
   payload.username = payload.username || payload.mobile;
   payload.passwordHash = await hashPassword(body.password);
 
@@ -268,6 +283,9 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
 
 router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
   const query = {};
+  if (isCompanyAdmin(req.user?.role)) {
+    query.companyId = normalize(req.user?.companyId);
+  }
   if (req.query.companyId) query.companyId = String(req.query.companyId);
   if (req.query.role) query.role = String(req.query.role);
   const users = await User.find(query).select("-passwordHash").sort({ createdAt: -1 }).lean();
@@ -301,6 +319,9 @@ router.get("/distributors", requireAuth, async (req, res) => {
 router.get("/:id", requireAuth, requireRole("admin"), async (req, res) => {
   const user = await User.findById(req.params.id).select("-passwordHash").lean();
   if (!user) return res.status(404).json({ ok: false, message: "User not found" });
+  if (isCompanyAdmin(req.user?.role) && normalize(user.companyId) !== normalize(req.user?.companyId)) {
+    return res.status(403).json({ ok: false, message: "Forbidden" });
+  }
   return res.json({ ok: true, user });
 });
 
@@ -308,8 +329,15 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
   const body = req.body || {};
   const existing = await User.findById(req.params.id).lean();
   if (!existing) return res.status(404).json({ ok: false, message: "User not found" });
+  if (isCompanyAdmin(req.user?.role) && normalize(existing.companyId) !== normalize(req.user?.companyId)) {
+    return res.status(403).json({ ok: false, message: "Forbidden" });
+  }
 
   const { payload, unset } = buildRoleAwarePayload(body, existing.role);
+  if (isCompanyAdmin(req.user?.role)) {
+    payload.companyId = normalize(req.user?.companyId);
+    payload.companyName = normalize(req.user?.companyName);
+  }
 
   if (payload.userId) {
     const duplicateUserId = await User.findOne({ userId: payload.userId, _id: { $ne: existing._id } }).lean();
@@ -335,6 +363,11 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
 });
 
 router.delete("/:id", requireAuth, requireRole("admin"), async (req, res) => {
+  const existing = await User.findById(req.params.id).lean();
+  if (!existing) return res.status(404).json({ ok: false, message: "User not found" });
+  if (isCompanyAdmin(req.user?.role) && normalize(existing.companyId) !== normalize(req.user?.companyId)) {
+    return res.status(403).json({ ok: false, message: "Forbidden" });
+  }
   const deleted = await User.findByIdAndDelete(req.params.id);
   if (!deleted) return res.status(404).json({ ok: false, message: "User not found" });
   return res.json({ ok: true });

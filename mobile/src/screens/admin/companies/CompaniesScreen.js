@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import apiClient from '../../../api/client';
 import Card from '../../../ui/Card';
 import Loader from '../../../ui/Loader';
@@ -37,6 +37,7 @@ export default function CompaniesScreen({ navigation }) {
 
   const [editOpen, setEditOpen] = useState(false);
   const [editId, setEditId] = useState('');
+  const [deletingId, setDeletingId] = useState('');
   const [form, setForm] = useState(emptyForm);
 
   const load = useCallback(async () => {
@@ -97,6 +98,28 @@ export default function CompaniesScreen({ navigation }) {
     }
   };
 
+  const confirmDelete = (id) => {
+    Alert.alert('Delete company', 'Are you sure you want to delete this company?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          setErr('');
+          setDeletingId(id);
+          try {
+            await apiClient.delete(`/companies/${id}`);
+            await load();
+          } catch (e) {
+            setErr(e.message || 'Failed to delete company');
+          } finally {
+            setDeletingId('');
+          }
+        },
+      },
+    ]);
+  };
+
   const headerRows = useMemo(
     () => ['Company ID', 'Company Name', 'Phone #1', 'Email', 'Actions'],
     []
@@ -110,7 +133,7 @@ export default function CompaniesScreen({ navigation }) {
         <View style={styles.titleRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.title}>Companies</Text>
-            <Text style={styles.subtitle}>Same data source as website company list (`/companies`).</Text>
+            <Text style={styles.subtitle}>Multi-company list synced with website (`/companies`).</Text>
           </View>
           <Pressable style={styles.addBtn} onPress={() => navigation?.navigate?.('admin:companies/add')}>
             <Text style={styles.addBtnText}>Add Company</Text>
@@ -139,9 +162,14 @@ export default function CompaniesScreen({ navigation }) {
                     <Text style={[styles.cell, styles.colName]}>{c.name || '-'}</Text>
                     <Text style={[styles.cell, styles.colDefault]}>{c.phone1 || '-'}</Text>
                     <Text style={[styles.cell, styles.colDefault]}>{c.email || '-'}</Text>
-                    <Pressable style={styles.editBtn} onPress={() => startEdit(c._id)}>
-                      <Text style={styles.editBtnText}>Edit</Text>
-                    </Pressable>
+                    <View style={styles.actionsCell}>
+                      <Pressable style={styles.editBtn} onPress={() => startEdit(c._id)}>
+                        <Text style={styles.editBtnText}>Edit</Text>
+                      </Pressable>
+                      <Pressable style={styles.deleteBtn} onPress={() => confirmDelete(c._id)} disabled={deletingId === c._id}>
+                        <Text style={styles.deleteBtnText}>{deletingId === c._id ? 'Deleting...' : 'Delete'}</Text>
+                      </Pressable>
+                    </View>
                   </View>
                 ))
               )}
@@ -218,7 +246,7 @@ const styles = StyleSheet.create({
   colName: { width: 220 },
   cell: { fontSize: 12, color: '#374151' },
   editBtn: {
-    width: 90,
+    width: 74,
     borderWidth: 1,
     borderColor: '#d4d4d8',
     borderRadius: 8,
@@ -228,6 +256,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   editBtnText: { fontSize: 12, fontWeight: '600', color: '#111827' },
+  actionsCell: { width: 154, flexDirection: 'row', gap: 6 },
+  deleteBtn: {
+    width: 74,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    backgroundColor: '#fef2f2',
+    alignItems: 'center',
+  },
+  deleteBtnText: { fontSize: 12, fontWeight: '700', color: '#b91c1c' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' },
   modalCard: {
     maxHeight: '88%',
