@@ -14,6 +14,14 @@ function isSystemAdmin(role) {
   return normalized === "admin" || normalized === "system admin";
 }
 
+function duplicateKeyMessage(error) {
+  const duplicateField = Object.keys(error?.keyPattern || {})[0] || Object.keys(error?.keyValue || {})[0];
+  if (!duplicateField) return "Duplicate value already exists";
+  if (duplicateField === "companyId") return "Company ID already exists";
+  if (duplicateField === "name") return "Company name already exists";
+  return `${duplicateField} already exists`;
+}
+
 // CREATE
 router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
   try {
@@ -21,9 +29,17 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
     if (!isSystemAdmin(req.user?.role)) {
       return res.status(403).json({ ok: false, message: "Only system admin can add companies." });
     }
+    const companyId = String(body.companyId || "").trim();
+    if (!companyId) {
+      return res.status(400).json({ ok: false, message: "Company ID is required." });
+    }
     const companyName = String(body.name || "").trim() || "AIM Hygienic (Pvt) Limited";
+    const exists = await Company.findOne({ companyId }).lean();
+    if (exists) {
+      return res.status(409).json({ ok: false, message: "Company ID already exists" });
+    }
     const doc = await Company.create({
-      companyId: String(body.companyId || "").trim(),
+      companyId,
       name: companyName,
 
       phone1: String(body.phone1 || "").trim(),
@@ -43,7 +59,7 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
   } catch (e) {
     // duplicate code
     if (e?.code === 11000) {
-      return res.status(409).json({ ok: false, message: "Company ID already exists" });
+      return res.status(409).json({ ok: false, message: duplicateKeyMessage(e) });
     }
     return res.status(500).json({ ok: false, message: "Failed to create company" });
   }
@@ -84,6 +100,10 @@ router.get("/:id", requireAuth, requireRole("admin"), async (req, res) => {
 router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
   try {
     const body = req.body || {};
+    const companyId = String(body.companyId || "").trim();
+    if (!companyId) {
+      return res.status(400).json({ ok: false, message: "Company ID is required." });
+    }
     const companyName = String(body.name || "").trim() || "AIM Hygienic (Pvt) Limited";
     const current = await Company.findById(req.params.id).lean();
     if (!current) return res.status(404).json({ ok: false, message: "Not found" });
@@ -91,10 +111,15 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
       return res.status(403).json({ ok: false, message: "Forbidden" });
     }
 
+    const duplicate = await Company.findOne({ companyId, _id: { $ne: req.params.id } }).lean();
+    if (duplicate) {
+      return res.status(409).json({ ok: false, message: "Company ID already exists" });
+    }
+
     const updated = await Company.findByIdAndUpdate(
       req.params.id,
       {
-        companyId: String(body.companyId || "").trim(),
+        companyId,
         name: companyName,
 
         phone1: String(body.phone1 || "").trim(),
@@ -109,7 +134,7 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
     return res.json({ ok: true, company: updated });
   } catch (e) {
     if (e?.code === 11000) {
-      return res.status(409).json({ ok: false, message: "Company ID already exists" });
+      return res.status(409).json({ ok: false, message: duplicateKeyMessage(e) });
     }
     return res.status(500).json({ ok: false, message: "Failed to update company" });
   }
