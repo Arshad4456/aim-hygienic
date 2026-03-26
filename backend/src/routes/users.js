@@ -3,6 +3,7 @@ const User = require("../models/User");
 const { requireAuth, requireRole } = require("../utils/auth");
 const { validatePassword } = require("../utils/password");
 const { hashPassword, verifyPassword } = require("../utils/passwordHash");
+const { syncUserToTenant, removeUserFromTenant, listTenantUsersByCompany } = require("../utils/tenantUsers");
 
 const router = express.Router();
 
@@ -290,14 +291,16 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
   payload.passwordHash = await hashPassword(body.password);
 
   const user = await User.create(payload);
+  await syncUserToTenant(user);
   return res.status(201).json({ ok: true, user: { id: user._id } });
 });
 
 router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
-  const query = {};
   if (isCompanyAdmin(req.user?.role)) {
-    query.companyId = normalize(req.user?.companyId);
+    const tenantUsers = await listTenantUsersByCompany(req.user?.companyId);
+    return res.json({ ok: true, users: tenantUsers });
   }
+  const query = {};
   if (req.query.companyId) query.companyId = String(req.query.companyId);
   if (req.query.role) query.role = String(req.query.role);
   const users = await User.find(query).select("-passwordHash").sort({ createdAt: -1 }).lean();
@@ -375,6 +378,11 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
     { new: true, runValidators: true }
   ).select("-passwordHash");
 
+  if (normalize(existing.companyId) && normalize(existing.companyId) !== normalize(updated?.companyId)) {
+    await removeUserFromTenant(existing);
+  }
+  await syncUserToTenant(updated);
+
   return res.json({ ok: true, user: updated });
 });
 
@@ -384,6 +392,7 @@ router.delete("/:id", requireAuth, requireRole("admin"), async (req, res) => {
   if (isCompanyAdmin(req.user?.role) && normalize(existing.companyId) !== normalize(req.user?.companyId)) {
     return res.status(403).json({ ok: false, message: "Forbidden" });
   }
+  await removeUserFromTenant(existing);
   const deleted = await User.findByIdAndDelete(req.params.id);
   if (!deleted) return res.status(404).json({ ok: false, message: "User not found" });
   return res.json({ ok: true });
