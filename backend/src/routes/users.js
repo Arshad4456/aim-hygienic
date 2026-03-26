@@ -346,9 +346,13 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
   }
 
   const { payload, unset } = buildRoleAwarePayload(body, existing.role);
+  const effectiveRole = normalizeRole(payload.role || existing.role);
+  const requiresCompany = effectiveRole && !isSystemLevelAdmin(effectiveRole);
   if (isCompanyAdmin(req.user?.role)) {
     payload.companyId = normalize(req.user?.companyId);
     payload.companyName = normalize(req.user?.companyName);
+  } else if (requiresCompany && !normalize(payload.companyId)) {
+    return res.status(400).json({ ok: false, message: "Company is required for this role." });
   }
 
   if (payload.userId) {

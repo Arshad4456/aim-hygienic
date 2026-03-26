@@ -18,6 +18,7 @@ function readFileAsDataUrl(file) {
 
 export default function UserListPage() {
   const [rows, setRows] = useState([]);
+  const [companies, setCompanies] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [regions, setRegions] = useState([]);
   const [zones, setZones] = useState([]);
@@ -26,6 +27,7 @@ export default function UserListPage() {
 
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
+  const [companyFilter, setCompanyFilter] = useState("");
   const [warehouseFilter, setWarehouseFilter] = useState("");
   const [regionFilter, setRegionFilter] = useState("");
   const [zoneFilter, setZoneFilter] = useState("");
@@ -46,14 +48,16 @@ export default function UserListPage() {
     setErr("");
     setLoading(true);
     try {
-      const [usersRes, warehousesRes, regionsRes, zonesRes, areasRes] = await Promise.all([
+      const [usersRes, companiesRes, warehousesRes, regionsRes, zonesRes, areasRes] = await Promise.all([
         apiFetch("/users"),
+        apiFetch("/companies"),
         apiFetch("/warehouses"),
         apiFetch("/regions"),
         apiFetch("/zones"),
         apiFetch("/areas"),
       ]);
       setRows(usersRes.users || []);
+      setCompanies(companiesRes.companies || []);
       setWarehouses(warehousesRes.warehouses || []);
       setRegions(regionsRes.regions || []);
       setZones(zonesRes.zones || []);
@@ -137,6 +141,7 @@ export default function UserListPage() {
     const value = search.trim().toLowerCase();
     return rows.filter((row) => {
       if (roleFilter && row.role !== roleFilter) return false;
+      if (companyFilter && row.companyId !== companyFilter) return false;
       if (!matchLocation(row.warehouseId, row.warehouseName, warehouseFilter, selectedWarehouseFilter?.name)) return false;
       if (!matchLocation(row.regionId, row.regionName, regionFilter, selectedRegionFilter?.name)) return false;
       if (!matchLocation(row.zoneId, row.zoneName, zoneFilter, selectedZoneFilter?.name)) return false;
@@ -147,6 +152,7 @@ export default function UserListPage() {
         row.userId,
         row.fullName,
         row.role,
+        row.companyName,
         row.mobile,
         row.mobileNumber,
         row.email,
@@ -165,6 +171,7 @@ export default function UserListPage() {
     rows,
     search,
     roleFilter,
+    companyFilter,
     warehouseFilter,
     regionFilter,
     zoneFilter,
@@ -236,6 +243,12 @@ export default function UserListPage() {
   async function onSaveEdit() {
     if (!editUser?._id) return;
     setEditErr("");
+    const normalizedRole = String(editUser.role || "").trim().toLowerCase();
+    const requiresCompany = normalizedRole && normalizedRole !== "admin" && normalizedRole !== "system admin";
+    if (requiresCompany && !String(editUser.companyId || "").trim()) {
+      setEditErr("Please select a company for this role.");
+      return;
+    }
 
     if (editUser.password) {
       const passwordErr = validatePassword(editUser.password);
@@ -268,6 +281,7 @@ export default function UserListPage() {
       userId: row.userId || "",
       fullName: row.fullName || "",
       role: row.role || "",
+      company: row.companyName || "",
       mobile: row.mobileNumber || row.mobile || "",
       email: row.email || "",
       warehouse: row.warehouseName || "",
@@ -286,11 +300,12 @@ export default function UserListPage() {
 
   function downloadExcel() {
     const rowsForExport = buildExportRows();
-    const headers = ["User ID", "Name", "Role", "Mobile", "Email", "Warehouse", "Region", "Zone", "Territory", "Field"];
+    const headers = ["User ID", "Name", "Role", "Company", "Mobile", "Email", "Warehouse", "Region", "Zone", "Territory", "Field"];
     const csvRows = rowsForExport.map((row) => [
       row.userId,
       row.fullName,
       row.role,
+      row.company,
       row.mobile,
       row.email,
       row.warehouse,
@@ -501,6 +516,14 @@ export default function UserListPage() {
             {AIM_USER_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
           <select
+            value={companyFilter}
+            onChange={(e) => setCompanyFilter(e.target.value)}
+            className="rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200"
+          >
+            <option value="">All companies</option>
+            {companies.map((c) => <option key={c.companyId} value={c.companyId}>{c.name}</option>)}
+          </select>
+          <select
             value={warehouseFilter}
             onChange={(e) => {
               setWarehouseFilter(e.target.value);
@@ -595,6 +618,7 @@ export default function UserListPage() {
                   </button>
                 </th>
                 <th className="border-b px-3 py-2 text-left">Role</th>
+                <th className="border-b px-3 py-2 text-left">Company</th>
                 <th className="border-b px-3 py-2 text-left">Mobile</th>
                 <th className="border-b px-3 py-2 text-left">Warehouse</th>
                 <th className="border-b px-3 py-2 text-left">Region</th>
@@ -607,15 +631,16 @@ export default function UserListPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={11} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
+                <tr><td colSpan={12} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
               ) : sortedRows.length === 0 ? (
-                <tr><td colSpan={11} className="px-3 py-6 text-center text-zinc-500">No users found</td></tr>
+                <tr><td colSpan={12} className="px-3 py-6 text-center text-zinc-500">No users found</td></tr>
               ) : (
                 sortedRows.map((row) => (
                   <tr key={row._id} className="hover:bg-zinc-50">
                     <td className="border-b px-3 py-2">{row.userId || "-"}</td>
                     <td className="border-b px-3 py-2">{row.fullName || "-"}</td>
                     <td className="border-b px-3 py-2">{row.role || "-"}</td>
+                    <td className="border-b px-3 py-2">{row.companyName || "-"}</td>
                     <td className="border-b px-3 py-2">{row.mobileNumber || row.mobile || "-"}</td>
                     <td className="border-b px-3 py-2">{row.warehouseName || "-"}</td>
                     <td className="border-b px-3 py-2">{row.regionName || "-"}</td>
@@ -650,6 +675,7 @@ export default function UserListPage() {
           saving={editSaving}
           error={editErr}
           warehouses={warehouses}
+          companies={companies}
           regions={regions}
           zones={zones}
           areas={areas}
@@ -670,6 +696,7 @@ function EditUserModal({
   saving,
   error,
   warehouses,
+  companies,
   regions,
   zones,
   areas,
@@ -678,6 +705,10 @@ function EditUserModal({
   setShowPassword,
 }) {
   const roleNeeds = ROLE_EXTRA_FIELDS[user.role] || [];
+  const requiresCompany = useMemo(() => {
+    const normalizedRole = String(user.role || "").trim().toLowerCase();
+    return Boolean(normalizedRole && normalizedRole !== "admin" && normalizedRole !== "system admin");
+  }, [user.role]);
 
   const selectedWarehouse = warehouses.find((x) => x.warehouseId === user.warehouseId);
   const selectedRegion = regions.find((x) => x.regionId === user.regionId);
@@ -725,6 +756,18 @@ function EditUserModal({
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <InputField label="User ID" value={user.userId || ""} readOnly />
             <InputField label="Role" value={user.role || ""} readOnly />
+            {requiresCompany ? (
+              <SelectField
+                label="Company"
+                value={user.companyId || ""}
+                onChange={(companyId) => {
+                  const item = companies.find((c) => c.companyId === companyId);
+                  setField("companyId", item?.companyId || "");
+                  setField("companyName", item?.name || "");
+                }}
+                options={companies.map((c) => ({ value: c.companyId, label: `${c.name} (${c.companyId})` }))}
+              />
+            ) : null}
 
             {roleNeeds.includes("warehouse") ? (
               <SelectField

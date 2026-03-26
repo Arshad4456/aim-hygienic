@@ -221,6 +221,7 @@ async function fileToBase64FromUri(uri) {
 export default function UsersScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
+  const [companies, setCompanies] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [regions, setRegions] = useState([]);
   const [zones, setZones] = useState([]);
@@ -229,6 +230,7 @@ export default function UsersScreen({ navigation }) {
 
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
+  const [companyFilter, setCompanyFilter] = useState('');
   const [warehouseFilter, setWarehouseFilter] = useState('');
   const [regionFilter, setRegionFilter] = useState('');
   const [zoneFilter, setZoneFilter] = useState('');
@@ -248,14 +250,16 @@ export default function UsersScreen({ navigation }) {
     setErr('');
     setLoading(true);
     try {
-      const [usersRes, warehousesRes, regionsRes, zonesRes, areasRes] = await Promise.all([
+      const [usersRes, companiesRes, warehousesRes, regionsRes, zonesRes, areasRes] = await Promise.all([
         apiClient.get('/users'),
+        apiClient.get('/companies'),
         apiClient.get('/warehouses'),
         apiClient.get('/regions'),
         apiClient.get('/zones'),
         apiClient.get('/areas'),
       ]);
       setRows(usersRes.data?.users || []);
+      setCompanies(companiesRes.data?.companies || []);
       setWarehouses(warehousesRes.data?.warehouses || []);
       setRegions(regionsRes.data?.regions || []);
       setZones(zonesRes.data?.zones || []);
@@ -281,7 +285,7 @@ export default function UsersScreen({ navigation }) {
 
   useEffect(() => {
     setPage(1);
-  }, [search, roleFilter, warehouseFilter, regionFilter, zoneFilter, territoryFilter, fieldFilter, sortBy, sortDirection]);
+  }, [search, roleFilter, companyFilter, warehouseFilter, regionFilter, zoneFilter, territoryFilter, fieldFilter, sortBy, sortDirection]);
 
   const selectedWarehouse = useMemo(() => warehouses.find((w) => w.warehouseId === warehouseFilter), [warehouses, warehouseFilter]);
   const selectedRegion = useMemo(() => regions.find((r) => r.regionId === regionFilter), [regions, regionFilter]);
@@ -322,6 +326,7 @@ export default function UsersScreen({ navigation }) {
         if (!inSearch) return false;
       }
       if (roleFilter && u.role !== roleFilter) return false;
+      if (companyFilter && u.companyId !== companyFilter) return false;
       if (warehouseFilter && u.warehouseId !== warehouseFilter) return false;
       if (regionFilter && u.regionId !== regionFilter) return false;
       if (zoneFilter && u.zoneId !== zoneFilter) return false;
@@ -329,7 +334,7 @@ export default function UsersScreen({ navigation }) {
       if (fieldFilter && u.fieldId !== fieldFilter) return false;
       return true;
     });
-  }, [rows, search, roleFilter, warehouseFilter, regionFilter, zoneFilter, territoryFilter, fieldFilter]);
+  }, [rows, search, roleFilter, companyFilter, warehouseFilter, regionFilter, zoneFilter, territoryFilter, fieldFilter]);
 
   const filteredSorted = useMemo(() => {
     const next = [...filtered];
@@ -413,6 +418,11 @@ export default function UsersScreen({ navigation }) {
     setEditSaving(true);
     setErr('');
     try {
+      const normalizedRole = String(editUser.role || '').trim().toLowerCase();
+      const requiresCompany = normalizedRole && normalizedRole !== 'admin' && normalizedRole !== 'system admin';
+      if (requiresCompany && !String(editUser.companyId || '').trim()) {
+        throw new Error('Company is required for this role.');
+      }
       if (editUser.password) {
         const passwordError = validatePassword(editUser.password);
         if (passwordError) throw new Error(passwordError);
@@ -494,6 +504,7 @@ export default function UsersScreen({ navigation }) {
           <TextInput value={search} onChangeText={setSearch} placeholder="Search" placeholderTextColor="#71717a" style={styles.input} />
 
           <FilterRow label="Role" value={roleFilter} onClear={() => setRoleFilter('')} options={AIM_USER_ROLES} onPick={setRoleFilter} />
+          <FilterRow label="Company" value={companyFilter} onClear={() => setCompanyFilter('')} options={companies.map((c) => ({ label: c.name, value: c.companyId }))} onPick={setCompanyFilter} />
           <FilterRow label="Warehouse" value={warehouseFilter} onClear={() => setWarehouseFilter('')} options={warehouses.map((w) => ({ label: w.name, value: w.warehouseId }))} onPick={setWarehouseFilter} />
           <FilterRow label="Region" value={regionFilter} onClear={() => setRegionFilter('')} options={filterRegions.map((r) => ({ label: r.name, value: r.regionId }))} onPick={setRegionFilter} />
           <FilterRow label="Zone" value={zoneFilter} onClear={() => setZoneFilter('')} options={filterZones.map((z) => ({ label: z.name, value: z.zoneId }))} onPick={setZoneFilter} />
@@ -520,7 +531,7 @@ export default function UsersScreen({ navigation }) {
               <Pressable onPress={() => onSortColumn('fullName')} style={[styles.headCell, styles.colData, styles.sortableHead]}>
                 <Text style={styles.headText}>Name {sortBy === 'fullName' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}</Text>
               </Pressable>
-              {['Role', 'Warehouse', 'Region', 'Zone', 'Territory', 'Field', 'Mobile', 'Email', 'Documents', 'Actions'].map((h) => (
+              {['Role', 'Company', 'Warehouse', 'Region', 'Zone', 'Territory', 'Field', 'Mobile', 'Email', 'Documents', 'Actions'].map((h) => (
                 <View key={h} style={[styles.headCell, h === 'Actions' ? styles.colAction : styles.colData]}>
                   <Text style={styles.headText}>{h}</Text>
                 </View>
@@ -536,6 +547,7 @@ export default function UsersScreen({ navigation }) {
                     <Text style={[styles.cell, styles.colData]}>{u.userId || '-'}</Text>
                     <Text style={[styles.cell, styles.colData]}>{u.fullName || '-'}</Text>
                     <Text style={[styles.cell, styles.colData]}>{u.role || '-'}</Text>
+                    <Text style={[styles.cell, styles.colData]}>{u.companyName || '-'}</Text>
                     <Text style={[styles.cell, styles.colData]}>{u.warehouseName || '-'}</Text>
                     <Text style={[styles.cell, styles.colData]}>{u.regionName || '-'}</Text>
                     <Text style={[styles.cell, styles.colData]}>{u.zoneName || '-'}</Text>
@@ -576,6 +588,22 @@ export default function UsersScreen({ navigation }) {
             <Text style={styles.modalTitle}>Edit User</Text>
             {editUser ? (
               <ScrollView contentContainerStyle={styles.formWrap}>
+                {(() => {
+                  const normalizedRole = String(editUser.role || '').trim().toLowerCase();
+                  const requiresCompany = normalizedRole && normalizedRole !== 'admin' && normalizedRole !== 'system admin';
+                  return requiresCompany ? (
+                    <FilterRow
+                      label="Company"
+                      value={editUser.companyId || ''}
+                      onClear={() => setEditUser((s) => ({ ...s, companyId: '', companyName: '' }))}
+                      options={companies.map((c) => ({ label: c.name, value: c.companyId }))}
+                      onPick={(companyId) => {
+                        const picked = companies.find((c) => c.companyId === companyId);
+                        setEditUser((s) => ({ ...s, companyId: picked?.companyId || '', companyName: picked?.name || '' }));
+                      }}
+                    />
+                  ) : null;
+                })()}
                 {BASE_EDIT_FIELDS.map((field) => (
                   <Field
                     key={field}
