@@ -1,8 +1,18 @@
 const express = require("express");
 const Product = require("../models/Product");
 const { requireAuth } = require("../utils/auth");
+const { syncProductToTenant, removeProductFromTenant, listTenantProductsByCompany } = require("../utils/tenantProducts");
 
 const router = express.Router();
+
+function normalizeRole(role) {
+  return String(role || "").trim().toLowerCase();
+}
+
+function isSystemLevelAdmin(role) {
+  const normalized = normalizeRole(role);
+  return normalized === "admin" || normalized === "system admin";
+}
 
 function toNumber(value) {
   const n = Number(value);
@@ -58,7 +68,14 @@ function normalizePayload(body = {}) {
 router.post("/", requireAuth, async (req, res) => {
   try {
     const body = normalizePayload(req.body || {});
+    const role = req.user?.role;
+    if (!isSystemLevelAdmin(role)) {
+      body.companyId = String(req.user?.companyId || "").trim();
+      body.companyName = String(req.user?.companyName || "").trim();
+      if (!body.companyId) return res.status(400).json({ ok: false, message: "Company is required for this role." });
+    }
     const doc = await Product.create({ ...body, createdBy: req.user?.uid });
+    await syncProductToTenant(doc);
     return res.status(201).json({ ok: true, product: doc });
   } catch (e) {
     if (e?.code === 11000) {
@@ -121,6 +138,10 @@ router.post("/bulk-upsert", requireAuth, async (req, res) => {
 
 router.get("/", requireAuth, async (req, res) => {
   try {
+    if (!isSystemLevelAdmin(req.user?.role)) {
+      const products = await listTenantProductsByCompany(req.user?.companyId);
+      return res.json({ ok: true, products });
+    }
     const query = {};
     if (req.query.companyId) query.companyId = String(req.query.companyId);
     if (req.query.category) query.category = String(req.query.category);
@@ -134,6 +155,19 @@ router.get("/", requireAuth, async (req, res) => {
 
 router.get("/barcodes", requireAuth, async (req, res) => {
   try {
+    if (!isSystemLevelAdmin(req.user?.role)) {
+      const scoped = await listTenantProductsByCompany(req.user?.companyId);
+      const items = scoped.map((row) => ({
+        _id: row._id,
+        productId: row.productId,
+        name: row.name,
+        barcode: row.barcode,
+        category: row.category,
+        subCategory: row.subCategory,
+        size: row.size,
+      }));
+      return res.json({ ok: true, products: items });
+    }
     const items = await Product.find().select("productId name barcode category subCategory size").lean();
     return res.json({ ok: true, products: items });
   } catch (e) {
@@ -145,6 +179,9 @@ router.get("/:id", requireAuth, async (req, res) => {
   try {
     const item = await Product.findById(req.params.id).lean();
     if (!item) return res.status(404).json({ ok: false, message: "Not found" });
+    if (!isSystemLevelAdmin(req.user?.role) && String(item.companyId || "").trim() !== String(req.user?.companyId || "").trim()) {
+      return res.status(403).json({ ok: false, message: "Forbidden" });
+    }
     return res.json({ ok: true, product: item });
   } catch (e) {
     return res.status(400).json({ ok: false, message: "Invalid id" });
@@ -154,12 +191,26 @@ router.get("/:id", requireAuth, async (req, res) => {
 router.put("/:id", requireAuth, async (req, res) => {
   try {
     const body = normalizePayload(req.body || {});
+    const existing = await Product.findById(req.params.id).lean();
+    if (!existing) return res.status(404).json({ ok: false, message: "Not found" });
+    if (!isSystemLevelAdmin(req.user?.role) && String(existing.companyId || "").trim() !== String(req.user?.companyId || "").trim()) {
+      return res.status(403).json({ ok: false, message: "Forbidden" });
+    }
+    if (!isSystemLevelAdmin(req.user?.role)) {
+      body.companyId = String(req.user?.companyId || "").trim();
+      body.companyName = String(req.user?.companyName || "").trim();
+      if (!body.companyId) return res.status(400).json({ ok: false, message: "Company is required for this role." });
+    }
     const updated = await Product.findByIdAndUpdate(
       req.params.id,
       body,
       { new: true, runValidators: true }
     );
     if (!updated) return res.status(404).json({ ok: false, message: "Not found" });
+    if (String(existing.companyId || "").trim() && String(existing.companyId || "").trim() !== String(updated.companyId || "").trim()) {
+      await removeProductFromTenant(existing);
+    }
+    await syncProductToTenant(updated);
     return res.json({ ok: true, product: updated });
   } catch (e) {
     if (e?.code === 11000) {
@@ -171,6 +222,12 @@ router.put("/:id", requireAuth, async (req, res) => {
 
 router.delete("/:id", requireAuth, async (req, res) => {
   try {
+    const existing = await Product.findById(req.params.id).lean();
+    if (!existing) return res.status(404).json({ ok: false, message: "Not found" });
+    if (!isSystemLevelAdmin(req.user?.role) && String(existing.companyId || "").trim() !== String(req.user?.companyId || "").trim()) {
+      return res.status(403).json({ ok: false, message: "Forbidden" });
+    }
+    await removeProductFromTenant(existing);
     const deleted = await Product.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ ok: false, message: "Not found" });
     return res.json({ ok: true });

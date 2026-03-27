@@ -21,6 +21,16 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
 
   const menuRef = useRef(null);
   const searchRef = useRef(null);
+  const resolvedUser = useMemo(() => {
+    if (user && Object.keys(user || {}).length) return user;
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = window.sessionStorage.getItem("aim_user") || window.localStorage.getItem("aim_user");
+      return raw ? JSON.parse(raw) : null;
+    } catch (_error) {
+      return null;
+    }
+  }, [user]);
 
   useEffect(() => {
     localStorage.setItem("aim_sidebar_collapsed", collapsed ? "1" : "0");
@@ -80,15 +90,15 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
   }
 
   const initials = useMemo(() => {
-    const name = user?.fullName || "Admin";
+    const name = resolvedUser?.fullName || "Admin";
     const parts = name.split(" ").filter(Boolean);
     const a = parts[0]?.[0] || "A";
     const b = parts[1]?.[0] || "H";
     return (a + b).toUpperCase();
-  }, [user]);
+  }, [resolvedUser]);
 
   const filteredSearchItems = useMemo(() => {
-    const role = (user?.role || (typeof window !== "undefined" ? window.sessionStorage.getItem("aim_role") : "") || "").toString().trim().toLowerCase();
+    const role = (resolvedUser?.role || (typeof window !== "undefined" ? window.sessionStorage.getItem("aim_role") : "") || "").toString().trim().toLowerCase();
     const canAccessCompanyManagement = role === "admin" || role === "system admin";
     const roleItems = canAccessCompanyManagement
       ? adminDashboardSearchItems
@@ -96,7 +106,7 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
     const value = searchTerm.trim().toLowerCase();
     if (!value) return roleItems;
     return roleItems.filter((item) => item.title.toLowerCase().includes(value));
-  }, [searchTerm, user?.role]);
+  }, [searchTerm, resolvedUser?.role]);
 
   async function toggleFullscreen() {
     if (typeof document === "undefined") return;
@@ -120,7 +130,7 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
   return (
     <div className="h-screen bg-zinc-50 flex overflow-hidden">
       <div className="hidden md:flex h-screen">
-        <Sidebar user={user} variant="desktop" collapsed={collapsed} />
+        <Sidebar user={resolvedUser} variant="desktop" collapsed={collapsed} />
       </div>
 
       {mobileOpen ? (
@@ -128,7 +138,7 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
           <div className="absolute inset-0 bg-black/40" onClick={() => setMobileOpen(false)} />
           <div className="absolute left-0 top-0 h-full w-[290px] bg-white shadow-xl">
             <Sidebar
-              user={user}
+              user={resolvedUser}
               variant="mobile"
               collapsed={false}
               onClose={() => setMobileOpen(false)}
@@ -215,10 +225,10 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
                 >
                   <div className="text-right hidden sm:block leading-tight whitespace-nowrap">
                     <div className="text-sm font-medium text-zinc-900">
-                      {user?.fullName || "System Admin"}
+                      {resolvedUser?.fullName || "System Admin"}
                     </div>
                     <div className="text-xs text-zinc-500">
-                      {user?.role || "admin"} • {user?.company || "AIM Hygienic"}
+                      {resolvedUser?.role || "admin"} • {resolvedUser?.companyName || "AIM Hygienic"}
                     </div>
                   </div>
                   <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
@@ -230,9 +240,9 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
                   <div className="absolute right-0 mt-2 w-56 rounded-2xl border bg-white shadow-lg p-2 z-50">
                     <div className="px-3 py-2">
                       <div className="text-sm font-semibold text-zinc-900">
-                        {user?.fullName || "System Admin"}
+                        {resolvedUser?.fullName || "System Admin"}
                       </div>
-                      <div className="text-xs text-zinc-500">{user?.username || "admin"}</div>
+                      <div className="text-xs text-zinc-500">{resolvedUser?.username || "admin"}</div>
                     </div>
 
                     <div className="h-px bg-zinc-100 my-1" />
