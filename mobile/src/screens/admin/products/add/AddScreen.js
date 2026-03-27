@@ -64,6 +64,7 @@ export default function AddScreen() {
   const [ok, setOk] = useState('');
   const [companies, setCompanies] = useState([]);
   const [companyId, setCompanyId] = useState('');
+  const [currentUser, setCurrentUser] = useState(null);
   const [form, setForm] = useState(PRODUCT_EMPTY_FORM);
   const [bulkInput, setBulkInput] = useState('');
   const [bulkErrors, setBulkErrors] = useState([]);
@@ -75,13 +76,27 @@ export default function AddScreen() {
         const { data } = await apiClient.get('/companies');
         setCompanies(data?.companies || []);
       } catch (e) {
-        setErr(e.message || 'Failed to load companies');
+        try {
+          const { data: meData } = await apiClient.get('/users/me');
+          const user = meData?.user || null;
+          const scopedCompanyId = String(user?.companyId || '').trim();
+          const scopedCompanyName = String(user?.companyName || '').trim();
+          setCurrentUser(user);
+          if (scopedCompanyId) {
+            setCompanies([{ _id: scopedCompanyId, companyId: scopedCompanyId, name: scopedCompanyName || scopedCompanyId }]);
+            setCompanyId(scopedCompanyId);
+          }
+        } catch (meErr) {
+          setErr(meErr.message || e.message || 'Failed to load companies');
+        }
       } finally {
         setLoading(false);
       }
     })();
   }, []);
 
+  const normalizedRole = String(currentUser?.role || '').trim().toLowerCase();
+  const canSelectCompany = normalizedRole === 'admin' || normalizedRole === 'system admin' || !normalizedRole;
   const selectedCompany = useMemo(() => companies.find((c) => c._id === companyId), [companies, companyId]);
   const subCategories = useMemo(() => {
     const selected = PRODUCT_CATEGORIES.find((c) => c.value === form.category);
@@ -179,7 +194,12 @@ export default function AddScreen() {
         <Text style={styles.label}>Select Company</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
           {companies.map((c) => (
-            <Pressable key={c._id} style={[styles.chip, companyId === c._id ? styles.chipActive : null]} onPress={() => setCompanyId(c._id)}>
+            <Pressable
+              key={c._id}
+              style={[styles.chip, companyId === c._id ? styles.chipActive : null, !canSelectCompany ? styles.chipDisabled : null]}
+              onPress={() => setCompanyId(c._id)}
+              disabled={!canSelectCompany}
+            >
               <Text style={[styles.chipText, companyId === c._id ? styles.chipTextActive : null]}>{c.name}</Text>
             </Pressable>
           ))}
@@ -249,6 +269,7 @@ const styles = StyleSheet.create({
   area: { minHeight: 120, textAlignVertical: 'top' },
   chip: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 999, backgroundColor: '#fff', paddingHorizontal: 10, paddingVertical: 6 },
   chipActive: { borderColor: '#10b981', backgroundColor: '#ecfdf5' },
+  chipDisabled: { opacity: 0.65 },
   chipText: { color: '#52525b', fontSize: 12 },
   chipTextActive: { color: '#047857', fontWeight: '700' },
   boolWrap: { marginTop: 10, gap: 8, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, backgroundColor: '#fff', padding: 10 },

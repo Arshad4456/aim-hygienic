@@ -40,6 +40,7 @@ export default function ProductsScreen({ navigation }) {
   const [err, setErr] = useState('');
   const [rows, setRows] = useState([]);
   const [companies, setCompanies] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
   const [search, setSearch] = useState('');
   const [companyFilter, setCompanyFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -54,9 +55,19 @@ export default function ProductsScreen({ navigation }) {
     setLoading(true);
     setErr('');
     try {
-      const [companiesRes, productsRes] = await Promise.all([apiClient.get('/companies'), apiClient.get('/products')]);
-      setCompanies(companiesRes.data?.companies || []);
+      const productsRes = await apiClient.get('/products');
       setRows(productsRes.data?.products || []);
+      try {
+        const companiesRes = await apiClient.get('/companies');
+        setCompanies(companiesRes.data?.companies || []);
+      } catch (_companyErr) {
+        const meRes = await apiClient.get('/users/me');
+        const user = meRes.data?.user || null;
+        const scopedCompanyId = String(user?.companyId || '').trim();
+        const scopedCompanyName = String(user?.companyName || '').trim();
+        setCurrentUser(user);
+        setCompanies(scopedCompanyId ? [{ _id: scopedCompanyId, companyId: scopedCompanyId, name: scopedCompanyName || scopedCompanyId }] : []);
+      }
     } catch (e) {
       setErr(e.message || 'Failed to load products');
     } finally {
@@ -94,6 +105,9 @@ export default function ProductsScreen({ navigation }) {
     }
     return next;
   }, [rows, companies, companyFilter, categoryFilter, subCategoryFilter, search]);
+
+  const normalizedRole = String(currentUser?.role || '').trim().toLowerCase();
+  const canSelectCompany = normalizedRole === 'admin' || normalizedRole === 'system admin' || !normalizedRole;
 
   const sortedRows = useMemo(() => {
     if (!sortKey) return filtered;
@@ -178,7 +192,13 @@ export default function ProductsScreen({ navigation }) {
 
         <TextInput value={search} onChangeText={setSearch} style={styles.input} placeholder="Search by code, name, company..." placeholderTextColor="#71717a" />
         <View style={styles.filterStack}>
-          <FilterRow label="Company" value={companyFilter} onClear={() => setCompanyFilter('')} onPick={setCompanyFilter} options={companies.map((c) => ({ label: c.name, value: c._id }))} />
+          <FilterRow
+            label="Company"
+            value={companyFilter}
+            onClear={() => setCompanyFilter('')}
+            onPick={setCompanyFilter}
+            options={canSelectCompany ? companies.map((c) => ({ label: c.name, value: c._id })) : []}
+          />
           <FilterRow label="Category" value={categoryFilter} onClear={() => { setCategoryFilter(''); setSubCategoryFilter(''); }} onPick={(v) => { setCategoryFilter(v); setSubCategoryFilter(''); }} options={PRODUCT_CATEGORIES.map((c) => ({ label: c.label, value: c.value }))} />
           <FilterRow label="Sub-Category" value={subCategoryFilter} onClear={() => setSubCategoryFilter('')} onPick={setSubCategoryFilter} options={subCategoryOptions} />
         </View>
