@@ -114,9 +114,17 @@ export default function ProductListPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [companiesRes, productsRes] = await Promise.all([apiFetch("/companies"), apiFetch("/products")]);
-        setCompanies(companiesRes.companies || []);
+        const productsRes = await apiFetch("/products");
         setRows(productsRes.products || []);
+        try {
+          const companiesRes = await apiFetch("/companies");
+          setCompanies(companiesRes.companies || []);
+        } catch (_companyErr) {
+          const me = await apiFetch("/users/me");
+          const companyId = String(me?.user?.companyId || "").trim();
+          const companyName = String(me?.user?.companyName || "").trim();
+          setCompanies(companyId ? [{ _id: companyId, companyId, name: companyName || companyId }] : []);
+        }
       } catch (e) {
         setErr(e.message || "Failed to load products");
       } finally {
