@@ -88,10 +88,15 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
   }, [user]);
 
   const filteredSearchItems = useMemo(() => {
+    const role = (user?.role || (typeof window !== "undefined" ? window.sessionStorage.getItem("aim_role") : "") || "").toString().trim().toLowerCase();
+    const canAccessCompanyManagement = role === "admin" || role === "system admin";
+    const roleItems = canAccessCompanyManagement
+      ? adminDashboardSearchItems
+      : adminDashboardSearchItems.filter((item) => !item.href.startsWith("/dashboards/admin/companies"));
     const value = searchTerm.trim().toLowerCase();
-    if (!value) return adminDashboardSearchItems;
-    return adminDashboardSearchItems.filter((item) => item.title.toLowerCase().includes(value));
-  }, [searchTerm]);
+    if (!value) return roleItems;
+    return roleItems.filter((item) => item.title.toLowerCase().includes(value));
+  }, [searchTerm, user?.role]);
 
   async function toggleFullscreen() {
     if (typeof document === "undefined") return;

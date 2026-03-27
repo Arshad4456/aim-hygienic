@@ -60,6 +60,12 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
   const router = useRouter();
 
   const [open, setOpen] = useState(() => ({ ...adminSidebarOpenCache }));
+  const userRole = useMemo(() => {
+    if (user?.role) return String(user.role).trim().toLowerCase();
+    if (typeof window !== "undefined") return String(window.sessionStorage.getItem("aim_role") || "").trim().toLowerCase();
+    return "";
+  }, [user?.role]);
+  const canAccessCompanyManagement = userRole === "admin" || userRole === "system admin";
 
   const menu = useMemo(
     () => [
@@ -75,16 +81,18 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
         ],
       },
 
-      {
-        type: "group",
-        key: "company",
-        title: "Company Management",
-        icon: "account",
-        children: [
-          { title: "Add New Company", href: "/dashboards/admin/companies/add" },
-          { title: "Company List", href: "/dashboards/admin/companies" },
-        ],
-      },
+      ...(canAccessCompanyManagement
+        ? [{
+            type: "group",
+            key: "company",
+            title: "Company Management",
+            icon: "account",
+            children: [
+              { title: "Add New Company", href: "/dashboards/admin/companies/add" },
+              { title: "Company List", href: "/dashboards/admin/companies" },
+            ],
+          }]
+        : []),
 
       {
         type: "group",
@@ -254,7 +262,7 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
       { type: "link", title: "Reports", href: "/dashboards/admin/reports", icon: "reports" },
       { type: "link", title: "Settings", href: "/dashboards/admin/settings", icon: "settings" },
     ],
-    []
+    [canAccessCompanyManagement]
   );
 
   function go(href) {

@@ -166,6 +166,7 @@ export default function DrawerNavigator() {
           <View style={[styles.drawerPanel, { paddingTop: insets.top }]}>
             <RoleDrawerContent
               roleKey={roleKey}
+              userRole={user?.role}
               modules={availableModules}
               activeRoute={activeRoute}
               onSelect={(routeName) => {

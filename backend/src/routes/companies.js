@@ -85,14 +85,10 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
 // LIST
 router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
   try {
-    const isCompanyAdmin = normalizeRole(req.user?.role) === "company admin";
-    const query = {};
-    if (isCompanyAdmin) {
-      const scopedCompanyId = String(req.user?.companyId || "").trim();
-      if (!scopedCompanyId) return res.json({ ok: true, companies: [] });
-      query.companyId = scopedCompanyId;
+    if (!isSystemAdmin(req.user?.role)) {
+      return res.status(403).json({ ok: false, message: "Only system admin can access companies." });
     }
-    const items = await Company.find(query).sort({ createdAt: -1 }).lean();
+    const items = await Company.find().sort({ createdAt: -1 }).lean();
     return res.json({ ok: true, companies: items });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to load companies" });
@@ -102,11 +98,11 @@ router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
 // GET ONE
 router.get("/:id", requireAuth, requireRole("admin"), async (req, res) => {
   try {
+    if (!isSystemAdmin(req.user?.role)) {
+      return res.status(403).json({ ok: false, message: "Only system admin can access companies." });
+    }
     const item = await Company.findById(req.params.id).lean();
     if (!item) return res.status(404).json({ ok: false, message: "Not found" });
-    if (normalizeRole(req.user?.role) === "company admin" && String(req.user?.companyId || "").trim() !== String(item.companyId || "").trim()) {
-      return res.status(403).json({ ok: false, message: "Forbidden" });
-    }
     return res.json({ ok: true, company: item });
   } catch (e) {
     return res.status(400).json({ ok: false, message: "Invalid id" });
@@ -116,6 +112,9 @@ router.get("/:id", requireAuth, requireRole("admin"), async (req, res) => {
 // UPDATE
 router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
   try {
+    if (!isSystemAdmin(req.user?.role)) {
+      return res.status(403).json({ ok: false, message: "Only system admin can update companies." });
+    }
     const body = req.body || {};
     const companyId = String(body.companyId || "").trim();
     if (!companyId) {
@@ -124,10 +123,6 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
     const companyName = String(body.name || "").trim() || "AIM Hygienic (Pvt) Limited";
     const current = await Company.findById(req.params.id).lean();
     if (!current) return res.status(404).json({ ok: false, message: "Not found" });
-    if (normalizeRole(req.user?.role) === "company admin" && String(req.user?.companyId || "").trim() !== String(current.companyId || "").trim()) {
-      return res.status(403).json({ ok: false, message: "Forbidden" });
-    }
-
     const duplicate = await Company.findOne({ companyId, _id: { $ne: req.params.id } }).lean();
     if (duplicate) {
       return res.status(409).json({ ok: false, message: "Company ID already exists" });
