@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import AdminShell from "../components/AdminShell";
 import { apiFetch } from "../../../lib/api";
+import useCompanyScope from "../components/useCompanyScope";
 
 const LIMIT = 50;
 
 export default function ZoneListPage() {
+  const { companies, companyDocId, setCompanyDocId, selectedCompany, canSelectCompany } = useCompanyScope();
   const [rows, setRows] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [regions, setRegions] = useState([]);
@@ -24,18 +26,20 @@ export default function ZoneListPage() {
     if (search.trim()) params.set("search", search.trim());
     if (warehouseId) params.set("warehouseId", warehouseId);
     if (regionId) params.set("regionId", regionId);
+    if (selectedCompany?.companyId) params.set("companyId", selectedCompany.companyId);
     const d = await apiFetch(`/zones?${params.toString()}`);
     setRows(d.zones || []);
     setTotalPages(d.pagination?.totalPages || 1);
     setLoading(false);
-  }, [page, search, warehouseId, regionId]);
+  }, [page, search, warehouseId, regionId, selectedCompany?.companyId]);
 
   useEffect(() => {
-    Promise.all([apiFetch("/warehouses"), apiFetch("/regions")]).then(([w, r]) => {
+    const qp = selectedCompany?.companyId ? `?companyId=${encodeURIComponent(selectedCompany.companyId)}` : "";
+    Promise.all([apiFetch(`/warehouses${qp}`), apiFetch(`/regions${qp}`)]).then(([w, r]) => {
       setWarehouses(w.warehouses || []);
       setRegions(r.regions || []);
     });
-  }, []);
+  }, [selectedCompany?.companyId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -46,7 +50,7 @@ export default function ZoneListPage() {
   async function del(id) { if (!confirm("Delete zone?")) return; await apiFetch(`/zones/${id}`, { method: "DELETE" }); load(); }
 
   return <AdminShell title="Zone List" user={null}><div className="rounded-2xl bg-white border shadow-sm p-5"><div className="text-xl font-semibold">Zones</div>
-    <div className="mt-4 grid gap-3 md:grid-cols-4"><input value={search} onChange={(e) => { setPage(1); setSearch(e.target.value); }} placeholder="Search by ID, name, warehouse or region" className="rounded-xl border px-3 py-2" /><select value={warehouseId} onChange={(e) => { setPage(1); setWarehouseId(e.target.value); }} className="rounded-xl border px-3 py-2"><option value="">All Warehouses</option>{warehouses.map((w) => <option key={w._id} value={w.warehouseId}>{w.name}</option>)}</select><select value={regionId} onChange={(e) => { setPage(1); setRegionId(e.target.value); }} className="rounded-xl border px-3 py-2"><option value="">All Regions</option>{regions.map((r) => <option key={r._id} value={r.regionId}>{r.name}</option>)}</select></div>
+    <div className="mt-4 grid gap-3 md:grid-cols-4"><select value={companyDocId} onChange={(e) => { setPage(1); setCompanyDocId(e.target.value); }} className="rounded-xl border px-3 py-2 disabled:bg-zinc-100 disabled:text-zinc-600" disabled={!canSelectCompany}><option value="">{canSelectCompany ? "All Companies" : "Company selected by role"}</option>{companies.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}</select><input value={search} onChange={(e) => { setPage(1); setSearch(e.target.value); }} placeholder="Search by ID, name, warehouse or region" className="rounded-xl border px-3 py-2" /><select value={warehouseId} onChange={(e) => { setPage(1); setWarehouseId(e.target.value); }} className="rounded-xl border px-3 py-2"><option value="">All Warehouses</option>{warehouses.map((w) => <option key={w._id} value={w.warehouseId}>{w.name}</option>)}</select><select value={regionId} onChange={(e) => { setPage(1); setRegionId(e.target.value); }} className="rounded-xl border px-3 py-2"><option value="">All Regions</option>{regions.map((r) => <option key={r._id} value={r.regionId}>{r.name}</option>)}</select></div>
     <div className="mt-5 overflow-auto rounded-xl border"><table className="min-w-[1000px] w-full text-sm"><thead className="bg-zinc-50"><tr><th className="px-3 py-2 border-b text-left">ID</th><th className="px-3 py-2 border-b text-left">Name</th><th className="px-3 py-2 border-b text-left">Warehouse</th><th className="px-3 py-2 border-b text-left">Region</th><th className="px-3 py-2 border-b text-left">Status</th><th className="px-3 py-2 border-b text-left">Actions</th></tr></thead><tbody>{loading ? <tr><td colSpan={6} className="px-3 py-6 text-center">Loading...</td></tr> : rows.map((r) => <tr key={r._id}><td className="px-3 py-2 border-b">{r.zoneId}</td><td className="px-3 py-2 border-b">{r.name}</td><td className="px-3 py-2 border-b">{r.warehouseName || "-"}</td><td className="px-3 py-2 border-b">{r.regionName || "-"}</td><td className="px-3 py-2 border-b">{r.status || "active"}</td><td className="px-3 py-2 border-b"><button className="rounded-lg border px-3 py-1 text-xs mr-2" onClick={() => setEdit({ ...r })}>Edit</button><button className="rounded-lg border px-3 py-1 text-xs text-red-600" onClick={() => del(r._id)}>Delete</button></td></tr>)}</tbody></table></div>
     <Pager page={page} totalPages={totalPages} onChange={setPage} /></div>{edit ? <Modal edit={edit} setEdit={setEdit} onSave={save} /> : null}</AdminShell>;
 }

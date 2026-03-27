@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import AdminShell from "../../components/AdminShell";
 import { apiFetch } from "../../../../lib/api";
 import { ToastStack, useToastStack } from "../components/ToastStick";
+import useCompanyScope from "../../components/useCompanyScope";
 
 const STATUS_OPTIONS = ["", "Active", "Inactive", "Under Maintenance", "Sold"];
 
@@ -15,6 +16,7 @@ function toDateInput(value) {
 }
 
 export default function VehicleManagementListPage() {
+  const { companies, companyDocId, setCompanyDocId, selectedCompany, canSelectCompany } = useCompanyScope();
   const [rows, setRows] = useState([]);
   const [users, setUsers] = useState([]);
   const [regions, setRegions] = useState([]);
@@ -54,13 +56,14 @@ export default function VehicleManagementListPage() {
       if (filters.zoneId) params.set("zoneId", filters.zoneId);
       if (filters.areaId) params.set("areaId", filters.areaId);
       if (filters.assignedUserId) params.set("assignedUserId", filters.assignedUserId);
+      if (selectedCompany?.companyId) params.set("companyId", selectedCompany.companyId);
 
       const [vehiclesRes, usersRes, regionsRes, zonesRes, areasRes] = await Promise.all([
         apiFetch(`/vehicles${params.toString() ? `?${params.toString()}` : ""}`),
         apiFetch("/users"),
-        apiFetch("/regions"),
-        apiFetch("/zones"),
-        apiFetch("/areas"),
+        apiFetch(`/regions${selectedCompany?.companyId ? `?companyId=${encodeURIComponent(selectedCompany.companyId)}` : ""}`),
+        apiFetch(`/zones${selectedCompany?.companyId ? `?companyId=${encodeURIComponent(selectedCompany.companyId)}` : ""}`),
+        apiFetch(`/areas${selectedCompany?.companyId ? `?companyId=${encodeURIComponent(selectedCompany.companyId)}` : ""}`),
       ]);
 
       let nextRows = vehiclesRes.vehicles || [];
@@ -81,7 +84,7 @@ export default function VehicleManagementListPage() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [selectedCompany?.companyId]);
 
   const regionOptions = regions;
   const zoneOptions = zones.filter((z) => !filters.regionId || String(z.regionId) === String(filters.regionId) || String(z.regionId) === String(regionOptions.find((x) => x._id === filters.regionId)?.regionId || ""));
@@ -194,6 +197,10 @@ export default function VehicleManagementListPage() {
         <div className="text-sm text-zinc-500 mt-1">Detailed filters, detail view, edit and delete actions.</div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-2 mt-4 text-sm">
+          <select value={companyDocId} onChange={(e) => setCompanyDocId(e.target.value)} className="border rounded-xl px-3 py-2 disabled:bg-zinc-100 disabled:text-zinc-600" disabled={!canSelectCompany}>
+            <option value="">{canSelectCompany ? "All companies" : "Company selected by role"}</option>
+            {companies.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
+          </select>
           <input value={filters.search} onChange={(e) => setFilter("search", e.target.value)} placeholder="search by reg/make/model/nickname" className="border rounded-xl px-3 py-2" />
           <input value={filters.type} onChange={(e) => setFilter("type", e.target.value)} placeholder="vehicle type" className="border rounded-xl px-3 py-2" />
           <input value={filters.fuelType} onChange={(e) => setFilter("fuelType", e.target.value)} placeholder="fuel type" className="border rounded-xl px-3 py-2" />

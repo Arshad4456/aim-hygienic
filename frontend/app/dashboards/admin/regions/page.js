@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import AdminShell from "../components/AdminShell";
 import { apiFetch } from "../../../lib/api";
+import useCompanyScope from "../components/useCompanyScope";
 
 const LIMIT = 50;
 
 export default function RegionListPage() {
+  const { companies, companyDocId, setCompanyDocId, selectedCompany, canSelectCompany } = useCompanyScope();
   const [rows, setRows] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -21,15 +23,17 @@ export default function RegionListPage() {
     const params = new URLSearchParams({ page: String(page), limit: String(LIMIT) });
     if (search.trim()) params.set("search", search.trim());
     if (warehouseId) params.set("warehouseId", warehouseId);
+    if (selectedCompany?.companyId) params.set("companyId", selectedCompany.companyId);
     const d = await apiFetch(`/regions?${params.toString()}`);
     setRows(d.regions || []);
     setTotalPages(d.pagination?.totalPages || 1);
     setLoading(false);
-  }, [page, search, warehouseId]);
+  }, [page, search, warehouseId, selectedCompany?.companyId]);
 
   useEffect(() => {
-    apiFetch("/warehouses").then((d) => setWarehouses(d.warehouses || []));
-  }, []);
+    const qp = selectedCompany?.companyId ? `?companyId=${encodeURIComponent(selectedCompany.companyId)}` : "";
+    apiFetch(`/warehouses${qp}`).then((d) => setWarehouses(d.warehouses || []));
+  }, [selectedCompany?.companyId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -53,6 +57,10 @@ export default function RegionListPage() {
       <div className="rounded-2xl bg-white border shadow-sm p-5">
         <div className="text-xl font-semibold">Regions</div>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <select value={companyDocId} onChange={(e) => { setPage(1); setCompanyDocId(e.target.value); }} className="rounded-xl border px-3 py-2 disabled:bg-zinc-100 disabled:text-zinc-600" disabled={!canSelectCompany}>
+            <option value="">{canSelectCompany ? "All Companies" : "Company selected by role"}</option>
+            {companies.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
+          </select>
           <input value={search} onChange={(e) => { setPage(1); setSearch(e.target.value); }} placeholder="Search by ID, name or warehouse" className="rounded-xl border px-3 py-2" />
           <select value={warehouseId} onChange={(e) => { setPage(1); setWarehouseId(e.target.value); }} className="rounded-xl border px-3 py-2">
             <option value="">All Warehouses</option>

@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import AdminShell from "../components/AdminShell";
 import { apiFetch } from "../../../lib/api";
+import useCompanyScope from "../components/useCompanyScope";
 
 const LIMIT = 50;
 
 export default function TerritoryListPage() {
+  const { companies, companyDocId, setCompanyDocId, selectedCompany, canSelectCompany } = useCompanyScope();
   const [rows, setRows] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [regions, setRegions] = useState([]);
@@ -27,19 +29,21 @@ export default function TerritoryListPage() {
     if (warehouseId) params.set("warehouseId", warehouseId);
     if (regionId) params.set("regionId", regionId);
     if (zoneId) params.set("zoneId", zoneId);
+    if (selectedCompany?.companyId) params.set("companyId", selectedCompany.companyId);
     const d = await apiFetch(`/areas?${params.toString()}`);
     setRows(d.areas || []);
     setTotalPages(d.pagination?.totalPages || 1);
     setLoading(false);
-  }, [page, search, warehouseId, regionId, zoneId]);
+  }, [page, search, warehouseId, regionId, zoneId, selectedCompany?.companyId]);
 
   useEffect(() => {
-    Promise.all([apiFetch("/warehouses"), apiFetch("/regions"), apiFetch("/zones")]).then(([w, r, z]) => {
+    const qp = selectedCompany?.companyId ? `?companyId=${encodeURIComponent(selectedCompany.companyId)}` : "";
+    Promise.all([apiFetch(`/warehouses${qp}`), apiFetch(`/regions${qp}`), apiFetch(`/zones${qp}`)]).then(([w, r, z]) => {
       setWarehouses(w.warehouses || []);
       setRegions(r.regions || []);
       setZones(z.zones || []);
     });
-  }, []);
+  }, [selectedCompany?.companyId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -50,7 +54,7 @@ export default function TerritoryListPage() {
   async function del(id) { if (!confirm("Delete territory?")) return; await apiFetch(`/areas/${id}`, { method: "DELETE" }); load(); }
 
   return <AdminShell title="Territory List" user={null}><div className="rounded-2xl bg-white border shadow-sm p-5"><div className="text-xl font-semibold">Territories</div>
-    <div className="mt-4 grid gap-3 md:grid-cols-5"><input value={search} onChange={(e) => { setPage(1); setSearch(e.target.value); }} placeholder="Search territory" className="rounded-xl border px-3 py-2" /><select value={warehouseId} onChange={(e) => { setPage(1); setWarehouseId(e.target.value); }} className="rounded-xl border px-3 py-2"><option value="">All Warehouses</option>{warehouses.map((w) => <option key={w._id} value={w.warehouseId}>{w.name}</option>)}</select><select value={regionId} onChange={(e) => { setPage(1); setRegionId(e.target.value); }} className="rounded-xl border px-3 py-2"><option value="">All Regions</option>{regions.map((r) => <option key={r._id} value={r.regionId}>{r.name}</option>)}</select><select value={zoneId} onChange={(e) => { setPage(1); setZoneId(e.target.value); }} className="rounded-xl border px-3 py-2"><option value="">All Zones</option>{zones.map((z) => <option key={z._id} value={z.zoneId}>{z.name}</option>)}</select></div>
+    <div className="mt-4 grid gap-3 md:grid-cols-5"><select value={companyDocId} onChange={(e) => { setPage(1); setCompanyDocId(e.target.value); }} className="rounded-xl border px-3 py-2 disabled:bg-zinc-100 disabled:text-zinc-600" disabled={!canSelectCompany}><option value="">{canSelectCompany ? "All Companies" : "Company selected by role"}</option>{companies.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}</select><input value={search} onChange={(e) => { setPage(1); setSearch(e.target.value); }} placeholder="Search territory" className="rounded-xl border px-3 py-2" /><select value={warehouseId} onChange={(e) => { setPage(1); setWarehouseId(e.target.value); }} className="rounded-xl border px-3 py-2"><option value="">All Warehouses</option>{warehouses.map((w) => <option key={w._id} value={w.warehouseId}>{w.name}</option>)}</select><select value={regionId} onChange={(e) => { setPage(1); setRegionId(e.target.value); }} className="rounded-xl border px-3 py-2"><option value="">All Regions</option>{regions.map((r) => <option key={r._id} value={r.regionId}>{r.name}</option>)}</select><select value={zoneId} onChange={(e) => { setPage(1); setZoneId(e.target.value); }} className="rounded-xl border px-3 py-2"><option value="">All Zones</option>{zones.map((z) => <option key={z._id} value={z.zoneId}>{z.name}</option>)}</select></div>
     <div className="mt-5 overflow-auto rounded-xl border"><table className="min-w-[1000px] w-full text-sm"><thead className="bg-zinc-50"><tr><th className="px-3 py-2 border-b text-left">ID</th><th className="px-3 py-2 border-b text-left">Name</th><th className="px-3 py-2 border-b text-left">Warehouse</th><th className="px-3 py-2 border-b text-left">Region</th><th className="px-3 py-2 border-b text-left">Zone</th><th className="px-3 py-2 border-b text-left">Status</th><th className="px-3 py-2 border-b text-left">Actions</th></tr></thead><tbody>{loading ? <tr><td colSpan={7} className="px-3 py-6 text-center">Loading...</td></tr> : rows.map((r) => <tr key={r._id}><td className="px-3 py-2 border-b">{r.areaId}</td><td className="px-3 py-2 border-b">{r.name}</td><td className="px-3 py-2 border-b">{r.warehouseName || "-"}</td><td className="px-3 py-2 border-b">{r.regionName || "-"}</td><td className="px-3 py-2 border-b">{r.zoneName || "-"}</td><td className="px-3 py-2 border-b">{r.status || "active"}</td><td className="px-3 py-2 border-b"><button className="rounded-lg border px-3 py-1 text-xs mr-2" onClick={() => setEdit({ ...r })}>Edit</button><button className="rounded-lg border px-3 py-1 text-xs text-red-600" onClick={() => del(r._id)}>Delete</button></td></tr>)}</tbody></table></div>
     <Pager page={page} totalPages={totalPages} onChange={setPage} /></div>{edit ? <Modal edit={edit} setEdit={setEdit} onSave={save} /> : null}</AdminShell>;
 }

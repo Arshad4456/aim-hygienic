@@ -4,10 +4,12 @@ import { useCallback, useEffect, useState } from "react";
 import AdminShell from "../components/AdminShell";
 import { apiFetch } from "../../../lib/api";
 import { deleteFieldCompat, listFieldsCompat, updateFieldCompat } from "../../../lib/fieldApi";
+import useCompanyScope from "../components/useCompanyScope";
 
 const LIMIT = 50;
 
 export default function FieldListPage() {
+  const { companies, companyDocId, setCompanyDocId, selectedCompany, canSelectCompany } = useCompanyScope();
   const [rows, setRows] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [regions, setRegions] = useState([]);
@@ -29,7 +31,7 @@ export default function FieldListPage() {
     setLoading(true);
     setErr("");
     try {
-      const data = await listFieldsCompat({ page, limit: LIMIT, search, warehouseId, regionId, zoneId, territoryId });
+      const data = await listFieldsCompat({ page, limit: LIMIT, search, warehouseId, regionId, zoneId, territoryId, companyId: selectedCompany?.companyId || "" });
       setRows(data.fields || []);
       setTotalPages(data.pagination?.totalPages || 1);
     } catch (e) {
@@ -38,16 +40,17 @@ export default function FieldListPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, warehouseId, regionId, zoneId, territoryId]);
+  }, [page, search, warehouseId, regionId, zoneId, territoryId, selectedCompany?.companyId]);
 
   useEffect(() => {
-    Promise.all([apiFetch("/warehouses"), apiFetch("/regions"), apiFetch("/zones"), apiFetch("/areas")]).then(([w, r, z, t]) => {
+    const qp = selectedCompany?.companyId ? `?companyId=${encodeURIComponent(selectedCompany.companyId)}` : "";
+    Promise.all([apiFetch(`/warehouses${qp}`), apiFetch(`/regions${qp}`), apiFetch(`/zones${qp}`), apiFetch(`/areas${qp}`)]).then(([w, r, z, t]) => {
       setWarehouses(w.warehouses || []);
       setRegions(r.regions || []);
       setZones(z.zones || []);
       setTerritories(t.areas || []);
     });
-  }, []);
+  }, [selectedCompany?.companyId]);
 
   useEffect(() => {
     load();
@@ -68,6 +71,7 @@ export default function FieldListPage() {
         <div className="text-xl font-semibold">Fields</div>
         {err ? <div className="mt-3 text-sm text-red-600">{err}</div> : null}
         <div className="mt-4 grid gap-3 md:grid-cols-6">
+          <select value={companyDocId} onChange={(e) => { setPage(1); setCompanyDocId(e.target.value); }} className="rounded-xl border px-3 py-2 disabled:bg-zinc-100 disabled:text-zinc-600" disabled={!canSelectCompany}><option value="">{canSelectCompany ? "All Companies" : "Company selected by role"}</option>{companies.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}</select>
           <input value={search} onChange={(e) => { setPage(1); setSearch(e.target.value); }} placeholder="Search field" className="rounded-xl border px-3 py-2" />
           <select value={warehouseId} onChange={(e) => { setPage(1); setWarehouseId(e.target.value); }} className="rounded-xl border px-3 py-2"><option value="">All Warehouses</option>{warehouses.map((w) => <option key={w._id} value={w.warehouseId}>{w.name}</option>)}</select>
           <select value={regionId} onChange={(e) => { setPage(1); setRegionId(e.target.value); }} className="rounded-xl border px-3 py-2"><option value="">All Regions</option>{regions.map((r) => <option key={r._id} value={r.regionId}>{r.name}</option>)}</select>
