@@ -196,29 +196,44 @@ export default function AddProductPage() {
   const [ok, setOk] = useState("");
 
   useEffect(() => {
-    async function loadCompanies() {
+    async function loadCompaniesAndUser() {
       try {
-        const data = await apiFetch("/companies");
-        setCompanies(data.companies || []);
-      } catch (e) {
-        try {
-          const me = await apiFetch("/users/me");
-          const user = me?.user || null;
-          const scopedCompanyId = String(user?.companyId || "").trim();
-          const scopedCompanyName = String(user?.companyName || "").trim();
-          setCurrentUser(user);
+        const me = await apiFetch("/users/me");
+        const user = me?.user || null;
+        const userRole = String(user?.role || "").trim().toLowerCase();
+        const scopedCompanyId = String(user?.companyId || "").trim();
+        const scopedCompanyName = String(user?.companyName || "").trim();
+        const isSystemAdmin = userRole === "admin" || userRole === "system admin";
+
+        setCurrentUser(user);
+        if (!isSystemAdmin) {
           if (scopedCompanyId) {
             setCompanies([{ _id: scopedCompanyId, companyId: scopedCompanyId, name: scopedCompanyName || scopedCompanyId }]);
             setCompanyId(scopedCompanyId);
+          } else {
+            setCompanies([]);
           }
-        } catch (meErr) {
-          setErr(meErr.message || e.message || "Failed to load companies");
+          return;
         }
+
+        try {
+          const companiesRes = await apiFetch("/companies");
+          setCompanies(companiesRes.companies || []);
+        } catch (companiesErr) {
+          if (scopedCompanyId) {
+            setCompanies([{ _id: scopedCompanyId, companyId: scopedCompanyId, name: scopedCompanyName || scopedCompanyId }]);
+            setCompanyId(scopedCompanyId);
+          } else {
+            throw companiesErr;
+          }
+        }
+      } catch (e) {
+        setErr(e.message || "Failed to load companies");
       } finally {
         setLoading(false);
       }
     }
-    loadCompanies();
+    loadCompaniesAndUser();
   }, []);
 
   const normalizedRole = String(currentUser?.role || "").trim().toLowerCase();
@@ -263,13 +278,23 @@ export default function AddProductPage() {
     setErr("");
     setOk("");
     setBulkSummary(null);
+    if (!selectedCompany?.companyId) {
+      setErr("Please select a company before importing products.");
+      return;
+    }
     const parsed = parseBulkText(bulkInput);
     setBulkErrors(parsed.errors || []);
     if (!parsed.rows.length) return;
 
+    const scopedRows = parsed.rows.map((row) => ({
+      ...row,
+      companyId: selectedCompany.companyId,
+      companyName: selectedCompany.name,
+    }));
+
     setBulkSaving(true);
     try {
-      const data = await apiFetch("/products/bulk-upsert", { method: "POST", body: { rows: parsed.rows } });
+      const data = await apiFetch("/products/bulk-upsert", { method: "POST", body: { rows: scopedRows } });
       setBulkSummary(data.summary || null);
       setOk("✅ Bulk import completed.");
       if (!data.summary?.skipped) setBulkInput("");
@@ -332,7 +357,7 @@ export default function AddProductPage() {
                   onChange={(e) => setCompanyId(e.target.value)}
                   disabled={!canSelectCompany}
                 >
-                  <option value="">Choose company...</option>
+                  <option value="">{canSelectCompany ? "Choose company..." : "Company selected by role"}</option>
                   {companies.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
                 </select>
               </div>

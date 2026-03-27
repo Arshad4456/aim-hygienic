@@ -91,11 +91,30 @@ router.post("/bulk-upsert", requireAuth, async (req, res) => {
     if (!rows.length) {
       return res.status(400).json({ ok: false, message: "No rows provided" });
     }
+    const role = req.user?.role;
+    const isSystemAdmin = isSystemLevelAdmin(role);
+    const scopedCompanyId = String(req.user?.companyId || "").trim();
+    const scopedCompanyName = String(req.user?.companyName || "").trim();
+    if (!isSystemAdmin && !scopedCompanyId) {
+      return res.status(400).json({ ok: false, message: "Company is required for this role." });
+    }
 
     const operations = [];
     const skipped = [];
     rows.forEach((row, idx) => {
       const normalized = normalizePayload(row || {});
+      if (isSystemAdmin) {
+        if (!String(normalized.companyId || "").trim()) {
+          skipped.push({
+            row: idx + 1,
+            reason: "Missing Company",
+          });
+          return;
+        }
+      } else {
+        normalized.companyId = scopedCompanyId;
+        normalized.companyName = scopedCompanyName || normalized.companyName;
+      }
       if (!normalized.productId || !normalized.name) {
         skipped.push({
           row: idx + 1,
