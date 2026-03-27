@@ -13,9 +13,10 @@ function assertCollection(collectionName) {
 async function resolveCompanyName(companyId, fallbackName = "") {
   const normalizedCompanyId = String(companyId || "").trim();
   if (!normalizedCompanyId) return String(fallbackName || "").trim();
-  if (fallbackName) return String(fallbackName || "").trim();
   const company = await Company.findOne({ companyId: normalizedCompanyId }).select("name").lean();
-  return String(company?.name || normalizedCompanyId).trim();
+  if (company?.name) return String(company.name).trim();
+  const normalizedFallback = String(fallbackName || "").trim();
+  return normalizedFallback || normalizedCompanyId;
 }
 
 async function getTenantCollection(companyId, companyName, collectionName) {
