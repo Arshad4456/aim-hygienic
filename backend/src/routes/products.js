@@ -101,6 +101,7 @@ router.post("/bulk-upsert", requireAuth, async (req, res) => {
 
     const operations = [];
     const skipped = [];
+    const touchedProductIds = [];
     rows.forEach((row, idx) => {
       const normalized = normalizePayload(row || {});
       if (isSystemAdmin) {
@@ -122,6 +123,7 @@ router.post("/bulk-upsert", requireAuth, async (req, res) => {
         });
         return;
       }
+      touchedProductIds.push(normalized.productId);
       operations.push({
         updateOne: {
           filter: { productId: normalized.productId },
@@ -138,7 +140,22 @@ router.post("/bulk-upsert", requireAuth, async (req, res) => {
       return res.status(400).json({ ok: false, message: "No valid rows found", skipped });
     }
 
+    const existingDocs = await Product.find({ productId: { $in: touchedProductIds } })
+      .select("productId companyId companyName")
+      .lean();
+    const existingByProductId = new Map(existingDocs.map((doc) => [String(doc.productId || "").trim(), doc]));
+
     const result = await Product.bulkWrite(operations, { ordered: false });
+    const updatedDocs = await Product.find({ productId: { $in: touchedProductIds } }).lean();
+    for (const doc of updatedDocs) {
+      const productId = String(doc.productId || "").trim();
+      const prev = existingByProductId.get(productId);
+      if (prev && String(prev.companyId || "").trim() && String(prev.companyId || "").trim() !== String(doc.companyId || "").trim()) {
+        await removeProductFromTenant(prev);
+      }
+      await syncProductToTenant(doc);
+    }
+
     return res.json({
       ok: true,
       summary: {

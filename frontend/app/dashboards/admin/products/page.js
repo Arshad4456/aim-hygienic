@@ -99,6 +99,7 @@ function compareValues(a, b, sortDir) {
 export default function ProductListPage() {
   const [companies, setCompanies] = useState([]);
   const [companyId, setCompanyId] = useState("");
+  const [canSelectCompany, setCanSelectCompany] = useState(true);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -116,14 +117,22 @@ export default function ProductListPage() {
       try {
         const productsRes = await apiFetch("/products");
         setRows(productsRes.products || []);
+        const me = await apiFetch("/users/me");
+        const userRole = String(me?.user?.role || "").trim().toLowerCase();
+        const scopedCompanyId = String(me?.user?.companyId || "").trim();
+        const scopedCompanyName = String(me?.user?.companyName || "").trim();
+        const isSystemAdmin = userRole === "admin" || userRole === "system admin";
+        setCanSelectCompany(isSystemAdmin);
         try {
           const companiesRes = await apiFetch("/companies");
           setCompanies(companiesRes.companies || []);
+          if (!isSystemAdmin && scopedCompanyId) {
+            setCompanies([{ _id: scopedCompanyId, companyId: scopedCompanyId, name: scopedCompanyName || scopedCompanyId }]);
+            setCompanyId(scopedCompanyId);
+          }
         } catch (_companyErr) {
-          const me = await apiFetch("/users/me");
-          const companyId = String(me?.user?.companyId || "").trim();
-          const companyName = String(me?.user?.companyName || "").trim();
-          setCompanies(companyId ? [{ _id: companyId, companyId, name: companyName || companyId }] : []);
+          setCompanies(scopedCompanyId ? [{ _id: scopedCompanyId, companyId: scopedCompanyId, name: scopedCompanyName || scopedCompanyId }] : []);
+          if (scopedCompanyId) setCompanyId(scopedCompanyId);
         }
       } catch (e) {
         setErr(e.message || "Failed to load products");
@@ -234,7 +243,14 @@ export default function ProductListPage() {
         {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
 
         <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3">
-          <FilterSelect label="Select Company" value={companyId} onChange={(v) => { setCompanyId(v); setPage(1); }} options={["", ...companies.map((c) => c._id)]} labels={(id) => (companies.find((c) => c._id === id)?.name || "All companies")} />
+          <FilterSelect
+            label="Select Company"
+            value={companyId}
+            onChange={(v) => { setCompanyId(v); setPage(1); }}
+            options={canSelectCompany ? ["", ...companies.map((c) => c._id)] : companies.map((c) => c._id)}
+            labels={(id) => (companies.find((c) => c._id === id)?.name || "All companies")}
+            disabled={!canSelectCompany}
+          />
           <div>
             <Label>Search</Label>
             <input className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" placeholder="Search by code, id, name, company..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
@@ -347,11 +363,16 @@ function EditCard({ form, onChange, onClose, onSave }) {
   );
 }
 
-function FilterSelect({ label, value, onChange, options, labels }) {
+function FilterSelect({ label, value, onChange, options, labels, disabled = false }) {
   return (
     <div>
       <Label>{label}</Label>
-      <select className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" value={value} onChange={(e) => onChange(e.target.value)}>
+      <select
+        className="mt-1 w-full rounded-xl border px-3 py-2 text-sm disabled:bg-zinc-100 disabled:text-zinc-600"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+      >
         {options.map((opt) => <option key={opt || "blank"} value={opt}>{labels(opt)}</option>)}
       </select>
     </div>
