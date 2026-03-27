@@ -136,13 +136,23 @@ export default function AddScreen() {
     setErr('');
     setOk('');
     setBulkSummary(null);
+    if (!selectedCompany?.companyId) {
+      setErr('Please select a company before importing products.');
+      return;
+    }
     const parsed = parseBulkText(bulkInput);
     setBulkErrors(parsed.errors || []);
     if (!parsed.rows.length) return;
 
+    const scopedRows = parsed.rows.map((row) => ({
+      ...row,
+      companyId: selectedCompany.companyId,
+      companyName: selectedCompany.name,
+    }));
+
     setBulkSaving(true);
     try {
-      const { data } = await apiClient.post('/products/bulk-upsert', { rows: parsed.rows });
+      const { data } = await apiClient.post('/products/bulk-upsert', { rows: scopedRows });
       setBulkSummary(data?.summary || null);
       setOk('✅ Bulk import completed.');
       if (!data?.summary?.skipped) setBulkInput('');
