@@ -319,6 +319,19 @@ export default function AddProductPage() {
             </button>
           </div>
 
+          <div className="mt-4">
+            <Label>Select Company for Bulk Import</Label>
+            <select
+              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm disabled:bg-zinc-100 disabled:text-zinc-600"
+              value={companyId}
+              onChange={(e) => setCompanyId(e.target.value)}
+              disabled={!canSelectCompany}
+            >
+              <option value="">{canSelectCompany ? "Choose company..." : "Company selected by role"}</option>
+              {companies.map((c) => <option key={`bulk-${c._id}`} value={c._id}>{c.name}</option>)}
+            </select>
+          </div>
+
           {bulkErrors.length ? (
             <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
               <div className="font-medium">Rows skipped before upload:</div>
