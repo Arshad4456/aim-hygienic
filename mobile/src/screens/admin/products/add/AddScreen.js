@@ -136,13 +136,23 @@ export default function AddScreen() {
     setErr('');
     setOk('');
     setBulkSummary(null);
+    if (!selectedCompany?.companyId) {
+      setErr('Please select a company before importing products.');
+      return;
+    }
     const parsed = parseBulkText(bulkInput);
     setBulkErrors(parsed.errors || []);
     if (!parsed.rows.length) return;
 
+    const scopedRows = parsed.rows.map((row) => ({
+      ...row,
+      companyId: selectedCompany.companyId,
+      companyName: selectedCompany.name,
+    }));
+
     setBulkSaving(true);
     try {
-      const { data } = await apiClient.post('/products/bulk-upsert', { rows: parsed.rows });
+      const { data } = await apiClient.post('/products/bulk-upsert', { rows: scopedRows });
       setBulkSummary(data?.summary || null);
       setOk('✅ Bulk import completed.');
       if (!data?.summary?.skipped) setBulkInput('');
@@ -170,6 +180,20 @@ export default function AddScreen() {
           </View>
           <Pressable style={styles.ghostBtn} onPress={downloadTemplate}><Text style={styles.ghostText}>Download Template</Text></Pressable>
         </View>
+
+        <Text style={styles.label}>Select Company for Bulk Import</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+          {companies.map((c) => (
+            <Pressable
+              key={`bulk-${c._id}`}
+              style={[styles.chip, companyId === c._id ? styles.chipActive : null, !canSelectCompany ? styles.chipDisabled : null]}
+              onPress={() => setCompanyId(c._id)}
+              disabled={!canSelectCompany}
+            >
+              <Text style={[styles.chipText, companyId === c._id ? styles.chipTextActive : null]}>{c.name}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
 
         {bulkErrors.length ? <Text style={styles.warn}>Rows skipped: {bulkErrors.slice(0, 5).join(' | ')}</Text> : null}
         {bulkSummary ? <Text style={styles.ok}>Imported {bulkSummary.processed}/{bulkSummary.received} · Inserted {bulkSummary.inserted} · Updated {bulkSummary.updated} · Skipped {bulkSummary.skipped}</Text> : null}
