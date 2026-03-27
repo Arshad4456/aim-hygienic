@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import AdminShell from "../components/AdminShell";
 import { apiFetch } from "../../../lib/api";
+import useCompanyScope from "../components/useCompanyScope";
 
 export default function WarehouseListPage() {
+  const { companies, companyDocId, setCompanyDocId, selectedCompany, canSelectCompany } = useCompanyScope();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -14,7 +16,8 @@ export default function WarehouseListPage() {
     setLoading(true);
     setErr("");
     try {
-      const data = await apiFetch("/warehouses");
+      const companyParam = selectedCompany?.companyId ? `?companyId=${encodeURIComponent(selectedCompany.companyId)}` : "";
+      const data = await apiFetch(`/warehouses${companyParam}`);
       setRows(data.warehouses || []);
     } catch (e) {
       setErr(e.message || "Failed to load warehouses");
@@ -22,7 +25,7 @@ export default function WarehouseListPage() {
       setLoading(false);
     }
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [companyDocId]);
 
   async function onDelete(id) {
     if (!confirm("Delete this warehouse?")) return;
@@ -41,6 +44,13 @@ export default function WarehouseListPage() {
     <AdminShell title="Warehouse List" user={null}>
       <div className="rounded-2xl bg-white border shadow-sm p-5">
         <div className="text-xl font-semibold">Warehouses</div>
+        <div className="mt-3 max-w-md">
+          <div className="text-sm font-medium text-zinc-800">Select Company</div>
+          <select className="mt-1 w-full rounded-xl border px-3 py-2 text-sm disabled:bg-zinc-100 disabled:text-zinc-600" value={companyDocId} onChange={(e) => setCompanyDocId(e.target.value)} disabled={!canSelectCompany}>
+            <option value="">{canSelectCompany ? "All companies" : "Company selected by role"}</option>
+            {companies.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
+          </select>
+        </div>
         {err ? <div className="mt-3 text-sm text-red-600">{err}</div> : null}
         <div className="mt-5 overflow-auto rounded-xl border">
           <table className="min-w-[1000px] w-full text-sm">
