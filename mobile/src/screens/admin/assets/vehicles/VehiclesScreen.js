@@ -3,10 +3,12 @@ import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View 
 import apiClient from '../../../../api/client';
 import Card from '../../../../ui/Card';
 import Loader from '../../../../ui/Loader';
+import useCompanyScope from '../../hooks/useCompanyScope';
 
 const STATUS_OPTIONS = ['', 'Active', 'Under Maintenance', 'Inactive'];
 
 export default function VehiclesScreen() {
+  const { companies, companyDocId, setCompanyDocId, selectedCompany, canSelectCompany, loadingCompanies } = useCompanyScope();
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
   const [users, setUsers] = useState([]);
@@ -22,8 +24,9 @@ export default function VehiclesScreen() {
     try {
       const params = new URLSearchParams();
       Object.entries(filters).forEach(([k, v]) => { if (String(v || '').trim()) params.set(k, String(v).trim()); });
+      if (selectedCompany?.companyId) params.set('companyId', selectedCompany.companyId);
       const [vRes, uRes, rRes, zRes, aRes] = await Promise.all([
-        apiClient.get(`/vehicles?${params.toString()}`), apiClient.get('/users'), apiClient.get('/regions'), apiClient.get('/zones'), apiClient.get('/areas'),
+        apiClient.get(`/vehicles?${params.toString()}`), apiClient.get('/users'), apiClient.get(`/regions${selectedCompany?.companyId ? `?companyId=${encodeURIComponent(selectedCompany.companyId)}` : ''}`), apiClient.get(`/zones${selectedCompany?.companyId ? `?companyId=${encodeURIComponent(selectedCompany.companyId)}` : ''}`), apiClient.get(`/areas${selectedCompany?.companyId ? `?companyId=${encodeURIComponent(selectedCompany.companyId)}` : ''}`),
       ]);
       setRows(vRes.data?.vehicles || []);
       setUsers((uRes.data?.users || []).filter((x) => String(x.role || '').toLowerCase() !== 'customer'));
@@ -31,7 +34,7 @@ export default function VehiclesScreen() {
       setZones(zRes.data?.zones || []);
       setAreas(aRes.data?.areas || []);
     } finally { setLoading(false); }
-  }, [filters]);
+  }, [filters, selectedCompany?.companyId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -51,9 +54,12 @@ export default function VehiclesScreen() {
     } catch (e) { Alert.alert('Update failed', e.message); }
   };
 
-  if (loading) return <Loader />;
+  if (loading || loadingCompanies) return <Loader />;
 
   return <ScrollView contentContainerStyle={styles.content}><Card><Text style={styles.title}>Vehicle List</Text>
+
+    <Text style={styles.label}>Company filter</Text>
+    <ScrollView horizontal contentContainerStyle={styles.wrap}><Pressable style={[styles.chip, !companyDocId ? styles.active : null, !canSelectCompany ? styles.disabled : null]} onPress={() => setCompanyDocId('')} disabled={!canSelectCompany}><Text style={!companyDocId ? styles.activeTx : null}>{canSelectCompany ? 'All Companies' : 'Company by role'}</Text></Pressable>{companies.map((c)=><Pressable key={c._id || c.companyId} style={[styles.chip, companyDocId === (c._id || c.companyId) ? styles.active : null, !canSelectCompany ? styles.disabled : null]} onPress={() => setCompanyDocId(c._id || c.companyId)} disabled={!canSelectCompany}><Text style={companyDocId === (c._id || c.companyId) ? styles.activeTx : null}>{c.name}</Text></Pressable>)}</ScrollView>
     <TextInput style={styles.input} value={filters.search} onChangeText={(v) => setFilter('search', v)} placeholder="search by reg/make/model/nickname" />
     <View style={styles.wrap}>{['type','fuelType'].map((k)=><TextInput key={k} style={[styles.input,{flex:1,minWidth:140,marginBottom:0}]} placeholder={k} value={filters[k]} onChangeText={(v)=>setFilter(k,v)} />)}</View>
     <Text style={styles.label}>Status / Assigned User filters</Text>
@@ -70,4 +76,4 @@ export default function VehiclesScreen() {
   </ScrollView>;
 }
 
-const styles = StyleSheet.create({ content: { padding: 12, gap: 12 }, title: { fontSize: 20, fontWeight: '700', marginBottom: 8 }, label: { marginBottom: 6, marginTop: 4, fontWeight: '600' }, detailLine: { color: '#374151', marginBottom: 6 }, input: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, minHeight: 42, paddingHorizontal: 12, marginBottom: 8 }, wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, chip: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 }, active: { backgroundColor: '#059669', borderColor: '#059669' }, activeTx: { color: '#fff' }, headRow: { flexDirection: 'row', borderBottomWidth: 1, borderColor: '#e4e4e7', paddingBottom: 6 }, head: { width: 165, fontWeight: '700' }, dataRow: { flexDirection: 'row', borderBottomWidth: 1, borderColor: '#f4f4f5', paddingVertical: 8 }, cell: { width: 165 }, btn: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }, overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 12 }, modal: { backgroundColor: '#fff', borderRadius: 12, padding: 12 } });
+const styles = StyleSheet.create({ content: { padding: 12, gap: 12 }, disabled: { opacity: 0.7 }, title: { fontSize: 20, fontWeight: '700', marginBottom: 8 }, label: { marginBottom: 6, marginTop: 4, fontWeight: '600' }, detailLine: { color: '#374151', marginBottom: 6 }, input: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, minHeight: 42, paddingHorizontal: 12, marginBottom: 8 }, wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, chip: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 }, active: { backgroundColor: '#059669', borderColor: '#059669' }, activeTx: { color: '#fff' }, headRow: { flexDirection: 'row', borderBottomWidth: 1, borderColor: '#e4e4e7', paddingBottom: 6 }, head: { width: 165, fontWeight: '700' }, dataRow: { flexDirection: 'row', borderBottomWidth: 1, borderColor: '#f4f4f5', paddingVertical: 8 }, cell: { width: 165 }, btn: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }, overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 12 }, modal: { backgroundColor: '#fff', borderRadius: 12, padding: 12 } });

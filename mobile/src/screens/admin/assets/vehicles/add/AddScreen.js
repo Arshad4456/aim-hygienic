@@ -4,6 +4,7 @@ import apiClient from '../../../../../api/client';
 import Button from '../../../../../ui/Button';
 import Card from '../../../../../ui/Card';
 import Loader from '../../../../../ui/Loader';
+import useCompanyScope from '../../../hooks/useCompanyScope';
 
 const TYPES = ['Motorbike', 'Scooter', 'Bicycle', 'Car', 'Microbus', 'Van', 'Pickup', 'Truck', 'Covered Van', 'Lorry', 'Mini Truck', 'Bus', 'Auto Rickshaw', 'CNG', 'Tractor', 'Ambulance', 'Other'];
 const FUEL_TYPES = ['Petrol', 'Diesel', 'Octane', 'CNG', 'Electric'];
@@ -11,6 +12,7 @@ const OWNERSHIP = ['company', 'rental', 'leased'];
 const STATUS = ['Active', 'Under Maintenance', 'Inactive'];
 
 export default function AddScreen() {
+  const { companies, companyDocId, setCompanyDocId, selectedCompany, canSelectCompany, loadingCompanies } = useCompanyScope();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [users, setUsers] = useState([]);
@@ -26,11 +28,12 @@ export default function AddScreen() {
 
   useEffect(() => { (async () => {
     try {
-      const [u, r, z, a, f] = await Promise.all([apiClient.get('/users'), apiClient.get('/regions'), apiClient.get('/zones'), apiClient.get('/areas'), apiClient.get('/fields')]);
+      const qp = selectedCompany?.companyId ? `?companyId=${encodeURIComponent(selectedCompany.companyId)}` : '';
+      const [u, r, z, a, f] = await Promise.all([apiClient.get('/users'), apiClient.get(`/regions${qp}`), apiClient.get(`/zones${qp}`), apiClient.get(`/areas${qp}`), apiClient.get(`/fields${qp}`)]);
       setUsers((u.data?.users || []).filter((x) => String(x.role || '').toLowerCase() !== 'customer'));
       setRegions(r.data?.regions || []); setZones(z.data?.zones || []); setAreas(a.data?.areas || []); setFields(f.data?.fields || []);
     } finally { setLoading(false); }
-  })(); }, []);
+  })(); }, [selectedCompany?.companyId]);
 
   const setField = (k, v) => setForm((s) => ({ ...s, [k]: v, ...(k === 'regionId' ? { zoneId: '', areaId: '', fieldId: '' } : {}), ...(k === 'zoneId' ? { areaId: '', fieldId: '' } : {}), ...(k === 'areaId' ? { fieldId: '' } : {}) }));
   const region = useMemo(() => regions.find((x) => x.regionId === form.regionId), [regions, form.regionId]);
@@ -50,14 +53,18 @@ export default function AddScreen() {
         expectedKmPerLiter: Number(form.expectedKmPerLiter || 0),
         regionName: region?.name || '', zoneName: zone?.name || '', areaName: area?.name || '', fieldName: field?.name || '',
         assignedUserName: assignedUser ? (assignedUser.fullName || assignedUser.name || assignedUser.username || '') : '',
+        companyId: selectedCompany?.companyId || '',
+        companyName: selectedCompany?.name || '',
       });
       Alert.alert('Success', 'Vehicle added successfully.');
     } catch (e) { Alert.alert('Save failed', e.message || 'Failed to add vehicle'); }
     finally { setSaving(false); }
   };
 
-  if (loading) return <Loader />;
+  if (loading || loadingCompanies) return <Loader />;
   return <ScrollView contentContainerStyle={styles.content}><Card><Text style={styles.title}>Add Vehicle</Text>
+
+    <Text style={styles.label}>Company</Text><ScrollView horizontal contentContainerStyle={styles.wrap}>{companies.map((c) => <Pressable key={c._id || c.companyId} style={[styles.chip, companyDocId === (c._id || c.companyId) ? styles.active : null, !canSelectCompany ? styles.disabled : null]} onPress={() => setCompanyDocId(c._id || c.companyId)} disabled={!canSelectCompany}><Text style={companyDocId === (c._id || c.companyId) ? styles.activeTx : null}>{c.name}</Text></Pressable>)}</ScrollView>
     {['vehicleId','make','model','year','nickname','registrationNo','engineNo','chassisNo','color','currentOdometer','expectedKmPerLiter'].map((k) => <TextInput key={k} style={styles.input} placeholder={k} value={form[k]} onChangeText={(v) => setField(k, v)} keyboardType={['year','currentOdometer','expectedKmPerLiter'].includes(k) ? 'numeric' : 'default'} />)}
     <Text style={styles.label}>Notes</Text><TextInput style={[styles.input, { minHeight: 72, textAlignVertical: 'top', paddingTop: 10 }]} multiline value={form.notes} onChangeText={(v) => setField('notes', v)} placeholder="notes" />
     <Text style={styles.label}>Type</Text><View style={styles.wrap}>{TYPES.map((v) => <Pressable key={v} style={[styles.chip, form.type === v ? styles.active : null]} onPress={() => setField('type', v)}><Text style={form.type === v ? styles.activeTx : null}>{v}</Text></Pressable>)}</View>
@@ -73,4 +80,4 @@ export default function AddScreen() {
   </Card></ScrollView>;
 }
 
-const styles = StyleSheet.create({ content: { padding: 12 }, title: { fontSize: 20, fontWeight: '700', marginBottom: 8 }, label: { marginTop: 8, marginBottom: 6, fontWeight: '600' }, input: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, minHeight: 42, paddingHorizontal: 12, marginBottom: 8 }, wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, chip: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 }, active: { backgroundColor: '#059669', borderColor: '#059669' }, activeTx: { color: '#fff' } });
+const styles = StyleSheet.create({ content: { padding: 12 }, disabled: { opacity: 0.7 }, title: { fontSize: 20, fontWeight: '700', marginBottom: 8 }, label: { marginTop: 8, marginBottom: 6, fontWeight: '600' }, input: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, minHeight: 42, paddingHorizontal: 12, marginBottom: 8 }, wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, chip: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 }, active: { backgroundColor: '#059669', borderColor: '#059669' }, activeTx: { color: '#fff' } });

@@ -3,10 +3,12 @@ import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View 
 import apiClient from '../../../api/client';
 import Card from '../../../ui/Card';
 import Loader from '../../../ui/Loader';
+import useCompanyScope from '../hooks/useCompanyScope';
 
 const STATUS = ['', 'active', 'inactive'];
 
 export default function AreasScreen() {
+  const { companies, companyDocId, setCompanyDocId, selectedCompany, canSelectCompany, loadingCompanies } = useCompanyScope();
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
   const [regions, setRegions] = useState([]);
@@ -21,22 +23,26 @@ export default function AreasScreen() {
       if (filters.search.trim()) params.set('search', filters.search.trim());
       if (filters.regionId) params.set('regionId', filters.regionId);
       if (filters.zoneId) params.set('zoneId', filters.zoneId);
-      const [a, r, z] = await Promise.all([apiClient.get(`/areas?${params.toString()}`), apiClient.get('/regions'), apiClient.get('/zones')]);
+      if (selectedCompany?.companyId) params.set('companyId', selectedCompany.companyId);
+      const qp = selectedCompany?.companyId ? `?companyId=${encodeURIComponent(selectedCompany.companyId)}` : '';
+      const [a, r, z] = await Promise.all([apiClient.get(`/areas?${params.toString()}`), apiClient.get(`/regions${qp}`), apiClient.get(`/zones${qp}`)]);
       let list = a.data?.areas || [];
       if (filters.status) list = list.filter((x) => String(x.status || 'active').toLowerCase() === filters.status);
       setRows(list); setRegions(r.data?.regions || []); setZones(z.data?.zones || []);
     } finally { setLoading(false); }
-  }, [filters]);
+  }, [filters, selectedCompany?.companyId]);
 
   useEffect(() => { load(); }, [load]);
 
   const onDelete = async (id) => { try { await apiClient.delete(`/areas/${id}`); load(); } catch (e) { Alert.alert('Delete failed', e.message); } };
   const onSave = async () => { try { await apiClient.put(`/areas/${edit._id}`, edit); setEdit(null); load(); } catch (e) { Alert.alert('Update failed', e.message); } };
 
-  if (loading) return <Loader />;
+  if (loading || loadingCompanies) return <Loader />;
   const setFilter = (k, v) => setFilters((s) => ({ ...s, [k]: v, ...(k === 'regionId' ? { zoneId: '' } : {}) }));
 
-  return <ScrollView contentContainerStyle={styles.content}><Card><Text style={styles.title}>Territory List</Text><TextInput style={styles.input} value={filters.search} onChangeText={(v) => setFilter('search', v)} placeholder="Search territory" />
+  return <ScrollView contentContainerStyle={styles.content}><Card><Text style={styles.title}>Territory List</Text>
+    <Text style={styles.label}>Company filter</Text><ScrollView horizontal contentContainerStyle={styles.wrap}><Pressable style={[styles.chip, !companyDocId ? styles.activeBg : null, !canSelectCompany ? styles.disabled : null]} onPress={() => setCompanyDocId('')} disabled={!canSelectCompany}><Text style={!companyDocId ? styles.activeTx : null}>{canSelectCompany ? 'All Companies' : 'Company by role'}</Text></Pressable>{companies.map((c) => <Pressable key={c._id || c.companyId} style={[styles.chip, companyDocId === (c._id || c.companyId) ? styles.activeBg : null, !canSelectCompany ? styles.disabled : null]} onPress={() => setCompanyDocId(c._id || c.companyId)} disabled={!canSelectCompany}><Text style={companyDocId === (c._id || c.companyId) ? styles.activeTx : null}>{c.name}</Text></Pressable>)}</ScrollView>
+<TextInput style={styles.input} value={filters.search} onChangeText={(v) => setFilter('search', v)} placeholder="Search territory" />
     <Text style={styles.label}>Region filter</Text><ScrollView horizontal contentContainerStyle={styles.wrap}><Pressable style={[styles.chip, !filters.regionId ? styles.activeBg : null]} onPress={() => setFilter('regionId', '')}><Text style={!filters.regionId ? styles.activeTx : null}>All Regions</Text></Pressable>{regions.map((r) => <Pressable key={r._id} style={[styles.chip, filters.regionId === r.regionId ? styles.activeBg : null]} onPress={() => setFilter('regionId', r.regionId)}><Text style={filters.regionId === r.regionId ? styles.activeTx : null}>{r.name}</Text></Pressable>)}</ScrollView>
     <Text style={styles.label}>Zone filter</Text><ScrollView horizontal contentContainerStyle={styles.wrap}><Pressable style={[styles.chip, !filters.zoneId ? styles.activeBg : null]} onPress={() => setFilter('zoneId', '')}><Text style={!filters.zoneId ? styles.activeTx : null}>All Zones</Text></Pressable>{zones.filter((z) => !filters.regionId || z.regionId === filters.regionId).map((z) => <Pressable key={z._id} style={[styles.chip, filters.zoneId === z.zoneId ? styles.activeBg : null]} onPress={() => setFilter('zoneId', z.zoneId)}><Text style={filters.zoneId === z.zoneId ? styles.activeTx : null}>{z.name}</Text></Pressable>)}</ScrollView>
     <Text style={styles.label}>Status filter</Text><View style={styles.wrap}>{STATUS.map((s) => <Pressable key={s || 'all'} style={[styles.chip, filters.status === s ? styles.activeBg : null]} onPress={() => setFilter('status', s)}><Text style={filters.status === s ? styles.activeTx : null}>{s || 'All status'}</Text></Pressable>)}</View>
@@ -46,4 +52,4 @@ export default function AreasScreen() {
   </ScrollView>;
 }
 
-const styles = StyleSheet.create({ content: { padding: 12, gap: 12 }, title: { fontSize: 20, fontWeight: '700', marginBottom: 8 }, label: { marginBottom: 6, marginTop: 4, fontWeight: '600' }, input: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, minHeight: 42, paddingHorizontal: 12, marginBottom: 8 }, wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, chip: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 }, activeBg: { backgroundColor: '#059669', borderColor: '#059669' }, activeTx: { color: '#fff' }, headRow: { flexDirection: 'row', borderBottomWidth: 1, borderColor: '#e4e4e7', paddingBottom: 6 }, head: { width: 145, fontWeight: '700' }, dataRow: { flexDirection: 'row', borderBottomWidth: 1, borderColor: '#f4f4f5', paddingVertical: 8 }, cell: { width: 145 }, btn: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }, overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 12 }, modal: { backgroundColor: '#fff', borderRadius: 12, padding: 12 } });
+const styles = StyleSheet.create({ content: { padding: 12, gap: 12 }, disabled: { opacity: 0.7 }, title: { fontSize: 20, fontWeight: '700', marginBottom: 8 }, label: { marginBottom: 6, marginTop: 4, fontWeight: '600' }, input: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, minHeight: 42, paddingHorizontal: 12, marginBottom: 8 }, wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, chip: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 }, activeBg: { backgroundColor: '#059669', borderColor: '#059669' }, activeTx: { color: '#fff' }, headRow: { flexDirection: 'row', borderBottomWidth: 1, borderColor: '#e4e4e7', paddingBottom: 6 }, head: { width: 145, fontWeight: '700' }, dataRow: { flexDirection: 'row', borderBottomWidth: 1, borderColor: '#f4f4f5', paddingVertical: 8 }, cell: { width: 145 }, btn: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }, overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 12 }, modal: { backgroundColor: '#fff', borderRadius: 12, padding: 12 } });
