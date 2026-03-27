@@ -34,30 +34,42 @@ function sanitizeDoc(doc = {}) {
 }
 
 async function syncMasterToTenant({ companyId, companyName, collectionName, doc }) {
-  const normalizedCompanyId = String(companyId || "").trim();
-  if (!normalizedCompanyId || !doc?._id) return;
-  const collection = await getTenantCollection(normalizedCompanyId, companyName, collectionName);
-  const payload = {
-    ...sanitizeDoc(doc),
-    companyId: normalizedCompanyId,
-    companyName: await resolveCompanyName(normalizedCompanyId, companyName),
-    updatedAt: new Date(),
-  };
-  await collection.updateOne({ _id: payload._id }, { $set: payload, $setOnInsert: { createdAt: payload.createdAt || new Date() } }, { upsert: true });
+  try {
+    const normalizedCompanyId = String(companyId || "").trim();
+    if (!normalizedCompanyId || !doc?._id) return;
+    const collection = await getTenantCollection(normalizedCompanyId, companyName, collectionName);
+    const payload = {
+      ...sanitizeDoc(doc),
+      companyId: normalizedCompanyId,
+      companyName: await resolveCompanyName(normalizedCompanyId, companyName),
+      updatedAt: new Date(),
+    };
+    await collection.updateOne({ _id: payload._id }, { $set: payload, $setOnInsert: { createdAt: payload.createdAt || new Date() } }, { upsert: true });
+  } catch (_e) {
+    // Keep primary DB operation successful even if tenant sync fails.
+  }
 }
 
 async function removeMasterFromTenant({ companyId, companyName, collectionName, id }) {
-  const normalizedCompanyId = String(companyId || "").trim();
-  if (!normalizedCompanyId || !id) return;
-  const collection = await getTenantCollection(normalizedCompanyId, companyName, collectionName);
-  await collection.deleteOne({ _id: typeof id === "string" ? new mongoose.Types.ObjectId(id) : id });
+  try {
+    const normalizedCompanyId = String(companyId || "").trim();
+    if (!normalizedCompanyId || !id) return;
+    const collection = await getTenantCollection(normalizedCompanyId, companyName, collectionName);
+    await collection.deleteOne({ _id: typeof id === "string" ? new mongoose.Types.ObjectId(id) : id });
+  } catch (_e) {
+    // Best-effort cleanup; avoid breaking primary delete/update flows.
+  }
 }
 
 async function listTenantMasterByCompany(companyId, collectionName) {
-  const normalizedCompanyId = String(companyId || "").trim();
-  if (!normalizedCompanyId) return [];
-  const collection = await getTenantCollection(normalizedCompanyId, "", collectionName);
-  return collection.find({}).sort({ createdAt: -1 }).toArray();
+  try {
+    const normalizedCompanyId = String(companyId || "").trim();
+    if (!normalizedCompanyId) return [];
+    const collection = await getTenantCollection(normalizedCompanyId, "", collectionName);
+    return collection.find({}).sort({ createdAt: -1 }).toArray();
+  } catch (_e) {
+    return [];
+  }
 }
 
 module.exports = {

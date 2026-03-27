@@ -52,6 +52,9 @@ router.get("/", requireAuth, async (req, res) => {
     const query = {};
     if (!isSystemLevelAdmin(req.user?.role)) {
       let items = await listTenantMasterByCompany(req.user?.companyId, "fields");
+      if (!items.length) {
+        items = await Field.find({ companyId: String(req.user?.companyId || "").trim() }).sort({ createdAt: -1 }).lean();
+      }
       if (req.query.warehouseId) items = items.filter((f) => String(f.warehouseId || "") === String(req.query.warehouseId));
       if (req.query.regionId) items = items.filter((f) => String(f.regionId || "") === String(req.query.regionId));
       if (req.query.zoneId) items = items.filter((f) => String(f.zoneId || "") === String(req.query.zoneId));
