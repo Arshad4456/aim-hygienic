@@ -1,6 +1,7 @@
 const express = require("express");
 const Zone = require("../models/Zone");
 const { requireAuth } = require("../utils/auth");
+const { syncMasterToTenant, removeMasterFromTenant, listTenantMasterByCompany } = require("../utils/tenantMasters");
 
 const router = express.Router();
 function normalizeRole(role) { return String(role || "").trim().toLowerCase(); }
@@ -32,6 +33,7 @@ router.post("/", requireAuth, async (req, res) => {
       status: String(body.status || "active").trim(),
       createdBy: req.user?.uid,
     });
+    await syncMasterToTenant({ companyId, companyName, collectionName: "zones", doc });
     return res.status(201).json({ ok: true, zone: doc });
   } catch (e) {
     if (e?.code === 11000) {
@@ -44,8 +46,15 @@ router.post("/", requireAuth, async (req, res) => {
 router.get("/", requireAuth, async (req, res) => {
   try {
     const query = {};
-    if (!isSystemLevelAdmin(req.user?.role)) query.companyId = String(req.user?.companyId || "").trim();
-    else if (req.query.companyId) query.companyId = String(req.query.companyId);
+    if (!isSystemLevelAdmin(req.user?.role)) {
+      let items = await listTenantMasterByCompany(req.user?.companyId, "zones");
+      if (req.query.warehouseId) items = items.filter((z) => String(z.warehouseId || "") === String(req.query.warehouseId));
+      if (req.query.regionId) items = items.filter((z) => String(z.regionId || "") === String(req.query.regionId));
+      const search = String(req.query.search || "").trim().toLowerCase();
+      if (search) items = items.filter((z) => [z.zoneId, z.name, z.warehouseName, z.regionName].filter(Boolean).join(" ").toLowerCase().includes(search));
+      return res.json({ ok: true, zones: items });
+    }
+    if (req.query.companyId) query.companyId = String(req.query.companyId);
     if (req.query.warehouseId) query.warehouseId = String(req.query.warehouseId);
     if (req.query.regionId) query.regionId = String(req.query.regionId);
 
@@ -118,6 +127,10 @@ router.put("/:id", requireAuth, async (req, res) => {
       { new: true, runValidators: true }
     );
     if (!updated) return res.status(404).json({ ok: false, message: "Not found" });
+    if (String(existing.companyId || "").trim() && String(existing.companyId || "").trim() !== String(updated.companyId || "").trim()) {
+      await removeMasterFromTenant({ companyId: existing.companyId, companyName: existing.companyName, collectionName: "zones", id: existing._id });
+    }
+    await syncMasterToTenant({ companyId: updated.companyId, companyName: updated.companyName, collectionName: "zones", doc: updated });
     return res.json({ ok: true, zone: updated });
   } catch (e) {
     if (e?.code === 11000) {
@@ -136,6 +149,7 @@ router.delete("/:id", requireAuth, async (req, res) => {
     }
     const deleted = await Zone.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ ok: false, message: "Not found" });
+    await removeMasterFromTenant({ companyId: existing.companyId, companyName: existing.companyName, collectionName: "zones", id: existing._id });
     return res.json({ ok: true });
   } catch (e) {
     return res.status(400).json({ ok: false, message: "Invalid id" });
