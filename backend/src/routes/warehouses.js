@@ -44,7 +44,10 @@ router.get("/", requireAuth, async (req, res) => {
   try {
     const query = {};
     if (!isSystemLevelAdmin(req.user?.role)) {
-      const items = await listTenantMasterByCompany(req.user?.companyId, "warehouses");
+      let items = await listTenantMasterByCompany(req.user?.companyId, "warehouses");
+      if (!items.length) {
+        items = await Warehouse.find({ companyId: String(req.user?.companyId || "").trim() }).sort({ createdAt: -1 }).lean();
+      }
       return res.json({ ok: true, warehouses: items });
     }
     if (req.query.companyId) {

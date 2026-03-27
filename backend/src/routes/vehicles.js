@@ -111,6 +111,9 @@ router.get("/", requireAuth, async (req, res) => {
     const isSystemAdmin = isSystemLevelAdmin(req.user?.role);
     if (!isSystemAdmin) {
       let vehicles = await listTenantMasterByCompany(req.user?.companyId, "vehicles");
+      if (!vehicles.length) {
+        vehicles = await Vehicle.find({ companyId: sanitizeString(req.user?.companyId) }).sort({ createdAt: -1 }).lean();
+      }
       if (req.query.type) vehicles = vehicles.filter((v) => String(v.type || "") === String(req.query.type));
       if (req.query.fuelType) vehicles = vehicles.filter((v) => String(v.fuelType || "") === String(req.query.fuelType));
       if (req.query.status) vehicles = vehicles.filter((v) => String(v.status || "") === String(req.query.status));
