@@ -44,7 +44,12 @@ async function syncMasterToTenant({ companyId, companyName, collectionName, doc 
       companyName: await resolveCompanyName(normalizedCompanyId, companyName),
       updatedAt: new Date(),
     };
-    await collection.updateOne({ _id: payload._id }, { $set: payload, $setOnInsert: { createdAt: payload.createdAt || new Date() } }, { upsert: true });
+    const { _id, ...rest } = payload;
+    await collection.updateOne(
+      { _id },
+      { $set: rest, $setOnInsert: { _id, createdAt: payload.createdAt || new Date() } },
+      { upsert: true }
+    );
   } catch (_e) {
     // Keep primary DB operation successful even if tenant sync fails.
   }
