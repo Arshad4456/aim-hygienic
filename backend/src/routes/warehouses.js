@@ -3,10 +3,19 @@ const Warehouse = require("../models/Warehouse");
 const { requireAuth } = require("../utils/auth");
 
 const router = express.Router();
+function normalizeRole(role) { return String(role || "").trim().toLowerCase(); }
+function isSystemLevelAdmin(role) { const r = normalizeRole(role); return r === "admin" || r === "system admin"; }
 
 router.post("/", requireAuth, async (req, res) => {
   try {
     const body = req.body || {};
+    const role = req.user?.role;
+    const isSystemAdmin = isSystemLevelAdmin(role);
+    const scopedCompanyId = String(req.user?.companyId || "").trim();
+    const scopedCompanyName = String(req.user?.companyName || "").trim();
+    const companyId = isSystemAdmin ? String(body.companyId || "").trim() : scopedCompanyId;
+    const companyName = isSystemAdmin ? String(body.companyName || "").trim() : scopedCompanyName;
+    if (!companyId) return res.status(400).json({ ok: false, message: "Company is required for this role." });
     const doc = await Warehouse.create({
       warehouseId: String(body.warehouseId || "").trim(),
       name: String(body.name || "").trim(),
@@ -16,8 +25,8 @@ router.post("/", requireAuth, async (req, res) => {
       address: String(body.address || "").trim(),
       capacity: Number(body.capacity || 0),
       status: String(body.status || "active").trim(),
-      companyId: String(body.companyId || "").trim(),
-      companyName: String(body.companyName || "").trim(),
+      companyId,
+      companyName,
       createdBy: req.user?.uid,
     });
     return res.status(201).json({ ok: true, warehouse: doc });
@@ -32,7 +41,11 @@ router.post("/", requireAuth, async (req, res) => {
 router.get("/", requireAuth, async (req, res) => {
   try {
     const query = {};
-    if (req.query.companyId) query.companyId = String(req.query.companyId);
+    if (!isSystemLevelAdmin(req.user?.role)) {
+      query.companyId = String(req.user?.companyId || "").trim();
+    } else if (req.query.companyId) {
+      query.companyId = String(req.query.companyId);
+    }
     const items = await Warehouse.find(query).sort({ createdAt: -1 }).lean();
     return res.json({ ok: true, warehouses: items });
   } catch (e) {
@@ -52,7 +65,15 @@ router.get("/:id", requireAuth, async (req, res) => {
 
 router.put("/:id", requireAuth, async (req, res) => {
   try {
+    const existing = await Warehouse.findById(req.params.id).lean();
+    if (!existing) return res.status(404).json({ ok: false, message: "Not found" });
+    if (!isSystemLevelAdmin(req.user?.role) && String(existing.companyId || "").trim() !== String(req.user?.companyId || "").trim()) {
+      return res.status(403).json({ ok: false, message: "Forbidden" });
+    }
     const body = req.body || {};
+    const isSystemAdmin = isSystemLevelAdmin(req.user?.role);
+    const companyId = isSystemAdmin ? String(body.companyId || "").trim() : String(req.user?.companyId || "").trim();
+    const companyName = isSystemAdmin ? String(body.companyName || "").trim() : String(req.user?.companyName || "").trim();
     const updated = await Warehouse.findByIdAndUpdate(
       req.params.id,
       {
@@ -64,8 +85,8 @@ router.put("/:id", requireAuth, async (req, res) => {
         address: String(body.address || "").trim(),
         capacity: Number(body.capacity || 0),
         status: String(body.status || "active").trim(),
-        companyId: String(body.companyId || "").trim(),
-        companyName: String(body.companyName || "").trim(),
+        companyId,
+        companyName,
       },
       { new: true, runValidators: true }
     );
@@ -81,6 +102,11 @@ router.put("/:id", requireAuth, async (req, res) => {
 
 router.delete("/:id", requireAuth, async (req, res) => {
   try {
+    const existing = await Warehouse.findById(req.params.id).lean();
+    if (!existing) return res.status(404).json({ ok: false, message: "Not found" });
+    if (!isSystemLevelAdmin(req.user?.role) && String(existing.companyId || "").trim() !== String(req.user?.companyId || "").trim()) {
+      return res.status(403).json({ ok: false, message: "Forbidden" });
+    }
     const deleted = await Warehouse.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ ok: false, message: "Not found" });
     return res.json({ ok: true });

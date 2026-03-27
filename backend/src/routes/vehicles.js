@@ -8,6 +8,8 @@ const User = require("../models/User");
 const { requireAuth } = require("../utils/auth");
 
 const router = express.Router();
+function normalizeRole(role) { return String(role || "").trim().toLowerCase(); }
+function isSystemLevelAdmin(role) { const r = normalizeRole(role); return r === "admin" || r === "system admin"; }
 
 function sanitizeString(value) {
   return value ? String(value).trim() : "";
@@ -57,6 +59,8 @@ function parseVehiclePayload(body = {}) {
     currentOdometer: parseNum(body.currentOdometer),
     expectedKmPerLiter: parseNum(body.expectedKmPerLiter),
     status: sanitizeString(body.status || "Active"),
+    companyId: sanitizeString(body.companyId),
+    companyName: sanitizeString(body.companyName),
     notes: sanitizeString(body.notes),
   };
 }
@@ -73,6 +77,11 @@ function validateVehiclePayload(payload) {
 router.post("/", requireAuth, async (req, res) => {
   try {
     const payload = parseVehiclePayload(req.body);
+    if (!isSystemLevelAdmin(req.user?.role)) {
+      payload.companyId = sanitizeString(req.user?.companyId);
+      payload.companyName = sanitizeString(req.user?.companyName);
+    }
+    if (!payload.companyId) return res.status(400).json({ ok: false, message: "Company is required for this role." });
     const validationErr = validateVehiclePayload(payload);
     if (validationErr) return res.status(400).json({ ok: false, message: validationErr });
 
@@ -97,6 +106,8 @@ router.post("/", requireAuth, async (req, res) => {
 router.get("/", requireAuth, async (req, res) => {
   try {
     const q = {};
+    if (!isSystemLevelAdmin(req.user?.role)) q.companyId = sanitizeString(req.user?.companyId);
+    else if (req.query.companyId) q.companyId = sanitizeString(req.query.companyId);
     if (req.query.type) q.type = req.query.type;
     if (req.query.fuelType) q.fuelType = req.query.fuelType;
     if (req.query.status) q.status = req.query.status;
@@ -126,6 +137,9 @@ router.get("/:id/detail", requireAuth, async (req, res) => {
   try {
     const vehicle = await Vehicle.findById(req.params.id).lean();
     if (!vehicle) return res.status(404).json({ ok: false, message: "Vehicle not found" });
+    if (!isSystemLevelAdmin(req.user?.role) && String(vehicle.companyId || "").trim() !== String(req.user?.companyId || "").trim()) {
+      return res.status(403).json({ ok: false, message: "Forbidden" });
+    }
 
     const [assignments, trips, refuels, maintenance] = await Promise.all([
       VehicleAssignment.find({ vehicleId: req.params.id }).sort({ startDate: -1 }).limit(30).lean(),
@@ -144,6 +158,9 @@ router.get("/:id", requireAuth, async (req, res) => {
   try {
     const vehicle = await Vehicle.findById(req.params.id).lean();
     if (!vehicle) return res.status(404).json({ ok: false, message: "Vehicle not found" });
+    if (!isSystemLevelAdmin(req.user?.role) && String(vehicle.companyId || "").trim() !== String(req.user?.companyId || "").trim()) {
+      return res.status(403).json({ ok: false, message: "Forbidden" });
+    }
     return res.json({ ok: true, vehicle });
   } catch (_e) {
     return res.status(400).json({ ok: false, message: "Invalid id" });
@@ -152,7 +169,17 @@ router.get("/:id", requireAuth, async (req, res) => {
 
 router.put("/:id", requireAuth, async (req, res) => {
   try {
+    const existing = await Vehicle.findById(req.params.id).lean();
+    if (!existing) return res.status(404).json({ ok: false, message: "Vehicle not found" });
+    if (!isSystemLevelAdmin(req.user?.role) && String(existing.companyId || "").trim() !== String(req.user?.companyId || "").trim()) {
+      return res.status(403).json({ ok: false, message: "Forbidden" });
+    }
     const payload = parseVehiclePayload(req.body);
+    if (!isSystemLevelAdmin(req.user?.role)) {
+      payload.companyId = sanitizeString(req.user?.companyId);
+      payload.companyName = sanitizeString(req.user?.companyName);
+    }
+    if (!payload.companyId) return res.status(400).json({ ok: false, message: "Company is required for this role." });
     const validationErr = validateVehiclePayload(payload);
     if (validationErr) return res.status(400).json({ ok: false, message: validationErr });
 
@@ -170,6 +197,9 @@ router.post("/:id/assign", requireAuth, async (req, res) => {
     const { userId, startDate } = req.body || {};
     const vehicle = await Vehicle.findById(req.params.id);
     if (!vehicle) return res.status(404).json({ ok: false, message: "Vehicle not found" });
+    if (!isSystemLevelAdmin(req.user?.role) && String(vehicle.companyId || "").trim() !== String(req.user?.companyId || "").trim()) {
+      return res.status(403).json({ ok: false, message: "Forbidden" });
+    }
 
     if (!userId) {
       vehicle.assignedUserId = undefined;
@@ -197,6 +227,11 @@ router.post("/:id/assign", requireAuth, async (req, res) => {
 
 router.delete("/:id", requireAuth, async (req, res) => {
   try {
+    const existing = await Vehicle.findById(req.params.id).lean();
+    if (!existing) return res.status(404).json({ ok: false, message: "Vehicle not found" });
+    if (!isSystemLevelAdmin(req.user?.role) && String(existing.companyId || "").trim() !== String(req.user?.companyId || "").trim()) {
+      return res.status(403).json({ ok: false, message: "Forbidden" });
+    }
     const deleted = await Vehicle.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ ok: false, message: "Vehicle not found" });
     return res.json({ ok: true });

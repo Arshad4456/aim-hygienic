@@ -1,16 +1,83 @@
 "use client";
+
 import { useEffect, useMemo, useState } from "react";
 import AdminShell from "../../components/AdminShell";
 import { apiFetch } from "../../../../lib/api";
+import useCompanyScope from "../../components/useCompanyScope";
 
-export default function AddZonePage(){
-  const [warehouses,setWarehouses]=useState([]); const [regions,setRegions]=useState([]); const [form,setForm]=useState({zoneId:'',name:'',warehouseDocId:'',regionDocId:'',status:'active'}); const [msg,setMsg]=useState(''); const [err,setErr]=useState('');
-  useEffect(()=>{Promise.all([apiFetch('/warehouses'),apiFetch('/regions')]).then(([w,r])=>{setWarehouses(w.warehouses||[]);setRegions(r.regions||[]);}).catch(e=>setErr(e.message));},[]);
-  const selectedWarehouse=warehouses.find(w=>w._id===form.warehouseDocId);
-  const filteredRegions=useMemo(()=>regions.filter(r=>!selectedWarehouse||r.warehouseId===selectedWarehouse.warehouseId),[regions,selectedWarehouse]);
-  async function submit(e){e.preventDefault();setErr('');setMsg('');try{const w=selectedWarehouse; const r=regions.find(x=>x._id===form.regionDocId); await apiFetch('/zones',{method:'POST',body:{zoneId:form.zoneId,name:form.name,warehouseId:w?.warehouseId||'',warehouseName:w?.name||'',regionId:r?.regionId||'',regionName:r?.name||'',status:form.status}}); setMsg('✅ Zone saved successfully.'); setForm({zoneId:'',name:'',warehouseDocId:'',regionDocId:'',status:'active'});}catch(e2){setErr(e2.message||'Failed to save zone')}}
-  return <AdminShell title="Add Zone" user={null}><div className="rounded-2xl bg-white border shadow-sm p-5"><div className="text-xl font-semibold">Add Zone</div>{err?<div className="mt-3 text-sm text-red-600">{err}</div>:null}{msg?<div className="mt-3 text-sm text-emerald-600">{msg}</div>:null}<form onSubmit={submit} className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4"><Field label="Zone ID" value={form.zoneId} onChange={(v)=>setForm(s=>({...s,zoneId:v}))} required/><Field label="Zone Name" value={form.name} onChange={(v)=>setForm(s=>({...s,name:v}))} required/><Select label="Warehouse Name" value={form.warehouseDocId} onChange={(v)=>setForm(s=>({...s,warehouseDocId:v,regionDocId:''}))} options={warehouses.map(w=>({value:w._id,label:w.name}))} required/><Select label="Region Name" value={form.regionDocId} onChange={(v)=>setForm(s=>({...s,regionDocId:v}))} options={filteredRegions.map(r=>({value:r._id,label:r.name}))} required/><Select label="Status" value={form.status} onChange={(v)=>setForm(s=>({...s,status:v}))} options={[{value:'active',label:'Active'},{value:'inactive',label:'Inactive'}]}/><div className="md:col-span-2"><button className="rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm">Save Zone</button></div></form></div></AdminShell>
+export default function AddZonePage() {
+  const { companies, companyDocId, setCompanyDocId, selectedCompany, canSelectCompany } = useCompanyScope();
+  const [warehouses, setWarehouses] = useState([]);
+  const [regions, setRegions] = useState([]);
+  const [form, setForm] = useState({ zoneId: "", name: "", warehouseDocId: "", regionDocId: "", status: "active" });
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    Promise.all([apiFetch("/warehouses"), apiFetch("/regions")])
+      .then(([w, r]) => { setWarehouses(w.warehouses || []); setRegions(r.regions || []); })
+      .catch((e) => setErr(e.message));
+  }, []);
+
+  const scopedWarehouses = useMemo(
+    () => warehouses.filter((w) => !selectedCompany?.companyId || String(w.companyId || "") === String(selectedCompany.companyId || "")),
+    [warehouses, selectedCompany],
+  );
+  const selectedWarehouse = scopedWarehouses.find((w) => w._id === form.warehouseDocId);
+  const filteredRegions = useMemo(
+    () => regions.filter((r) => (!selectedCompany?.companyId || String(r.companyId || "") === String(selectedCompany.companyId || "")) && (!selectedWarehouse || r.warehouseId === selectedWarehouse.warehouseId)),
+    [regions, selectedCompany, selectedWarehouse],
+  );
+
+  async function submit(e) {
+    e.preventDefault();
+    setErr("");
+    setMsg("");
+    try {
+      if (!selectedCompany?.companyId) throw new Error("Please select company");
+      const w = selectedWarehouse;
+      const r = filteredRegions.find((x) => x._id === form.regionDocId);
+      await apiFetch("/zones", {
+        method: "POST",
+        body: {
+          zoneId: form.zoneId,
+          name: form.name,
+          warehouseId: w?.warehouseId || "",
+          warehouseName: w?.name || "",
+          regionId: r?.regionId || "",
+          regionName: r?.name || "",
+          companyId: selectedCompany.companyId,
+          companyName: selectedCompany.name,
+          status: form.status,
+        },
+      });
+      setMsg("✅ Zone saved successfully.");
+      setForm({ zoneId: "", name: "", warehouseDocId: "", regionDocId: "", status: "active" });
+    } catch (e2) {
+      setErr(e2.message || "Failed to save zone");
+    }
+  }
+
+  return (
+    <AdminShell title="Add Zone" user={null}>
+      <div className="rounded-2xl bg-white border shadow-sm p-5">
+        <div className="text-xl font-semibold">Add Zone</div>
+        {err ? <div className="mt-3 text-sm text-red-600">{err}</div> : null}
+        {msg ? <div className="mt-3 text-sm text-emerald-600">{msg}</div> : null}
+        <form onSubmit={submit} className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Select label="Company" value={companyDocId} onChange={setCompanyDocId} options={companies.map((c) => ({ value: c._id, label: c.name }))} required disabled={!canSelectCompany} placeholder={canSelectCompany ? "Choose company..." : "Company selected by role"} />
+          <Field label="Zone ID" value={form.zoneId} onChange={(v) => setForm((s) => ({ ...s, zoneId: v }))} required />
+          <Field label="Zone Name" value={form.name} onChange={(v) => setForm((s) => ({ ...s, name: v }))} required />
+          <Select label="Warehouse Name" value={form.warehouseDocId} onChange={(v) => setForm((s) => ({ ...s, warehouseDocId: v, regionDocId: "" }))} options={scopedWarehouses.map((w) => ({ value: w._id, label: w.name }))} required />
+          <Select label="Region Name" value={form.regionDocId} onChange={(v) => setForm((s) => ({ ...s, regionDocId: v }))} options={filteredRegions.map((r) => ({ value: r._id, label: r.name }))} required />
+          <Select label="Status" value={form.status} onChange={(v) => setForm((s) => ({ ...s, status: v }))} options={[{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }]} />
+          <div className="md:col-span-2"><button className="rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm">Save Zone</button></div>
+        </form>
+      </div>
+    </AdminShell>
+  );
 }
-function Label({children}){return <div className="text-sm font-medium text-zinc-800">{children}</div>}
-function Field({label,value,onChange,required}){return <div><Label>{label}</Label><input required={required} value={value} onChange={(e)=>onChange(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2"/></div>}
-function Select({label,value,onChange,options,required}){return <div><Label>{label}</Label><select required={required} value={value} onChange={(e)=>onChange(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2"><option value="">Choose...</option>{options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select></div>}
+
+function Label({ children }) { return <div className="text-sm font-medium text-zinc-800">{children}</div>; }
+function Field({ label, value, onChange, required }) { return <div><Label>{label}</Label><input required={required} value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2" /></div>; }
+function Select({ label, value, onChange, options, required = false, disabled = false, placeholder = "Choose..." }) { return <div><Label>{label}</Label><select required={required} disabled={disabled} value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2 disabled:bg-zinc-100 disabled:text-zinc-600"><option value="">{placeholder}</option>{options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>; }

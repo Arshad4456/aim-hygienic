@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import AdminShell from "../../components/AdminShell";
 import { apiFetch } from "../../../../lib/api";
+import useCompanyScope from "../../components/useCompanyScope";
 
 export default function AddWarehousePage() {
-  const [companies, setCompanies] = useState([]);
+  const { companies, companyDocId, setCompanyDocId, selectedCompany, canSelectCompany } = useCompanyScope();
   const [form, setForm] = useState({
     warehouseId: "",
     name: "",
@@ -19,12 +20,6 @@ export default function AddWarehousePage() {
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
 
-  useEffect(() => {
-    apiFetch("/companies")
-      .then((data) => setCompanies(data.companies || []))
-      .catch((e) => setErr(e.message || "Failed to load company"));
-  }, []);
-
   function setField(key, value) {
     setForm((s) => ({ ...s, [key]: value }));
   }
@@ -35,13 +30,13 @@ export default function AddWarehousePage() {
     setOk("");
     setSaving(true);
     try {
-      const company = companies[0];
+      if (!selectedCompany?.companyId) throw new Error("Please select company");
       await apiFetch("/warehouses", {
         method: "POST",
         body: {
           ...form,
-          companyId: company?.companyId || "",
-          companyName: company?.name || "AIM Hygienic (Pvt) Limited",
+          companyId: selectedCompany?.companyId || "",
+          companyName: selectedCompany?.name || "",
         },
       });
       setOk("✅ Warehouse saved successfully.");
@@ -63,6 +58,13 @@ export default function AddWarehousePage() {
         {ok ? <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{ok}</div> : null}
 
         <form onSubmit={onSubmit} className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="md:col-span-2">
+            <Label>Select Company</Label>
+            <select className="mt-1 w-full rounded-xl border px-3 py-2 text-sm disabled:bg-zinc-100 disabled:text-zinc-600" value={companyDocId} onChange={(e) => setCompanyDocId(e.target.value)} disabled={!canSelectCompany}>
+              <option value="">{canSelectCompany ? "Choose company..." : "Company selected by role"}</option>
+              {companies.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
+            </select>
+          </div>
           <Field label="Warehouse ID" value={form.warehouseId} onChange={(v) => setField("warehouseId", v)} required />
           <Field label="Warehouse Name" value={form.name} onChange={(v) => setField("name", v)} required />
           <Field label="Mobile Number" value={form.mobileNumber} onChange={(v) => setField("mobileNumber", v)} required />
