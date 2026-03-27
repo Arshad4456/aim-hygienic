@@ -1,6 +1,7 @@
 const express = require("express");
 const Warehouse = require("../models/Warehouse");
 const { requireAuth } = require("../utils/auth");
+const { syncMasterToTenant, removeMasterFromTenant, listTenantMasterByCompany } = require("../utils/tenantMasters");
 
 const router = express.Router();
 function normalizeRole(role) { return String(role || "").trim().toLowerCase(); }
@@ -29,6 +30,7 @@ router.post("/", requireAuth, async (req, res) => {
       companyName,
       createdBy: req.user?.uid,
     });
+    await syncMasterToTenant({ companyId, companyName, collectionName: "warehouses", doc });
     return res.status(201).json({ ok: true, warehouse: doc });
   } catch (e) {
     if (e?.code === 11000) {
@@ -42,8 +44,10 @@ router.get("/", requireAuth, async (req, res) => {
   try {
     const query = {};
     if (!isSystemLevelAdmin(req.user?.role)) {
-      query.companyId = String(req.user?.companyId || "").trim();
-    } else if (req.query.companyId) {
+      const items = await listTenantMasterByCompany(req.user?.companyId, "warehouses");
+      return res.json({ ok: true, warehouses: items });
+    }
+    if (req.query.companyId) {
       query.companyId = String(req.query.companyId);
     }
     const items = await Warehouse.find(query).sort({ createdAt: -1 }).lean();
@@ -91,6 +95,10 @@ router.put("/:id", requireAuth, async (req, res) => {
       { new: true, runValidators: true }
     );
     if (!updated) return res.status(404).json({ ok: false, message: "Not found" });
+    if (String(existing.companyId || "").trim() && String(existing.companyId || "").trim() !== String(updated.companyId || "").trim()) {
+      await removeMasterFromTenant({ companyId: existing.companyId, companyName: existing.companyName, collectionName: "warehouses", id: existing._id });
+    }
+    await syncMasterToTenant({ companyId: updated.companyId, companyName: updated.companyName, collectionName: "warehouses", doc: updated });
     return res.json({ ok: true, warehouse: updated });
   } catch (e) {
     if (e?.code === 11000) {
@@ -109,6 +117,7 @@ router.delete("/:id", requireAuth, async (req, res) => {
     }
     const deleted = await Warehouse.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ ok: false, message: "Not found" });
+    await removeMasterFromTenant({ companyId: existing.companyId, companyName: existing.companyName, collectionName: "warehouses", id: existing._id });
     return res.json({ ok: true });
   } catch (e) {
     return res.status(400).json({ ok: false, message: "Invalid id" });

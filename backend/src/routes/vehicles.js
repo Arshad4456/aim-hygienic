@@ -6,6 +6,7 @@ const VehicleMaintenance = require("../models/VehicleMaintenance");
 const VehicleAssignment = require("../models/VehicleAssignment");
 const User = require("../models/User");
 const { requireAuth } = require("../utils/auth");
+const { syncMasterToTenant, removeMasterFromTenant, listTenantMasterByCompany } = require("../utils/tenantMasters");
 
 const router = express.Router();
 function normalizeRole(role) { return String(role || "").trim().toLowerCase(); }
@@ -86,6 +87,7 @@ router.post("/", requireAuth, async (req, res) => {
     if (validationErr) return res.status(400).json({ ok: false, message: validationErr });
 
     const vehicle = await Vehicle.create({ ...payload, createdBy: req.user?.uid });
+    await syncMasterToTenant({ companyId: payload.companyId, companyName: payload.companyName, collectionName: "vehicles", doc: vehicle });
 
     if (payload.assignedUserId) {
       await VehicleAssignment.create({
@@ -106,8 +108,24 @@ router.post("/", requireAuth, async (req, res) => {
 router.get("/", requireAuth, async (req, res) => {
   try {
     const q = {};
-    if (!isSystemLevelAdmin(req.user?.role)) q.companyId = sanitizeString(req.user?.companyId);
-    else if (req.query.companyId) q.companyId = sanitizeString(req.query.companyId);
+    const isSystemAdmin = isSystemLevelAdmin(req.user?.role);
+    if (!isSystemAdmin) {
+      let vehicles = await listTenantMasterByCompany(req.user?.companyId, "vehicles");
+      if (req.query.type) vehicles = vehicles.filter((v) => String(v.type || "") === String(req.query.type));
+      if (req.query.fuelType) vehicles = vehicles.filter((v) => String(v.fuelType || "") === String(req.query.fuelType));
+      if (req.query.status) vehicles = vehicles.filter((v) => String(v.status || "") === String(req.query.status));
+      if (req.query.regionId) vehicles = vehicles.filter((v) => String(v.regionId || "") === String(req.query.regionId));
+      if (req.query.zoneId) vehicles = vehicles.filter((v) => String(v.zoneId || "") === String(req.query.zoneId));
+      if (req.query.areaId) vehicles = vehicles.filter((v) => String(v.areaId || "") === String(req.query.areaId));
+      if (req.query.assignedUserId) vehicles = vehicles.filter((v) => String(v.assignedUserId || "") === String(req.query.assignedUserId));
+      if (req.query.search) {
+        const search = String(req.query.search || "").toLowerCase();
+        vehicles = vehicles.filter((v) => [v.registrationNo, v.nickname, v.make, v.model].filter(Boolean).join(" ").toLowerCase().includes(search));
+      }
+      const limit = Math.min(Number(req.query.limit) || 500, 1000);
+      return res.json({ ok: true, vehicles: vehicles.slice(0, limit) });
+    }
+    if (req.query.companyId) q.companyId = sanitizeString(req.query.companyId);
     if (req.query.type) q.type = req.query.type;
     if (req.query.fuelType) q.fuelType = req.query.fuelType;
     if (req.query.status) q.status = req.query.status;
@@ -185,6 +203,10 @@ router.put("/:id", requireAuth, async (req, res) => {
 
     const vehicle = await Vehicle.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true });
     if (!vehicle) return res.status(404).json({ ok: false, message: "Vehicle not found" });
+    if (String(existing.companyId || "").trim() && String(existing.companyId || "").trim() !== String(vehicle.companyId || "").trim()) {
+      await removeMasterFromTenant({ companyId: existing.companyId, companyName: existing.companyName, collectionName: "vehicles", id: existing._id });
+    }
+    await syncMasterToTenant({ companyId: vehicle.companyId, companyName: vehicle.companyName, collectionName: "vehicles", doc: vehicle });
     return res.json({ ok: true, vehicle });
   } catch (e) {
     if (e?.code === 11000) return res.status(409).json({ ok: false, message: "Vehicle unique identifier already exists" });
@@ -234,6 +256,7 @@ router.delete("/:id", requireAuth, async (req, res) => {
     }
     const deleted = await Vehicle.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ ok: false, message: "Vehicle not found" });
+    await removeMasterFromTenant({ companyId: existing.companyId, companyName: existing.companyName, collectionName: "vehicles", id: existing._id });
     return res.json({ ok: true });
   } catch (_e) {
     return res.status(400).json({ ok: false, message: "Invalid id" });
