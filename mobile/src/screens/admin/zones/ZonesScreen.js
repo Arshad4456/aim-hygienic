@@ -3,10 +3,12 @@ import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View 
 import apiClient from '../../../api/client';
 import Card from '../../../ui/Card';
 import Loader from '../../../ui/Loader';
+import useCompanyScope from '../hooks/useCompanyScope';
 
 const STATUS = ['', 'active', 'inactive'];
 
 export default function ZonesScreen() {
+  const { companies, companyDocId, setCompanyDocId, selectedCompany, canSelectCompany, loadingCompanies } = useCompanyScope();
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
@@ -21,10 +23,12 @@ export default function ZonesScreen() {
       if (filters.search.trim()) params.set('search', filters.search.trim());
       if (filters.warehouseId) params.set('warehouseId', filters.warehouseId);
       if (filters.regionId) params.set('regionId', filters.regionId);
+      if (selectedCompany?.companyId) params.set('companyId', selectedCompany.companyId);
+      const qp = selectedCompany?.companyId ? `?companyId=${encodeURIComponent(selectedCompany.companyId)}` : '';
       const [z, w, r] = await Promise.all([
         apiClient.get(`/zones?${params.toString()}`),
-        apiClient.get('/warehouses'),
-        apiClient.get('/regions'),
+        apiClient.get(`/warehouses${qp}`),
+        apiClient.get(`/regions${qp}`),
       ]);
       let list = z.data?.zones || [];
       if (filters.status) list = list.filter((x) => String(x.status || 'active').toLowerCase() === filters.status);
@@ -32,14 +36,14 @@ export default function ZonesScreen() {
       setWarehouses(w.data?.warehouses || []);
       setRegions(r.data?.regions || []);
     } finally { setLoading(false); }
-  }, [filters]);
+  }, [filters, selectedCompany?.companyId]);
 
   useEffect(() => { load(); }, [load]);
 
   const onDelete = async (id) => { try { await apiClient.delete(`/zones/${id}`); load(); } catch (e) { Alert.alert('Delete failed', e.message); } };
   const onSave = async () => { try { await apiClient.put(`/zones/${edit._id}`, edit); setEdit(null); load(); } catch (e) { Alert.alert('Update failed', e.message); } };
 
-  if (loading) return <Loader />;
+  if (loading || loadingCompanies) return <Loader />;
   const setFilter = (k, v) => setFilters((s) => ({ ...s, [k]: v }));
 
   return (
@@ -47,6 +51,9 @@ export default function ZonesScreen() {
       <Card>
         <Text style={styles.title}>Zone List</Text>
         <TextInput style={styles.input} value={filters.search} onChangeText={(v) => setFilter('search', v)} placeholder="Search zone" />
+
+        <Text style={styles.label}>Company filter</Text>
+        <ScrollView horizontal contentContainerStyle={styles.wrap}><Pressable style={[styles.chip, !companyDocId ? styles.activeBg : null, !canSelectCompany ? styles.disabled : null]} onPress={() => setCompanyDocId('')} disabled={!canSelectCompany}><Text style={!companyDocId ? styles.activeTx : null}>{canSelectCompany ? 'All Companies' : 'Company by role'}</Text></Pressable>{companies.map((c) => <Pressable key={c._id || c.companyId} style={[styles.chip, companyDocId === (c._id || c.companyId) ? styles.activeBg : null, !canSelectCompany ? styles.disabled : null]} onPress={() => setCompanyDocId(c._id || c.companyId)} disabled={!canSelectCompany}><Text style={companyDocId === (c._id || c.companyId) ? styles.activeTx : null}>{c.name}</Text></Pressable>)}</ScrollView>
         <Text style={styles.label}>Warehouse filter</Text>
         <ScrollView horizontal contentContainerStyle={styles.wrap}><Pressable style={[styles.chip, !filters.warehouseId ? styles.activeBg : null]} onPress={() => setFilter('warehouseId', '')}><Text style={!filters.warehouseId ? styles.activeTx : null}>All Warehouses</Text></Pressable>{warehouses.map((w) => <Pressable key={w._id} style={[styles.chip, filters.warehouseId === w.warehouseId ? styles.activeBg : null]} onPress={() => setFilter('warehouseId', w.warehouseId)}><Text style={filters.warehouseId === w.warehouseId ? styles.activeTx : null}>{w.name}</Text></Pressable>)}</ScrollView>
         <Text style={styles.label}>Region filter</Text>
@@ -60,4 +67,4 @@ export default function ZonesScreen() {
   );
 }
 
-const styles = StyleSheet.create({ content: { padding: 12, gap: 12 }, title: { fontSize: 20, fontWeight: '700', marginBottom: 8 }, label: { marginBottom: 6, marginTop: 4, fontWeight: '600' }, input: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, minHeight: 42, paddingHorizontal: 12, marginBottom: 8 }, wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, chip: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 }, activeBg: { backgroundColor: '#059669', borderColor: '#059669' }, activeTx: { color: '#fff' }, headRow: { flexDirection: 'row', borderBottomWidth: 1, borderColor: '#e4e4e7', paddingBottom: 6 }, head: { width: 145, fontWeight: '700' }, dataRow: { flexDirection: 'row', borderBottomWidth: 1, borderColor: '#f4f4f5', paddingVertical: 8 }, cell: { width: 145 }, btn: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }, overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 12 }, modal: { backgroundColor: '#fff', borderRadius: 12, padding: 12 } });
+const styles = StyleSheet.create({ content: { padding: 12, gap: 12 }, disabled: { opacity: 0.7 }, title: { fontSize: 20, fontWeight: '700', marginBottom: 8 }, label: { marginBottom: 6, marginTop: 4, fontWeight: '600' }, input: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, minHeight: 42, paddingHorizontal: 12, marginBottom: 8 }, wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, chip: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 }, activeBg: { backgroundColor: '#059669', borderColor: '#059669' }, activeTx: { color: '#fff' }, headRow: { flexDirection: 'row', borderBottomWidth: 1, borderColor: '#e4e4e7', paddingBottom: 6 }, head: { width: 145, fontWeight: '700' }, dataRow: { flexDirection: 'row', borderBottomWidth: 1, borderColor: '#f4f4f5', paddingVertical: 8 }, cell: { width: 145 }, btn: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }, overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 12 }, modal: { backgroundColor: '#fff', borderRadius: 12, padding: 12 } });

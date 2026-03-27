@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import apiClient from '../../../../api/client';
 import Card from '../../../../ui/Card';
 import Loader from '../../../../ui/Loader';
+import useCompanyScope from '../../hooks/useCompanyScope';
 
 function Field({ label, value, onChangeText, keyboardType = 'default' }) {
   return (
@@ -14,28 +15,13 @@ function Field({ label, value, onChangeText, keyboardType = 'default' }) {
 }
 
 export default function AddScreen({ navigation }) {
-  const [loading, setLoading] = useState(true);
+  const { companies, companyDocId, setCompanyDocId, selectedCompany, canSelectCompany, loadingCompanies } = useCompanyScope();
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const [ok, setOk] = useState('');
-  const [companies, setCompanies] = useState([]);
   const [form, setForm] = useState({ warehouseId: '', name: '', mobileNumber: '', phoneNumber: '', capacity: '', status: 'active', address: '' });
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data } = await apiClient.get('/companies');
-        setCompanies(data?.companies || []);
-      } catch (e) {
-        setErr(e.message || 'Failed to load company');
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  const company = useMemo(() => companies[0], [companies]);
-
+  const selected = useMemo(() => selectedCompany || companies[0] || null, [selectedCompany, companies]);
   const setField = (key, value) => setForm((s) => ({ ...s, [key]: value }));
 
   const onSubmit = async () => {
@@ -45,13 +31,17 @@ export default function AddScreen({ navigation }) {
       setErr('Please fill all required fields.');
       return;
     }
+    if (!selected?.companyId) {
+      setErr('Please select a company.');
+      return;
+    }
     setSaving(true);
     try {
       await apiClient.post('/warehouses', {
         ...form,
         capacity: Number(form.capacity || 0),
-        companyId: company?.companyId || '',
-        companyName: company?.name || 'AIM Hygienic (Pvt) Limited',
+        companyId: selected.companyId,
+        companyName: selected.name || '',
       });
       setOk('✅ Warehouse saved successfully.');
       setForm({ warehouseId: '', name: '', mobileNumber: '', phoneNumber: '', capacity: '', status: 'active', address: '' });
@@ -63,16 +53,23 @@ export default function AddScreen({ navigation }) {
     }
   };
 
-  if (loading) return <Loader />;
+  if (loadingCompanies) return <Loader />;
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <Card>
         <Text style={styles.title}>Add Warehouse</Text>
-        <Text style={styles.subtitle}>Current setup supports one warehouse for all regions.</Text>
-
         {err ? <Text style={styles.error}>{err}</Text> : null}
         {ok ? <Text style={styles.ok}>{ok}</Text> : null}
+
+        <Text style={styles.label}>Select Company</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statusRow}>
+          {companies.map((c) => (
+            <Pressable key={c._id || c.companyId} style={[styles.chip, companyDocId === (c._id || c.companyId) ? styles.chipActive : null, !canSelectCompany ? styles.chipDisabled : null]} onPress={() => setCompanyDocId(c._id || c.companyId)} disabled={!canSelectCompany}>
+              <Text style={[styles.chipText, companyDocId === (c._id || c.companyId) ? styles.chipTextActive : null]}>{c.name}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
 
         <View style={{ marginTop: 10, gap: 8 }}>
           <Field label="Warehouse ID" value={form.warehouseId} onChangeText={(v) => setField('warehouseId', v)} />
@@ -100,14 +97,14 @@ export default function AddScreen({ navigation }) {
 const styles = StyleSheet.create({
   content: { padding: 14, backgroundColor: '#f5f6f8' },
   title: { fontSize: 24, fontWeight: '700', color: '#111827' },
-  subtitle: { marginTop: 4, color: '#6b7280', fontSize: 13 },
   error: { marginTop: 8, color: '#b91c1c' },
   ok: { marginTop: 8, color: '#047857' },
   label: { fontSize: 12, fontWeight: '600', color: '#374151' },
   input: { marginTop: 4, borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#fff', color: '#111827' },
   area: { minHeight: 90, textAlignVertical: 'top' },
-  statusRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  statusRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 6 },
   chip: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 999, backgroundColor: '#fff', paddingHorizontal: 10, paddingVertical: 6 },
+  chipDisabled: { opacity: 0.7 },
   chipActive: { borderColor: '#10b981', backgroundColor: '#ecfdf5' },
   chipText: { color: '#52525b', fontSize: 12 },
   chipTextActive: { color: '#047857', fontWeight: '700' },

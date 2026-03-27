@@ -3,6 +3,7 @@ import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View 
 import apiClient from '../../../api/client';
 import Card from '../../../ui/Card';
 import Loader from '../../../ui/Loader';
+import useCompanyScope from '../hooks/useCompanyScope';
 
 const PAGE_SIZE = 50;
 
@@ -16,6 +17,7 @@ function Field({ label, value, onChangeText }) {
 }
 
 export default function WarehousesScreen({ navigation }) {
+  const { companies, companyDocId, setCompanyDocId, selectedCompany, canSelectCompany, loadingCompanies } = useCompanyScope();
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
   const [err, setErr] = useState('');
@@ -29,14 +31,15 @@ export default function WarehousesScreen({ navigation }) {
     setErr('');
     setLoading(true);
     try {
-      const { data } = await apiClient.get('/warehouses');
+      const query = selectedCompany?.companyId ? `?companyId=${encodeURIComponent(selectedCompany.companyId)}` : '';
+      const { data } = await apiClient.get(`/warehouses${query}`);
       setRows(data?.warehouses || []);
     } catch (e) {
       setErr(e.message || 'Failed to load warehouses');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedCompany?.companyId]);
 
   useEffect(() => {
     load();
@@ -44,7 +47,7 @@ export default function WarehousesScreen({ navigation }) {
 
   useEffect(() => {
     setPage(1);
-  }, [search, status]);
+  }, [search, status, companyDocId]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -92,7 +95,7 @@ export default function WarehousesScreen({ navigation }) {
     }
   };
 
-  if (loading) return <Loader />;
+  if (loading || loadingCompanies) return <Loader />;
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
@@ -104,6 +107,18 @@ export default function WarehousesScreen({ navigation }) {
           </View>
           <Pressable style={styles.addBtn} onPress={() => navigation?.navigate?.('admin:warehouses/add')}><Text style={styles.addText}>Add Warehouse</Text></Pressable>
         </View>
+
+        <Text style={styles.fieldLabel}>Company</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statusRow}>
+          <Pressable style={[styles.chip, !companyDocId ? styles.chipActive : null, !canSelectCompany ? styles.chipDisabled : null]} onPress={() => setCompanyDocId('')} disabled={!canSelectCompany}>
+            <Text style={[styles.chipText, !companyDocId ? styles.chipTextActive : null]}>{canSelectCompany ? 'All Companies' : 'Company by role'}</Text>
+          </Pressable>
+          {companies.map((c) => (
+            <Pressable key={c._id || c.companyId} style={[styles.chip, companyDocId === (c._id || c.companyId) ? styles.chipActive : null, !canSelectCompany ? styles.chipDisabled : null]} onPress={() => setCompanyDocId(c._id || c.companyId)} disabled={!canSelectCompany}>
+              <Text style={[styles.chipText, companyDocId === (c._id || c.companyId) ? styles.chipTextActive : null]}>{c.name}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
 
         <TextInput style={styles.input} value={search} onChangeText={setSearch} placeholder="Search warehouse..." placeholderTextColor="#71717a" />
         <View style={styles.statusRow}>
@@ -192,6 +207,7 @@ const styles = StyleSheet.create({
   input: { marginTop: 8, borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#fff', color: '#111827' },
   statusRow: { marginTop: 8, flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   chip: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 999, backgroundColor: '#fff', paddingHorizontal: 10, paddingVertical: 6 },
+  chipDisabled: { opacity: 0.7 },
   chipActive: { borderColor: '#10b981', backgroundColor: '#ecfdf5' },
   chipText: { color: '#52525b', fontSize: 12 },
   chipTextActive: { color: '#047857', fontWeight: '700' },

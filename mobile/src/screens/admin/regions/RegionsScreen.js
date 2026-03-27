@@ -3,8 +3,10 @@ import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View 
 import apiClient from '../../../api/client';
 import Card from '../../../ui/Card';
 import Loader from '../../../ui/Loader';
+import useCompanyScope from '../hooks/useCompanyScope';
 
 export default function RegionsScreen() {
+  const { companies, companyDocId, setCompanyDocId, selectedCompany, canSelectCompany, loadingCompanies } = useCompanyScope();
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
   const [rows, setRows] = useState([]);
@@ -17,9 +19,14 @@ export default function RegionsScreen() {
     setErr('');
     setLoading(true);
     try {
+      const params = new URLSearchParams();
+      if (search.trim()) params.set('search', search.trim());
+      if (warehouseId) params.set('warehouseId', warehouseId);
+      if (selectedCompany?.companyId) params.set('companyId', selectedCompany.companyId);
+      const qp = selectedCompany?.companyId ? `?companyId=${encodeURIComponent(selectedCompany.companyId)}` : '';
       const [listRes, warehouseRes] = await Promise.all([
-        apiClient.get(`/regions?search=${encodeURIComponent(search)}${warehouseId ? `&warehouseId=${encodeURIComponent(warehouseId)}` : ''}`),
-        apiClient.get('/warehouses'),
+        apiClient.get(`/regions?${params.toString()}`),
+        apiClient.get(`/warehouses${qp}`),
       ]);
       setRows(listRes.data?.regions || []);
       setWarehouses(warehouseRes.data?.warehouses || []);
@@ -28,37 +35,35 @@ export default function RegionsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [search, warehouseId]);
+  }, [search, warehouseId, selectedCompany?.companyId]);
 
   useEffect(() => { load(); }, [load]);
 
   const onDelete = async (id) => {
-    try {
-      await apiClient.delete(`/regions/${id}`);
-      load();
-    } catch (e) {
-      Alert.alert('Delete failed', e.message || 'Failed to delete region');
-    }
+    try { await apiClient.delete(`/regions/${id}`); load(); }
+    catch (e) { Alert.alert('Delete failed', e.message || 'Failed to delete region'); }
   };
 
   const onSave = async () => {
     if (!edit?._id) return;
-    try {
-      await apiClient.put(`/regions/${edit._id}`, edit);
-      setEdit(null);
-      load();
-    } catch (e) {
-      Alert.alert('Update failed', e.message || 'Failed to update region');
-    }
+    try { await apiClient.put(`/regions/${edit._id}`, edit); setEdit(null); load(); }
+    catch (e) { Alert.alert('Update failed', e.message || 'Failed to update region'); }
   };
 
-  if (loading) return <Loader />;
+  if (loading || loadingCompanies) return <Loader />;
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <Card>
         <Text style={styles.title}>Region List</Text>
         {err ? <Text style={styles.err}>{err}</Text> : null}
+
+        <Text style={styles.smallLabel}>Company</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterWrap}>
+          <Pressable style={[styles.chip, !companyDocId ? styles.chipActive : null, !canSelectCompany ? styles.chipDisabled : null]} onPress={() => setCompanyDocId('')} disabled={!canSelectCompany}><Text style={!companyDocId ? styles.chipTextActive : null}>{canSelectCompany ? 'All Companies' : 'Company by role'}</Text></Pressable>
+          {companies.map((c) => <Pressable key={c._id || c.companyId} style={[styles.chip, companyDocId === (c._id || c.companyId) ? styles.chipActive : null, !canSelectCompany ? styles.chipDisabled : null]} onPress={() => setCompanyDocId(c._id || c.companyId)} disabled={!canSelectCompany}><Text style={companyDocId === (c._id || c.companyId) ? styles.chipTextActive : null}>{c.name}</Text></Pressable>)}
+        </ScrollView>
+
         <TextInput style={styles.input} value={search} onChangeText={setSearch} placeholder="Search by ID, name or warehouse" />
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterWrap}>
           <Pressable style={[styles.chip, !warehouseId ? styles.chipActive : null]} onPress={() => setWarehouseId('')}><Text style={!warehouseId ? styles.chipTextActive : null}>All Warehouses</Text></Pressable>
@@ -89,13 +94,7 @@ export default function RegionsScreen() {
           <TextInput style={styles.input} value={edit?.name || ''} onChangeText={(v) => setEdit((s) => ({ ...s, name: v }))} placeholder="Region Name" />
           <TextInput style={styles.input} value={edit?.warehouseName || ''} onChangeText={(v) => setEdit((s) => ({ ...s, warehouseName: v }))} placeholder="Warehouse Name" />
           <Text style={styles.smallLabel}>Status</Text>
-          <View style={styles.statusRow}>
-            {['active', 'inactive'].map((st) => (
-              <Pressable key={st} style={[styles.chip, edit?.status === st ? styles.chipActive : null]} onPress={() => setEdit((prev) => ({ ...prev, status: st }))}>
-                <Text style={edit?.status === st ? styles.chipTextActive : null}>{st}</Text>
-              </Pressable>
-            ))}
-          </View>
+          <View style={styles.statusRow}>{['active', 'inactive'].map((st) => (<Pressable key={st} style={[styles.chip, edit?.status === st ? styles.chipActive : null]} onPress={() => setEdit((prev) => ({ ...prev, status: st }))}><Text style={edit?.status === st ? styles.chipTextActive : null}>{st}</Text></Pressable>))}</View>
           <View style={styles.modalActions}><Pressable style={styles.btn} onPress={onSave}><Text style={styles.btnText}>Update</Text></Pressable><Pressable style={styles.btn} onPress={() => setEdit(null)}><Text style={styles.btnText}>Cancel</Text></Pressable></View>
         </View></View>
       </Modal>
@@ -110,6 +109,7 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 10, minHeight: 42, paddingHorizontal: 12, backgroundColor: '#fff', marginBottom: 8 },
   filterWrap: { gap: 8 },
   chip: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
+  chipDisabled: { opacity: 0.7 },
   chipActive: { backgroundColor: '#059669', borderColor: '#059669' },
   chipTextActive: { color: '#fff' },
   tableWrap: { minWidth: 740 },
