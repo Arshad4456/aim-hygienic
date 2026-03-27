@@ -45,13 +45,13 @@ async function syncMasterToTenant({ companyId, companyName, collectionName, doc 
       updatedAt: new Date(),
     };
     const { _id, ...rest } = payload;
-    await collection.updateOne(
+    await collection.replaceOne(
       { _id },
-      { $set: rest, $setOnInsert: { _id, createdAt: payload.createdAt || new Date() } },
+      { _id, ...rest, createdAt: payload.createdAt || new Date() },
       { upsert: true }
     );
   } catch (_e) {
-    // Keep primary DB operation successful even if tenant sync fails.
+    console.error("[tenantMasters] sync failed", _e?.message || _e);
   }
 }
 
@@ -62,7 +62,7 @@ async function removeMasterFromTenant({ companyId, companyName, collectionName, 
     const collection = await getTenantCollection(normalizedCompanyId, companyName, collectionName);
     await collection.deleteOne({ _id: typeof id === "string" ? new mongoose.Types.ObjectId(id) : id });
   } catch (_e) {
-    // Best-effort cleanup; avoid breaking primary delete/update flows.
+    console.error("[tenantMasters] remove failed", _e?.message || _e);
   }
 }
 
@@ -73,6 +73,7 @@ async function listTenantMasterByCompany(companyId, collectionName) {
     const collection = await getTenantCollection(normalizedCompanyId, "", collectionName);
     return collection.find({}).sort({ createdAt: -1 }).toArray();
   } catch (_e) {
+    console.error("[tenantMasters] list failed", _e?.message || _e);
     return [];
   }
 }
