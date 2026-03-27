@@ -59,11 +59,17 @@ function buildAdminMenu(modules) {
   }).filter(Boolean);
 }
 
-export default function RoleDrawerContent({ roleKey, modules, activeRoute, onSelect }) {
+export default function RoleDrawerContent({ roleKey, userRole, modules, activeRoute, onSelect }) {
   const items = useMemo(() => {
-    if (roleKey === 'admin') return buildAdminMenu(modules);
+    if (roleKey === 'admin') {
+      const normalizedRole = String(userRole || '').trim().toLowerCase();
+      const canAccessCompanyManagement = normalizedRole === 'admin' || normalizedRole === 'system admin';
+      const adminMenu = buildAdminMenu(modules);
+      if (canAccessCompanyManagement) return adminMenu;
+      return adminMenu.filter((item) => item.key !== 'company');
+    }
     return buildDefaultGroups(modules);
-  }, [roleKey, modules]);
+  }, [roleKey, userRole, modules]);
 
   const [expanded, setExpanded] = useState(() => Object.fromEntries(items.map((item, i) => [item.key, i < 4])));
 
