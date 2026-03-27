@@ -184,6 +184,7 @@ function downloadTemplate() {
 export default function AddProductPage() {
   const [companies, setCompanies] = useState([]);
   const [companyId, setCompanyId] = useState("");
+  const [currentUser, setCurrentUser] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [bulkInput, setBulkInput] = useState("");
   const [bulkErrors, setBulkErrors] = useState([]);
@@ -200,7 +201,19 @@ export default function AddProductPage() {
         const data = await apiFetch("/companies");
         setCompanies(data.companies || []);
       } catch (e) {
-        setErr(e.message || "Failed to load companies");
+        try {
+          const me = await apiFetch("/users/me");
+          const user = me?.user || null;
+          const scopedCompanyId = String(user?.companyId || "").trim();
+          const scopedCompanyName = String(user?.companyName || "").trim();
+          setCurrentUser(user);
+          if (scopedCompanyId) {
+            setCompanies([{ _id: scopedCompanyId, companyId: scopedCompanyId, name: scopedCompanyName || scopedCompanyId }]);
+            setCompanyId(scopedCompanyId);
+          }
+        } catch (meErr) {
+          setErr(meErr.message || e.message || "Failed to load companies");
+        }
       } finally {
         setLoading(false);
       }
@@ -208,6 +221,8 @@ export default function AddProductPage() {
     loadCompanies();
   }, []);
 
+  const normalizedRole = String(currentUser?.role || "").trim().toLowerCase();
+  const canSelectCompany = normalizedRole === "admin" || normalizedRole === "system admin" || !normalizedRole;
   const selectedCompany = companies.find((c) => c._id === companyId);
   const subCategories = useMemo(() => {
     const item = categoryOptions.find((c) => c.value === form.category);
@@ -311,7 +326,12 @@ export default function AddProductPage() {
             <form onSubmit={onSubmit} className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
                 <Label>Select Company</Label>
-                <select className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+                <select
+                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm disabled:bg-zinc-100 disabled:text-zinc-600"
+                  value={companyId}
+                  onChange={(e) => setCompanyId(e.target.value)}
+                  disabled={!canSelectCompany}
+                >
                   <option value="">Choose company...</option>
                   {companies.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
                 </select>
