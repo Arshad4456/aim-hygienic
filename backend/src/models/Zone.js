@@ -4,6 +4,8 @@ const ZoneSchema = new mongoose.Schema(
   {
     zoneId: { type: String, required: true, trim: true, unique: true },
     name: { type: String, required: true, trim: true },
+    companyId: { type: String, trim: true },
+    companyName: { type: String, trim: true },
     warehouseId: { type: String, trim: true },
     warehouseName: { type: String, trim: true },
     regionId: { type: String, trim: true },

@@ -3,6 +3,8 @@ const Region = require("../models/Region");
 const { requireAuth } = require("../utils/auth");
 
 const router = express.Router();
+function normalizeRole(role) { return String(role || "").trim().toLowerCase(); }
+function isSystemLevelAdmin(role) { const r = normalizeRole(role); return r === "admin" || r === "system admin"; }
 
 function getPagination(query) {
   const hasPaging = query.page || query.limit;
@@ -14,11 +16,15 @@ function getPagination(query) {
 router.post("/", requireAuth, async (req, res) => {
   try {
     const body = req.body || {};
+    const isSystemAdmin = isSystemLevelAdmin(req.user?.role);
+    const companyId = isSystemAdmin ? String(body.companyId || "").trim() : String(req.user?.companyId || "").trim();
+    const companyName = isSystemAdmin ? String(body.companyName || "").trim() : String(req.user?.companyName || "").trim();
+    if (!companyId) return res.status(400).json({ ok: false, message: "Company is required for this role." });
     const doc = await Region.create({
       regionId: String(body.regionId || "").trim(),
       name: String(body.name || "").trim(),
-      companyId: String(body.companyId || "").trim(),
-      companyName: String(body.companyName || "").trim(),
+      companyId,
+      companyName,
       warehouseId: String(body.warehouseId || "").trim(),
       warehouseName: String(body.warehouseName || "").trim(),
       status: String(body.status || "active").trim(),
@@ -36,7 +42,11 @@ router.post("/", requireAuth, async (req, res) => {
 router.get("/", requireAuth, async (req, res) => {
   try {
     const query = {};
-    if (req.query.companyId) query.companyId = String(req.query.companyId);
+    if (!isSystemLevelAdmin(req.user?.role)) {
+      query.companyId = String(req.user?.companyId || "").trim();
+    } else if (req.query.companyId) {
+      query.companyId = String(req.query.companyId);
+    }
     if (req.query.warehouseId) query.warehouseId = String(req.query.warehouseId);
 
     const search = String(req.query.search || "").trim();
@@ -83,14 +93,22 @@ router.get("/:id", requireAuth, async (req, res) => {
 
 router.put("/:id", requireAuth, async (req, res) => {
   try {
+    const existing = await Region.findById(req.params.id).lean();
+    if (!existing) return res.status(404).json({ ok: false, message: "Not found" });
+    if (!isSystemLevelAdmin(req.user?.role) && String(existing.companyId || "").trim() !== String(req.user?.companyId || "").trim()) {
+      return res.status(403).json({ ok: false, message: "Forbidden" });
+    }
     const body = req.body || {};
+    const isSystemAdmin = isSystemLevelAdmin(req.user?.role);
+    const companyId = isSystemAdmin ? String(body.companyId || "").trim() : String(req.user?.companyId || "").trim();
+    const companyName = isSystemAdmin ? String(body.companyName || "").trim() : String(req.user?.companyName || "").trim();
     const updated = await Region.findByIdAndUpdate(
       req.params.id,
       {
         regionId: String(body.regionId || "").trim(),
         name: String(body.name || "").trim(),
-        companyId: String(body.companyId || "").trim(),
-        companyName: String(body.companyName || "").trim(),
+        companyId,
+        companyName,
         warehouseId: String(body.warehouseId || "").trim(),
         warehouseName: String(body.warehouseName || "").trim(),
         status: String(body.status || "active").trim(),
@@ -109,6 +127,11 @@ router.put("/:id", requireAuth, async (req, res) => {
 
 router.delete("/:id", requireAuth, async (req, res) => {
   try {
+    const existing = await Region.findById(req.params.id).lean();
+    if (!existing) return res.status(404).json({ ok: false, message: "Not found" });
+    if (!isSystemLevelAdmin(req.user?.role) && String(existing.companyId || "").trim() !== String(req.user?.companyId || "").trim()) {
+      return res.status(403).json({ ok: false, message: "Forbidden" });
+    }
     const deleted = await Region.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ ok: false, message: "Not found" });
     return res.json({ ok: true });

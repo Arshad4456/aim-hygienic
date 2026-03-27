@@ -3,6 +3,8 @@ const Area = require("../models/Area");
 const { requireAuth } = require("../utils/auth");
 
 const router = express.Router();
+function normalizeRole(role) { return String(role || "").trim().toLowerCase(); }
+function isSystemLevelAdmin(role) { const r = normalizeRole(role); return r === "admin" || r === "system admin"; }
 
 function getPagination(query) {
   const hasPaging = query.page || query.limit;
@@ -14,9 +16,15 @@ function getPagination(query) {
 router.post("/", requireAuth, async (req, res) => {
   try {
     const body = req.body || {};
+    const isSystemAdmin = isSystemLevelAdmin(req.user?.role);
+    const companyId = isSystemAdmin ? String(body.companyId || "").trim() : String(req.user?.companyId || "").trim();
+    const companyName = isSystemAdmin ? String(body.companyName || "").trim() : String(req.user?.companyName || "").trim();
+    if (!companyId) return res.status(400).json({ ok: false, message: "Company is required for this role." });
     const doc = await Area.create({
       areaId: String(body.areaId || "").trim(),
       name: String(body.name || "").trim(),
+      companyId,
+      companyName,
       warehouseId: String(body.warehouseId || "").trim(),
       warehouseName: String(body.warehouseName || "").trim(),
       regionId: String(body.regionId || "").trim(),
@@ -38,6 +46,8 @@ router.post("/", requireAuth, async (req, res) => {
 router.get("/", requireAuth, async (req, res) => {
   try {
     const query = {};
+    if (!isSystemLevelAdmin(req.user?.role)) query.companyId = String(req.user?.companyId || "").trim();
+    else if (req.query.companyId) query.companyId = String(req.query.companyId);
     if (req.query.warehouseId) query.warehouseId = String(req.query.warehouseId);
     if (req.query.regionId) query.regionId = String(req.query.regionId);
     if (req.query.zoneId) query.zoneId = String(req.query.zoneId);
@@ -86,12 +96,22 @@ router.get("/:id", requireAuth, async (req, res) => {
 
 router.put("/:id", requireAuth, async (req, res) => {
   try {
+    const existing = await Area.findById(req.params.id).lean();
+    if (!existing) return res.status(404).json({ ok: false, message: "Not found" });
+    if (!isSystemLevelAdmin(req.user?.role) && String(existing.companyId || "").trim() !== String(req.user?.companyId || "").trim()) {
+      return res.status(403).json({ ok: false, message: "Forbidden" });
+    }
     const body = req.body || {};
+    const isSystemAdmin = isSystemLevelAdmin(req.user?.role);
+    const companyId = isSystemAdmin ? String(body.companyId || "").trim() : String(req.user?.companyId || "").trim();
+    const companyName = isSystemAdmin ? String(body.companyName || "").trim() : String(req.user?.companyName || "").trim();
     const updated = await Area.findByIdAndUpdate(
       req.params.id,
       {
         areaId: String(body.areaId || "").trim(),
         name: String(body.name || "").trim(),
+        companyId,
+        companyName,
         warehouseId: String(body.warehouseId || "").trim(),
         warehouseName: String(body.warehouseName || "").trim(),
         regionId: String(body.regionId || "").trim(),
@@ -114,6 +134,11 @@ router.put("/:id", requireAuth, async (req, res) => {
 
 router.delete("/:id", requireAuth, async (req, res) => {
   try {
+    const existing = await Area.findById(req.params.id).lean();
+    if (!existing) return res.status(404).json({ ok: false, message: "Not found" });
+    if (!isSystemLevelAdmin(req.user?.role) && String(existing.companyId || "").trim() !== String(req.user?.companyId || "").trim()) {
+      return res.status(403).json({ ok: false, message: "Forbidden" });
+    }
     const deleted = await Area.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ ok: false, message: "Not found" });
     return res.json({ ok: true });

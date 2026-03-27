@@ -39,6 +39,8 @@ const VehicleSchema = new mongoose.Schema(
     currentOdometer: { type: Number, required: true },
     expectedKmPerLiter: { type: Number, default: 0 },
     status: { type: String, enum: ["Active", "Inactive", "Under Maintenance", "Sold"], default: "Active" },
+    companyId: { type: String, trim: true },
+    companyName: { type: String, trim: true },
     notes: { type: String, trim: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },

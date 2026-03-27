@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "../../../lib/api";
 import { ToastStack, useToastStack } from "../vehicle-management/components/ToastStick";
+import useCompanyScope from "./useCompanyScope";
 
 const TYPE_OPTIONS = ["Car", "Suzuki", "Shahzor", "Truck", "Container", "Pickup", "Van", "Bike", "Other"];
 const FUEL_OPTIONS = ["Petrol", "Diesel", "CNG", "Hybrid", "Electric"];
 
 export default function VehicleMasterForm({ onSaved }) {
+  const { companies, companyDocId, setCompanyDocId, selectedCompany, canSelectCompany } = useCompanyScope();
   const [lookups, setLookups] = useState({ regions: [], zones: [], areas: [], fields: [], users: [] });
   const [submitting, setSubmitting] = useState(false);
   const { toasts, addToast, closeToast } = useToastStack();
@@ -27,11 +29,16 @@ export default function VehicleMasterForm({ onSaved }) {
 
   }, []);
 
-  const selectedRegion = lookups.regions.find((r) => r._id === form.regionId);
-  const selectedZone = lookups.zones.find((z) => z._id === form.zoneId);
+  const scopedRegions = lookups.regions.filter((r) => !selectedCompany?.companyId || String(r.companyId || "") === String(selectedCompany.companyId || ""));
+  const scopedZones = lookups.zones.filter((z) => !selectedCompany?.companyId || String(z.companyId || "") === String(selectedCompany.companyId || ""));
+  const scopedAreas = lookups.areas.filter((a) => !selectedCompany?.companyId || String(a.companyId || "") === String(selectedCompany.companyId || ""));
+  const scopedFields = lookups.fields.filter((f) => !selectedCompany?.companyId || String(f.companyId || "") === String(selectedCompany.companyId || ""));
 
-  const zones = lookups.zones.filter((z) => !selectedRegion || String(z.regionId || "") === String(selectedRegion.regionId || "") || String(z.regionId || "") === String(selectedRegion._id || ""));
-  const areas = lookups.areas.filter((a) => !selectedZone || String(a.zoneId || "") === String(selectedZone.zoneId || "") || String(a.zoneId || "") === String(selectedZone._id || ""));
+  const selectedRegion = scopedRegions.find((r) => r._id === form.regionId);
+  const selectedZone = scopedZones.find((z) => z._id === form.zoneId);
+
+  const zones = scopedZones.filter((z) => !selectedRegion || String(z.regionId || "") === String(selectedRegion.regionId || "") || String(z.regionId || "") === String(selectedRegion._id || ""));
+  const areas = scopedAreas.filter((a) => !selectedZone || String(a.zoneId || "") === String(selectedZone.zoneId || "") || String(a.zoneId || "") === String(selectedZone._id || ""));
   const users = lookups.users.filter((u) => String(u.role || "").toLowerCase() !== "customer");
 
   function setField(key, value) {
@@ -48,10 +55,11 @@ export default function VehicleMasterForm({ onSaved }) {
     const pending = addToast("Promise is pending", "pending", true);
 
     try {
+      if (!selectedCompany?.companyId) throw new Error("Please select company");
       const region = selectedRegion;
       const zone = selectedZone;
-      const area = lookups.areas.find((a) => a._id === form.areaId);
-      const field = lookups.fields.find((f) => f._id === form.fieldId);
+      const area = scopedAreas.find((a) => a._id === form.areaId);
+      const field = scopedFields.find((f) => f._id === form.fieldId);
       const user = users.find((u) => u._id === form.assignedUserId);
 
       const payload = {
@@ -70,6 +78,8 @@ export default function VehicleMasterForm({ onSaved }) {
         areaName: area?.name || "",
         fieldId: field?.fieldId || "",
         fieldName: field?.name || "",
+        companyId: selectedCompany.companyId,
+        companyName: selectedCompany.name,
         assignedUserName: user?.fullName || user?.name || user?.username || "",
       };
 
@@ -98,6 +108,7 @@ export default function VehicleMasterForm({ onSaved }) {
   return (
     <>
       <form onSubmit={submit} className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <Select label="Company" value={companyDocId} onChange={setCompanyDocId} options={companies.map((c) => ({ label: c.name, value: c._id }))} required disabled={!canSelectCompany} />
         <Select label="Vehicle Type" value={form.type} onChange={(v) => setField("type", v)} options={TYPE_OPTIONS} />
         <Field label="Make" value={form.make} onChange={(v) => setField("make", v)} required />
         <Field label="Model" value={form.model} onChange={(v) => setField("model", v)} required />
@@ -108,7 +119,7 @@ export default function VehicleMasterForm({ onSaved }) {
         <Field label="Chassis No" value={form.chassisNo} onChange={(v) => setField("chassisNo", v)} required />
         <Field label="Color" value={form.color} onChange={(v) => setField("color", v)} />
         <Select label="Ownership" value={form.ownershipType} onChange={(v) => setField("ownershipType", v)} options={[{ label: "Company Owned", value: "company" }, { label: "Rented/Leased", value: "leased" }, { label: "Employee Owned", value: "employee" }]} />
-        <Select label="Region" value={form.regionId} onChange={(v) => setField("regionId", v)} options={lookups.regions.map((r) => ({ label: r.name, value: r._id }))} required />
+        <Select label="Region" value={form.regionId} onChange={(v) => setField("regionId", v)} options={scopedRegions.map((r) => ({ label: r.name, value: r._id }))} required />
         <Select label="Zone" value={form.zoneId} onChange={(v) => setField("zoneId", v)} options={zones.map((z) => ({ label: z.name, value: z._id }))} required />
         <Select label="Territory" value={form.areaId} onChange={(v) => setField("areaId", v)} options={areas.map((a) => ({ label: a.name, value: a._id }))} required />
         <Select label="Assigned User" value={form.assignedUserId} onChange={(v) => setField("assignedUserId", v)} options={users.map((u) => ({ label: `${u.fullName || u.name || u.username} (${u.role || "User"})`, value: u._id }))} />
@@ -128,7 +139,7 @@ function Field({ label, value, onChange, type = "text", required = false }) {
   return <div><div className="text-sm font-medium">{label}</div><input required={required} type={type} value={value || ""} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" /></div>;
 }
 
-function Select({ label, value, onChange, options = [], required = false }) {
+function Select({ label, value, onChange, options = [], required = false, disabled = false }) {
   const normalized = options.map((o) => (typeof o === "string" ? { label: o, value: o } : o));
-  return <div><div className="text-sm font-medium">{label}</div><select required={required} value={value || ""} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"><option value="">Select...</option>{normalized.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>;
+  return <div><div className="text-sm font-medium">{label}</div><select required={required} disabled={disabled} value={value || ""} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm disabled:bg-zinc-100 disabled:text-zinc-600"><option value="">Select...</option>{normalized.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>;
 }
