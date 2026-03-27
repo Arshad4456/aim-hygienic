@@ -42,20 +42,27 @@ export default function AddUserPage() {
 
   useEffect(() => {
     (async () => {
-      const [usersRes, companiesRes, warehousesRes, regionsRes, zonesRes, areasRes] = await Promise.all([
+      const [usersRes, warehousesRes, regionsRes, zonesRes, areasRes] = await Promise.all([
         apiFetch("/users"),
-        apiFetch("/companies"),
         apiFetch("/warehouses"),
         apiFetch("/regions"),
         apiFetch("/zones"),
         apiFetch("/areas"),
       ]);
       setUsers(usersRes.users || []);
-      setCompanies(companiesRes.companies || []);
       setWarehouses(warehousesRes.warehouses || []);
       setRegions(regionsRes.regions || []);
       setZones(zonesRes.zones || []);
       setAreas(areasRes.areas || []);
+      try {
+        const companiesRes = await apiFetch("/companies");
+        setCompanies(companiesRes.companies || []);
+      } catch (_companyErr) {
+        const me = await apiFetch("/users/me");
+        const companyId = String(me?.user?.companyId || "").trim();
+        const companyName = String(me?.user?.companyName || "").trim();
+        setCompanies(companyId ? [{ companyId, name: companyName || companyId }] : []);
+      }
       try {
         const fieldsRes = await listFieldsCompat();
         setFields(fieldsRes.fields || []);

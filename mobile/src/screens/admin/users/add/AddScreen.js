@@ -95,9 +95,8 @@ export default function AddScreen({ navigation }) {
     let mounted = true;
     (async () => {
       try {
-        const [u, c, w, r, z, a] = await Promise.all([
+        const [u, w, r, z, a] = await Promise.all([
           apiClient.get('/users'),
-          apiClient.get('/companies'),
           apiClient.get('/warehouses'),
           apiClient.get('/regions'),
           apiClient.get('/zones'),
@@ -116,12 +115,20 @@ export default function AddScreen({ navigation }) {
 
         const userRows = u.data?.users || [];
         setUsers(userRows);
-        setCompanies(c.data?.companies || []);
         setWarehouses(w.data?.warehouses || []);
         setRegions(r.data?.regions || []);
         setZones(z.data?.zones || []);
         setAreas(a.data?.areas || []);
         setFields(f.data?.fields || []);
+        try {
+          const companiesRes = await apiClient.get('/companies');
+          setCompanies(companiesRes.data?.companies || []);
+        } catch (_companyErr) {
+          const meRes = await apiClient.get('/users/me');
+          const companyId = String(meRes.data?.user?.companyId || '').trim();
+          const companyName = String(meRes.data?.user?.companyName || '').trim();
+          setCompanies(companyId ? [{ companyId, name: companyName || companyId }] : []);
+        }
 
         const nextId = `USR-${String(userRows.length + 1).padStart(4, '0')}`;
         setForm((prev) => ({ ...prev, userId: nextId }));

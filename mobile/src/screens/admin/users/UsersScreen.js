@@ -250,20 +250,27 @@ export default function UsersScreen({ navigation }) {
     setErr('');
     setLoading(true);
     try {
-      const [usersRes, companiesRes, warehousesRes, regionsRes, zonesRes, areasRes] = await Promise.all([
+      const [usersRes, warehousesRes, regionsRes, zonesRes, areasRes] = await Promise.all([
         apiClient.get('/users'),
-        apiClient.get('/companies'),
         apiClient.get('/warehouses'),
         apiClient.get('/regions'),
         apiClient.get('/zones'),
         apiClient.get('/areas'),
       ]);
       setRows(usersRes.data?.users || []);
-      setCompanies(companiesRes.data?.companies || []);
       setWarehouses(warehousesRes.data?.warehouses || []);
       setRegions(regionsRes.data?.regions || []);
       setZones(zonesRes.data?.zones || []);
       setAreas(areasRes.data?.areas || []);
+      try {
+        const companiesRes = await apiClient.get('/companies');
+        setCompanies(companiesRes.data?.companies || []);
+      } catch (_companyErr) {
+        const meRes = await apiClient.get('/users/me');
+        const companyId = String(meRes.data?.user?.companyId || '').trim();
+        const companyName = String(meRes.data?.user?.companyName || '').trim();
+        setCompanies(companyId ? [{ companyId, name: companyName || companyId }] : []);
+      }
       try {
         const fieldsRes = await apiClient.get('/fields');
         setFields(fieldsRes.data?.fields || []);
