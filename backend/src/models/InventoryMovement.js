@@ -12,6 +12,8 @@ const InventoryMovementSchema = new mongoose.Schema(
     zoneName: { type: String, trim: true },
     areaId: { type: String, trim: true },
     areaName: { type: String, trim: true },
+    companyId: { type: String, trim: true },
+    companyName: { type: String, trim: true },
     movementScope: {
       type: String,
       enum: ["warehouse", "region", "zone", "area"],

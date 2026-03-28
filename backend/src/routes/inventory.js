@@ -3,6 +3,7 @@ const InventoryMovement = require("../models/InventoryMovement");
 const StockTransfer = require("../models/StockTransfer");
 const Product = require("../models/Product");
 const WarehouseTransaction = require("../models/WarehouseTransaction");
+const Warehouse = require("../models/Warehouse");
 const Message = require("../models/Message");
 const { requireAuth, requireRole } = require("../utils/auth");
 
@@ -21,6 +22,11 @@ function isAdminRole(role) {
   return String(role || "").trim().toLowerCase() === "admin";
 }
 
+function isSystemLevelAdmin(role) {
+  const normalized = String(role || "").trim().toLowerCase();
+  return normalized === "admin" || normalized === "system admin";
+}
+
 function isWarehouseManagerRole(role) {
   return String(role || "").trim().toLowerCase() === "warehouse manager";
 }
@@ -34,6 +40,38 @@ function applyWarehouseScope(query, req) {
   const warehouseId = getScopedWarehouseId(req.user);
   query.warehouseId = warehouseId || "__no_warehouse__";
   return query;
+}
+
+function getUserCompanyId(req) {
+  return toTrimmedString(req.user?.companyId);
+}
+
+function applyCompanyScope(query, req, requestedCompanyId = "") {
+  const userCompanyId = getUserCompanyId(req);
+  if (isSystemLevelAdmin(req.user?.role)) {
+    const normalizedRequested = toTrimmedString(requestedCompanyId);
+    if (normalizedRequested) query.companyId = normalizedRequested;
+    return query;
+  }
+  query.companyId = userCompanyId || "__no_company__";
+  return query;
+}
+
+function resolveCompanyPayload(req, body = {}, fallbackCompany = {}) {
+  const userCompanyId = getUserCompanyId(req);
+  const userCompanyName = toTrimmedString(req.user?.companyName);
+  if (isSystemLevelAdmin(req.user?.role)) {
+    const providedId = toTrimmedString(body.companyId);
+    const providedName = toTrimmedString(body.companyName);
+    return {
+      companyId: providedId || toTrimmedString(fallbackCompany.companyId),
+      companyName: providedName || toTrimmedString(fallbackCompany.companyName),
+    };
+  }
+  return {
+    companyId: userCompanyId || toTrimmedString(fallbackCompany.companyId),
+    companyName: userCompanyName || toTrimmedString(fallbackCompany.companyName),
+  };
 }
 
 function buildTransactionCode() {
@@ -97,6 +135,8 @@ async function createInventoryMovementsForTransaction(transaction, items = [], u
         regionName: transaction.regionName,
         zoneId: transaction.zoneId,
         zoneName: transaction.zoneName,
+        companyId: transaction.companyId,
+        companyName: transaction.companyName,
         movementScope: "warehouse",
         quantity: quantitySign * item.totalPacks,
         movementType,
@@ -127,11 +167,12 @@ async function createLowStockMessageIfRequired(transaction, productBalances, use
   });
 }
 
-async function calculateProductBalanceMap(warehouseId, productIds) {
+async function calculateProductBalanceMap(warehouseId, productIds, companyId = "") {
   const match = {
     productId: { $in: productIds },
   };
   if (warehouseId) match.warehouseId = warehouseId;
+  if (companyId) match.companyId = companyId;
 
   const balances = await InventoryMovement.aggregate([
     { $match: match },
@@ -144,7 +185,9 @@ async function calculateProductBalanceMap(warehouseId, productIds) {
     },
   ]);
 
-  const productDocs = await Product.find({ productId: { $in: productIds } })
+  const productFilter = { productId: { $in: productIds } };
+  if (companyId) productFilter.companyId = companyId;
+  const productDocs = await Product.find(productFilter)
     .select("productId name minStockLevel")
     .lean();
   const balanceByProductId = new Map(balances.map((row) => [row._id, row]));
@@ -217,6 +260,14 @@ router.post("/transactions", requireAuth, async (req, res) => {
       return res.status(400).json({ ok: false, message: "Warehouse is required" });
     }
 
+    const warehouseDoc = await Warehouse.findOne({ warehouseId: scopeWarehouseId })
+      .select("companyId companyName")
+      .lean();
+    const companyPayload = resolveCompanyPayload(req, body, warehouseDoc || {});
+    if (!companyPayload.companyId) {
+      return res.status(400).json({ ok: false, message: "Company is required" });
+    }
+
     const subtotal = normalizedItems.reduce((sum, item) => sum + (item.totalPrice || item.totalPacks * item.unitPrice), 0);
     const adjustment = toNumber(body.adjustment, 0);
     const grandTotal = subtotal + adjustment;
@@ -248,6 +299,8 @@ router.post("/transactions", requireAuth, async (req, res) => {
         fromEntityName: toTrimmedString(body.fromEntityName),
         toEntityType: toTrimmedString(body.toEntityType),
         toEntityName: toTrimmedString(body.toEntityName),
+        companyId: companyPayload.companyId,
+        companyName: companyPayload.companyName,
         warehouseId: scopeWarehouseId,
         warehouseName: scopeWarehouseName,
         regionId: toTrimmedString(body.regionId),
@@ -292,7 +345,7 @@ router.post("/transactions", requireAuth, async (req, res) => {
     }
 
     const productBalances = !isApprovalRequest
-      ? await calculateProductBalanceMap(scopeWarehouseId, normalizedItems.map((item) => item.productId))
+      ? await calculateProductBalanceMap(scopeWarehouseId, normalizedItems.map((item) => item.productId), companyPayload.companyId)
       : [];
 
     if (!isApprovalRequest) {
@@ -332,6 +385,7 @@ router.get("/transactions", requireAuth, async (req, res) => {
     if (req.query.distributorId) query.distributorId = toTrimmedString(req.query.distributorId);
     if (req.query.requestStatus) query.requestStatus = toTrimmedString(req.query.requestStatus).toUpperCase();
     if (req.query.requestSourceRole) query.requestSourceRole = toTrimmedString(req.query.requestSourceRole);
+    applyCompanyScope(query, req, req.query.companyId);
     if (!isAdminRole(req.user?.role) && !isWarehouseManagerRole(req.user?.role)) {
       query.createdBy = req.user?.uid;
     }
@@ -354,6 +408,12 @@ router.put("/transactions/:id", requireAuth, requireRole("admin", "warehouse man
   try {
     const transaction = await WarehouseTransaction.findById(req.params.id);
     if (!transaction) return res.status(404).json({ ok: false, message: "Transaction not found" });
+    if (!isSystemLevelAdmin(req.user?.role)) {
+      const userCompanyId = getUserCompanyId(req);
+      if (!userCompanyId || toTrimmedString(transaction.companyId) !== userCompanyId) {
+        return res.status(403).json({ ok: false, message: "Forbidden" });
+      }
+    }
 
     if (isWarehouseManagerRole(req.user?.role)) {
       const scopedWarehouseId = getScopedWarehouseId(req.user);
@@ -450,6 +510,12 @@ router.put("/transactions/:id/mark-read", requireAuth, requireRole("admin", "war
       { new: true }
     );
     if (!transaction) return res.status(404).json({ ok: false, message: "Transaction not found" });
+    if (!isSystemLevelAdmin(req.user?.role)) {
+      const userCompanyId = getUserCompanyId(req);
+      if (!userCompanyId || toTrimmedString(transaction.companyId) !== userCompanyId) {
+        return res.status(403).json({ ok: false, message: "Forbidden" });
+      }
+    }
 
     if (isWarehouseManagerRole(req.user?.role)) {
       const scopedWarehouseId = getScopedWarehouseId(req.user);
@@ -472,6 +538,12 @@ router.put("/transactions/:id/request-status", requireAuth, requireRole("admin",
 
     const transaction = await WarehouseTransaction.findById(req.params.id);
     if (!transaction) return res.status(404).json({ ok: false, message: "Transaction not found" });
+    if (!isSystemLevelAdmin(req.user?.role)) {
+      const userCompanyId = getUserCompanyId(req);
+      if (!userCompanyId || toTrimmedString(transaction.companyId) !== userCompanyId) {
+        return res.status(403).json({ ok: false, message: "Forbidden" });
+      }
+    }
 
     if (isWarehouseManagerRole(req.user?.role)) {
       const scopedWarehouseId = getScopedWarehouseId(req.user);
@@ -524,6 +596,12 @@ router.put("/transactions/:id/return-payment", requireAuth, async (req, res) => 
       { new: true }
     );
     if (!transaction) return res.status(404).json({ ok: false, message: "Transaction not found" });
+    if (!isSystemLevelAdmin(req.user?.role)) {
+      const userCompanyId = getUserCompanyId(req);
+      if (!userCompanyId || toTrimmedString(transaction.companyId) !== userCompanyId) {
+        return res.status(403).json({ ok: false, message: "Forbidden" });
+      }
+    }
 
     if (isWarehouseManagerRole(req.user?.role)) {
       const scopedWarehouseId = getScopedWarehouseId(req.user);
@@ -540,6 +618,7 @@ router.put("/transactions/:id/return-payment", requireAuth, async (req, res) => 
 router.delete("/transactions/:id", requireAuth, async (req, res) => {
   try {
     const deleteFilter = { _id: req.params.id };
+    applyCompanyScope(deleteFilter, req);
     if (isWarehouseManagerRole(req.user?.role)) {
       deleteFilter.warehouseId = getScopedWarehouseId(req.user) || "__no_warehouse__";
     }
@@ -555,9 +634,11 @@ router.delete("/transactions/:id", requireAuth, async (req, res) => {
 
 router.delete("/transactions/clear", requireAuth, requireRole("admin"), async (req, res) => {
   try {
-    await WarehouseTransaction.deleteMany({});
-    await InventoryMovement.deleteMany({});
-    await StockTransfer.deleteMany({});
+    const filter = {};
+    applyCompanyScope(filter, req);
+    await WarehouseTransaction.deleteMany(filter);
+    await InventoryMovement.deleteMany(filter);
+    await StockTransfer.deleteMany(filter);
     return res.json({ ok: true, message: "Warehouse inventory module data cleared" });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to clear transaction data" });
@@ -568,9 +649,12 @@ router.get("/near-expiry-products", requireAuth, async (req, res) => {
   try {
     const now = new Date();
     const threeMonthsLater = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+    const companyMatch = {};
+    applyCompanyScope(companyMatch, req, req.query.companyId);
     const rows = await InventoryMovement.aggregate([
       {
         $match: {
+          ...companyMatch,
           ...(isWarehouseManagerRole(req.user?.role) ? { warehouseId: getScopedWarehouseId(req.user) || "__no_warehouse__" } : {}),
           batchExpiryDate: { $gte: now, $lte: threeMonthsLater },
         },
@@ -613,9 +697,12 @@ router.get("/analytics", requireAuth, async (req, res) => {
     const weeklyStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
     const monthlyStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
+    const companyMatch = {};
+    applyCompanyScope(companyMatch, req, req.query.companyId);
+
     async function totalsSince(date) {
       const rows = await WarehouseTransaction.aggregate([
-        { $match: { ...(isWarehouseManagerRole(req.user?.role) ? { warehouseId: getScopedWarehouseId(req.user) || "__no_warehouse__" } : {}), transactionAt: { $gte: date } } },
+        { $match: { ...companyMatch, ...(isWarehouseManagerRole(req.user?.role) ? { warehouseId: getScopedWarehouseId(req.user) || "__no_warehouse__" } : {}), transactionAt: { $gte: date } } },
         {
           $group: {
             _id: "$transactionType",
@@ -646,6 +733,7 @@ router.get("/analytics", requireAuth, async (req, res) => {
       { $unwind: "$items" },
       {
         $match: {
+          ...companyMatch,
           ...(isWarehouseManagerRole(req.user?.role) ? { warehouseId: getScopedWarehouseId(req.user) || "__no_warehouse__" } : {}),
           "items.expiryDate": {
             $lte: new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000),
@@ -668,6 +756,7 @@ router.get("/analytics", requireAuth, async (req, res) => {
     ]);
 
     const returnPayments = await WarehouseTransaction.find({
+      ...companyMatch,
       ...(isWarehouseManagerRole(req.user?.role) ? { warehouseId: getScopedWarehouseId(req.user) || "__no_warehouse__" } : {}),
       transactionType: "RETURN_STOCK",
       returnPaymentStatus: { $in: ["PENDING", "OVERDUE"] },
@@ -693,6 +782,10 @@ router.get("/analytics", requireAuth, async (req, res) => {
 router.post("/movements", requireAuth, async (req, res) => {
   try {
     const body = req.body || {};
+    const companyPayload = resolveCompanyPayload(req, body);
+    if (!companyPayload.companyId) {
+      return res.status(400).json({ ok: false, message: "Company is required" });
+    }
     const doc = await InventoryMovement.create({
       productId: String(body.productId || "").trim(),
       productName: String(body.productName || "").trim(),
@@ -704,6 +797,8 @@ router.post("/movements", requireAuth, async (req, res) => {
       zoneName: String(body.zoneName || "").trim(),
       areaId: String(body.areaId || "").trim(),
       areaName: String(body.areaName || "").trim(),
+      companyId: companyPayload.companyId,
+      companyName: companyPayload.companyName,
       movementScope: String(body.movementScope || "warehouse").trim(),
       quantity: Number(body.quantity || 0),
       movementType: String(body.movementType || "").trim(),
@@ -726,6 +821,7 @@ router.get("/movements", requireAuth, async (req, res) => {
     if (req.query.zoneId) query.zoneId = String(req.query.zoneId);
     if (req.query.areaId) query.areaId = String(req.query.areaId);
     if (req.query.movementType) query.movementType = String(req.query.movementType);
+    applyCompanyScope(query, req, req.query.companyId);
     const items = await InventoryMovement.find(query).sort({ createdAt: -1 }).lean();
     return res.json({ ok: true, movements: items });
   } catch (e) {
@@ -736,8 +832,14 @@ router.get("/movements", requireAuth, async (req, res) => {
 router.put("/movements/:id", requireAuth, async (req, res) => {
   try {
     const body = req.body || {};
-    const updated = await InventoryMovement.findByIdAndUpdate(
-      req.params.id,
+    const companyPayload = resolveCompanyPayload(req, body);
+    if (!companyPayload.companyId) {
+      return res.status(400).json({ ok: false, message: "Company is required" });
+    }
+    const scope = { _id: req.params.id };
+    applyCompanyScope(scope, req);
+    const updated = await InventoryMovement.findOneAndUpdate(
+      scope,
       {
         productId: String(body.productId || "").trim(),
         productName: String(body.productName || "").trim(),
@@ -749,6 +851,8 @@ router.put("/movements/:id", requireAuth, async (req, res) => {
         zoneName: String(body.zoneName || "").trim(),
         areaId: String(body.areaId || "").trim(),
         areaName: String(body.areaName || "").trim(),
+        companyId: companyPayload.companyId,
+        companyName: companyPayload.companyName,
         movementScope: String(body.movementScope || "warehouse").trim(),
         quantity: Number(body.quantity || 0),
         movementType: String(body.movementType || "").trim(),
@@ -765,7 +869,9 @@ router.put("/movements/:id", requireAuth, async (req, res) => {
 
 router.delete("/movements/clear", requireAuth, requireRole("admin"), async (req, res) => {
   try {
-    await InventoryMovement.deleteMany({});
+    const filter = {};
+    applyCompanyScope(filter, req);
+    await InventoryMovement.deleteMany(filter);
     return res.json({ ok: true });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to clear movements" });
@@ -775,10 +881,18 @@ router.delete("/movements/clear", requireAuth, requireRole("admin"), async (req,
 router.post("/transfers", requireAuth, async (req, res) => {
   try {
     const body = req.body || {};
+    const fromWarehouseId = isWarehouseManagerRole(req.user?.role) ? getScopedWarehouseId(req.user) : String(body.fromWarehouseId || "").trim();
+    const fromWarehouseDoc = await Warehouse.findOne({ warehouseId: fromWarehouseId }).select("companyId companyName").lean();
+    const companyPayload = resolveCompanyPayload(req, body, fromWarehouseDoc || {});
+    if (!companyPayload.companyId) {
+      return res.status(400).json({ ok: false, message: "Company is required" });
+    }
     const doc = await StockTransfer.create({
       productId: String(body.productId || "").trim(),
       productName: String(body.productName || "").trim(),
-      fromWarehouseId: isWarehouseManagerRole(req.user?.role) ? getScopedWarehouseId(req.user) : String(body.fromWarehouseId || "").trim(),
+      companyId: companyPayload.companyId,
+      companyName: companyPayload.companyName,
+      fromWarehouseId,
       fromWarehouseName: String(body.fromWarehouseName || "").trim(),
       toWarehouseId: String(body.toWarehouseId || "").trim(),
       toWarehouseName: String(body.toWarehouseName || "").trim(),
@@ -793,6 +907,8 @@ router.post("/transfers", requireAuth, async (req, res) => {
       await InventoryMovement.create({
         productId: doc.productId,
         productName: doc.productName,
+        companyId: doc.companyId,
+        companyName: doc.companyName,
         warehouseId: doc.fromWarehouseId,
         warehouseName: doc.fromWarehouseName,
         movementScope: "warehouse",
@@ -804,6 +920,8 @@ router.post("/transfers", requireAuth, async (req, res) => {
       await InventoryMovement.create({
         productId: doc.productId,
         productName: doc.productName,
+        companyId: doc.companyId,
+        companyName: doc.companyName,
         warehouseId: doc.toWarehouseId,
         warehouseName: doc.toWarehouseName,
         movementScope: "warehouse",
@@ -826,6 +944,7 @@ router.post("/transfers", requireAuth, async (req, res) => {
 router.get("/transfers", requireAuth, async (req, res) => {
   try {
     const transferQuery = {};
+    applyCompanyScope(transferQuery, req, req.query.companyId);
     if (isWarehouseManagerRole(req.user?.role)) {
       const warehouseId = getScopedWarehouseId(req.user);
       transferQuery.$or = [{ fromWarehouseId: warehouseId || "__no_warehouse__" }, { toWarehouseId: warehouseId || "__no_warehouse__" }];
@@ -841,6 +960,7 @@ router.put("/transfers/:id", requireAuth, async (req, res) => {
   try {
     const body = req.body || {};
     const transferScope = { _id: req.params.id };
+    applyCompanyScope(transferScope, req);
     if (isWarehouseManagerRole(req.user?.role)) {
       const warehouseId = getScopedWarehouseId(req.user) || "__no_warehouse__";
       transferScope.$or = [{ fromWarehouseId: warehouseId }, { toWarehouseId: warehouseId }];
@@ -858,6 +978,8 @@ router.put("/transfers/:id", requireAuth, async (req, res) => {
       await InventoryMovement.create({
         productId: existing.productId,
         productName: existing.productName,
+        companyId: existing.companyId,
+        companyName: existing.companyName,
         warehouseId: existing.fromWarehouseId,
         warehouseName: existing.fromWarehouseName,
         movementScope: "warehouse",
@@ -869,6 +991,8 @@ router.put("/transfers/:id", requireAuth, async (req, res) => {
       await InventoryMovement.create({
         productId: existing.productId,
         productName: existing.productName,
+        companyId: existing.companyId,
+        companyName: existing.companyName,
         warehouseId: existing.toWarehouseId,
         warehouseName: existing.toWarehouseName,
         movementScope: "warehouse",
@@ -898,6 +1022,7 @@ router.put("/transfers/:id", requireAuth, async (req, res) => {
 router.delete("/transfers/:id", requireAuth, async (req, res) => {
   try {
     const deleteScope = { _id: req.params.id };
+    applyCompanyScope(deleteScope, req);
     if (isWarehouseManagerRole(req.user?.role)) {
       const warehouseId = getScopedWarehouseId(req.user) || "__no_warehouse__";
       deleteScope.$or = [{ fromWarehouseId: warehouseId }, { toWarehouseId: warehouseId }];
@@ -916,6 +1041,7 @@ router.get("/summary", requireAuth, async (req, res) => {
     const match = {};
     if (req.query.warehouseId) match.warehouseId = String(req.query.warehouseId);
     applyWarehouseScope(match, req);
+    applyCompanyScope(match, req, req.query.companyId);
     const items = await InventoryMovement.aggregate([
       { $match: match },
       {
@@ -945,12 +1071,13 @@ router.get("/summary-detail", requireAuth, async (req, res) => {
     if (!productId || !warehouseId) {
       return res.status(400).json({ ok: false, message: "productId and warehouseId are required" });
     }
+    const detailMatch = { productId, warehouseId };
+    applyCompanyScope(detailMatch, req, req.query.companyId);
 
     const rows = await InventoryMovement.aggregate([
       {
         $match: {
-          productId,
-          warehouseId,
+          ...detailMatch,
           batchManufactureDate: { $exists: true, $ne: null },
           batchExpiryDate: { $exists: true, $ne: null },
         },
@@ -988,6 +1115,7 @@ router.get("/low-stock", requireAuth, async (req, res) => {
   try {
     const lowStockMatch = {};
     applyWarehouseScope(lowStockMatch, req);
+    applyCompanyScope(lowStockMatch, req, req.query.companyId);
     const summary = await InventoryMovement.aggregate([
       { $match: lowStockMatch },
       {
@@ -1000,7 +1128,9 @@ router.get("/low-stock", requireAuth, async (req, res) => {
         },
       },
     ]);
-    const products = await Product.find().select("productId name minStockLevel").lean();
+    const productFilter = {};
+    applyCompanyScope(productFilter, req, req.query.companyId);
+    const products = await Product.find(productFilter).select("productId name minStockLevel").lean();
     const lowStock = products
       .flatMap((p) => {
         const matches = summary.filter((s) => s._id.productId === p.productId);
