@@ -1,12 +1,80 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const Vehicle = require("../models/Vehicle");
 const VehicleTrip = require("../models/VehicleTrip");
 const VehicleRefuel = require("../models/VehicleRefuel");
 const VehicleMaintenance = require("../models/VehicleMaintenance");
 const AccountTransaction = require("../models/AccountTransaction");
+const Company = require("../models/Company");
 const { requireAuth } = require("../utils/auth");
+const { toTenantDatabaseName } = require("../utils/tenantDatabases");
 
 const router = express.Router();
+
+function normalizeRole(role) {
+  return String(role || "").trim().toLowerCase();
+}
+
+function isSystemLevelAdmin(role) {
+  const normalized = normalizeRole(role);
+  return normalized === "admin" || normalized === "system admin";
+}
+
+function normalizeCompanyId(value) {
+  return String(value || "").trim();
+}
+
+async function resolveTenantDbName(companyId, companyName = "") {
+  const normalizedCompanyId = normalizeCompanyId(companyId);
+  const normalizedCompanyName = String(companyName || "").trim();
+  if (!normalizedCompanyId && !normalizedCompanyName) return "";
+  if (normalizedCompanyName) return toTenantDatabaseName(normalizedCompanyName, normalizedCompanyId || "company");
+  const company = await Company.findOne({ companyId: normalizedCompanyId }).select("name").lean();
+  return toTenantDatabaseName(company?.name || normalizedCompanyId, normalizedCompanyId || "company");
+}
+
+function getModelFromDb(db, baseModel) {
+  const modelName = baseModel.modelName;
+  return db.models[modelName] || db.model(modelName, baseModel.schema, baseModel.collection.name);
+}
+
+async function getScopedVehicleModels(req, requestedCompanyId = "", requestedCompanyName = "") {
+  const scopedCompanyId = isSystemLevelAdmin(req.user?.role)
+    ? normalizeCompanyId(requestedCompanyId)
+    : normalizeCompanyId(req.user?.companyId);
+  const scopedCompanyName = isSystemLevelAdmin(req.user?.role)
+    ? String(requestedCompanyName || "").trim()
+    : String(req.user?.companyName || "").trim();
+
+  if (!scopedCompanyId) {
+    return {
+      scopedCompanyId: "",
+      VehicleModel: Vehicle,
+      VehicleTripModel: VehicleTrip,
+      VehicleRefuelModel: VehicleRefuel,
+      VehicleMaintenanceModel: VehicleMaintenance,
+    };
+  }
+
+  const dbName = await resolveTenantDbName(scopedCompanyId, scopedCompanyName);
+  if (!dbName) {
+    return {
+      scopedCompanyId,
+      VehicleModel: Vehicle,
+      VehicleTripModel: VehicleTrip,
+      VehicleRefuelModel: VehicleRefuel,
+      VehicleMaintenanceModel: VehicleMaintenance,
+    };
+  }
+  const tenantDb = mongoose.connection.useDb(dbName, { useCache: true });
+  return {
+    scopedCompanyId,
+    VehicleModel: getModelFromDb(tenantDb, Vehicle),
+    VehicleTripModel: getModelFromDb(tenantDb, VehicleTrip),
+    VehicleRefuelModel: getModelFromDb(tenantDb, VehicleRefuel),
+    VehicleMaintenanceModel: getModelFromDb(tenantDb, VehicleMaintenance),
+  };
+}
 
 function monthRange(from, to) {
   const start = from ? new Date(from) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -27,21 +95,33 @@ function safeDate(value) {
 
 router.get("/overview", requireAuth, async (req, res) => {
   try {
+    const { scopedCompanyId, VehicleModel, VehicleTripModel, VehicleRefuelModel, VehicleMaintenanceModel } = await getScopedVehicleModels(
+      req,
+      req.query.companyId,
+      req.query.companyName
+    );
+    if (!isSystemLevelAdmin(req.user?.role) && !scopedCompanyId) {
+      return res.status(400).json({ ok: false, message: "Company is required for this role." });
+    }
+
     const { start, end } = monthRange(req.query.from, req.query.to);
     const vf = {};
     ["regionId", "zoneId", "areaId", "type", "status"].forEach((k) => {
       if (req.query[k]) vf[k] = req.query[k];
     });
     if (req.query.assignedUserId) vf.assignedUserId = req.query.assignedUserId;
+    if (isSystemLevelAdmin(req.user?.role) && scopedCompanyId && VehicleModel === Vehicle) {
+      vf.companyId = scopedCompanyId;
+    }
 
-    const vehicles = await Vehicle.find(vf).lean();
+    const vehicles = await VehicleModel.find(vf).lean();
     const vehicleIds = vehicles.map((v) => v._id);
     const vehicleMap = new Map(vehicles.map((v) => [String(v._id), v]));
 
     const [trips, refuels, maintenance] = await Promise.all([
-      VehicleTrip.find({ vehicleId: { $in: vehicleIds }, tripDate: { $gte: start, $lte: end } }).lean(),
-      VehicleRefuel.find({ vehicleId: { $in: vehicleIds }, date: { $gte: start, $lte: end } }).lean(),
-      VehicleMaintenance.find({ vehicleId: { $in: vehicleIds }, date: { $gte: start, $lte: end } }).lean(),
+      VehicleTripModel.find({ vehicleId: { $in: vehicleIds }, tripDate: { $gte: start, $lte: end } }).lean(),
+      VehicleRefuelModel.find({ vehicleId: { $in: vehicleIds }, date: { $gte: start, $lte: end } }).lean(),
+      VehicleMaintenanceModel.find({ vehicleId: { $in: vehicleIds }, date: { $gte: start, $lte: end } }).lean(),
     ]);
 
     const totalKm = trips.reduce((a, t) => a + (t.distance || 0), 0);
@@ -279,6 +359,15 @@ router.get("/overview", requireAuth, async (req, res) => {
 
 router.post("/trips", requireAuth, async (req, res) => {
   try {
+    const { scopedCompanyId, VehicleModel, VehicleTripModel } = await getScopedVehicleModels(
+      req,
+      req.body?.companyId,
+      req.body?.companyName
+    );
+    if (!isSystemLevelAdmin(req.user?.role) && !scopedCompanyId) {
+      return res.status(400).json({ ok: false, message: "Company is required for this role." });
+    }
+
     const body = req.body || {};
     const start = Number(body.startOdometer);
     const end = Number(body.endOdometer);
@@ -287,10 +376,10 @@ router.post("/trips", requireAuth, async (req, res) => {
     }
     if (end < start) return res.status(400).json({ ok: false, message: "End odometer must be greater than or equal to start" });
 
-    const vehicle = await Vehicle.findById(body.vehicleId);
+    const vehicle = await VehicleModel.findById(body.vehicleId);
     if (!vehicle) return res.status(404).json({ ok: false, message: "Vehicle not found" });
 
-    const lastTrip = await VehicleTrip.findOne({ vehicleId: body.vehicleId }).sort({ tripDate: -1, createdAt: -1 }).lean();
+    const lastTrip = await VehicleTripModel.findOne({ vehicleId: body.vehicleId }).sort({ tripDate: -1, createdAt: -1 }).lean();
     if (lastTrip && start < Number(lastTrip.endOdometer || 0)) {
       return res.status(400).json({ ok: false, message: "Start odometer cannot be lower than last trip end odometer" });
     }
@@ -299,7 +388,7 @@ router.post("/trips", requireAuth, async (req, res) => {
     const anomalyFlags = [];
     if (distance > Number(process.env.VEHICLE_MAX_TRIP_KM || 600)) anomalyFlags.push("km_spike");
 
-    const trip = await VehicleTrip.create({
+    const trip = await VehicleTripModel.create({
       vehicleId: body.vehicleId,
       userId: body.userId || req.user.uid,
       tripType: body.tripType === "personal" ? "personal" : "company",
@@ -331,17 +420,36 @@ router.post("/trips", requireAuth, async (req, res) => {
 });
 
 router.get("/trips", requireAuth, async (_req, res) => {
-  const trips = await VehicleTrip.find().sort({ tripDate: -1 }).limit(200).lean();
-  return res.json({ ok: true, trips });
+  try {
+    const { scopedCompanyId, VehicleTripModel } = await getScopedVehicleModels(_req, _req.query.companyId, _req.query.companyName);
+    if (!isSystemLevelAdmin(_req.user?.role) && !scopedCompanyId) {
+      return res.status(400).json({ ok: false, message: "Company is required for this role." });
+    }
+    const trips = await VehicleTripModel.find().sort({ tripDate: -1 }).limit(200).lean();
+    return res.json({ ok: true, trips });
+  } catch (_error) {
+    return res.status(500).json({ ok: false, message: "Failed to load trips" });
+  }
 });
 
 router.post("/refuels", requireAuth, async (req, res) => {
   try {
+    const { scopedCompanyId, VehicleModel, VehicleRefuelModel } = await getScopedVehicleModels(
+      req,
+      req.body?.companyId,
+      req.body?.companyName
+    );
+    if (!isSystemLevelAdmin(req.user?.role) && !scopedCompanyId) {
+      return res.status(400).json({ ok: false, message: "Company is required for this role." });
+    }
+
     const body = req.body || {};
     if (!body.vehicleId || !body.date || !body.liters || !body.receiptUrl) {
       return res.status(400).json({ ok: false, message: "Vehicle, date, liters and receipt are required" });
     }
-    const refuel = await VehicleRefuel.create({ ...body, userId: body.userId || req.user.uid, createdBy: req.user.uid });
+    const vehicle = await VehicleModel.findById(body.vehicleId).select("_id").lean();
+    if (!vehicle) return res.status(404).json({ ok: false, message: "Vehicle not found" });
+    const refuel = await VehicleRefuelModel.create({ ...body, userId: body.userId || req.user.uid, createdBy: req.user.uid });
 
     if (body.paidFromAccountId && Number(body.cost || 0) > 0) {
       await AccountTransaction.create({
@@ -362,12 +470,29 @@ router.post("/refuels", requireAuth, async (req, res) => {
 });
 
 router.get("/refuels", requireAuth, async (_req, res) => {
-  const refuels = await VehicleRefuel.find().sort({ date: -1 }).limit(200).lean();
-  return res.json({ ok: true, refuels });
+  try {
+    const { scopedCompanyId, VehicleRefuelModel } = await getScopedVehicleModels(_req, _req.query.companyId, _req.query.companyName);
+    if (!isSystemLevelAdmin(_req.user?.role) && !scopedCompanyId) {
+      return res.status(400).json({ ok: false, message: "Company is required for this role." });
+    }
+    const refuels = await VehicleRefuelModel.find().sort({ date: -1 }).limit(200).lean();
+    return res.json({ ok: true, refuels });
+  } catch (_error) {
+    return res.status(500).json({ ok: false, message: "Failed to load refuels" });
+  }
 });
 
 router.post("/maintenance", requireAuth, async (req, res) => {
   try {
+    const { scopedCompanyId, VehicleModel, VehicleMaintenanceModel } = await getScopedVehicleModels(
+      req,
+      req.body?.companyId,
+      req.body?.companyName
+    );
+    if (!isSystemLevelAdmin(req.user?.role) && !scopedCompanyId) {
+      return res.status(400).json({ ok: false, message: "Company is required for this role." });
+    }
+
     const body = req.body || {};
     if (!body.vehicleId || !body.date || !body.maintenanceType || !body.cost) {
       return res.status(400).json({ ok: false, message: "Vehicle, date, type and cost are required" });
@@ -379,7 +504,9 @@ router.post("/maintenance", requireAuth, async (req, res) => {
       return res.status(400).json({ ok: false, message: "Notes are required for Other category" });
     }
 
-    const record = await VehicleMaintenance.create({ ...body, createdBy: req.user.uid });
+    const vehicle = await VehicleModel.findById(body.vehicleId).select("_id").lean();
+    if (!vehicle) return res.status(404).json({ ok: false, message: "Vehicle not found" });
+    const record = await VehicleMaintenanceModel.create({ ...body, createdBy: req.user.uid });
     if (body.paidFromAccountId && Number(body.cost || 0) > 0) {
       await AccountTransaction.create({
         accountId: body.paidFromAccountId,
@@ -399,8 +526,16 @@ router.post("/maintenance", requireAuth, async (req, res) => {
 });
 
 router.get("/maintenance", requireAuth, async (_req, res) => {
-  const maintenance = await VehicleMaintenance.find().sort({ date: -1 }).limit(200).lean();
-  return res.json({ ok: true, maintenance });
+  try {
+    const { scopedCompanyId, VehicleMaintenanceModel } = await getScopedVehicleModels(_req, _req.query.companyId, _req.query.companyName);
+    if (!isSystemLevelAdmin(_req.user?.role) && !scopedCompanyId) {
+      return res.status(400).json({ ok: false, message: "Company is required for this role." });
+    }
+    const maintenance = await VehicleMaintenanceModel.find().sort({ date: -1 }).limit(200).lean();
+    return res.json({ ok: true, maintenance });
+  } catch (_error) {
+    return res.status(500).json({ ok: false, message: "Failed to load maintenance" });
+  }
 });
 
 module.exports = router;
