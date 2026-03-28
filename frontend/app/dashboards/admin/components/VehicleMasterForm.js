@@ -109,6 +109,7 @@ export default function VehicleMasterForm({ onSaved }) {
     <>
       <form onSubmit={submit} className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <Select label="Company" value={companyDocId} onChange={setCompanyDocId} options={companies.map((c) => ({ label: c.name, value: c._id }))} required disabled={!canSelectCompany} />
+        <Field label="Vehicle ID" value={form.vehicleId} onChange={(v) => setField("vehicleId", v)} required />
         <Select label="Vehicle Type" value={form.type} onChange={(v) => setField("type", v)} options={TYPE_OPTIONS} />
         <Field label="Make" value={form.make} onChange={(v) => setField("make", v)} required />
         <Field label="Model" value={form.model} onChange={(v) => setField("model", v)} required />
