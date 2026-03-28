@@ -193,19 +193,24 @@ router.get("/my", requireAuth, async (req, res) => {
 
 router.get("/secondary/distributor", requireAuth, async (req, res) => {
   try {
-    const role = String(req.user?.role || "").trim();
-    if (role !== "Distributor") return res.status(403).json({ ok: false, message: "Forbidden" });
+    const role = normalizeRole(req.user?.role);
+    if (role !== "distributor") return res.status(403).json({ ok: false, message: "Forbidden" });
 
     const me = await User.findById(req.user?.uid).lean();
     if (!me) return res.status(404).json({ ok: false, message: "User not found" });
 
     const limit = Math.min(Number(req.query.limit) || 200, 500);
     const territoryName = String(me.territoryName || me.areaName || "").trim();
-    const distributorIds = Array.from(new Set([String(me.userId || "").trim(), String(me.distributorId || "").trim()].filter(Boolean)));
+    const distributorIds = Array.from(new Set([
+      String(me.userId || "").trim(),
+      String(me.distributorId || "").trim(),
+      String(me._id || "").trim(),
+      String(req.user?.distributorId || "").trim(),
+    ].filter(Boolean)));
     const warehouseId = String(me.warehouseId || "").trim();
     const warehouseNames = Array.from(new Set([String(me.businessName || "").trim(), String(me.fullName || "").trim(), String(me.warehouseName || "").trim()].filter(Boolean)));
 
-    const query = withCompanyScope(me, { saleType: "secondary" });
+    const query = withCompanyScope(me, { saleType: "secondary", sourceType: { $in: ["customer", "order_booker"] } });
 
     const relatedFilters = [];
     if (territoryName) relatedFilters.push({ territoryName });
@@ -566,10 +571,13 @@ router.post("/", requireAuth, async (req, res) => {
 
     const totalAmount = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
     const role = String(req.user?.role || "").trim();
+    const normalizedRole = normalizeRole(role);
     const authUser = await User.findById(req.user?.uid).lean();
     const ownUserId = authUser?.userId || req.user?.uid || "";
-    const isBrandManager = role === "Brand Manager";
-    const isDistributor = role === "Distributor";
+    const isBrandManager = normalizedRole === "brand manager";
+    const isDistributor = normalizedRole === "distributor";
+    const companyId = String(req.body?.companyId || authUser?.companyId || req.user?.companyId || "").trim();
+    const companyName = String(req.body?.companyName || authUser?.companyName || req.user?.companyName || "").trim();
 
     const order = await SalesOrder.create({
       orderNo: orderNo || `SO-${Date.now()}`,
@@ -601,6 +609,8 @@ router.post("/", requireAuth, async (req, res) => {
       fieldId: req.body?.fieldId || authUser?.fieldId || "",
       fieldName: req.body?.fieldName || authUser?.fieldName || "",
       address: req.body?.address || authUser?.address || authUser?.shopAddress || "",
+      companyId,
+      companyName,
       statusHistory: [{ status: "pending", changedBy: req.user?.uid, changedAt: new Date(), note: "Order created" }],
     });
 
