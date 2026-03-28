@@ -40,6 +40,8 @@ const SalesOrderSchema = new mongoose.Schema(
       default: "customer",
     },
     customerName: { type: String, required: true, trim: true },
+    companyId: { type: String, trim: true },
+    companyName: { type: String, trim: true },
     customerType: {
       type: String,
       enum: ["customer", "distributor", "salesman", "brand"],
