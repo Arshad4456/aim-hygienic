@@ -1,12 +1,15 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const Vehicle = require("../models/Vehicle");
 const VehicleTrip = require("../models/VehicleTrip");
 const VehicleRefuel = require("../models/VehicleRefuel");
 const VehicleMaintenance = require("../models/VehicleMaintenance");
 const VehicleAssignment = require("../models/VehicleAssignment");
+const Company = require("../models/Company");
 const User = require("../models/User");
 const { requireAuth } = require("../utils/auth");
 const { syncMasterToTenant, removeMasterFromTenant, listTenantMasterByCompany } = require("../utils/tenantMasters");
+const { toTenantDatabaseName } = require("../utils/tenantDatabases");
 
 const router = express.Router();
 function normalizeRole(role) { return String(role || "").trim().toLowerCase(); }
@@ -19,6 +22,37 @@ function sanitizeString(value) {
 function parseNum(value, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
+}
+
+async function resolveTenantDbName(companyId, companyName = "") {
+  const normalizedCompanyId = sanitizeString(companyId);
+  const normalizedCompanyName = sanitizeString(companyName);
+  if (!normalizedCompanyId && !normalizedCompanyName) return "";
+  if (normalizedCompanyName) return toTenantDatabaseName(normalizedCompanyName, normalizedCompanyId || "company");
+  const company = await Company.findOne({ companyId: normalizedCompanyId }).select("name").lean();
+  return toTenantDatabaseName(company?.name || normalizedCompanyId, normalizedCompanyId || "company");
+}
+
+function getModelFromDb(db, baseModel) {
+  const modelName = baseModel.modelName;
+  return db.models[modelName] || db.model(modelName, baseModel.schema, baseModel.collection.name);
+}
+
+async function getScopedVehicleActivityModels(companyId, companyName = "") {
+  const normalizedCompanyId = sanitizeString(companyId);
+  if (!normalizedCompanyId) {
+    return { VehicleTripModel: VehicleTrip, VehicleRefuelModel: VehicleRefuel, VehicleMaintenanceModel: VehicleMaintenance };
+  }
+  const dbName = await resolveTenantDbName(normalizedCompanyId, companyName);
+  if (!dbName) {
+    return { VehicleTripModel: VehicleTrip, VehicleRefuelModel: VehicleRefuel, VehicleMaintenanceModel: VehicleMaintenance };
+  }
+  const tenantDb = mongoose.connection.useDb(dbName, { useCache: true });
+  return {
+    VehicleTripModel: getModelFromDb(tenantDb, VehicleTrip),
+    VehicleRefuelModel: getModelFromDb(tenantDb, VehicleRefuel),
+    VehicleMaintenanceModel: getModelFromDb(tenantDb, VehicleMaintenance),
+  };
 }
 
 function parseVehiclePayload(body = {}) {
@@ -162,11 +196,15 @@ router.get("/:id/detail", requireAuth, async (req, res) => {
       return res.status(403).json({ ok: false, message: "Forbidden" });
     }
 
+    const { VehicleTripModel, VehicleRefuelModel, VehicleMaintenanceModel } = await getScopedVehicleActivityModels(
+      vehicle.companyId,
+      vehicle.companyName
+    );
     const [assignments, trips, refuels, maintenance] = await Promise.all([
       VehicleAssignment.find({ vehicleId: req.params.id }).sort({ startDate: -1 }).limit(30).lean(),
-      VehicleTrip.find({ vehicleId: req.params.id }).sort({ tripDate: -1 }).limit(50).lean(),
-      VehicleRefuel.find({ vehicleId: req.params.id }).sort({ date: -1 }).limit(50).lean(),
-      VehicleMaintenance.find({ vehicleId: req.params.id }).sort({ date: -1 }).limit(50).lean(),
+      VehicleTripModel.find({ vehicleId: req.params.id }).sort({ tripDate: -1 }).limit(50).lean(),
+      VehicleRefuelModel.find({ vehicleId: req.params.id }).sort({ date: -1 }).limit(50).lean(),
+      VehicleMaintenanceModel.find({ vehicleId: req.params.id }).sort({ date: -1 }).limit(50).lean(),
     ]);
 
     return res.json({ ok: true, vehicle, assignments, trips, refuels, maintenance });
