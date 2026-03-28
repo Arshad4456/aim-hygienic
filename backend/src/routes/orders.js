@@ -6,11 +6,22 @@ const User = require("../models/User");
 const router = express.Router();
 
 const ALLOWED_STATUSES = ["pending", "approved", "rejected", "dispatched", "delivered"];
-const ADMIN_ROLES = new Set(["admin"]);
+const ADMIN_ROLES = new Set(["admin", "system admin", "company admin"]);
 const DELIVERY_APPROVER_ROLES = new Set(["admin", "warehouse manager", "distributor"]);
 
 function normalizeRole(role) {
   return String(role || "").trim().toLowerCase();
+}
+
+
+function getCompanyScopeQuery(user) {
+  const companyId = String(user?.companyId || "").trim();
+  return companyId ? { companyId } : {};
+}
+
+function withCompanyScope(user, query = {}) {
+  const scopedCompany = getCompanyScopeQuery(user);
+  return { ...query, ...scopedCompany };
 }
 
 function isWarehouseManagerRole(role) {
@@ -102,43 +113,45 @@ async function attachPodMetaToOrder(order) {
 }
 
 function roleMatchQuery(user) {
-  const role = String(user?.role || "").trim();
+  const rawRole = String(user?.role || "").trim();
+  const role = normalizeRole(rawRole);
   const userId = String(user?.userId || "").trim();
   const authUid = String(user?.uid || user?._id || "").trim();
   const roleMappedIds = {
-    "Brand Manager": String(user?.managerId || "").trim(),
-    Distributor: String(user?.distributorId || "").trim(),
-    "Order Booker": String(user?.orderBookerId || "").trim(),
-    Salesman: String(user?.salesmanId || "").trim(),
-    "Delivery Boy": String(user?.deliveryBoyId || "").trim(),
+    "brand manager": String(user?.managerId || "").trim(),
+    distributor: String(user?.distributorId || "").trim(),
+    "order booker": String(user?.orderBookerId || "").trim(),
+    salesman: String(user?.salesmanId || "").trim(),
+    "delivery boy": String(user?.deliveryBoyId || "").trim(),
     customer: String(user?.customerId || "").trim(),
   };
 
   if (!role) return { _id: null };
-  if (ADMIN_ROLES.has(role)) return {};
-  if (isWarehouseManagerRole(role)) {
+  if (role === "system admin") return {};
+  if (ADMIN_ROLES.has(role)) return withCompanyScope(user, {});
+  if (isWarehouseManagerRole(rawRole)) {
     const warehouseId = getScopedWarehouseId(user);
-    return warehouseId ? { toWarehouseId: warehouseId } : { _id: null };
+    return withCompanyScope(user, warehouseId ? { toWarehouseId: warehouseId } : { _id: null });
   }
 
   const idsForRole = Array.from(new Set([userId, roleMappedIds[role]].filter(Boolean)));
 
-  if (role === "Brand Manager") return { brandManagerId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
-  if (role === "Distributor") return { distributorId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
-  if (role === "Order Booker") {
+  if (role === "brand manager") return withCompanyScope(user, { brandManagerId: { $in: idsForRole.length ? idsForRole : ["__none__"] } });
+  if (role === "distributor") return withCompanyScope(user, { distributorId: { $in: idsForRole.length ? idsForRole : ["__none__"] } });
+  if (role === "order booker") {
     const roleQuery = { orderBookerId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
-    return authUid ? { $or: [roleQuery, { createdBy: authUid }] } : roleQuery;
+    return withCompanyScope(user, authUid ? { $or: [roleQuery, { createdBy: authUid }] } : roleQuery);
   }
-  if (role === "Salesman") return { salesmanId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
-  if (role === "Delivery Boy") return { deliveryBoyId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
+  if (role === "salesman") return withCompanyScope(user, { salesmanId: { $in: idsForRole.length ? idsForRole : ["__none__"] } });
+  if (role === "delivery boy") return withCompanyScope(user, { deliveryBoyId: { $in: idsForRole.length ? idsForRole : ["__none__"] } });
   if (role === "customer") {
     const roleQuery = { customerId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
-    return authUid ? { $or: [roleQuery, { createdBy: authUid }] } : roleQuery;
+    return withCompanyScope(user, authUid ? { $or: [roleQuery, { createdBy: authUid }] } : roleQuery);
   }
-  if (role === "Zone Sale Manager") return { zoneId: String(user?.zoneId || "").trim() || "__none__" };
-  if (role === "Territory Sale Manager") return { territoryName: String(user?.territoryName || user?.areaName || "").trim() || "__none__" };
+  if (role === "zone sale manager") return withCompanyScope(user, { zoneId: String(user?.zoneId || "").trim() || "__none__" });
+  if (role === "territory sale manager") return withCompanyScope(user, { territoryName: String(user?.territoryName || user?.areaName || "").trim() || "__none__" });
 
-  return authUid ? { createdBy: authUid } : { _id: null };
+  return withCompanyScope(user, authUid ? { createdBy: authUid } : { _id: null });
 }
 
 
@@ -192,7 +205,7 @@ router.get("/secondary/distributor", requireAuth, async (req, res) => {
     const warehouseId = String(me.warehouseId || "").trim();
     const warehouseNames = Array.from(new Set([String(me.businessName || "").trim(), String(me.fullName || "").trim(), String(me.warehouseName || "").trim()].filter(Boolean)));
 
-    const query = { saleType: "secondary" };
+    const query = withCompanyScope(me, { saleType: "secondary" });
 
     const relatedFilters = [];
     if (territoryName) relatedFilters.push({ territoryName });

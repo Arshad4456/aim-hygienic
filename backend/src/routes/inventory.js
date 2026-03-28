@@ -22,7 +22,8 @@ function toNumber(value, fallback = 0) {
 }
 
 function isAdminRole(role) {
-  return String(role || "").trim().toLowerCase() === "admin";
+  const normalized = String(role || "").trim().toLowerCase();
+  return ["admin", "system admin", "company admin"].includes(normalized);
 }
 
 function isSystemLevelAdmin(role) {
