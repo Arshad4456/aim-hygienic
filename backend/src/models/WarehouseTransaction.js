@@ -45,6 +45,8 @@ const WarehouseTransactionSchema = new mongoose.Schema(
     fromEntityName: { type: String, trim: true },
     toEntityType: { type: String, trim: true },
     toEntityName: { type: String, trim: true },
+    companyId: { type: String, trim: true },
+    companyName: { type: String, trim: true },
     warehouseId: { type: String, trim: true },
     warehouseName: { type: String, trim: true },
     regionId: { type: String, trim: true },

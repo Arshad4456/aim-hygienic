@@ -4,6 +4,8 @@ const StockTransferSchema = new mongoose.Schema(
   {
     productId: { type: String, required: true, trim: true },
     productName: { type: String, trim: true },
+    companyId: { type: String, trim: true },
+    companyName: { type: String, trim: true },
     fromWarehouseId: { type: String, required: true, trim: true },
     fromWarehouseName: { type: String, trim: true },
     toWarehouseId: { type: String, required: true, trim: true },
