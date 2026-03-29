@@ -23,11 +23,12 @@ export default function ReceiptCenter({ title, subtitle, roleKey, links = [] }) 
     }
 
     async function load() {
-        const [receiptsRes, accountsRes, usersRes, ordersRes] = await Promise.allSettled([
+        const [receiptsRes, accountsRes, usersRes, ordersRes, primaryTxRes] = await Promise.allSettled([
             apiFetch("/receipts"),
             apiFetch("/accounts"),
             apiFetch("/users"),
-            apiFetch("/orders?limit=300"),
+            fetchPagedOrders(),
+            apiFetch("/inventory/transactions?transactionType=SALE_STOCK"),
         ]);
 
         setRows(receiptsRes.status === "fulfilled" ? (receiptsRes.value.receipts || []) : []);
@@ -41,11 +42,20 @@ export default function ReceiptCenter({ title, subtitle, roleKey, links = [] }) 
                 ? (usersRes.value.users || []).filter((x) => ["salesman", "cashier", "order booker", "orderbooker"].includes(String(x.role || "").toLowerCase()))
                 : [],
         );
-        setInvoices(
-            ordersRes.status === "fulfilled"
-                ? (ordersRes.value.orders || []).filter((x) => ["approved", "dispatched", "delivered"].includes(String(x.status || "").toLowerCase()))
-                : [],
-        );
+        const orderInvoices = ordersRes.status === "fulfilled"
+            ? (ordersRes.value || []).filter((x) => ["approved", "dispatched", "delivered"].includes(String(x.status || "").toLowerCase()))
+            : [];
+        const primaryTransactionInvoices = primaryTxRes.status === "fulfilled"
+            ? mapPrimaryTransactionsToInvoices(primaryTxRes.value?.transactions || [])
+            : [];
+
+        const dedupedByInvoiceNo = new Map();
+        [...orderInvoices, ...primaryTransactionInvoices].forEach((item) => {
+            const key = item.orderNo || item.invoiceNo || item._id;
+            if (!key) return;
+            dedupedByInvoiceNo.set(key, item);
+        });
+        setInvoices(Array.from(dedupedByInvoiceNo.values()));
     }
 
     useEffect(() => {
@@ -163,6 +173,36 @@ export default function ReceiptCenter({ title, subtitle, roleKey, links = [] }) 
             </div>
         </UserDashboardShell>
     );
+}
+
+async function fetchPagedOrders() {
+    const limit = 200;
+    let page = 1;
+    let totalPages = 1;
+    const allOrders = [];
+    while (page <= totalPages) {
+        const data = await apiFetch(`/orders?limit=${limit}&page=${page}`);
+        const rows = Array.isArray(data?.orders) ? data.orders : [];
+        allOrders.push(...rows);
+        totalPages = Math.max(Number(data?.pagination?.totalPages) || 1, 1);
+        page += 1;
+    }
+    return allOrders;
+}
+
+function mapPrimaryTransactionsToInvoices(transactions = []) {
+    return transactions
+        .filter((txn) => {
+            const status = String(txn?.requestStatus || "").toUpperCase();
+            return ["DISPATCHED", "DELIVERED"].includes(status);
+        })
+        .map((txn) => ({
+            _id: txn?._id || txn?.transactionCode,
+            orderNo: txn?.transactionCode || txn?._id,
+            invoiceNo: txn?.transactionCode || txn?._id,
+            saleType: "primary",
+            status: String(txn?.requestStatus || "").toLowerCase(),
+        }));
 }
 
 function Input({ label, value, onChange, type = "text", required = false }) { return <div><div className="text-sm font-medium">{label}</div><input required={required} type={type} value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" /></div>; }
