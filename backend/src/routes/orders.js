@@ -173,7 +173,7 @@ function canTransition(order, nextStatus) {
 
 router.get("/", requireAuth, async (req, res) => {
   try {
-    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const limit = Math.min(Number(req.query.limit) || 50, 2000);
     const orders = await SalesOrder.find(roleMatchQuery(req.user)).sort({ createdAt: -1 }).limit(limit).lean();
     return res.json({ ok: true, orders: await attachPodMetaToOrders(orders) });
   } catch (e) {
@@ -183,7 +183,7 @@ router.get("/", requireAuth, async (req, res) => {
 
 router.get("/my", requireAuth, async (req, res) => {
   try {
-    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const limit = Math.min(Number(req.query.limit) || 50, 2000);
     const orders = await SalesOrder.find(roleMatchQuery(req.user)).sort({ createdAt: -1 }).limit(limit).lean();
     return res.json({ ok: true, orders: await attachPodMetaToOrders(orders) });
   } catch (e) {
