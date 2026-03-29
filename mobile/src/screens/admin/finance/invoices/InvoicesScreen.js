@@ -17,8 +17,11 @@ export default function InvoicesScreen() {
 
   useEffect(() => {
     let active = true;
-    apiClient.get('/orders?limit=200')
-      .then((res) => { if (active) setOrders(res?.data?.orders || []); })
+    Promise.all([fetchCompanyOrders(), fetchPrimaryInvoiceTransactions()])
+      .then(([allOrders, primaryTxns]) => {
+        if (!active) return;
+        setOrders([...allOrders, ...primaryTxns.map(mapPrimaryTransactionToInvoice)]);
+      })
       .catch((e) => { if (active) setErr(e.message || 'Failed to load invoices'); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
@@ -28,7 +31,7 @@ export default function InvoicesScreen() {
     () =>
       orders.filter((o) => {
         const status = String(o.status || '').toLowerCase();
-        const saleType = String(o.saleType || '').toLowerCase();
+        const saleType = resolveSaleType(o);
         return saleType === 'primary' && ['approved', 'dispatched', 'delivered'].includes(status);
       }),
     [orders]
@@ -58,6 +61,83 @@ export default function InvoicesScreen() {
       <InvoiceTable title="Primary Order Invoices" rows={primaryInvoices} />
     </ScrollView>
   );
+}
+
+async function fetchCompanyOrders() {
+  const limit = 200;
+  let page = 1;
+  let totalPages = 1;
+  const allOrders = [];
+  while (page <= totalPages) {
+    const res = await apiClient.get(`/orders?limit=${limit}&page=${page}`);
+    const data = res?.data || {};
+    const rows = Array.isArray(data.orders) ? data.orders : [];
+    allOrders.push(...rows);
+    totalPages = Math.max(Number(data?.pagination?.totalPages) || 1, 1);
+    page += 1;
+  }
+  return allOrders;
+}
+
+async function fetchPrimaryInvoiceTransactions() {
+  const res = await apiClient.get('/inventory/transactions?transactionType=SALE_STOCK');
+  const rows = Array.isArray(res?.data?.transactions) ? res.data.transactions : [];
+  return rows.filter((txn) => {
+    const status = String(txn?.requestStatus || '').toUpperCase();
+    if (!['DISPATCHED', 'DELIVERED'].includes(status)) return false;
+    return isPrimaryTransaction(txn);
+  });
+}
+
+function isPrimaryTransaction(txn) {
+  const sourceRole = String(txn?.requestSourceRole || txn?.fromEntityType || '').toLowerCase();
+  if (sourceRole.includes('brand') || sourceRole.includes('distributor')) return true;
+  const toEntityType = String(txn?.toEntityType || '').toLowerCase();
+  return toEntityType === 'brand' || toEntityType === 'distributor';
+}
+
+function mapPrimaryTransactionToInvoice(txn) {
+  const normalizedItems = Array.isArray(txn?.items)
+    ? txn.items.map((item) => ({
+      ...item,
+      quantity: Number(item?.totalPacks || item?.quantity || 0),
+      unitPrice: Number(item?.onePackPrice || item?.unitPrice || 0),
+    }))
+    : [];
+
+  return {
+    _id: txn?._id || txn?.transactionCode,
+    orderNo: txn?.transactionCode || txn?._id,
+    invoiceNo: txn?.transactionCode || txn?._id,
+    saleType: 'primary',
+    distributorName: txn?.distributorName || txn?.fromEntityName || txn?.toEntityName || '-',
+    territoryName: txn?.territory || txn?.territoryName || '-',
+    totalAmount: Number(txn?.grandTotal || txn?.totalAmount || txn?.subtotal || 0),
+    updatedAt: txn?.requestStatusUpdatedAt || txn?.updatedAt || txn?.transactionAt || txn?.createdAt,
+    status: String(txn?.requestStatus || 'DISPATCHED').toLowerCase(),
+    items: normalizedItems,
+    toWarehouseName: txn?.warehouseName || '',
+    fromEntityName: txn?.fromEntityName || '',
+    customerName: txn?.distributorName || txn?.toEntityName || '',
+  };
+}
+
+function resolveSaleType(order) {
+  const saleType = String(order?.saleType || '').trim().toLowerCase();
+  if (saleType === 'primary' || saleType === 'secondary') return saleType;
+
+  const sourceType = String(order?.sourceType || '').trim().toLowerCase();
+  if (sourceType === 'brand' || sourceType === 'distributor') return 'primary';
+  if (sourceType === 'customer' || sourceType === 'order_booker') return 'secondary';
+
+  const customerType = String(order?.customerType || '').trim().toLowerCase();
+  if (customerType === 'brand' || customerType === 'distributor') return 'primary';
+  if (customerType === 'customer' || customerType === 'salesman') return 'secondary';
+
+  const fromEntityRole = String(order?.fromEntityRole || '').trim().toLowerCase();
+  if (fromEntityRole.includes('brand') || fromEntityRole.includes('distributor')) return 'primary';
+
+  return 'primary';
 }
 
 function InvoiceTable({ title, rows }) {
