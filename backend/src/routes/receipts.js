@@ -42,6 +42,11 @@ function isSystemLevelAdmin(role) {
   return normalized === "admin" || normalized === "system admin";
 }
 
+function isAdminRole(role) {
+  const normalized = normalizeRole(role);
+  return ["admin", "system admin", "company admin"].includes(normalized);
+}
+
 async function resolveTenantDbName(companyId, companyName = "") {
   const normalizedCompanyId = asText(companyId);
   const normalizedCompanyName = asText(companyName);
@@ -88,8 +93,8 @@ router.post("/", requireAuth, async (req, res) => {
       req.body?.companyName || req.query?.companyName
     );
     const body = req.body || {};
-    const role = String(req.user?.role || "").toLowerCase();
-    if (!canAccessOwn(role) && role !== "admin") {
+    const role = normalizeRole(req.user?.role);
+    if (!canAccessOwn(role) && !isAdminRole(role)) {
       return res.status(403).json({ ok: false, message: "Only payer roles can create receipts" });
     }
 
@@ -147,10 +152,10 @@ router.post("/", requireAuth, async (req, res) => {
 router.get("/", requireAuth, async (req, res) => {
   try {
     const { ReceiptModel } = await getScopedReceiptModels(req, req.query?.companyId, req.query?.companyName);
-    const role = String(req.user?.role || "").toLowerCase();
+    const role = normalizeRole(req.user?.role);
     const query = {};
 
-    if (role !== "admin") {
+    if (!isAdminRole(role)) {
       query.payerUserId = req.user.uid;
     }
 
@@ -187,8 +192,8 @@ router.patch("/:id/attachment", requireAuth, async (req, res) => {
     const receipt = await ReceiptModel.findById(req.params.id);
     if (!receipt) return res.status(404).json({ ok: false, message: "Receipt not found" });
 
-    const role = String(req.user?.role || "").toLowerCase();
-    const isAdmin = role === "admin";
+    const role = normalizeRole(req.user?.role);
+    const isAdmin = isAdminRole(role);
     const isOwner = String(receipt.payerUserId || "") === String(req.user.uid || "");
 
     if (!isAdmin && !isOwner) {
