@@ -44,10 +44,13 @@ export default function FinanceInvoicesPage() {
     [orders]
   );
   const primaryInvoices = useMemo(
-    () => deliveredInvoices.filter((o) => String(o.saleType || "").toLowerCase() === "primary"),
+    () => deliveredInvoices.filter((o) => resolveSaleType(o) === "primary"),
     [deliveredInvoices]
   );
-  const secondaryInvoices = useMemo(() => deliveredInvoices.filter((o) => String(o.saleType || "").toLowerCase() === "secondary"), [deliveredInvoices]);
+  const secondaryInvoices = useMemo(
+    () => deliveredInvoices.filter((o) => resolveSaleType(o) === "secondary"),
+    [deliveredInvoices]
+  );
 
   return (
     <AdminShell title="Invoices" user={null}>
@@ -100,7 +103,7 @@ function InvoiceTable({ title, rows, loading }) {
             rows.map((o) => (
               <tr key={o._id}>
                 <td className="px-3 py-2 border-b font-medium text-zinc-900">{o.orderNo || o.invoiceNo || o._id}</td>
-                <td className="px-3 py-2 border-b">{o.saleType || "-"}</td>
+                <td className="px-3 py-2 border-b">{resolveSaleType(o)}</td>
                 <td className="px-3 py-2 border-b">{o.distributorName || o.customerName || o.distributorId || "-"}</td>
                 <td className="px-3 py-2 border-b">{o.territoryName || o.areaName || "-"}</td>
                 <td className="px-3 py-2 border-b">PKR {Number(o.totalAmount || 0).toLocaleString()}</td>
@@ -114,6 +117,24 @@ function InvoiceTable({ title, rows, loading }) {
       </table>
     </div>
   );
+}
+
+function resolveSaleType(order) {
+  const saleType = String(order?.saleType || "").trim().toLowerCase();
+  if (saleType === "primary" || saleType === "secondary") return saleType;
+
+  const sourceType = String(order?.sourceType || "").trim().toLowerCase();
+  if (sourceType === "brand" || sourceType === "distributor") return "primary";
+  if (sourceType === "customer" || sourceType === "order_booker") return "secondary";
+
+  const customerType = String(order?.customerType || "").trim().toLowerCase();
+  if (customerType === "brand" || customerType === "distributor") return "primary";
+  if (customerType === "customer" || customerType === "salesman") return "secondary";
+
+  const fromEntityRole = String(order?.fromEntityRole || "").trim().toLowerCase();
+  if (fromEntityRole.includes("brand") || fromEntityRole.includes("distributor")) return "primary";
+
+  return "primary";
 }
 
 function printOrderInvoice(order) {
