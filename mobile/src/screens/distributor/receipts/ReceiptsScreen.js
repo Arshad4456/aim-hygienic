@@ -30,11 +30,12 @@ export default function ReceiptsScreen() {
     setLoading(true);
     setErr('');
     try {
-      const [receiptsRes, accountsRes, usersRes, ordersRes] = await Promise.allSettled([
+      const [receiptsRes, accountsRes, usersRes, ordersRes, primaryTxRes] = await Promise.allSettled([
         apiClient.get('/receipts'),
         apiClient.get('/accounts'),
         apiClient.get('/users'),
-        apiClient.get('/orders?limit=300'),
+        fetchPagedOrders(),
+        apiClient.get('/inventory/transactions?transactionType=SALE_STOCK'),
       ]);
 
       setRows(receiptsRes.status === 'fulfilled' ? receiptsRes.value?.data?.receipts || [] : []);
@@ -53,13 +54,22 @@ export default function ReceiptsScreen() {
           : []
       );
 
-      setInvoices(
+      const orderInvoices =
         ordersRes.status === 'fulfilled'
-          ? (ordersRes.value?.data?.orders || []).filter((x) =>
-              ['approved', 'dispatched', 'delivered'].includes(String(x.status || '').toLowerCase())
-            )
-          : []
-      );
+          ? (ordersRes.value || []).filter((x) => ['approved', 'dispatched', 'delivered'].includes(String(x.status || '').toLowerCase()))
+          : [];
+      const primaryInvoices =
+        primaryTxRes.status === 'fulfilled'
+          ? mapPrimaryTransactionsToInvoices(primaryTxRes.value?.data?.transactions || [])
+          : [];
+
+      const byInvoiceNo = new Map();
+      [...orderInvoices, ...primaryInvoices].forEach((item) => {
+        const key = item.orderNo || item.invoiceNo || item._id;
+        if (!key) return;
+        byInvoiceNo.set(key, item);
+      });
+      setInvoices(Array.from(byInvoiceNo.values()));
     } catch (e) {
       setErr(e.message || 'Failed to load receipts');
     } finally {
@@ -274,6 +284,37 @@ export default function ReceiptsScreen() {
       </Card>
     </ScrollView>
   );
+}
+
+async function fetchPagedOrders() {
+  const limit = 200;
+  let page = 1;
+  let totalPages = 1;
+  const allOrders = [];
+  while (page <= totalPages) {
+    const res = await apiClient.get(`/orders?limit=${limit}&page=${page}`);
+    const data = res?.data || {};
+    const rows = Array.isArray(data.orders) ? data.orders : [];
+    allOrders.push(...rows);
+    totalPages = Math.max(Number(data?.pagination?.totalPages) || 1, 1);
+    page += 1;
+  }
+  return allOrders;
+}
+
+function mapPrimaryTransactionsToInvoices(transactions = []) {
+  return transactions
+    .filter((txn) => {
+      const status = String(txn?.requestStatus || '').toUpperCase();
+      return ['DISPATCHED', 'DELIVERED'].includes(status);
+    })
+    .map((txn) => ({
+      _id: txn?._id || txn?.transactionCode,
+      orderNo: txn?.transactionCode || txn?._id,
+      invoiceNo: txn?.transactionCode || txn?._id,
+      saleType: 'primary',
+      status: String(txn?.requestStatus || '').toLowerCase(),
+    }));
 }
 
 function Input({ label, value, onChangeText, placeholder, keyboardType }) {
