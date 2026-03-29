@@ -16,15 +16,17 @@ function useNow() {
 export default function FinanceInvoicesPage() {
   const now = useNow();
   const [orders, setOrders] = useState([]);
+  const [primaryPayments, setPrimaryPayments] = useState([]);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let ignore = false;
-    apiFetch("/orders?limit=200")
-      .then((data) => {
+    Promise.all([apiFetch("/orders?limit=500"), apiFetch("/payments/primary?status=all")])
+      .then(([ordersData, primaryData]) => {
         if (ignore) return;
-        setOrders(data.orders || []);
+        setOrders(ordersData.orders || []);
+        setPrimaryPayments(primaryData.primaryPayments || []);
       })
       .catch((e) => {
         if (ignore) return;
@@ -43,7 +45,29 @@ export default function FinanceInvoicesPage() {
     () => orders.filter((o) => String(o.status || "").toLowerCase() === "delivered"),
     [orders]
   );
-  const primaryInvoices = useMemo(() => deliveredInvoices.filter((o) => String(o.saleType || "").toLowerCase() === "primary"), [deliveredInvoices]);
+  const primaryOrderInvoices = useMemo(
+    () => deliveredInvoices.filter((o) => String(o.saleType || "").toLowerCase() === "primary"),
+    [deliveredInvoices]
+  );
+  const primaryPaymentInvoices = useMemo(
+    () =>
+      (primaryPayments || []).map((p) => ({
+        _id: `primary-${p._id || p.invoiceNo}`,
+        orderNo: p.invoiceNo,
+        invoiceNo: p.invoiceNo,
+        saleType: "primary",
+        distributorName: p.distributorName,
+        territoryName: p.territoryName,
+        totalAmount: Number(p.amountTotal || 0),
+        updatedAt: p.payDate || p.createdAt,
+        status: Number(p.amountRemaining || 0) <= 0 ? "closed" : "open",
+      })),
+    [primaryPayments]
+  );
+  const primaryInvoices = useMemo(() => {
+    if (primaryOrderInvoices.length) return primaryOrderInvoices;
+    return primaryPaymentInvoices;
+  }, [primaryOrderInvoices, primaryPaymentInvoices]);
   const secondaryInvoices = useMemo(() => deliveredInvoices.filter((o) => String(o.saleType || "").toLowerCase() === "secondary"), [deliveredInvoices]);
 
   return (
@@ -102,7 +126,7 @@ function InvoiceTable({ title, rows, loading }) {
                 <td className="px-3 py-2 border-b">{o.territoryName || o.areaName || "-"}</td>
                 <td className="px-3 py-2 border-b">PKR {Number(o.totalAmount || 0).toLocaleString()}</td>
                 <td className="px-3 py-2 border-b">{o.updatedAt ? new Date(o.updatedAt).toLocaleDateString() : "-"}</td>
-                <td className="px-3 py-2 border-b"><span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700">Delivered</span></td>
+                <td className="px-3 py-2 border-b"><span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700">{String(o.status || "delivered").replaceAll("_", " ")}</span></td>
                 <td className="px-3 py-2 border-b"><button type="button" onClick={() => printOrderInvoice(o)} className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100">Invoice</button></td>
               </tr>
             ))

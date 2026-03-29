@@ -5,7 +5,9 @@ const Account = require("../models/Account");
 const AccountTransaction = require("../models/AccountTransaction");
 const SalesOrder = require("../models/SalesOrder");
 const User = require("../models/User");
+const Company = require("../models/Company");
 const { requireAuth, requireRole } = require("../utils/auth");
+const { toTenantDatabaseName } = require("../utils/tenantDatabases");
 
 const router = express.Router();
 
@@ -31,8 +33,60 @@ function canAccessOwn(role) {
   return ["customer", "distributor", "order booker", "orderbooker", "salesman"].includes(String(role || "").toLowerCase());
 }
 
+function normalizeRole(role) {
+  return String(role || "").trim().toLowerCase();
+}
+
+function isSystemLevelAdmin(role) {
+  const normalized = normalizeRole(role);
+  return normalized === "admin" || normalized === "system admin";
+}
+
+async function resolveTenantDbName(companyId, companyName = "") {
+  const normalizedCompanyId = asText(companyId);
+  const normalizedCompanyName = asText(companyName);
+  if (!normalizedCompanyId && !normalizedCompanyName) return "";
+  if (normalizedCompanyName) return toTenantDatabaseName(normalizedCompanyName, normalizedCompanyId || "company");
+  const company = await Company.findOne({ companyId: normalizedCompanyId }).select("name").lean();
+  return toTenantDatabaseName(company?.name || normalizedCompanyId, normalizedCompanyId || "company");
+}
+
+function getModelFromDb(db, baseModel) {
+  const modelName = baseModel.modelName;
+  return db.models[modelName] || db.model(modelName, baseModel.schema, baseModel.collection.name);
+}
+
+async function getScopedReceiptModels(req, requestedCompanyId = "", requestedCompanyName = "") {
+  const scopedCompanyId = isSystemLevelAdmin(req.user?.role)
+    ? asText(requestedCompanyId)
+    : asText(req.user?.companyId);
+  const scopedCompanyName = isSystemLevelAdmin(req.user?.role)
+    ? asText(requestedCompanyName)
+    : asText(req.user?.companyName);
+  if (!scopedCompanyId) {
+    return { ReceiptModel: Receipt, AccountModel: Account, AccountTransactionModel: AccountTransaction, SalesOrderModel: SalesOrder, UserModel: User };
+  }
+  const dbName = await resolveTenantDbName(scopedCompanyId, scopedCompanyName);
+  if (!dbName) {
+    return { ReceiptModel: Receipt, AccountModel: Account, AccountTransactionModel: AccountTransaction, SalesOrderModel: SalesOrder, UserModel: User };
+  }
+  const tenantDb = mongoose.connection.useDb(dbName, { useCache: true });
+  return {
+    ReceiptModel: getModelFromDb(tenantDb, Receipt),
+    AccountModel: getModelFromDb(tenantDb, Account),
+    AccountTransactionModel: getModelFromDb(tenantDb, AccountTransaction),
+    SalesOrderModel: getModelFromDb(tenantDb, SalesOrder),
+    UserModel: getModelFromDb(tenantDb, User),
+  };
+}
+
 router.post("/", requireAuth, async (req, res) => {
   try {
+    const { ReceiptModel, SalesOrderModel, UserModel } = await getScopedReceiptModels(
+      req,
+      req.body?.companyId || req.query?.companyId,
+      req.body?.companyName || req.query?.companyName
+    );
     const body = req.body || {};
     const role = String(req.user?.role || "").toLowerCase();
     if (!canAccessOwn(role) && role !== "admin") {
@@ -57,13 +111,13 @@ router.post("/", requireAuth, async (req, res) => {
       return res.status(400).json({ ok: false, message: "Received by person is required for cash payment" });
     }
 
-    const payer = await User.findById(req.user.uid).lean();
+    const payer = await UserModel.findById(req.user.uid).lean();
     const linkedInvoiceNo = asText(body.linkedInvoiceNo);
     const linkedOrder = linkedInvoiceNo
-      ? await SalesOrder.findOne({ $or: [{ orderNo: linkedInvoiceNo }, { invoiceNo: linkedInvoiceNo }] }).lean()
+      ? await SalesOrderModel.findOne({ $or: [{ orderNo: linkedInvoiceNo }, { invoiceNo: linkedInvoiceNo }] }).lean()
       : null;
 
-    const doc = await Receipt.create({
+    const doc = await ReceiptModel.create({
       receiptNo: makeReceiptNo(),
       receiptType: asText(body.receiptType || "invoice_payment").toLowerCase(),
       payerRole: req.user.role,
@@ -92,6 +146,7 @@ router.post("/", requireAuth, async (req, res) => {
 
 router.get("/", requireAuth, async (req, res) => {
   try {
+    const { ReceiptModel } = await getScopedReceiptModels(req, req.query?.companyId, req.query?.companyName);
     const role = String(req.user?.role || "").toLowerCase();
     const query = {};
 
@@ -111,7 +166,7 @@ router.get("/", requireAuth, async (req, res) => {
       if (to) query.paymentDate.$lte = to;
     }
 
-    const receipts = await Receipt.find(query)
+    const receipts = await ReceiptModel.find(query)
       .populate("paidToAccountId", "accountName bankName accountNumber accountType")
       .populate("receivedByUserId", "fullName role mobile")
       .sort({ status: 1, createdAt: -1 })
@@ -125,10 +180,11 @@ router.get("/", requireAuth, async (req, res) => {
 
 router.patch("/:id/attachment", requireAuth, async (req, res) => {
   try {
+    const { ReceiptModel } = await getScopedReceiptModels(req, req.body?.companyId || req.query?.companyId, req.body?.companyName || req.query?.companyName);
     const attachmentUrl = asText(req.body?.attachmentUrl);
     if (!attachmentUrl) return res.status(400).json({ ok: false, message: "attachmentUrl is required" });
 
-    const receipt = await Receipt.findById(req.params.id);
+    const receipt = await ReceiptModel.findById(req.params.id);
     if (!receipt) return res.status(404).json({ ok: false, message: "Receipt not found" });
 
     const role = String(req.user?.role || "").toLowerCase();
@@ -154,9 +210,14 @@ router.patch("/:id/attachment", requireAuth, async (req, res) => {
 router.post("/:id/approve", requireAuth, requireRole("admin"), async (req, res) => {
   const session = await mongoose.startSession();
   try {
+    const { ReceiptModel, AccountModel, AccountTransactionModel, SalesOrderModel } = await getScopedReceiptModels(
+      req,
+      req.body?.companyId || req.query?.companyId,
+      req.body?.companyName || req.query?.companyName
+    );
     let resultReceipt = null;
     await session.withTransaction(async () => {
-      const receipt = await Receipt.findById(req.params.id).session(session);
+      const receipt = await ReceiptModel.findById(req.params.id).session(session);
       if (!receipt) throw new Error("NOT_FOUND");
       if (receipt.status !== "pending") throw new Error("Already processed");
 
@@ -174,13 +235,13 @@ router.post("/:id/approve", requireAuth, requireRole("admin"), async (req, res) 
 
       let account = null;
       if (receipt.paymentMethod === "online") {
-        account = await Account.findById(receipt.paidToAccountId).session(session);
+        account = await AccountModel.findById(receipt.paidToAccountId).session(session);
       } else {
-        account = await Account.findOne({ accountType: "cash", status: "active" }).session(session);
+        account = await AccountModel.findOne({ accountType: "cash", status: "active" }).session(session);
       }
       if (!account) throw new Error("Target account not found");
 
-      const tx = await AccountTransaction.create([
+      const tx = await AccountTransactionModel.create([
         {
           accountId: account._id,
           type: "cash_in",
@@ -200,7 +261,7 @@ router.post("/:id/approve", requireAuth, requireRole("admin"), async (req, res) 
       await account.save({ session });
 
       if (receipt.linkedOrderId) {
-        const order = await SalesOrder.findById(receipt.linkedOrderId).session(session);
+        const order = await SalesOrderModel.findById(receipt.linkedOrderId).session(session);
         if (order) {
           order.notes = `${asText(order.notes)}\n[Receipt ${receipt.receiptNo}] +${receipt.amount}`.trim();
           await order.save({ session });
@@ -226,10 +287,11 @@ router.post("/:id/approve", requireAuth, requireRole("admin"), async (req, res) 
 
 router.post("/:id/reject", requireAuth, requireRole("admin"), async (req, res) => {
   try {
+    const { ReceiptModel } = await getScopedReceiptModels(req, req.body?.companyId || req.query?.companyId, req.body?.companyName || req.query?.companyName);
     const reason = asText(req.body?.reason);
     if (!reason) return res.status(400).json({ ok: false, message: "Rejection reason is required" });
 
-    const receipt = await Receipt.findById(req.params.id);
+    const receipt = await ReceiptModel.findById(req.params.id);
     if (!receipt) return res.status(404).json({ ok: false, message: "Receipt not found" });
     if (receipt.status !== "pending") return res.status(400).json({ ok: false, message: "Receipt already processed" });
 

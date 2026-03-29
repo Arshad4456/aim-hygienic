@@ -1,19 +1,62 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const { requireAuth } = require("../utils/auth");
 const InventoryMovement = require("../models/InventoryMovement");
 const Expense = require("../models/Expense");
 const Account = require("../models/Account");
+const Company = require("../models/Company");
 const User = require("../models/User");
 const Warehouse = require("../models/Warehouse");
 const StockTransfer = require("../models/StockTransfer");
 const Vehicle = require("../models/Vehicle");
 const Product = require("../models/Product");
 const Message = require("../models/Message");
+const { toTenantDatabaseName } = require("../utils/tenantDatabases");
 
 const router = express.Router();
 
 function safeNumber(value) {
   return Number.isFinite(Number(value)) ? Number(value) : 0;
+}
+
+function normalizeRole(role) {
+  return String(role || "").trim().toLowerCase();
+}
+
+function isSystemLevelAdmin(role) {
+  const normalized = normalizeRole(role);
+  return normalized === "admin" || normalized === "system admin";
+}
+
+async function resolveTenantDbName(companyId, companyName = "") {
+  const normalizedCompanyId = String(companyId || "").trim();
+  const normalizedCompanyName = String(companyName || "").trim();
+  if (!normalizedCompanyId && !normalizedCompanyName) return "";
+  if (normalizedCompanyName) return toTenantDatabaseName(normalizedCompanyName, normalizedCompanyId || "company");
+  const company = await Company.findOne({ companyId: normalizedCompanyId }).select("name").lean();
+  return toTenantDatabaseName(company?.name || normalizedCompanyId, normalizedCompanyId || "company");
+}
+
+function getModelFromDb(db, baseModel) {
+  const modelName = baseModel.modelName;
+  return db.models[modelName] || db.model(modelName, baseModel.schema, baseModel.collection.name);
+}
+
+async function getScopedFinanceModels(req, requestedCompanyId = "", requestedCompanyName = "") {
+  const scopedCompanyId = isSystemLevelAdmin(req.user?.role)
+    ? String(requestedCompanyId || "").trim()
+    : String(req.user?.companyId || "").trim();
+  const scopedCompanyName = isSystemLevelAdmin(req.user?.role)
+    ? String(requestedCompanyName || "").trim()
+    : String(req.user?.companyName || "").trim();
+  if (!scopedCompanyId) return { ExpenseModel: Expense, AccountModel: Account };
+  const dbName = await resolveTenantDbName(scopedCompanyId, scopedCompanyName);
+  if (!dbName) return { ExpenseModel: Expense, AccountModel: Account };
+  const tenantDb = mongoose.connection.useDb(dbName, { useCache: true });
+  return {
+    ExpenseModel: getModelFromDb(tenantDb, Expense),
+    AccountModel: getModelFromDb(tenantDb, Account),
+  };
 }
 
 router.get("/overview", requireAuth, async (req, res) => {
@@ -252,7 +295,8 @@ router.get("/inventory", requireAuth, async (req, res) => {
 
 router.get("/finance", requireAuth, async (req, res) => {
   try {
-    const [expenseTotals] = await Expense.aggregate([
+    const { ExpenseModel, AccountModel } = await getScopedFinanceModels(req, req.query?.companyId, req.query?.companyName);
+    const [expenseTotals] = await ExpenseModel.aggregate([
       {
         $group: {
           _id: null,
@@ -266,7 +310,7 @@ router.get("/finance", requireAuth, async (req, res) => {
       },
     ]);
 
-    const expensesByCategory = await Expense.aggregate([
+    const expensesByCategory = await ExpenseModel.aggregate([
       {
         $group: {
           _id: { $ifNull: ["$category", "Uncategorized"] },
@@ -277,7 +321,7 @@ router.get("/finance", requireAuth, async (req, res) => {
       { $sort: { total: -1 } },
     ]);
 
-    const accounts = await Account.find()
+    const accounts = await AccountModel.find()
       .select("accountName accountType currency currentBalance")
       .sort({ accountName: 1 })
       .lean();
