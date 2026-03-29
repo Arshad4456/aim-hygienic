@@ -3,7 +3,9 @@ const mongoose = require("mongoose");
 const Account = require("../models/Account");
 const AccountTransaction = require("../models/AccountTransaction");
 const AccountAuditLog = require("../models/AccountAuditLog");
+const Company = require("../models/Company");
 const { requireAuth, requireRole } = require("../utils/auth");
+const { toTenantDatabaseName } = require("../utils/tenantDatabases");
 
 const router = express.Router();
 
@@ -21,6 +23,53 @@ const REFERENCE_TYPES = [
 function toNumber(value) {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
+}
+
+function normalizeRole(role) {
+  return String(role || "").trim().toLowerCase();
+}
+
+function isSystemLevelAdmin(role) {
+  const normalized = normalizeRole(role);
+  return normalized === "admin" || normalized === "system admin";
+}
+
+async function resolveTenantDbName(companyId, companyName = "") {
+  const normalizedCompanyId = String(companyId || "").trim();
+  const normalizedCompanyName = String(companyName || "").trim();
+  if (!normalizedCompanyId && !normalizedCompanyName) return "";
+  if (normalizedCompanyName) return toTenantDatabaseName(normalizedCompanyName, normalizedCompanyId || "company");
+  const company = await Company.findOne({ companyId: normalizedCompanyId }).select("name").lean();
+  return toTenantDatabaseName(company?.name || normalizedCompanyId, normalizedCompanyId || "company");
+}
+
+function getModelFromDb(db, baseModel) {
+  const modelName = baseModel.modelName;
+  return db.models[modelName] || db.model(modelName, baseModel.schema, baseModel.collection.name);
+}
+
+async function getScopedAccountModels(req, requestedCompanyId = "", requestedCompanyName = "") {
+  const scopedCompanyId = isSystemLevelAdmin(req.user?.role)
+    ? String(requestedCompanyId || "").trim()
+    : String(req.user?.companyId || "").trim();
+  const scopedCompanyName = isSystemLevelAdmin(req.user?.role)
+    ? String(requestedCompanyName || "").trim()
+    : String(req.user?.companyName || "").trim();
+
+  if (!scopedCompanyId) {
+    return { AccountModel: Account, AccountTransactionModel: AccountTransaction, AccountAuditLogModel: AccountAuditLog };
+  }
+
+  const dbName = await resolveTenantDbName(scopedCompanyId, scopedCompanyName);
+  if (!dbName) {
+    return { AccountModel: Account, AccountTransactionModel: AccountTransaction, AccountAuditLogModel: AccountAuditLog };
+  }
+  const tenantDb = mongoose.connection.useDb(dbName, { useCache: true });
+  return {
+    AccountModel: getModelFromDb(tenantDb, Account),
+    AccountTransactionModel: getModelFromDb(tenantDb, AccountTransaction),
+    AccountAuditLogModel: getModelFromDb(tenantDb, AccountAuditLog),
+  };
 }
 
 function startOfDay(date = new Date()) {
@@ -43,12 +92,13 @@ function maskAccountNumber(accountNumber = "") {
   return `${"•".repeat(Math.max(clean.length - 4, 0))}${tail}`;
 }
 
-async function logAudit({ accountId, action, description, metadata, createdBy }) {
-  await AccountAuditLog.create({ accountId, action, description, metadata, createdBy });
+async function logAudit({ AccountAuditLogModel = AccountAuditLog, accountId, action, description, metadata, createdBy }) {
+  await AccountAuditLogModel.create({ accountId, action, description, metadata, createdBy });
 }
 
 router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
   try {
+    const { AccountModel, AccountTransactionModel, AccountAuditLogModel } = await getScopedAccountModels(req, req.body?.companyId || req.query?.companyId, req.body?.companyName || req.query?.companyName);
     const body = req.body || {};
     const accountType = String(body.accountType || "").trim().toLowerCase();
     if (!ACCOUNT_TYPES.includes(accountType)) return res.status(400).json({ ok: false, message: "Invalid account type" });
@@ -86,9 +136,9 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
       }
     }
 
-    const doc = await Account.create(payload);
+    const doc = await AccountModel.create(payload);
 
-    await AccountTransaction.create({
+    await AccountTransactionModel.create({
       accountId: doc._id,
       type: openingBalance >= 0 ? "cash_in" : "cash_out",
       amount: Math.abs(openingBalance),
@@ -100,6 +150,7 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
     });
 
     await logAudit({
+      AccountAuditLogModel,
       accountId: doc._id,
       action: "account_created",
       description: "Account created with opening balance",
@@ -116,10 +167,11 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
 
 router.get("/", requireAuth, async (req, res) => {
   try {
+    const { AccountModel } = await getScopedAccountModels(req, req.query?.companyId, req.query?.companyName);
     const query = {};
     if (req.query.status) query.status = String(req.query.status);
     if (req.query.accountType) query.accountType = String(req.query.accountType);
-    const items = await Account.find(query).sort({ createdAt: -1 }).lean();
+    const items = await AccountModel.find(query).sort({ createdAt: -1 }).lean();
 
     const accounts = items.map((item) => ({
       ...item,
@@ -140,17 +192,18 @@ router.get("/", requireAuth, async (req, res) => {
 
 router.get("/:id", requireAuth, async (req, res) => {
   try {
+    const { AccountModel, AccountTransactionModel } = await getScopedAccountModels(req, req.query?.companyId, req.query?.companyName);
     const accountId = toObjectId(req.params.id);
     if (!accountId) return res.status(400).json({ ok: false, message: "Invalid id" });
 
-    const account = await Account.findById(accountId).lean();
+    const account = await AccountModel.findById(accountId).lean();
     if (!account) return res.status(404).json({ ok: false, message: "Not found" });
 
     const todayStart = startOfDay();
     const monthStart = startOfMonth();
 
     const [daily, monthly, txCount, largestTx] = await Promise.all([
-      AccountTransaction.aggregate([
+      AccountTransactionModel.aggregate([
         { $match: { accountId, transactionDate: { $gte: todayStart } } },
         {
           $group: {
@@ -160,7 +213,7 @@ router.get("/:id", requireAuth, async (req, res) => {
           },
         },
       ]),
-      AccountTransaction.aggregate([
+      AccountTransactionModel.aggregate([
         { $match: { accountId, transactionDate: { $gte: monthStart } } },
         {
           $group: {
@@ -170,8 +223,8 @@ router.get("/:id", requireAuth, async (req, res) => {
           },
         },
       ]),
-      AccountTransaction.countDocuments({ accountId }),
-      AccountTransaction.findOne({ accountId }).sort({ amount: -1 }).lean(),
+      AccountTransactionModel.countDocuments({ accountId }),
+      AccountTransactionModel.findOne({ accountId }).sort({ amount: -1 }).lean(),
     ]);
 
     return res.json({
@@ -203,10 +256,11 @@ router.get("/:id", requireAuth, async (req, res) => {
 
 router.get("/:id/transactions", requireAuth, async (req, res) => {
   try {
+    const { AccountTransactionModel } = await getScopedAccountModels(req, req.query?.companyId, req.query?.companyName);
     const accountId = toObjectId(req.params.id);
     if (!accountId) return res.status(400).json({ ok: false, message: "Invalid id" });
 
-    const tx = await AccountTransaction.find({ accountId }).sort({ transactionDate: -1, createdAt: -1 }).lean();
+    const tx = await AccountTransactionModel.find({ accountId }).sort({ transactionDate: -1, createdAt: -1 }).lean();
     return res.json({ ok: true, transactions: tx });
   } catch (_e) {
     return res.status(500).json({ ok: false, message: "Failed to load transactions" });
@@ -215,6 +269,7 @@ router.get("/:id/transactions", requireAuth, async (req, res) => {
 
 router.post("/:id/transactions", requireAuth, requireRole("admin", "manage director", "ceo"), async (req, res) => {
   try {
+    const { AccountModel, AccountTransactionModel, AccountAuditLogModel } = await getScopedAccountModels(req, req.body?.companyId || req.query?.companyId, req.body?.companyName || req.query?.companyName);
     const accountId = toObjectId(req.params.id);
     if (!accountId) return res.status(400).json({ ok: false, message: "Invalid id" });
 
@@ -230,7 +285,7 @@ router.post("/:id/transactions", requireAuth, requireRole("admin", "manage direc
     const description = String(body.description || "").trim();
     if (!description) return res.status(400).json({ ok: false, message: "Description is required" });
 
-    const account = await Account.findById(accountId);
+    const account = await AccountModel.findById(accountId);
     if (!account) return res.status(404).json({ ok: false, message: "Account not found" });
 
     const allowNegativeBalance = String(process.env.ALLOW_NEGATIVE_BALANCE || "false") === "true";
@@ -239,7 +294,7 @@ router.post("/:id/transactions", requireAuth, requireRole("admin", "manage direc
       return res.status(400).json({ ok: false, message: "Transaction rejected. Negative balance is not allowed." });
     }
 
-    const trx = await AccountTransaction.create({
+    const trx = await AccountTransactionModel.create({
       accountId,
       type,
       amount,
@@ -256,6 +311,7 @@ router.post("/:id/transactions", requireAuth, requireRole("admin", "manage direc
     await account.save();
 
     await logAudit({
+      AccountAuditLogModel,
       accountId,
       action: "transaction_added",
       description: `Added ${type} transaction`,
@@ -271,15 +327,16 @@ router.post("/:id/transactions", requireAuth, requireRole("admin", "manage direc
 
 router.post("/:id/transactions/:transactionId/reverse", requireAuth, requireRole("admin"), async (req, res) => {
   try {
+    const { AccountModel, AccountTransactionModel, AccountAuditLogModel } = await getScopedAccountModels(req, req.body?.companyId || req.query?.companyId, req.body?.companyName || req.query?.companyName);
     const accountId = toObjectId(req.params.id);
     const transactionId = toObjectId(req.params.transactionId);
     if (!accountId || !transactionId) return res.status(400).json({ ok: false, message: "Invalid id" });
 
-    const original = await AccountTransaction.findOne({ _id: transactionId, accountId });
+    const original = await AccountTransactionModel.findOne({ _id: transactionId, accountId });
     if (!original) return res.status(404).json({ ok: false, message: "Transaction not found" });
 
     const reverseType = original.type === "cash_in" ? "cash_out" : "cash_in";
-    const reversal = await AccountTransaction.create({
+    const reversal = await AccountTransactionModel.create({
       accountId,
       type: reverseType,
       amount: original.amount,
@@ -291,12 +348,13 @@ router.post("/:id/transactions/:transactionId/reverse", requireAuth, requireRole
       createdBy: req.user.uid,
     });
 
-    const account = await Account.findById(accountId);
+    const account = await AccountModel.findById(accountId);
     account.currentBalance = reverseType === "cash_in" ? account.currentBalance + original.amount : account.currentBalance - original.amount;
     account.updatedBy = req.user.uid;
     await account.save();
 
     await logAudit({
+      AccountAuditLogModel,
       accountId,
       action: "transaction_reversed",
       description: "Reversal transaction created",
@@ -312,6 +370,7 @@ router.post("/:id/transactions/:transactionId/reverse", requireAuth, requireRole
 
 router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
   try {
+    const { AccountModel, AccountAuditLogModel } = await getScopedAccountModels(req, req.body?.companyId || req.query?.companyId, req.body?.companyName || req.query?.companyName);
     const body = req.body || {};
     const updates = {
       accountName: String(body.accountName || "").trim(),
@@ -330,10 +389,11 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
       updatedBy: req.user.uid,
     };
 
-    const updated = await Account.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
+    const updated = await AccountModel.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
     if (!updated) return res.status(404).json({ ok: false, message: "Not found" });
 
     await logAudit({
+      AccountAuditLogModel,
       accountId: updated._id,
       action: "account_updated",
       description: "Account information updated",
@@ -350,7 +410,8 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
 
 router.patch("/:id/deactivate", requireAuth, requireRole("admin"), async (req, res) => {
   try {
-    const updated = await Account.findByIdAndUpdate(
+    const { AccountModel, AccountAuditLogModel } = await getScopedAccountModels(req, req.body?.companyId || req.query?.companyId, req.body?.companyName || req.query?.companyName);
+    const updated = await AccountModel.findByIdAndUpdate(
       req.params.id,
       { status: "inactive", updatedBy: req.user.uid },
       { new: true, runValidators: true }
@@ -358,6 +419,7 @@ router.patch("/:id/deactivate", requireAuth, requireRole("admin"), async (req, r
     if (!updated) return res.status(404).json({ ok: false, message: "Not found" });
 
     await logAudit({
+      AccountAuditLogModel,
       accountId: updated._id,
       action: "account_deactivated",
       description: "Account deactivated",
@@ -374,15 +436,16 @@ router.patch("/:id/deactivate", requireAuth, requireRole("admin"), async (req, r
 
 router.delete("/:id", requireAuth, requireRole("admin"), async (req, res) => {
   try {
-    const account = await Account.findById(req.params.id);
+    const { AccountModel, AccountTransactionModel, AccountAuditLogModel } = await getScopedAccountModels(req, req.body?.companyId || req.query?.companyId, req.body?.companyName || req.query?.companyName);
+    const account = await AccountModel.findById(req.params.id);
     if (!account) return res.status(404).json({ ok: false, message: "Not found" });
 
     await Promise.all([
-      AccountTransaction.deleteMany({ accountId: account._id }),
-      AccountAuditLog.deleteMany({ accountId: account._id }),
+      AccountTransactionModel.deleteMany({ accountId: account._id }),
+      AccountAuditLogModel.deleteMany({ accountId: account._id }),
     ]);
 
-    await Account.deleteOne({ _id: account._id });
+    await AccountModel.deleteOne({ _id: account._id });
 
     return res.json({ ok: true });
   } catch (_e) {

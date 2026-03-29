@@ -7,7 +7,9 @@ const User = require("../models/User");
 const Warehouse = require("../models/Warehouse");
 const PrimaryPayment = require("../models/PrimaryPayment");
 const SecondaryPayment = require("../models/SecondaryPayment");
+const Company = require("../models/Company");
 const { requireAuth } = require("../utils/auth");
+const { toTenantDatabaseName } = require("../utils/tenantDatabases");
 
 const router = express.Router();
 
@@ -27,6 +29,53 @@ function isWarehouseManagerUser(user) {
 
 function isDistributorUser(user) {
   return normalizeRole(user?.role) === "distributor";
+}
+
+function isSystemLevelAdmin(role) {
+  const normalized = normalizeRole(role);
+  return normalized === "admin" || normalized === "system admin";
+}
+
+async function resolveTenantDbName(companyId, companyName = "") {
+  const normalizedCompanyId = String(companyId || "").trim();
+  const normalizedCompanyName = String(companyName || "").trim();
+  if (!normalizedCompanyId && !normalizedCompanyName) return "";
+  if (normalizedCompanyName) return toTenantDatabaseName(normalizedCompanyName, normalizedCompanyId || "company");
+  const company = await Company.findOne({ companyId: normalizedCompanyId }).select("name").lean();
+  return toTenantDatabaseName(company?.name || normalizedCompanyId, normalizedCompanyId || "company");
+}
+
+function getModelFromDb(db, baseModel) {
+  const modelName = baseModel.modelName;
+  return db.models[modelName] || db.model(modelName, baseModel.schema, baseModel.collection.name);
+}
+
+async function getScopedPaymentModels(req, requestedCompanyId = "", requestedCompanyName = "") {
+  const scopedCompanyId = isSystemLevelAdmin(req.user?.role)
+    ? String(requestedCompanyId || "").trim()
+    : String(req.user?.companyId || "").trim();
+  const scopedCompanyName = isSystemLevelAdmin(req.user?.role)
+    ? String(requestedCompanyName || "").trim()
+    : String(req.user?.companyName || "").trim();
+
+  if (!scopedCompanyId) {
+    return { RegionModel: Region, ZoneModel: Zone, AreaModel: Area, UserModel: User, WarehouseModel: Warehouse, PrimaryPaymentModel: PrimaryPayment, SecondaryPaymentModel: SecondaryPayment };
+  }
+
+  const dbName = await resolveTenantDbName(scopedCompanyId, scopedCompanyName);
+  if (!dbName) {
+    return { RegionModel: Region, ZoneModel: Zone, AreaModel: Area, UserModel: User, WarehouseModel: Warehouse, PrimaryPaymentModel: PrimaryPayment, SecondaryPaymentModel: SecondaryPayment };
+  }
+  const tenantDb = mongoose.connection.useDb(dbName, { useCache: true });
+  return {
+    RegionModel: getModelFromDb(tenantDb, Region),
+    ZoneModel: getModelFromDb(tenantDb, Zone),
+    AreaModel: getModelFromDb(tenantDb, Area),
+    UserModel: getModelFromDb(tenantDb, User),
+    WarehouseModel: getModelFromDb(tenantDb, Warehouse),
+    PrimaryPaymentModel: getModelFromDb(tenantDb, PrimaryPayment),
+    SecondaryPaymentModel: getModelFromDb(tenantDb, SecondaryPayment),
+  };
 }
 
 function startOfDay(value) {
@@ -67,7 +116,7 @@ function getDeadlineMeta(primary, dueSoonDays = 7) {
   return { deadlineStatus: "on_track", daysToDeadline };
 }
 
-async function resolveDistributorScope(req) {
+async function resolveDistributorScope(req, UserModel = User) {
   const tokenDistributorId = String(req.user?.distributorId || "").trim();
   if (toObjectId(tokenDistributorId)) {
     return { distributorObjectId: toObjectId(tokenDistributorId), distributorId: tokenDistributorId };
@@ -82,12 +131,12 @@ async function resolveDistributorScope(req) {
 
   if (!lookupOr.length) return { distributorObjectId: null, distributorId: tokenDistributorId };
 
-  const dbUser = await User.findOne({ $or: lookupOr }).select("_id role").lean();
+  const dbUser = await UserModel.findOne({ $or: lookupOr }).select("_id role").lean();
   const distributorObjectId = dbUser?._id && normalizeRole(dbUser.role) === "distributor" ? toObjectId(dbUser._id) : null;
   return { distributorObjectId, distributorId: distributorObjectId ? String(distributorObjectId) : tokenDistributorId };
 }
 
-async function resolveScopedWarehouse(req) {
+async function resolveScopedWarehouse(req, UserModel = User, WarehouseModel = Warehouse) {
   if (!isWarehouseManagerUser(req.user)) return null;
 
   const refs = new Set();
@@ -109,28 +158,28 @@ async function resolveScopedWarehouse(req) {
     dbUserQuery.push({ username: tokenUsername.toLowerCase() });
   }
 
-  const dbUser = dbUserQuery.length > 0 ? await User.findOne({ $or: dbUserQuery }).select("warehouseId warehouseName").lean() : null;
+  const dbUser = dbUserQuery.length > 0 ? await UserModel.findOne({ $or: dbUserQuery }).select("warehouseId warehouseName").lean() : null;
   const dbWarehouseId = String(dbUser?.warehouseId || "").trim();
   const dbWarehouseName = String(dbUser?.warehouseName || "").trim();
   if (dbWarehouseId) refs.add(dbWarehouseId);
   if (dbWarehouseName) refs.add(dbWarehouseName);
 
   for (const ref of refs) {
-    const warehouseById = toObjectId(ref) ? await Warehouse.findById(ref).lean() : null;
+    const warehouseById = toObjectId(ref) ? await WarehouseModel.findById(ref).lean() : null;
     if (warehouseById) return warehouseById;
 
-    const warehouseByCode = await Warehouse.findOne({ warehouseId: ref }).lean();
+    const warehouseByCode = await WarehouseModel.findOne({ warehouseId: ref }).lean();
     if (warehouseByCode) return warehouseByCode;
 
-    const warehouseByName = await Warehouse.findOne({ name: ref }).lean();
+    const warehouseByName = await WarehouseModel.findOne({ name: ref }).lean();
     if (warehouseByName) return warehouseByName;
   }
 
   return null;
 }
 
-async function ensureWarehouseManagerHasWarehouse(req, res) {
-  const warehouse = await resolveScopedWarehouse(req);
+async function ensureWarehouseManagerHasWarehouse(req, res, UserModel = User, WarehouseModel = Warehouse) {
+  const warehouse = await resolveScopedWarehouse(req, UserModel, WarehouseModel);
   if (!warehouse) {
     res.status(403).json({ ok: false, message: "Warehouse manager is not mapped to a warehouse" });
     return null;
@@ -141,16 +190,17 @@ async function ensureWarehouseManagerHasWarehouse(req, res) {
 
 router.get("/masters", requireAuth, async (req, res) => {
   try {
-    const scopedWarehouse = isWarehouseManagerUser(req.user) ? await ensureWarehouseManagerHasWarehouse(req, res) : null;
+    const { RegionModel, ZoneModel, AreaModel, UserModel, WarehouseModel } = await getScopedPaymentModels(req, req.query?.companyId, req.query?.companyName);
+    const scopedWarehouse = isWarehouseManagerUser(req.user) ? await ensureWarehouseManagerHasWarehouse(req, res, UserModel, WarehouseModel) : null;
     if (isWarehouseManagerUser(req.user) && !scopedWarehouse) return;
 
     const warehouseQuery = scopedWarehouse ? { _id: scopedWarehouse._id } : {};
 
     const [regions, zones, areas, warehouses] = await Promise.all([
-      Region.find({}).lean(),
-      Zone.find({}).lean(),
-      Area.find({}).lean(),
-      Warehouse.find(warehouseQuery).lean(),
+      RegionModel.find({}).lean(),
+      ZoneModel.find({}).lean(),
+      AreaModel.find({}).lean(),
+      WarehouseModel.find(warehouseQuery).lean(),
     ]);
 
     let distributorQuery = { role: "Distributor" };
@@ -162,10 +212,10 @@ router.get("/masters", requireAuth, async (req, res) => {
       };
     }
 
-    let distributors = await User.find(distributorQuery).select("fullName role territoryId warehouseId warehouseName").sort({ fullName: 1 }).lean();
+    let distributors = await UserModel.find(distributorQuery).select("fullName role territoryId warehouseId warehouseName").sort({ fullName: 1 }).lean();
 
     if (scopedWarehouse && distributors.length === 0) {
-      distributors = await User.find({ role: "Distributor" }).select("fullName role territoryId warehouseId warehouseName").sort({ fullName: 1 }).lean();
+      distributors = await UserModel.find({ role: "Distributor" }).select("fullName role territoryId warehouseId warehouseName").sort({ fullName: 1 }).lean();
     }
 
     return res.json({ ok: true, regions, zones, areas, warehouses, users: distributors });
@@ -174,12 +224,12 @@ router.get("/masters", requireAuth, async (req, res) => {
   }
 });
 
-async function generateInvoiceNo() {
+async function generateInvoiceNo(PrimaryPaymentModel = PrimaryPayment) {
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const invoiceNo = `PP-${Date.now().toString().slice(-8)}-${Math.floor(Math.random() * 1000)
       .toString()
       .padStart(3, "0")}`;
-    const exists = await PrimaryPayment.exists({ invoiceNo });
+    const exists = await PrimaryPaymentModel.exists({ invoiceNo });
     if (!exists) return invoiceNo;
   }
   throw new Error("Could not generate unique invoice number");
@@ -187,6 +237,11 @@ async function generateInvoiceNo() {
 
 router.post("/primary", requireAuth, async (req, res) => {
   try {
+    const { RegionModel, ZoneModel, AreaModel, UserModel, WarehouseModel, PrimaryPaymentModel } = await getScopedPaymentModels(
+      req,
+      req.body?.companyId || req.query?.companyId,
+      req.body?.companyName || req.query?.companyName
+    );
     const body = req.body || {};
     const amountTotal = Number(body.amount);
     if (!Number.isFinite(amountTotal) || amountTotal <= 0) {
@@ -195,17 +250,17 @@ router.post("/primary", requireAuth, async (req, res) => {
 
     let warehouseObjectId = toObjectId(body.warehouseId);
     if (isWarehouseManagerUser(req.user)) {
-      const scopedWarehouse = await ensureWarehouseManagerHasWarehouse(req, res);
+      const scopedWarehouse = await ensureWarehouseManagerHasWarehouse(req, res, UserModel, WarehouseModel);
       if (!scopedWarehouse) return;
       warehouseObjectId = scopedWarehouse._id;
     }
 
     const [region, zone, territory, distributor, warehouse] = await Promise.all([
-      Region.findById(body.regionId).lean(),
-      Zone.findById(body.zoneId).lean(),
-      Area.findById(body.territoryId).lean(),
-      User.findOne({ _id: body.distributorId, role: "Distributor" }).lean(),
-      warehouseObjectId ? Warehouse.findById(warehouseObjectId).lean() : null,
+      RegionModel.findById(body.regionId).lean(),
+      ZoneModel.findById(body.zoneId).lean(),
+      AreaModel.findById(body.territoryId).lean(),
+      UserModel.findOne({ _id: body.distributorId, role: "Distributor" }).lean(),
+      warehouseObjectId ? WarehouseModel.findById(warehouseObjectId).lean() : null,
     ]);
 
     if (!region || !zone || !territory || !distributor || !warehouse) {
@@ -224,11 +279,11 @@ router.post("/primary", requireAuth, async (req, res) => {
       return res.status(400).json({ ok: false, message: "Distributor does not belong to selected territory" });
     }
 
-    const invoiceNo = await generateInvoiceNo();
+    const invoiceNo = await generateInvoiceNo(PrimaryPaymentModel);
     const amountPaidBack = 0;
     const amountRemaining = amountTotal;
 
-    const primary = await PrimaryPayment.create({
+    const primary = await PrimaryPaymentModel.create({
       invoiceNo,
       regionId: region.regionId,
       regionName: region.name,
@@ -258,11 +313,12 @@ router.post("/primary", requireAuth, async (req, res) => {
 
 router.get("/primary", requireAuth, async (req, res) => {
   try {
+    const { UserModel, PrimaryPaymentModel } = await getScopedPaymentModels(req, req.query?.companyId, req.query?.companyName);
     const query = {};
     const isDistributor = isDistributorUser(req.user);
 
     if (isDistributor) {
-      const scope = await resolveDistributorScope(req);
+      const scope = await resolveDistributorScope(req, UserModel);
       if (!scope.distributorObjectId) {
         return res.status(403).json({ ok: false, message: "Forbidden: distributor mapping missing" });
       }
@@ -273,7 +329,8 @@ router.get("/primary", requireAuth, async (req, res) => {
     }
 
     if (isWarehouseManagerUser(req.user)) {
-      const scopedWarehouse = await ensureWarehouseManagerHasWarehouse(req, res);
+      const { WarehouseModel } = await getScopedPaymentModels(req, req.query?.companyId, req.query?.companyName);
+      const scopedWarehouse = await ensureWarehouseManagerHasWarehouse(req, res, UserModel, WarehouseModel);
       if (!scopedWarehouse) return;
       query.warehouseId = scopedWarehouse._id;
     } else if (req.query.warehouseId || req.query.warehouse_id) {
@@ -293,7 +350,7 @@ router.get("/primary", requireAuth, async (req, res) => {
     if (status === "open") query.amountRemaining = { $gt: 0 };
     if (status === "closed") query.amountRemaining = 0;
 
-    const items = await PrimaryPayment.find(query).sort({ createdAt: -1 }).lean();
+    const items = await PrimaryPaymentModel.find(query).sort({ createdAt: -1 }).lean();
     const dueSoonDays = Number(process.env.PAYMENT_DUE_SOON_DAYS || 7);
     const primaryPayments = items.map((item) => ({ ...item, ...getDeadlineMeta(item, dueSoonDays) }));
 
@@ -305,25 +362,26 @@ router.get("/primary", requireAuth, async (req, res) => {
 
 router.get("/primary/:invoiceNo", requireAuth, async (req, res) => {
   try {
-    const primary = await PrimaryPayment.findOne({ invoiceNo: req.params.invoiceNo }).lean();
+    const { UserModel, WarehouseModel, PrimaryPaymentModel, SecondaryPaymentModel } = await getScopedPaymentModels(req, req.query?.companyId, req.query?.companyName);
+    const primary = await PrimaryPaymentModel.findOne({ invoiceNo: req.params.invoiceNo }).lean();
     if (!primary) return res.status(404).json({ ok: false, message: "Primary invoice not found" });
 
     if (isDistributorUser(req.user)) {
-      const scope = await resolveDistributorScope(req);
+      const scope = await resolveDistributorScope(req, UserModel);
       if (!scope.distributorObjectId || String(primary.distributorId) !== String(scope.distributorObjectId)) {
         return res.status(403).json({ ok: false, message: "Forbidden" });
       }
     }
 
     if (isWarehouseManagerUser(req.user)) {
-      const scopedWarehouse = await ensureWarehouseManagerHasWarehouse(req, res);
+      const scopedWarehouse = await ensureWarehouseManagerHasWarehouse(req, res, UserModel, WarehouseModel);
       if (!scopedWarehouse) return;
       if (String(primary.warehouseId) !== String(scopedWarehouse._id)) {
         return res.status(403).json({ ok: false, message: "Forbidden" });
       }
     }
 
-    const settlements = await SecondaryPayment.find({ primaryPaymentId: primary._id }).sort({ createdAt: -1 }).lean();
+    const settlements = await SecondaryPaymentModel.find({ primaryPaymentId: primary._id }).sort({ createdAt: -1 }).lean();
     const dueSoonDays = Number(process.env.PAYMENT_DUE_SOON_DAYS || 7);
     return res.json({ ok: true, primaryPayment: { ...primary, ...getDeadlineMeta(primary, dueSoonDays) }, settlements, dueSoonDays });
   } catch (error) {
@@ -333,30 +391,35 @@ router.get("/primary/:invoiceNo", requireAuth, async (req, res) => {
 
 router.delete("/primary/:id", requireAuth, async (req, res) => {
   try {
-    const primary = await PrimaryPayment.findById(req.params.id).lean();
+    const { UserModel, WarehouseModel, PrimaryPaymentModel, SecondaryPaymentModel } = await getScopedPaymentModels(
+      req,
+      req.body?.companyId || req.query?.companyId,
+      req.body?.companyName || req.query?.companyName
+    );
+    const primary = await PrimaryPaymentModel.findById(req.params.id).lean();
     if (!primary) return res.status(404).json({ ok: false, message: "Primary payment not found" });
 
     if (isDistributorUser(req.user)) {
-      const scope = await resolveDistributorScope(req);
+      const scope = await resolveDistributorScope(req, UserModel);
       if (!scope.distributorObjectId || String(primary.distributorId) !== String(scope.distributorObjectId)) {
         return res.status(403).json({ ok: false, message: "Forbidden" });
       }
     }
 
     if (isWarehouseManagerUser(req.user)) {
-      const scopedWarehouse = await ensureWarehouseManagerHasWarehouse(req, res);
+      const scopedWarehouse = await ensureWarehouseManagerHasWarehouse(req, res, UserModel, WarehouseModel);
       if (!scopedWarehouse) return;
       if (String(primary.warehouseId) !== String(scopedWarehouse._id)) {
         return res.status(403).json({ ok: false, message: "Forbidden" });
       }
     }
 
-    const linked = await SecondaryPayment.exists({ primaryPaymentId: primary._id });
+    const linked = await SecondaryPaymentModel.exists({ primaryPaymentId: primary._id });
     if (linked) {
       return res.status(409).json({ ok: false, message: "Cannot delete primary payment with secondary settlements" });
     }
 
-    await PrimaryPayment.findByIdAndDelete(primary._id);
+    await PrimaryPaymentModel.findByIdAndDelete(primary._id);
     return res.json({ ok: true });
   } catch (error) {
     return res.status(400).json({ ok: false, message: "Invalid primary payment id" });
@@ -366,6 +429,11 @@ router.delete("/primary/:id", requireAuth, async (req, res) => {
 router.post("/secondary", requireAuth, async (req, res) => {
   const session = await mongoose.startSession();
   try {
+    const { UserModel, WarehouseModel, PrimaryPaymentModel, SecondaryPaymentModel } = await getScopedPaymentModels(
+      req,
+      req.body?.companyId || req.query?.companyId,
+      req.body?.companyName || req.query?.companyName
+    );
     const body = req.body || {};
     const amountPaid = Number(body.amountPaid);
     if (!Number.isFinite(amountPaid) || amountPaid <= 0) {
@@ -375,12 +443,12 @@ router.post("/secondary", requireAuth, async (req, res) => {
     let scopedWarehouseObjectId = null;
     let scopedDistributorObjectId = null;
     if (isWarehouseManagerUser(req.user)) {
-      const scopedWarehouse = await ensureWarehouseManagerHasWarehouse(req, res);
+      const scopedWarehouse = await ensureWarehouseManagerHasWarehouse(req, res, UserModel, WarehouseModel);
       if (!scopedWarehouse) return;
       scopedWarehouseObjectId = scopedWarehouse._id;
     }
     if (isDistributorUser(req.user)) {
-      const scope = await resolveDistributorScope(req);
+      const scope = await resolveDistributorScope(req, UserModel);
       if (!scope.distributorObjectId) {
         return res.status(403).json({ ok: false, message: "Forbidden: distributor mapping missing" });
       }
@@ -389,7 +457,7 @@ router.post("/secondary", requireAuth, async (req, res) => {
 
     let createdSecondary = null;
     await session.withTransaction(async () => {
-      const primary = await PrimaryPayment.findOne({ invoiceNo: String(body.primaryInvoiceNo || "").trim() }).session(session);
+      const primary = await PrimaryPaymentModel.findOne({ invoiceNo: String(body.primaryInvoiceNo || "").trim() }).session(session);
       if (!primary) throw new Error("Primary invoice does not exist");
 
       const expectedWarehouseId = scopedWarehouseObjectId || toObjectId(body.warehouseId);
@@ -404,7 +472,7 @@ router.post("/secondary", requireAuth, async (req, res) => {
         throw new Error("Amount paid cannot be greater than remaining amount");
       }
 
-      createdSecondary = await SecondaryPayment.create(
+      createdSecondary = await SecondaryPaymentModel.create(
         [
           {
             primaryPaymentId: primary._id,
@@ -438,11 +506,12 @@ router.post("/secondary", requireAuth, async (req, res) => {
 
 router.get("/secondary", requireAuth, async (req, res) => {
   try {
+    const { UserModel, WarehouseModel, SecondaryPaymentModel } = await getScopedPaymentModels(req, req.query?.companyId, req.query?.companyName);
     const query = {};
     const isDistributor = isDistributorUser(req.user);
 
     if (isDistributor) {
-      const scope = await resolveDistributorScope(req);
+      const scope = await resolveDistributorScope(req, UserModel);
       if (!scope.distributorObjectId) {
         return res.status(403).json({ ok: false, message: "Forbidden: distributor mapping missing" });
       }
@@ -450,7 +519,7 @@ router.get("/secondary", requireAuth, async (req, res) => {
     }
 
     if (isWarehouseManagerUser(req.user)) {
-      const scopedWarehouse = await ensureWarehouseManagerHasWarehouse(req, res);
+      const scopedWarehouse = await ensureWarehouseManagerHasWarehouse(req, res, UserModel, WarehouseModel);
       if (!scopedWarehouse) return;
       query.warehouseId = scopedWarehouse._id;
     } else if (req.query.warehouseId || req.query.warehouse_id) {
@@ -466,7 +535,7 @@ router.get("/secondary", requireAuth, async (req, res) => {
       if (endDate) query.paidDate.$lte = endOfDay(endDate);
     }
 
-    const rows = await SecondaryPayment.find(query).sort({ createdAt: -1 }).lean();
+    const rows = await SecondaryPaymentModel.find(query).sort({ createdAt: -1 }).lean();
     return res.json({ ok: true, secondaryPayments: rows });
   } catch (error) {
     return res.status(500).json({ ok: false, message: "Failed to load secondary payments" });
@@ -476,11 +545,16 @@ router.get("/secondary", requireAuth, async (req, res) => {
 router.delete("/secondary/:id", requireAuth, async (req, res) => {
   const session = await mongoose.startSession();
   try {
+    const { UserModel, WarehouseModel, PrimaryPaymentModel, SecondaryPaymentModel } = await getScopedPaymentModels(
+      req,
+      req.body?.companyId || req.query?.companyId,
+      req.body?.companyName || req.query?.companyName
+    );
     const scopedWarehouseObjectId = isWarehouseManagerUser(req.user)
-      ? (await ensureWarehouseManagerHasWarehouse(req, res))?._id
+      ? (await ensureWarehouseManagerHasWarehouse(req, res, UserModel, WarehouseModel))?._id
       : null;
     const scopedDistributorObjectId = isDistributorUser(req.user)
-      ? (await resolveDistributorScope(req))?.distributorObjectId
+      ? (await resolveDistributorScope(req, UserModel))?.distributorObjectId
       : null;
     if (isWarehouseManagerUser(req.user) && !scopedWarehouseObjectId) return;
     if (isDistributorUser(req.user) && !scopedDistributorObjectId) {
@@ -488,7 +562,7 @@ router.delete("/secondary/:id", requireAuth, async (req, res) => {
     }
 
     await session.withTransaction(async () => {
-      const secondary = await SecondaryPayment.findById(req.params.id).session(session);
+      const secondary = await SecondaryPaymentModel.findById(req.params.id).session(session);
       if (!secondary) throw new Error("Secondary payment not found");
 
       if (scopedWarehouseObjectId && String(secondary.warehouseId) !== String(scopedWarehouseObjectId)) {
@@ -498,7 +572,7 @@ router.delete("/secondary/:id", requireAuth, async (req, res) => {
         throw new Error("Forbidden");
       }
 
-      const primary = await PrimaryPayment.findById(secondary.primaryPaymentId).session(session);
+      const primary = await PrimaryPaymentModel.findById(secondary.primaryPaymentId).session(session);
       if (!primary) throw new Error("Linked primary payment not found");
 
       if (scopedWarehouseObjectId && String(primary.warehouseId) !== String(scopedWarehouseObjectId)) {
