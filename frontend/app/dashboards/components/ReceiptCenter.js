@@ -27,7 +27,7 @@ export default function ReceiptCenter({ title, subtitle, roleKey, links = [] }) 
             apiFetch("/receipts"),
             apiFetch("/accounts"),
             apiFetch("/users"),
-            apiFetch("/orders?limit=300"),
+            apiFetch("/orders?limit=2000"),
         ]);
 
         setRows(receiptsRes.status === "fulfilled" ? (receiptsRes.value.receipts || []) : []);

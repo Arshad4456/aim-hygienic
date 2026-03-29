@@ -21,7 +21,7 @@ export default function FinanceInvoicesPage() {
 
   useEffect(() => {
     let ignore = false;
-    apiFetch("/orders?limit=500")
+    apiFetch("/orders?limit=2000")
       .then((ordersData) => {
         if (ignore) return;
         setOrders(ordersData.orders || []);
