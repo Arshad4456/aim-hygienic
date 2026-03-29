@@ -16,15 +16,17 @@ function useNow() {
 export default function FinanceInvoicesPage() {
   const now = useNow();
   const [orders, setOrders] = useState([]);
+  const [primaryTransactions, setPrimaryTransactions] = useState([]);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let ignore = false;
-    fetchCompanyOrders()
-      .then((allOrders) => {
+    Promise.all([fetchCompanyOrders(), fetchPrimaryInvoiceTransactions()])
+      .then(([allOrders, saleTransactions]) => {
         if (ignore) return;
         setOrders(allOrders);
+        setPrimaryTransactions(saleTransactions);
       })
       .catch((e) => {
         if (ignore) return;
@@ -39,18 +41,19 @@ export default function FinanceInvoicesPage() {
     };
   }, []);
 
-  const deliveredInvoices = useMemo(
+  const deliveredOrderInvoices = useMemo(
     () => orders.filter((o) => ["approved", "dispatched", "delivered"].includes(String(o.status || "").toLowerCase())),
     [orders]
   );
   const primaryInvoices = useMemo(
-    () => deliveredInvoices.filter((o) => resolveSaleType(o) === "primary"),
-    [deliveredInvoices]
+    () => primaryTransactions.map((txn) => mapPrimaryTransactionToInvoice(txn)),
+    [primaryTransactions]
   );
   const secondaryInvoices = useMemo(
-    () => deliveredInvoices.filter((o) => resolveSaleType(o) === "secondary"),
-    [deliveredInvoices]
+    () => deliveredOrderInvoices.filter((o) => resolveSaleType(o) === "secondary"),
+    [deliveredOrderInvoices]
   );
+  const deliveredInvoices = useMemo(() => [...primaryInvoices, ...secondaryInvoices], [primaryInvoices, secondaryInvoices]);
 
   return (
     <AdminShell title="Invoices" user={null}>
@@ -96,6 +99,49 @@ async function fetchCompanyOrders() {
   }
 
   return allOrders;
+}
+
+async function fetchPrimaryInvoiceTransactions() {
+  const data = await apiFetch("/inventory/transactions?transactionType=SALE_STOCK");
+  const rows = Array.isArray(data?.transactions) ? data.transactions : [];
+  return rows.filter((txn) => {
+    const status = String(txn?.requestStatus || "").toUpperCase();
+    if (!["DISPATCHED", "DELIVERED"].includes(status)) return false;
+    return isPrimaryTransaction(txn);
+  });
+}
+
+function isPrimaryTransaction(txn) {
+  const sourceRole = String(txn?.requestSourceRole || txn?.fromEntityType || "").toLowerCase();
+  if (sourceRole.includes("brand") || sourceRole.includes("distributor")) return true;
+  const toEntityType = String(txn?.toEntityType || "").toLowerCase();
+  return toEntityType === "brand" || toEntityType === "distributor";
+}
+
+function mapPrimaryTransactionToInvoice(txn) {
+  const normalizedItems = Array.isArray(txn?.items)
+    ? txn.items.map((item) => ({
+      ...item,
+      quantity: Number(item?.totalPacks || item?.quantity || 0),
+      unitPrice: Number(item?.onePackPrice || item?.unitPrice || 0),
+    }))
+    : [];
+
+  return {
+    _id: txn?._id || txn?.transactionCode,
+    orderNo: txn?.transactionCode || txn?._id,
+    invoiceNo: txn?.transactionCode || txn?._id,
+    saleType: "primary",
+    distributorName: txn?.distributorName || txn?.fromEntityName || txn?.toEntityName || "-",
+    territoryName: txn?.territory || txn?.territoryName || "-",
+    totalAmount: Number(txn?.grandTotal || txn?.totalAmount || txn?.subtotal || 0),
+    updatedAt: txn?.requestStatusUpdatedAt || txn?.updatedAt || txn?.transactionAt || txn?.createdAt,
+    status: String(txn?.requestStatus || "DISPATCHED").toLowerCase(),
+    items: normalizedItems,
+    toWarehouseName: txn?.warehouseName || "",
+    fromEntityName: txn?.fromEntityName || "",
+    customerName: txn?.distributorName || txn?.toEntityName || "",
+  };
 }
 
 
