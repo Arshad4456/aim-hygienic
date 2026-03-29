@@ -1,10 +1,7 @@
 const express = require("express");
-const mongoose = require("mongoose");
 const { requireAuth } = require("../utils/auth");
 const SalesOrder = require("../models/SalesOrder");
 const User = require("../models/User");
-const Company = require("../models/Company");
-const { toTenantDatabaseName } = require("../utils/tenantDatabases");
 
 const router = express.Router();
 
@@ -16,22 +13,14 @@ function normalizeRole(role) {
   return String(role || "").trim().toLowerCase();
 }
 
-function asText(value) {
-  return String(value || "").trim();
-}
 
-function isSystemLevelAdmin(role) {
-  return normalizeRole(role) === "system admin";
-}
-
-function getCompanyScopeQuery(user, includeCompanyScope = true) {
-  if (!includeCompanyScope) return {};
+function getCompanyScopeQuery(user) {
   const companyId = String(user?.companyId || "").trim();
   return companyId ? { companyId } : {};
 }
 
-function withCompanyScope(user, query = {}, options = {}) {
-  const scopedCompany = getCompanyScopeQuery(user, options.includeCompanyScope !== false);
+function withCompanyScope(user, query = {}) {
+  const scopedCompany = getCompanyScopeQuery(user);
   return { ...query, ...scopedCompany };
 }
 
@@ -43,17 +32,17 @@ function getScopedWarehouseId(user) {
   return String(user?.warehouse_id || user?.warehouseId || "").trim();
 }
 
-async function getAuthenticatedUser(req, UserModel = User) {
+async function getAuthenticatedUser(req) {
   if (!req.user?.uid) return null;
-  return UserModel.findById(req.user.uid).lean();
+  return User.findById(req.user.uid).lean();
 }
 
 function getFieldScope(user) {
   return String(user?.fieldId || user?.field_id || "").trim();
 }
 
-async function getSalesmanFieldScope(req, UserModel = User) {
-  const authUser = await getAuthenticatedUser(req, UserModel);
+async function getSalesmanFieldScope(req) {
+  const authUser = await getAuthenticatedUser(req);
   const fieldId = getFieldScope(authUser);
   if (!fieldId) return { error: "Salesman field not configured" };
   return { authUser, fieldId };
@@ -96,7 +85,7 @@ function withPodFields(order, uploaderById = {}) {
   };
 }
 
-async function attachPodMetaToOrders(orders = [], UserModel = User) {
+async function attachPodMetaToOrders(orders = []) {
   const podUserIds = Array.from(
     new Set(
       orders
@@ -107,7 +96,7 @@ async function attachPodMetaToOrders(orders = [], UserModel = User) {
 
   let uploaderById = {};
   if (podUserIds.length) {
-    const users = await UserModel.find({ _id: { $in: podUserIds } }).select("fullName name userId").lean();
+    const users = await User.find({ _id: { $in: podUserIds } }).select("fullName name userId").lean();
     uploaderById = users.reduce((acc, user) => {
       acc[String(user._id)] = serializePodUploader(user);
       return acc;
@@ -123,8 +112,7 @@ async function attachPodMetaToOrder(order) {
   return mapped;
 }
 
-function roleMatchQuery(user, options = {}) {
-  const includeCompanyScope = options.includeCompanyScope !== false;
+function roleMatchQuery(user) {
   const rawRole = String(user?.role || "").trim();
   const role = normalizeRole(rawRole);
   const userId = String(user?.userId || "").trim();
@@ -140,58 +128,30 @@ function roleMatchQuery(user, options = {}) {
 
   if (!role) return { _id: null };
   if (role === "system admin") return {};
-  if (ADMIN_ROLES.has(role)) return withCompanyScope(user, {}, { includeCompanyScope });
+  if (ADMIN_ROLES.has(role)) return withCompanyScope(user, {});
   if (isWarehouseManagerRole(rawRole)) {
     const warehouseId = getScopedWarehouseId(user);
-    return withCompanyScope(user, warehouseId ? { toWarehouseId: warehouseId } : { _id: null }, { includeCompanyScope });
+    return withCompanyScope(user, warehouseId ? { toWarehouseId: warehouseId } : { _id: null });
   }
 
   const idsForRole = Array.from(new Set([userId, roleMappedIds[role]].filter(Boolean)));
 
-  if (role === "brand manager") return withCompanyScope(user, { brandManagerId: { $in: idsForRole.length ? idsForRole : ["__none__"] } }, { includeCompanyScope });
-  if (role === "distributor") return withCompanyScope(user, { distributorId: { $in: idsForRole.length ? idsForRole : ["__none__"] } }, { includeCompanyScope });
+  if (role === "brand manager") return withCompanyScope(user, { brandManagerId: { $in: idsForRole.length ? idsForRole : ["__none__"] } });
+  if (role === "distributor") return withCompanyScope(user, { distributorId: { $in: idsForRole.length ? idsForRole : ["__none__"] } });
   if (role === "order booker") {
     const roleQuery = { orderBookerId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
-    return withCompanyScope(user, authUid ? { $or: [roleQuery, { createdBy: authUid }] } : roleQuery, { includeCompanyScope });
+    return withCompanyScope(user, authUid ? { $or: [roleQuery, { createdBy: authUid }] } : roleQuery);
   }
-  if (role === "salesman") return withCompanyScope(user, { salesmanId: { $in: idsForRole.length ? idsForRole : ["__none__"] } }, { includeCompanyScope });
-  if (role === "delivery boy") return withCompanyScope(user, { deliveryBoyId: { $in: idsForRole.length ? idsForRole : ["__none__"] } }, { includeCompanyScope });
+  if (role === "salesman") return withCompanyScope(user, { salesmanId: { $in: idsForRole.length ? idsForRole : ["__none__"] } });
+  if (role === "delivery boy") return withCompanyScope(user, { deliveryBoyId: { $in: idsForRole.length ? idsForRole : ["__none__"] } });
   if (role === "customer") {
     const roleQuery = { customerId: { $in: idsForRole.length ? idsForRole : ["__none__"] } };
-    return withCompanyScope(user, authUid ? { $or: [roleQuery, { createdBy: authUid }] } : roleQuery, { includeCompanyScope });
+    return withCompanyScope(user, authUid ? { $or: [roleQuery, { createdBy: authUid }] } : roleQuery);
   }
-  if (role === "zone sale manager") return withCompanyScope(user, { zoneId: String(user?.zoneId || "").trim() || "__none__" }, { includeCompanyScope });
-  if (role === "territory sale manager") return withCompanyScope(user, { territoryName: String(user?.territoryName || user?.areaName || "").trim() || "__none__" }, { includeCompanyScope });
+  if (role === "zone sale manager") return withCompanyScope(user, { zoneId: String(user?.zoneId || "").trim() || "__none__" });
+  if (role === "territory sale manager") return withCompanyScope(user, { territoryName: String(user?.territoryName || user?.areaName || "").trim() || "__none__" });
 
-  return withCompanyScope(user, authUid ? { createdBy: authUid } : { _id: null }, { includeCompanyScope });
-}
-
-async function resolveTenantDbName(companyId, companyName = "") {
-  const normalizedCompanyId = asText(companyId);
-  const normalizedCompanyName = asText(companyName);
-  if (!normalizedCompanyId && !normalizedCompanyName) return "";
-  if (normalizedCompanyName) return toTenantDatabaseName(normalizedCompanyName, normalizedCompanyId || "company");
-  const company = await Company.findOne({ companyId: normalizedCompanyId }).select("name").lean();
-  return toTenantDatabaseName(company?.name || normalizedCompanyId, normalizedCompanyId || "company");
-}
-
-function getModelFromDb(db, baseModel) {
-  const modelName = baseModel.modelName;
-  return db.models[modelName] || db.model(modelName, baseModel.schema, baseModel.collection.name);
-}
-
-async function getScopedOrderModels(req, requestedCompanyId = "", requestedCompanyName = "") {
-  const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? asText(requestedCompanyId) : asText(req.user?.companyId);
-  const scopedCompanyName = isSystemLevelAdmin(req.user?.role) ? asText(requestedCompanyName) : asText(req.user?.companyName);
-  if (!scopedCompanyId) return { SalesOrderModel: SalesOrder, UserModel: User, usesTenantDb: false };
-  const dbName = await resolveTenantDbName(scopedCompanyId, scopedCompanyName);
-  if (!dbName) return { SalesOrderModel: SalesOrder, UserModel: User, usesTenantDb: false };
-  const tenantDb = mongoose.connection.useDb(dbName, { useCache: true });
-  return {
-    SalesOrderModel: getModelFromDb(tenantDb, SalesOrder),
-    UserModel: getModelFromDb(tenantDb, User),
-    usesTenantDb: true,
-  };
+  return withCompanyScope(user, authUid ? { createdBy: authUid } : { _id: null });
 }
 
 
@@ -213,10 +173,9 @@ function canTransition(order, nextStatus) {
 
 router.get("/", requireAuth, async (req, res) => {
   try {
-    const { SalesOrderModel, UserModel, usesTenantDb } = await getScopedOrderModels(req, req.query?.companyId, req.query?.companyName);
     const limit = Math.min(Number(req.query.limit) || 50, 200);
-    const orders = await SalesOrderModel.find(roleMatchQuery(req.user, { includeCompanyScope: !usesTenantDb })).sort({ createdAt: -1 }).limit(limit).lean();
-    return res.json({ ok: true, orders: await attachPodMetaToOrders(orders, UserModel) });
+    const orders = await SalesOrder.find(roleMatchQuery(req.user)).sort({ createdAt: -1 }).limit(limit).lean();
+    return res.json({ ok: true, orders: await attachPodMetaToOrders(orders) });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to load sales orders" });
   }
@@ -224,10 +183,9 @@ router.get("/", requireAuth, async (req, res) => {
 
 router.get("/my", requireAuth, async (req, res) => {
   try {
-    const { SalesOrderModel, UserModel, usesTenantDb } = await getScopedOrderModels(req, req.query?.companyId, req.query?.companyName);
     const limit = Math.min(Number(req.query.limit) || 50, 200);
-    const orders = await SalesOrderModel.find(roleMatchQuery(req.user, { includeCompanyScope: !usesTenantDb })).sort({ createdAt: -1 }).limit(limit).lean();
-    return res.json({ ok: true, orders: await attachPodMetaToOrders(orders, UserModel) });
+    const orders = await SalesOrder.find(roleMatchQuery(req.user)).sort({ createdAt: -1 }).limit(limit).lean();
+    return res.json({ ok: true, orders: await attachPodMetaToOrders(orders) });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to load dashboard orders" });
   }
@@ -235,11 +193,10 @@ router.get("/my", requireAuth, async (req, res) => {
 
 router.get("/secondary/distributor", requireAuth, async (req, res) => {
   try {
-    const { SalesOrderModel, UserModel, usesTenantDb } = await getScopedOrderModels(req, req.query?.companyId, req.query?.companyName);
     const role = normalizeRole(req.user?.role);
     if (role !== "distributor") return res.status(403).json({ ok: false, message: "Forbidden" });
 
-    const me = await UserModel.findById(req.user?.uid).lean();
+    const me = await User.findById(req.user?.uid).lean();
     if (!me) return res.status(404).json({ ok: false, message: "User not found" });
 
     const limit = Math.min(Number(req.query.limit) || 200, 500);
@@ -253,7 +210,7 @@ router.get("/secondary/distributor", requireAuth, async (req, res) => {
     const warehouseId = String(me.warehouseId || "").trim();
     const warehouseNames = Array.from(new Set([String(me.businessName || "").trim(), String(me.fullName || "").trim(), String(me.warehouseName || "").trim()].filter(Boolean)));
 
-    const query = withCompanyScope(me, { saleType: "secondary", sourceType: { $in: ["customer", "order_booker"] } }, { includeCompanyScope: !usesTenantDb });
+    const query = withCompanyScope(me, { saleType: "secondary", sourceType: { $in: ["customer", "order_booker"] } });
 
     const relatedFilters = [];
     if (territoryName) relatedFilters.push({ territoryName });
@@ -262,8 +219,8 @@ router.get("/secondary/distributor", requireAuth, async (req, res) => {
     if (warehouseNames.length) relatedFilters.push({ toWarehouseName: { $in: warehouseNames } });
     if (relatedFilters.length) query.$or = relatedFilters;
 
-    const orders = await SalesOrderModel.find(query).sort({ createdAt: -1 }).limit(limit).lean();
-    return res.json({ ok: true, orders: await attachPodMetaToOrders(orders, UserModel) });
+    const orders = await SalesOrder.find(query).sort({ createdAt: -1 }).limit(limit).lean();
+    return res.json({ ok: true, orders: await attachPodMetaToOrders(orders) });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to load distributor secondary orders" });
   }
@@ -271,13 +228,12 @@ router.get("/secondary/distributor", requireAuth, async (req, res) => {
 
 router.get("/approvals", requireAuth, async (req, res) => {
   try {
-    const { SalesOrderModel, UserModel, usesTenantDb } = await getScopedOrderModels(req, req.query?.companyId, req.query?.companyName);
     const limit = Math.min(Number(req.query.limit) || 50, 200);
-    const orders = await SalesOrderModel.find({ ...roleMatchQuery(req.user, { includeCompanyScope: !usesTenantDb }), status: "pending" })
+    const orders = await SalesOrder.find({ ...roleMatchQuery(req.user), status: "pending" })
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
-    return res.json({ ok: true, orders: await attachPodMetaToOrders(orders, UserModel) });
+    return res.json({ ok: true, orders: await attachPodMetaToOrders(orders) });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to load approval queue" });
   }
@@ -285,13 +241,12 @@ router.get("/approvals", requireAuth, async (req, res) => {
 
 router.get("/dispatch", requireAuth, async (req, res) => {
   try {
-    const { SalesOrderModel, UserModel, usesTenantDb } = await getScopedOrderModels(req, req.query?.companyId, req.query?.companyName);
     const limit = Math.min(Number(req.query.limit) || 50, 200);
-    const orders = await SalesOrderModel.find({ ...roleMatchQuery(req.user, { includeCompanyScope: !usesTenantDb }), status: { $in: ["approved", "dispatched"] } })
+    const orders = await SalesOrder.find({ ...roleMatchQuery(req.user), status: { $in: ["approved", "dispatched"] } })
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
-    return res.json({ ok: true, orders: await attachPodMetaToOrders(orders, UserModel) });
+    return res.json({ ok: true, orders: await attachPodMetaToOrders(orders) });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to load dispatch queue" });
   }
@@ -299,16 +254,15 @@ router.get("/dispatch", requireAuth, async (req, res) => {
 
 router.get("/salesman-deliveries", requireAuth, async (req, res) => {
   try {
-    const { SalesOrderModel, UserModel } = await getScopedOrderModels(req, req.query?.companyId, req.query?.companyName);
     if (String(req.user?.role || "") !== "Salesman") {
       return res.status(403).json({ ok: false, message: "Only Salesman can access deliveries" });
     }
 
-    const scope = await getSalesmanFieldScope(req, UserModel);
+    const scope = await getSalesmanFieldScope(req);
     if (scope.error) return res.status(400).json({ ok: false, message: scope.error });
 
     const limit = Math.min(Number(req.query.limit) || 200, 500);
-    const orders = await SalesOrderModel.find({
+    const orders = await SalesOrder.find({
       saleType: "secondary",
       fieldId: scope.fieldId,
       status: { $in: ["approved", "dispatched"] },
@@ -317,7 +271,7 @@ router.get("/salesman-deliveries", requireAuth, async (req, res) => {
       .limit(limit)
       .lean();
 
-    return res.json({ ok: true, orders: await attachPodMetaToOrders(orders, UserModel) });
+    return res.json({ ok: true, orders: await attachPodMetaToOrders(orders) });
   } catch (_error) {
     return res.status(500).json({ ok: false, message: "Failed to load salesman deliveries" });
   }
