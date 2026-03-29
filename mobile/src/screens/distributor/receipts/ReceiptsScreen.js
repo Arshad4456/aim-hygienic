@@ -55,9 +55,11 @@ export default function ReceiptsScreen() {
 
       setInvoices(
         ordersRes.status === 'fulfilled'
-          ? (ordersRes.value?.data?.orders || []).filter((x) =>
-              ['approved', 'dispatched', 'delivered'].includes(String(x.status || '').toLowerCase())
-            )
+          ? (ordersRes.value?.data?.orders || []).filter((x) => {
+              const status = String(x.status || '').toLowerCase();
+              const saleType = String(x.saleType || '').toLowerCase();
+              return saleType === 'primary' && ['dispatched', 'delivered'].includes(status);
+            })
           : []
       );
     } catch (e) {
@@ -98,7 +100,7 @@ export default function ReceiptsScreen() {
 
   const invoiceOptions = useMemo(
     () => [
-      { value: '', label: invoices.length ? 'Select Invoice' : 'No approved/dispatched/delivered invoice' },
+      { value: '', label: invoices.length ? 'Select Invoice' : 'No dispatched/delivered primary invoice' },
       ...invoices.map((x) => ({
         value: x.orderNo || x.invoiceNo || x._id,
         label: `${x.orderNo || x.invoiceNo || x._id} [${x.status || '-'}] (${x.saleType || '-'})`,
