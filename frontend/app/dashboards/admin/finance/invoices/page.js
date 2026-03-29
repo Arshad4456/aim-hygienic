@@ -21,10 +21,10 @@ export default function FinanceInvoicesPage() {
 
   useEffect(() => {
     let ignore = false;
-    apiFetch("/orders?limit=500")
-      .then((ordersData) => {
+    fetchCompanyOrders()
+      .then((allOrders) => {
         if (ignore) return;
-        setOrders(ordersData.orders || []);
+        setOrders(allOrders);
       })
       .catch((e) => {
         if (ignore) return;
@@ -79,6 +79,23 @@ export default function FinanceInvoicesPage() {
       </div>
     </AdminShell>
   );
+}
+
+async function fetchCompanyOrders() {
+  const limit = 200;
+  let page = 1;
+  let totalPages = 1;
+  const allOrders = [];
+
+  while (page <= totalPages) {
+    const data = await apiFetch(`/orders?limit=${limit}&page=${page}`);
+    const rows = Array.isArray(data?.orders) ? data.orders : [];
+    allOrders.push(...rows);
+    totalPages = Math.max(Number(data?.pagination?.totalPages) || 1, 1);
+    page += 1;
+  }
+
+  return allOrders;
 }
 
 

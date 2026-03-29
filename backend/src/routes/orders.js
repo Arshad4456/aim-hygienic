@@ -173,9 +173,23 @@ function canTransition(order, nextStatus) {
 
 router.get("/", requireAuth, async (req, res) => {
   try {
-    const limit = Math.min(Number(req.query.limit) || 50, 200);
-    const orders = await SalesOrder.find(roleMatchQuery(req.user)).sort({ createdAt: -1 }).limit(limit).lean();
-    return res.json({ ok: true, orders: await attachPodMetaToOrders(orders) });
+    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 500);
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const query = roleMatchQuery(req.user);
+    const [orders, total] = await Promise.all([
+      SalesOrder.find(query).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+      SalesOrder.countDocuments(query),
+    ]);
+    return res.json({
+      ok: true,
+      orders: await attachPodMetaToOrders(orders),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(Math.ceil(total / limit), 1),
+      },
+    });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to load sales orders" });
   }
