@@ -16,17 +16,15 @@ function useNow() {
 export default function FinanceInvoicesPage() {
   const now = useNow();
   const [orders, setOrders] = useState([]);
-  const [primaryPayments, setPrimaryPayments] = useState([]);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let ignore = false;
-    Promise.all([apiFetch("/orders?limit=500"), apiFetch("/payments/primary?status=all")])
-      .then(([ordersData, primaryData]) => {
+    apiFetch("/orders?limit=500")
+      .then((ordersData) => {
         if (ignore) return;
         setOrders(ordersData.orders || []);
-        setPrimaryPayments(primaryData.primaryPayments || []);
       })
       .catch((e) => {
         if (ignore) return;
@@ -42,32 +40,13 @@ export default function FinanceInvoicesPage() {
   }, []);
 
   const deliveredInvoices = useMemo(
-    () => orders.filter((o) => String(o.status || "").toLowerCase() === "delivered"),
+    () => orders.filter((o) => ["approved", "dispatched", "delivered"].includes(String(o.status || "").toLowerCase())),
     [orders]
   );
-  const primaryOrderInvoices = useMemo(
+  const primaryInvoices = useMemo(
     () => deliveredInvoices.filter((o) => String(o.saleType || "").toLowerCase() === "primary"),
     [deliveredInvoices]
   );
-  const primaryPaymentInvoices = useMemo(
-    () =>
-      (primaryPayments || []).map((p) => ({
-        _id: `primary-${p._id || p.invoiceNo}`,
-        orderNo: p.invoiceNo,
-        invoiceNo: p.invoiceNo,
-        saleType: "primary",
-        distributorName: p.distributorName,
-        territoryName: p.territoryName,
-        totalAmount: Number(p.amountTotal || 0),
-        updatedAt: p.payDate || p.createdAt,
-        status: Number(p.amountRemaining || 0) <= 0 ? "closed" : "open",
-      })),
-    [primaryPayments]
-  );
-  const primaryInvoices = useMemo(() => {
-    if (primaryOrderInvoices.length) return primaryOrderInvoices;
-    return primaryPaymentInvoices;
-  }, [primaryOrderInvoices, primaryPaymentInvoices]);
   const secondaryInvoices = useMemo(() => deliveredInvoices.filter((o) => String(o.saleType || "").toLowerCase() === "secondary"), [deliveredInvoices]);
 
   return (
