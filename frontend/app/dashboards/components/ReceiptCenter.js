@@ -41,9 +41,12 @@ export default function ReceiptCenter({ title, subtitle, roleKey, links = [] }) 
                 ? (usersRes.value.users || []).filter((x) => ["salesman", "cashier", "order booker", "orderbooker"].includes(String(x.role || "").toLowerCase()))
                 : [],
         );
+        const allowedInvoiceStatuses = String(roleKey || "").toLowerCase() === "distributor"
+            ? ["dispatched", "delivered"]
+            : ["approved", "dispatched", "delivered"];
         setInvoices(
             ordersRes.status === "fulfilled"
-                ? (ordersRes.value.orders || []).filter((x) => ["approved", "dispatched", "delivered"].includes(String(x.status || "").toLowerCase()))
+                ? (ordersRes.value.orders || []).filter((x) => allowedInvoiceStatuses.includes(String(x.status || "").toLowerCase()))
                 : [],
         );
     }
@@ -101,7 +104,10 @@ export default function ReceiptCenter({ title, subtitle, roleKey, links = [] }) 
 
     const accountOptions = [{ value: "", label: accounts.length ? "Select Account" : "No accounts available" }, ...accounts.map((x) => ({ value: x._id, label: x.accountName || [x.bankName, x.accountNumber].filter(Boolean).join(" - ") || x._id }))];
     const collectorOptions = [{ value: "", label: collectors.length ? "Select Collector" : "No collectors available" }, ...collectors.map((x) => ({ value: x._id, label: `${x.fullName || x.username || x.mobile} (${x.role || ""})` }))];
-    const invoiceOptions = [{ value: "", label: invoices.length ? "Select Invoice" : "No approved/dispatched/delivered invoice" }, ...invoices.map((x) => ({ value: x.orderNo || x.invoiceNo || x._id, label: `${x.orderNo || x.invoiceNo || x._id} [${x.status || "-"}] (${x.saleType || "-"})` }))];
+    const linkedInvoicePlaceholder = String(roleKey || "").toLowerCase() === "distributor"
+        ? "No dispatched/delivered invoice"
+        : "No approved/dispatched/delivered invoice";
+    const invoiceOptions = [{ value: "", label: invoices.length ? "Select Invoice" : linkedInvoicePlaceholder }, ...invoices.map((x) => ({ value: x.orderNo || x.invoiceNo || x._id, label: `${x.orderNo || x.invoiceNo || x._id} [${x.status || "-"}] (${x.saleType || "-"})` }))];
 
     return (
         <UserDashboardShell title={title} subtitle={subtitle} roleKey={roleKey} links={links} showAccountCards>
