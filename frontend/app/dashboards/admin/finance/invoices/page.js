@@ -16,15 +16,17 @@ function useNow() {
 export default function FinanceInvoicesPage() {
   const now = useNow();
   const [orders, setOrders] = useState([]);
+  const [primaryPayments, setPrimaryPayments] = useState([]);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let ignore = false;
-    apiFetch("/orders?limit=2000")
-      .then((ordersData) => {
+    Promise.all([apiFetch("/orders?limit=500"), apiFetch("/payments/primary?status=all")])
+      .then(([ordersData, primaryData]) => {
         if (ignore) return;
         setOrders(ordersData.orders || []);
+        setPrimaryPayments(primaryData.primaryPayments || []);
       })
       .catch((e) => {
         if (ignore) return;
@@ -39,18 +41,34 @@ export default function FinanceInvoicesPage() {
     };
   }, []);
 
-  const dispatchedDeliveredInvoices = useMemo(
-    () => orders.filter((o) => ["dispatched", "delivered"].includes(String(o.status || "").toLowerCase())),
+  const deliveredInvoices = useMemo(
+    () => orders.filter((o) => String(o.status || "").toLowerCase() === "delivered"),
     [orders]
   );
-  const primaryInvoices = useMemo(
-    () => dispatchedDeliveredInvoices.filter((o) => String(o.saleType || "").toLowerCase() !== "secondary"),
-    [dispatchedDeliveredInvoices]
+  const primaryOrderInvoices = useMemo(
+    () => deliveredInvoices.filter((o) => String(o.saleType || "").toLowerCase() === "primary"),
+    [deliveredInvoices]
   );
-  const secondaryInvoices = useMemo(
-    () => dispatchedDeliveredInvoices.filter((o) => String(o.saleType || "").toLowerCase() === "secondary"),
-    [dispatchedDeliveredInvoices]
+  const primaryPaymentInvoices = useMemo(
+    () =>
+      (primaryPayments || []).map((p) => ({
+        _id: `primary-${p._id || p.invoiceNo}`,
+        orderNo: p.invoiceNo,
+        invoiceNo: p.invoiceNo,
+        saleType: "primary",
+        distributorName: p.distributorName,
+        territoryName: p.territoryName,
+        totalAmount: Number(p.amountTotal || 0),
+        updatedAt: p.payDate || p.createdAt,
+        status: Number(p.amountRemaining || 0) <= 0 ? "closed" : "open",
+      })),
+    [primaryPayments]
   );
+  const primaryInvoices = useMemo(() => {
+    if (primaryOrderInvoices.length) return primaryOrderInvoices;
+    return primaryPaymentInvoices;
+  }, [primaryOrderInvoices, primaryPaymentInvoices]);
+  const secondaryInvoices = useMemo(() => deliveredInvoices.filter((o) => String(o.saleType || "").toLowerCase() === "secondary"), [deliveredInvoices]);
 
   return (
     <AdminShell title="Invoices" user={null}>
@@ -58,14 +76,14 @@ export default function FinanceInvoicesPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-xl font-semibold text-zinc-900">Invoices</div>
-            <div className="text-sm text-zinc-500 mt-1">All dispatched and delivered sales invoices from order management.</div>
+            <div className="text-sm text-zinc-500 mt-1">All delivered sales invoices from order management.</div>
           </div>
           <div className="rounded-full border bg-zinc-50 px-3 py-1 text-xs text-zinc-600">{now.toLocaleString()}</div>
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-          <StatCard label="Dispatched + Delivered Invoices" value={String(dispatchedDeliveredInvoices.length)} />
-          <StatCard label="Dispatched + Delivered Amount" value={`PKR ${dispatchedDeliveredInvoices.reduce((s, o) => s + Number(o.totalAmount || 0), 0).toLocaleString()}`} />
+          <StatCard label="Delivered Invoices" value={String(deliveredInvoices.length)} />
+          <StatCard label="Total Delivered Amount" value={`PKR ${deliveredInvoices.reduce((s, o) => s + Number(o.totalAmount || 0), 0).toLocaleString()}`} />
           <StatCard label="Primary Invoices" value={String(primaryInvoices.length)} />
           <StatCard label="Secondary Invoices" value={String(secondaryInvoices.length)} />
         </div>
