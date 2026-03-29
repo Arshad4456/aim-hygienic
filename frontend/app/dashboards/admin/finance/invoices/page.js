@@ -39,15 +39,18 @@ export default function FinanceInvoicesPage() {
     };
   }, []);
 
-  const deliveredInvoices = useMemo(
-    () => orders.filter((o) => ["approved", "dispatched", "delivered"].includes(String(o.status || "").toLowerCase())),
+  const dispatchedDeliveredInvoices = useMemo(
+    () => orders.filter((o) => ["dispatched", "delivered"].includes(String(o.status || "").toLowerCase())),
     [orders]
   );
   const primaryInvoices = useMemo(
-    () => deliveredInvoices.filter((o) => String(o.saleType || "").toLowerCase() === "primary"),
-    [deliveredInvoices]
+    () => dispatchedDeliveredInvoices.filter((o) => String(o.saleType || "").toLowerCase() !== "secondary"),
+    [dispatchedDeliveredInvoices]
   );
-  const secondaryInvoices = useMemo(() => deliveredInvoices.filter((o) => String(o.saleType || "").toLowerCase() === "secondary"), [deliveredInvoices]);
+  const secondaryInvoices = useMemo(
+    () => dispatchedDeliveredInvoices.filter((o) => String(o.saleType || "").toLowerCase() === "secondary"),
+    [dispatchedDeliveredInvoices]
+  );
 
   return (
     <AdminShell title="Invoices" user={null}>
@@ -55,14 +58,14 @@ export default function FinanceInvoicesPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-xl font-semibold text-zinc-900">Invoices</div>
-            <div className="text-sm text-zinc-500 mt-1">All delivered sales invoices from order management.</div>
+            <div className="text-sm text-zinc-500 mt-1">All dispatched and delivered sales invoices from order management.</div>
           </div>
           <div className="rounded-full border bg-zinc-50 px-3 py-1 text-xs text-zinc-600">{now.toLocaleString()}</div>
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-          <StatCard label="Delivered Invoices" value={String(deliveredInvoices.length)} />
-          <StatCard label="Total Delivered Amount" value={`PKR ${deliveredInvoices.reduce((s, o) => s + Number(o.totalAmount || 0), 0).toLocaleString()}`} />
+          <StatCard label="Dispatched + Delivered Invoices" value={String(dispatchedDeliveredInvoices.length)} />
+          <StatCard label="Dispatched + Delivered Amount" value={`PKR ${dispatchedDeliveredInvoices.reduce((s, o) => s + Number(o.totalAmount || 0), 0).toLocaleString()}`} />
           <StatCard label="Primary Invoices" value={String(primaryInvoices.length)} />
           <StatCard label="Secondary Invoices" value={String(secondaryInvoices.length)} />
         </div>
