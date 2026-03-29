@@ -43,7 +43,14 @@ export default function ReceiptCenter({ title, subtitle, roleKey, links = [] }) 
         );
         setInvoices(
             ordersRes.status === "fulfilled"
-                ? (ordersRes.value.orders || []).filter((x) => ["approved", "dispatched", "delivered"].includes(String(x.status || "").toLowerCase()))
+                ? (ordersRes.value.orders || []).filter((x) => {
+                    const status = String(x.status || "").toLowerCase();
+                    const saleType = String(x.saleType || "").toLowerCase();
+                    if (String(roleKey || "").toLowerCase() === "distributor") {
+                        return saleType === "primary" && ["dispatched", "delivered"].includes(status);
+                    }
+                    return ["approved", "dispatched", "delivered"].includes(status);
+                })
                 : [],
         );
     }
@@ -101,7 +108,14 @@ export default function ReceiptCenter({ title, subtitle, roleKey, links = [] }) 
 
     const accountOptions = [{ value: "", label: accounts.length ? "Select Account" : "No accounts available" }, ...accounts.map((x) => ({ value: x._id, label: x.accountName || [x.bankName, x.accountNumber].filter(Boolean).join(" - ") || x._id }))];
     const collectorOptions = [{ value: "", label: collectors.length ? "Select Collector" : "No collectors available" }, ...collectors.map((x) => ({ value: x._id, label: `${x.fullName || x.username || x.mobile} (${x.role || ""})` }))];
-    const invoiceOptions = [{ value: "", label: invoices.length ? "Select Invoice" : "No approved/dispatched/delivered invoice" }, ...invoices.map((x) => ({ value: x.orderNo || x.invoiceNo || x._id, label: `${x.orderNo || x.invoiceNo || x._id} [${x.status || "-"}] (${x.saleType || "-"})` }))];
+    const invoiceOptions = [{
+        value: "",
+        label: invoices.length
+            ? "Select Invoice"
+            : (String(roleKey || "").toLowerCase() === "distributor"
+                ? "No dispatched/delivered primary invoice"
+                : "No approved/dispatched/delivered invoice"),
+    }, ...invoices.map((x) => ({ value: x.orderNo || x.invoiceNo || x._id, label: `${x.orderNo || x.invoiceNo || x._id} [${x.status || "-"}] (${x.saleType || "-"})` }))];
 
     return (
         <UserDashboardShell title={title} subtitle={subtitle} roleKey={roleKey} links={links} showAccountCards>

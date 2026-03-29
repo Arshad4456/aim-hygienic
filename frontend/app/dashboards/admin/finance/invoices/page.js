@@ -39,15 +39,14 @@ export default function FinanceInvoicesPage() {
     };
   }, []);
 
-  const deliveredInvoices = useMemo(
-    () => orders.filter((o) => ["approved", "dispatched", "delivered"].includes(String(o.status || "").toLowerCase())),
+  const primaryInvoices = useMemo(
+    () => orders.filter((o) => {
+      const status = String(o.status || "").toLowerCase();
+      const saleType = String(o.saleType || "").toLowerCase();
+      return saleType === "primary" && ["approved", "dispatched", "delivered"].includes(status);
+    }),
     [orders]
   );
-  const primaryInvoices = useMemo(
-    () => deliveredInvoices.filter((o) => String(o.saleType || "").toLowerCase() === "primary"),
-    [deliveredInvoices]
-  );
-  const secondaryInvoices = useMemo(() => deliveredInvoices.filter((o) => String(o.saleType || "").toLowerCase() === "secondary"), [deliveredInvoices]);
 
   return (
     <AdminShell title="Invoices" user={null}>
@@ -61,17 +60,14 @@ export default function FinanceInvoicesPage() {
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-          <StatCard label="Delivered Invoices" value={String(deliveredInvoices.length)} />
-          <StatCard label="Total Delivered Amount" value={`PKR ${deliveredInvoices.reduce((s, o) => s + Number(o.totalAmount || 0), 0).toLocaleString()}`} />
           <StatCard label="Primary Invoices" value={String(primaryInvoices.length)} />
-          <StatCard label="Secondary Invoices" value={String(secondaryInvoices.length)} />
+          <StatCard label="Total Primary Amount" value={`PKR ${primaryInvoices.reduce((s, o) => s + Number(o.totalAmount || 0), 0).toLocaleString()}`} />
         </div>
 
         {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
 
         <div className="mt-5 space-y-5">
           <InvoiceTable title="Primary Order Invoices" rows={primaryInvoices} loading={loading} />
-          <InvoiceTable title="Secondary Order Invoices" rows={secondaryInvoices} loading={loading} />
         </div>
       </div>
     </AdminShell>
