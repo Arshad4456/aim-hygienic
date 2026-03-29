@@ -24,9 +24,15 @@ export default function InvoicesScreen() {
     return () => { active = false; };
   }, []);
 
-  const deliveredInvoices = useMemo(() => orders.filter((o) => String(o.status || '').toLowerCase() === 'delivered'), [orders]);
-  const primaryInvoices = useMemo(() => deliveredInvoices.filter((o) => String(o.saleType || '').toLowerCase() === 'primary'), [deliveredInvoices]);
-  const secondaryInvoices = useMemo(() => deliveredInvoices.filter((o) => String(o.saleType || '').toLowerCase() === 'secondary'), [deliveredInvoices]);
+  const primaryInvoices = useMemo(
+    () =>
+      orders.filter((o) => {
+        const status = String(o.status || '').toLowerCase();
+        const saleType = String(o.saleType || '').toLowerCase();
+        return saleType === 'primary' && ['approved', 'dispatched', 'delivered'].includes(status);
+      }),
+    [orders]
+  );
 
   if (loading) return <Loader />;
 
@@ -36,23 +42,20 @@ export default function InvoicesScreen() {
         <View style={styles.headerRow}>
           <View>
             <Text style={styles.title}>Invoices</Text>
-            <Text style={styles.subtitle}>All delivered sales invoices from order management.</Text>
+            <Text style={styles.subtitle}>Primary sales invoices from order management (approved, dispatched, delivered).</Text>
           </View>
           <Text style={styles.clock}>{now.toLocaleString()}</Text>
         </View>
 
         <View style={styles.statsWrap}>
-          <StatCard label="Delivered Invoices" value={String(deliveredInvoices.length)} />
-          <StatCard label="Total Delivered Amount" value={`PKR ${deliveredInvoices.reduce((s, o) => s + Number(o.totalAmount || 0), 0).toLocaleString()}`} />
           <StatCard label="Primary Invoices" value={String(primaryInvoices.length)} />
-          <StatCard label="Secondary Invoices" value={String(secondaryInvoices.length)} />
+          <StatCard label="Total Primary Amount" value={`PKR ${primaryInvoices.reduce((s, o) => s + Number(o.totalAmount || 0), 0).toLocaleString()}`} />
         </View>
 
         {err ? <Text style={styles.err}>{err}</Text> : null}
       </Card>
 
       <InvoiceTable title="Primary Order Invoices" rows={primaryInvoices} />
-      <InvoiceTable title="Secondary Order Invoices" rows={secondaryInvoices} />
     </ScrollView>
   );
 }
