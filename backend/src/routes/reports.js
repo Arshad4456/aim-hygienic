@@ -59,6 +59,28 @@ async function getScopedFinanceModels(req, requestedCompanyId = "", requestedCom
   };
 }
 
+function getScopedCompanyContext(req, requestedCompanyId = "", requestedCompanyName = "") {
+  const scopedCompanyId = isSystemLevelAdmin(req.user?.role)
+    ? String(requestedCompanyId || "").trim()
+    : String(req.user?.companyId || "").trim();
+  const scopedCompanyName = isSystemLevelAdmin(req.user?.role)
+    ? String(requestedCompanyName || "").trim()
+    : String(req.user?.companyName || "").trim();
+  return { scopedCompanyId, scopedCompanyName };
+}
+
+async function getScopedProcurementModels(req, requestedCompanyId = "", requestedCompanyName = "") {
+  const { scopedCompanyId, scopedCompanyName } = getScopedCompanyContext(req, requestedCompanyId, requestedCompanyName);
+  if (!scopedCompanyId) return { InventoryMovementModel: InventoryMovement, UserModel: User };
+  const dbName = await resolveTenantDbName(scopedCompanyId, scopedCompanyName);
+  if (!dbName) return { InventoryMovementModel: InventoryMovement, UserModel: User };
+  const tenantDb = mongoose.connection.useDb(dbName, { useCache: true });
+  return {
+    InventoryMovementModel: getModelFromDb(tenantDb, InventoryMovement),
+    UserModel: getModelFromDb(tenantDb, User),
+  };
+}
+
 router.get("/overview", requireAuth, async (req, res) => {
   try {
     const [salesAgg] = await InventoryMovement.aggregate([
@@ -404,22 +426,23 @@ router.get("/compliance", requireAuth, async (req, res) => {
 
 router.get("/procurement", requireAuth, async (req, res) => {
   try {
+    const { InventoryMovementModel, UserModel } = await getScopedProcurementModels(req, req.query?.companyId, req.query?.companyName);
     const startDate = new Date();
     startDate.setHours(0, 0, 0, 0);
     startDate.setDate(startDate.getDate() - 6);
 
     const [supplierTotal, supplierActive, purchaseAgg, recentPurchases, trendAgg] = await Promise.all([
-      User.countDocuments({ role: { $regex: /supplier/i } }),
-      User.countDocuments({ role: { $regex: /supplier/i }, status: "active" }),
-      InventoryMovement.aggregate([
+      UserModel.countDocuments({ role: { $regex: /supplier/i } }),
+      UserModel.countDocuments({ role: { $regex: /supplier/i }, status: "active" }),
+      InventoryMovementModel.aggregate([
         { $match: { movementType: "PURCHASE_IN" } },
         { $group: { _id: null, count: { $sum: 1 }, quantity: { $sum: "$quantity" } } },
       ]),
-      InventoryMovement.find({ movementType: "PURCHASE_IN" })
+      InventoryMovementModel.find({ movementType: "PURCHASE_IN" })
         .sort({ createdAt: -1 })
         .limit(5)
         .lean(),
-      InventoryMovement.aggregate([
+      InventoryMovementModel.aggregate([
         { $match: { movementType: "PURCHASE_IN", createdAt: { $gte: startDate } } },
         {
           $group: {
