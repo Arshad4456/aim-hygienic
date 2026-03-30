@@ -72,11 +72,25 @@ function getScopedCompanyContext(req, requestedCompanyId = "", requestedCompanyN
 async function getScopedProcurementModels(req, requestedCompanyId = "", requestedCompanyName = "") {
   const { scopedCompanyId, scopedCompanyName } = getScopedCompanyContext(req, requestedCompanyId, requestedCompanyName);
   if (!scopedCompanyId) {
-    return { InventoryMovementModel: InventoryMovement, UserModel: User, StockTransferModel: StockTransfer, VehicleModel: Vehicle };
+    return {
+      InventoryMovementModel: InventoryMovement,
+      UserModel: User,
+      StockTransferModel: StockTransfer,
+      VehicleModel: Vehicle,
+      MessageModel: Message,
+      ReturnClaimModel: ReturnClaim,
+    };
   }
   const dbName = await resolveTenantDbName(scopedCompanyId, scopedCompanyName);
   if (!dbName) {
-    return { InventoryMovementModel: InventoryMovement, UserModel: User, StockTransferModel: StockTransfer, VehicleModel: Vehicle };
+    return {
+      InventoryMovementModel: InventoryMovement,
+      UserModel: User,
+      StockTransferModel: StockTransfer,
+      VehicleModel: Vehicle,
+      MessageModel: Message,
+      ReturnClaimModel: ReturnClaim,
+    };
   }
   const tenantDb = mongoose.connection.useDb(dbName, { useCache: true });
   return {
@@ -84,6 +98,8 @@ async function getScopedProcurementModels(req, requestedCompanyId = "", requeste
     UserModel: getModelFromDb(tenantDb, User),
     StockTransferModel: getModelFromDb(tenantDb, StockTransfer),
     VehicleModel: getModelFromDb(tenantDb, Vehicle),
+    MessageModel: getModelFromDb(tenantDb, Message),
+    ReturnClaimModel: getModelFromDb(tenantDb, ReturnClaim),
   };
 }
 
@@ -416,9 +432,10 @@ router.get("/logistics", requireAuth, async (req, res) => {
 
 router.get("/compliance", requireAuth, async (req, res) => {
   try {
-    const adjustmentCount = await InventoryMovement.countDocuments({ movementType: "ADJUSTMENT" });
-    const returnCount = await InventoryMovement.countDocuments({ movementType: "RETURN_IN" });
-    const messageCount = await Message.countDocuments();
+    const { InventoryMovementModel, MessageModel, ReturnClaimModel } = await getScopedProcurementModels(req, req.query?.companyId, req.query?.companyName);
+    const adjustmentCount = await InventoryMovementModel.countDocuments({ movementType: "ADJUSTMENT" });
+    const returnCount = await ReturnClaimModel.countDocuments();
+    const messageCount = await MessageModel.countDocuments();
 
     return res.json({
       ok: true,

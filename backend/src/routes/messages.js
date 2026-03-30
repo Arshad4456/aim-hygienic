@@ -1,6 +1,9 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const Message = require("../models/Message");
+const Company = require("../models/Company");
 const { requireAuth } = require("../utils/auth");
+const { toTenantDatabaseName } = require("../utils/tenantDatabases");
 
 const router = express.Router();
 
@@ -26,10 +29,48 @@ function buildRoleScope(req) {
   return query;
 }
 
+function normalizeRole(role) {
+  return String(role || "").trim().toLowerCase();
+}
+
+function isSystemLevelAdmin(role) {
+  const normalized = normalizeRole(role);
+  return normalized === "admin" || normalized === "system admin";
+}
+
+async function resolveTenantDbName(companyId, companyName = "") {
+  const normalizedCompanyId = String(companyId || "").trim();
+  const normalizedCompanyName = String(companyName || "").trim();
+  if (!normalizedCompanyId && !normalizedCompanyName) return "";
+  if (normalizedCompanyName) return toTenantDatabaseName(normalizedCompanyName, normalizedCompanyId || "company");
+  const company = await Company.findOne({ companyId: normalizedCompanyId }).select("name").lean();
+  return toTenantDatabaseName(company?.name || normalizedCompanyId, normalizedCompanyId || "company");
+}
+
+function getModelFromDb(db, baseModel) {
+  const modelName = baseModel.modelName;
+  return db.models[modelName] || db.model(modelName, baseModel.schema, baseModel.collection.name);
+}
+
+async function getScopedMessageModel(req, requestedCompanyId = "", requestedCompanyName = "") {
+  const scopedCompanyId = isSystemLevelAdmin(req.user?.role)
+    ? String(requestedCompanyId || "").trim()
+    : String(req.user?.companyId || "").trim();
+  const scopedCompanyName = isSystemLevelAdmin(req.user?.role)
+    ? String(requestedCompanyName || "").trim()
+    : String(req.user?.companyName || "").trim();
+  if (!scopedCompanyId) return Message;
+  const dbName = await resolveTenantDbName(scopedCompanyId, scopedCompanyName);
+  if (!dbName) return Message;
+  const tenantDb = mongoose.connection.useDb(dbName, { useCache: true });
+  return getModelFromDb(tenantDb, Message);
+}
+
 router.post("/", requireAuth, async (req, res) => {
   try {
+    const MessageModel = await getScopedMessageModel(req, req.body?.companyId || req.query?.companyId, req.body?.companyName || req.query?.companyName);
     const body = req.body || {};
-    const doc = await Message.create({
+    const doc = await MessageModel.create({
       title: String(body.title || "").trim(),
       body: String(body.body || "").trim(),
       type: String(body.type || "general").trim(),
@@ -47,6 +88,7 @@ router.post("/", requireAuth, async (req, res) => {
 
 router.get("/", requireAuth, async (req, res) => {
   try {
+    const MessageModel = await getScopedMessageModel(req, req.query?.companyId, req.query?.companyName);
     const query = buildRoleScope(req);
     const uid = String(req.user?.uid || "");
 
@@ -54,7 +96,7 @@ router.get("/", requireAuth, async (req, res) => {
       query.readByUserIds = { $nin: [uid] };
     }
 
-    const items = await Message.find(query).sort({ createdAt: -1 }).lean();
+    const items = await MessageModel.find(query).sort({ createdAt: -1 }).lean();
     return res.json({
       ok: true,
       messages: items.map((item) => ({
@@ -69,13 +111,14 @@ router.get("/", requireAuth, async (req, res) => {
 
 router.get("/summary", requireAuth, async (req, res) => {
   try {
+    const MessageModel = await getScopedMessageModel(req, req.query?.companyId, req.query?.companyName);
     const query = buildRoleScope(req);
     const uid = String(req.user?.uid || "");
     if (uid) {
       query.readByUserIds = { $nin: [uid] };
     }
 
-    const unread = await Message.countDocuments(query);
+    const unread = await MessageModel.countDocuments(query);
     return res.json({ ok: true, unread });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to load message summary" });
@@ -84,12 +127,13 @@ router.get("/summary", requireAuth, async (req, res) => {
 
 router.patch("/:id/read", requireAuth, async (req, res) => {
   try {
+    const MessageModel = await getScopedMessageModel(req, req.body?.companyId || req.query?.companyId, req.body?.companyName || req.query?.companyName);
     const uid = String(req.user?.uid || "");
     if (!uid) {
       return res.status(400).json({ ok: false, message: "Invalid user" });
     }
 
-    const updated = await Message.findByIdAndUpdate(
+    const updated = await MessageModel.findByIdAndUpdate(
       req.params.id,
       { $addToSet: { readByUserIds: uid } },
       { new: true }
