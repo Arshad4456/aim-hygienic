@@ -3,7 +3,9 @@ const mongoose = require("mongoose");
 const Expense = require("../models/Expense");
 const Account = require("../models/Account");
 const AccountTransaction = require("../models/AccountTransaction");
+const Company = require("../models/Company");
 const { requireAuth } = require("../utils/auth");
+const { toTenantDatabaseName } = require("../utils/tenantDatabases");
 
 const router = express.Router();
 
@@ -20,21 +22,69 @@ function asObjectId(value) {
   return mongoose.Types.ObjectId.isValid(value) ? new mongoose.Types.ObjectId(value) : undefined;
 }
 
+function toTrimmedString(value) {
+  return String(value || "").trim();
+}
+
+function isSystemLevelAdmin(role) {
+  const normalized = String(role || "").trim().toLowerCase();
+  return normalized === "admin" || normalized === "system admin";
+}
+
+function getModelFromDb(db, baseModel) {
+  const modelName = baseModel.modelName;
+  return db.models[modelName] || db.model(modelName, baseModel.schema, baseModel.collection.name);
+}
+
+async function resolveTenantDbName(companyId, fallbackCompanyName = "") {
+  const normalizedCompanyId = toTrimmedString(companyId);
+  const normalizedFallbackName = toTrimmedString(fallbackCompanyName);
+  if (!normalizedCompanyId && !normalizedFallbackName) return "";
+  if (normalizedFallbackName) return toTenantDatabaseName(normalizedFallbackName, normalizedCompanyId || "company");
+  const company = await Company.findOne({ companyId: normalizedCompanyId }).select("name").lean();
+  return toTenantDatabaseName(company?.name || normalizedCompanyId, normalizedCompanyId || "company");
+}
+
+async function getScopedFinanceModels(req, companyId, companyName = "") {
+  const normalizedCompanyId = toTrimmedString(companyId);
+  if (!normalizedCompanyId) {
+    return { ExpenseModel: Expense, AccountModel: Account, AccountTransactionModel: AccountTransaction };
+  }
+
+  const dbName = await resolveTenantDbName(normalizedCompanyId, companyName);
+  if (!dbName) {
+    return { ExpenseModel: Expense, AccountModel: Account, AccountTransactionModel: AccountTransaction };
+  }
+
+  const tenantDb = mongoose.connection.useDb(dbName, { useCache: true });
+  return {
+    ExpenseModel: getModelFromDb(tenantDb, Expense),
+    AccountModel: getModelFromDb(tenantDb, Account),
+    AccountTransactionModel: getModelFromDb(tenantDb, AccountTransaction),
+  };
+}
+
+function getScopedCompanyId(req, requestedCompanyId = "") {
+  if (isSystemLevelAdmin(req.user?.role)) return toTrimmedString(requestedCompanyId);
+  return toTrimmedString(req.user?.companyId);
+}
+
 function shouldPostToAccount(status, approvalRequired) {
   return status === "posted" || status === "paid" || status === "approved" || !approvalRequired;
 }
 
-async function syncAccountImpact(expense, userId) {
+async function syncAccountImpact(expense, userId, models) {
   if (!expense?.fromAccountId || expense?.accountTransactionId || expense?.isTransfer) return;
   if (!shouldPostToAccount(expense.status, expense.approvalRequired)) return;
 
-  const account = await Account.findById(expense.fromAccountId);
+  const { AccountModel, AccountTransactionModel } = models;
+  const account = await AccountModel.findById(expense.fromAccountId);
   if (!account) return;
 
   const amount = Math.abs(toNumber(expense.amount));
   if (amount <= 0) return;
 
-  const tx = await AccountTransaction.create({
+  const tx = await AccountTransactionModel.create({
     accountId: expense.fromAccountId,
     type: "cash_out",
     amount,
@@ -108,8 +158,10 @@ function toPayload(body, req) {
 
 router.post("/", requireAuth, async (req, res) => {
   try {
-    const doc = await Expense.create(toPayload(req.body || {}, req));
-    await syncAccountImpact(doc, req.user?.uid);
+    const scopedCompanyId = getScopedCompanyId(req, req.body?.companyId);
+    const { ExpenseModel, AccountModel, AccountTransactionModel } = await getScopedFinanceModels(req, scopedCompanyId, req.body?.companyName);
+    const doc = await ExpenseModel.create(toPayload(req.body || {}, req));
+    await syncAccountImpact(doc, req.user?.uid, { AccountModel, AccountTransactionModel });
     return res.status(201).json({ ok: true, expense: doc });
   } catch (e) {
     if (e?.code === 11000) {
@@ -121,6 +173,8 @@ router.post("/", requireAuth, async (req, res) => {
 
 router.get("/", requireAuth, async (req, res) => {
   try {
+    const scopedCompanyId = getScopedCompanyId(req, req.query?.companyId);
+    const { ExpenseModel } = await getScopedFinanceModels(req, scopedCompanyId, req.query?.companyName);
     const query = {};
     if (req.query.status && req.query.status !== "all") query.status = String(req.query.status);
     if (req.query.section && req.query.section !== "all") query.section = String(req.query.section);
@@ -131,7 +185,7 @@ router.get("/", requireAuth, async (req, res) => {
     if (req.query.fromAccountId) query.fromAccountId = asObjectId(req.query.fromAccountId);
     if (req.query.createdBy) query.createdBy = asObjectId(req.query.createdBy);
 
-    const items = await Expense.find(query).sort({ expenseDate: -1, createdAt: -1 }).lean();
+    const items = await ExpenseModel.find(query).sort({ expenseDate: -1, createdAt: -1 }).lean();
     return res.json({ ok: true, expenses: items });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to load expenses" });
@@ -140,7 +194,9 @@ router.get("/", requireAuth, async (req, res) => {
 
 router.get("/:id", requireAuth, async (req, res) => {
   try {
-    const item = await Expense.findById(req.params.id).lean();
+    const scopedCompanyId = getScopedCompanyId(req, req.query?.companyId);
+    const { ExpenseModel } = await getScopedFinanceModels(req, scopedCompanyId, req.query?.companyName);
+    const item = await ExpenseModel.findById(req.params.id).lean();
     if (!item) return res.status(404).json({ ok: false, message: "Not found" });
     return res.json({ ok: true, expense: item });
   } catch (e) {
@@ -150,12 +206,14 @@ router.get("/:id", requireAuth, async (req, res) => {
 
 router.put("/:id", requireAuth, async (req, res) => {
   try {
-    const current = await Expense.findById(req.params.id);
+    const scopedCompanyId = getScopedCompanyId(req, req.body?.companyId || req.query?.companyId);
+    const { ExpenseModel, AccountModel, AccountTransactionModel } = await getScopedFinanceModels(req, scopedCompanyId, req.body?.companyName || req.query?.companyName);
+    const current = await ExpenseModel.findById(req.params.id);
     if (!current) return res.status(404).json({ ok: false, message: "Not found" });
 
     Object.assign(current, toPayload(req.body || {}, req));
     await current.save();
-    await syncAccountImpact(current, req.user?.uid);
+    await syncAccountImpact(current, req.user?.uid, { AccountModel, AccountTransactionModel });
 
     return res.json({ ok: true, expense: current });
   } catch (e) {
@@ -168,7 +226,9 @@ router.put("/:id", requireAuth, async (req, res) => {
 
 router.delete("/:id", requireAuth, async (req, res) => {
   try {
-    const deleted = await Expense.findByIdAndDelete(req.params.id);
+    const scopedCompanyId = getScopedCompanyId(req, req.body?.companyId || req.query?.companyId);
+    const { ExpenseModel } = await getScopedFinanceModels(req, scopedCompanyId, req.body?.companyName || req.query?.companyName);
+    const deleted = await ExpenseModel.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ ok: false, message: "Not found" });
     return res.json({ ok: true });
   } catch (e) {
