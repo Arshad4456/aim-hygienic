@@ -461,6 +461,11 @@ router.get("/overview", requireAuth, async (req, res) => {
 
 router.get("/sales-manager", requireAuth, async (req, res) => {
   try {
+    const { companyId: requestedScopeCompanyId } = await resolveScopedCompanyForRequest(
+      req,
+      req.query?.companyId,
+      req.query?.companyName
+    );
     const { UserModel, ProductModel, WarehouseModel, RegionModel, SalesOrderModel } = await getScopedDashboardModels(req, req.query?.companyId, req.query?.companyName);
     const currentUser = await UserModel.findById(req.user?.uid).lean()
       || await User.findById(req.user?.uid).select("_id companyId companyName").lean();
@@ -468,9 +473,14 @@ router.get("/sales-manager", requireAuth, async (req, res) => {
       return res.status(404).json({ ok: false, message: "User not found" });
     }
 
-    const companyId = String(currentUser.companyId || "").trim();
-    const companyName = String(currentUser.companyName || "").trim();
+    const companyId = String(requestedScopeCompanyId || currentUser.companyId || "").trim();
+    const companyName = String(currentUser.companyName || req.user?.companyName || "").trim();
+    if (!companyId && !isSystemLevelAdmin(req.user?.role)) {
+      return res.status(400).json({ ok: false, message: "Company context is required for sales dashboard" });
+    }
+
     const teamQuery = companyId ? { companyId } : { _id: currentUser._id };
+    const orderMatchBase = companyId ? { companyId } : {};
 
     const [teamUsers, activeUsers, productCount, warehouseCount, regionCount] = await Promise.all([
       UserModel.find(teamQuery).select("_id status").lean(),
@@ -481,7 +491,9 @@ router.get("/sales-manager", requireAuth, async (req, res) => {
     ]);
 
     const teamIds = teamUsers.map((user) => user._id);
-    const orderMatch = teamIds.length ? { createdBy: { $in: teamIds } } : { createdBy: currentUser._id };
+    const orderMatch = teamIds.length
+      ? { ...orderMatchBase, createdBy: { $in: teamIds } }
+      : { ...orderMatchBase, createdBy: currentUser._id };
 
     const [orderAgg, statusAgg, recentOrders] = await Promise.all([
       SalesOrderModel.aggregate([
