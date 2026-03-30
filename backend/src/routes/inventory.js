@@ -95,11 +95,23 @@ function getModelFromDb(db, baseModel) {
 async function getScopedInventoryModels(req, companyId, companyName = "") {
   const normalizedCompanyId = toTrimmedString(companyId);
   if (!normalizedCompanyId) {
-    return { InventoryMovementModel: InventoryMovement, WarehouseTransactionModel: WarehouseTransaction, StockTransferModel: StockTransfer, ProductModel: Product };
+    return {
+      InventoryMovementModel: InventoryMovement,
+      WarehouseTransactionModel: WarehouseTransaction,
+      StockTransferModel: StockTransfer,
+      ProductModel: Product,
+      MessageModel: Message,
+    };
   }
   const dbName = await resolveTenantDbName(normalizedCompanyId, companyName);
   if (!dbName) {
-    return { InventoryMovementModel: InventoryMovement, WarehouseTransactionModel: WarehouseTransaction, StockTransferModel: StockTransfer, ProductModel: Product };
+    return {
+      InventoryMovementModel: InventoryMovement,
+      WarehouseTransactionModel: WarehouseTransaction,
+      StockTransferModel: StockTransfer,
+      ProductModel: Product,
+      MessageModel: Message,
+    };
   }
   const tenantDb = mongoose.connection.useDb(dbName, { useCache: true });
   return {
@@ -107,6 +119,7 @@ async function getScopedInventoryModels(req, companyId, companyName = "") {
     WarehouseTransactionModel: getModelFromDb(tenantDb, WarehouseTransaction),
     StockTransferModel: getModelFromDb(tenantDb, StockTransfer),
     ProductModel: getModelFromDb(tenantDb, Product),
+    MessageModel: getModelFromDb(tenantDb, Message),
   };
 }
 
@@ -185,7 +198,7 @@ async function createInventoryMovementsForTransaction(transaction, items = [], u
   );
 }
 
-async function createLowStockMessageIfRequired(transaction, productBalances, userId) {
+async function createLowStockMessageIfRequired(transaction, productBalances, userId, MessageModel = Message) {
   const lowBalances = productBalances.filter((row) => row.quantity <= (row.minStockLevel || 0));
   if (!lowBalances.length) return;
 
@@ -195,7 +208,7 @@ async function createLowStockMessageIfRequired(transaction, productBalances, use
     )
     .join("; ");
 
-  await Message.create({
+  await MessageModel.create({
     subject: `Low Stock Alert (${transaction.transactionCode})`,
     body: `Low stock detected after transaction ${transaction.transactionCode}: ${lines}`,
     messageType: "alert",
@@ -303,7 +316,7 @@ router.post("/transactions", requireAuth, async (req, res) => {
     if (!companyPayload.companyId) {
       return res.status(400).json({ ok: false, message: "Company is required" });
     }
-    const { WarehouseTransactionModel, InventoryMovementModel, ProductModel } = await getScopedInventoryModels(
+    const { WarehouseTransactionModel, InventoryMovementModel, ProductModel, MessageModel } = await getScopedInventoryModels(
       req,
       companyPayload.companyId,
       companyPayload.companyName
@@ -397,7 +410,7 @@ router.post("/transactions", requireAuth, async (req, res) => {
 
     if (!isApprovalRequest) {
       try {
-        await createLowStockMessageIfRequired(transaction, productBalances, req.user?.uid);
+        await createLowStockMessageIfRequired(transaction, productBalances, req.user?.uid, MessageModel);
       } catch (alertError) {
         console.error("Failed to create low stock alert", alertError);
       }
@@ -405,9 +418,10 @@ router.post("/transactions", requireAuth, async (req, res) => {
 
     if (isReturnStockRequest) {
       try {
-        await Message.create({
+        await MessageModel.create({
           title: "Return Stock Request",
           body: `${req.user?.role || "User"} submitted return stock request ${transaction.transactionCode}`,
+          senderUserId: req.user?.uid,
           senderRole: req.user?.role,
           recipientRole: "admin",
           relatedEntity: transaction.transactionCode,
@@ -457,7 +471,7 @@ router.get("/transactions", requireAuth, async (req, res) => {
 router.put("/transactions/:id", requireAuth, requireRole("admin", "warehouse manager"), async (req, res) => {
   try {
     const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? toTrimmedString(req.body?.companyId || req.query?.companyId) : getUserCompanyId(req);
-    const { WarehouseTransactionModel, InventoryMovementModel } = await getScopedInventoryModels(req, scopedCompanyId, req.body?.companyName || req.query?.companyName);
+    const { WarehouseTransactionModel, InventoryMovementModel, MessageModel } = await getScopedInventoryModels(req, scopedCompanyId, req.body?.companyName || req.query?.companyName);
     const transaction = await WarehouseTransactionModel.findById(req.params.id);
     if (!transaction) return res.status(404).json({ ok: false, message: "Transaction not found" });
     if (!isSystemLevelAdmin(req.user?.role)) {
@@ -622,9 +636,10 @@ router.put("/transactions/:id/request-status", requireAuth, requireRole("admin",
 
     if (transaction.requestSourceRole && transaction.requestSourceRole !== "admin") {
       try {
-        await Message.create({
+        await MessageModel.create({
           title: "Stock Request Update",
           body: `Request ${transaction.transactionCode} is ${status}`,
+          senderUserId: req.user?.uid,
           senderRole: "admin",
           recipientRole: transaction.requestSourceRole,
           relatedEntity: transaction.transactionCode,
