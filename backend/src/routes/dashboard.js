@@ -136,7 +136,20 @@ function formatYearKey(date) {
 
 router.get("/overview", requireAuth, async (req, res) => {
   try {
-    const { InventoryMovementModel, ExpenseModel, StockTransferModel, UserModel, SalesOrderModel, ProductModel, WarehouseModel, VehicleModel, MessageModel, ReturnClaimModel } = await getScopedDashboardModels(req, req.query?.companyId, req.query?.companyName);
+    const {
+      InventoryMovementModel,
+      ExpenseModel,
+      StockTransferModel,
+      UserModel,
+      SalesOrderModel,
+      ProductModel,
+      WarehouseModel,
+      VehicleModel,
+      MessageModel,
+      ReturnClaimModel,
+    } = await getScopedDashboardModels(req, req.query?.companyId, req.query?.companyName, {
+      requireTenantForCompanyUser: true,
+    });
     const startDate = new Date();
     startDate.setHours(0, 0, 0, 0);
     startDate.setDate(startDate.getDate() - 6);
@@ -463,6 +476,9 @@ router.get("/overview", requireAuth, async (req, res) => {
       },
     });
   } catch (e) {
+    if (e?.message === "TENANT_CONTEXT_REQUIRED" || e?.message === "TENANT_DB_REQUIRED") {
+      return res.status(400).json({ ok: false, message: "Tenant company database context is required for dashboard overview" });
+    }
     return res.status(500).json({ ok: false, message: "Failed to load dashboard" });
   }
 });
@@ -572,7 +588,18 @@ router.get("/sales-manager", requireAuth, async (req, res) => {
 
 router.get("/operations", requireAuth, async (req, res) => {
   try {
-    const { SalesOrderModel, VehicleModel, WarehouseModel, InventoryMovementModel, StockTransferModel, ExpenseModel, ReturnClaimModel, ProductModel } = await getScopedDashboardModels(req, req.query?.companyId, req.query?.companyName);
+    const {
+      SalesOrderModel,
+      VehicleModel,
+      WarehouseModel,
+      InventoryMovementModel,
+      StockTransferModel,
+      ExpenseModel,
+      ReturnClaimModel,
+      ProductModel,
+    } = await getScopedDashboardModels(req, req.query?.companyId, req.query?.companyName, {
+      requireTenantForCompanyUser: true,
+    });
     const activityStart = new Date();
     activityStart.setHours(0, 0, 0, 0);
     activityStart.setDate(activityStart.getDate() - 13);
@@ -817,6 +844,9 @@ router.get("/operations", requireAuth, async (req, res) => {
       updatedAt: new Date().toISOString(),
     });
   } catch (e) {
+    if (e?.message === "TENANT_CONTEXT_REQUIRED" || e?.message === "TENANT_DB_REQUIRED") {
+      return res.status(400).json({ ok: false, message: "Tenant company database context is required for operations dashboard" });
+    }
     return res.status(500).json({ ok: false, message: "Failed to load operations dashboard" });
   }
 });
