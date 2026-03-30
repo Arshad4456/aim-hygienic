@@ -1,8 +1,49 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const { requireAuth } = require("../utils/auth");
 const InventoryMovement = require("../models/InventoryMovement");
+const Company = require("../models/Company");
+const { toTenantDatabaseName } = require("../utils/tenantDatabases");
 
 const router = express.Router();
+
+function toTrimmedString(value) {
+  return String(value || "").trim();
+}
+
+function isSystemLevelAdmin(role) {
+  const normalized = toTrimmedString(role).toLowerCase();
+  return normalized === "admin" || normalized === "system admin";
+}
+
+async function resolveTenantDbName(companyId, companyName = "") {
+  const normalizedCompanyId = toTrimmedString(companyId);
+  const normalizedCompanyName = toTrimmedString(companyName);
+  if (!normalizedCompanyId && !normalizedCompanyName) return "";
+  if (normalizedCompanyName) return toTenantDatabaseName(normalizedCompanyName, normalizedCompanyId || "company");
+  const company = await Company.findOne({ companyId: normalizedCompanyId }).select("name").lean();
+  return toTenantDatabaseName(company?.name || normalizedCompanyId, normalizedCompanyId || "company");
+}
+
+function getModelFromDb(db, baseModel) {
+  const modelName = baseModel.modelName;
+  return db.models[modelName] || db.model(modelName, baseModel.schema, baseModel.collection.name);
+}
+
+async function getScopedInventoryMovementModel(req, requestedCompanyId = "", requestedCompanyName = "") {
+  const scopedCompanyId = isSystemLevelAdmin(req.user?.role)
+    ? toTrimmedString(requestedCompanyId)
+    : toTrimmedString(req.user?.companyId);
+  const scopedCompanyName = isSystemLevelAdmin(req.user?.role)
+    ? toTrimmedString(requestedCompanyName)
+    : toTrimmedString(req.user?.companyName);
+
+  if (!scopedCompanyId) return InventoryMovement;
+  const dbName = await resolveTenantDbName(scopedCompanyId, scopedCompanyName);
+  if (!dbName) return InventoryMovement;
+  const tenantDb = mongoose.connection.useDb(dbName, { useCache: true });
+  return getModelFromDb(tenantDb, InventoryMovement);
+}
 
 function toDateString(date) {
   return date.toISOString().slice(0, 10);
@@ -21,6 +62,11 @@ function buildDateRange(days) {
 
 router.get("/summary", requireAuth, async (req, res) => {
   try {
+    const InventoryMovementModel = await getScopedInventoryMovementModel(
+      req,
+      req.query?.companyId,
+      req.query?.companyName,
+    );
     const today = new Date();
     const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const startOfWeek = new Date(startOfToday);
@@ -28,12 +74,12 @@ router.get("/summary", requireAuth, async (req, res) => {
     const startOfPrevWeek = new Date(startOfWeek);
     startOfPrevWeek.setDate(startOfPrevWeek.getDate() - 7);
 
-    const [salesAgg] = await InventoryMovement.aggregate([
+    const [salesAgg] = await InventoryMovementModel.aggregate([
       { $match: { movementType: "SALE_OUT" } },
       { $group: { _id: null, orders: { $sum: 1 }, quantity: { $sum: "$quantity" } } },
     ]);
 
-    const regions = await InventoryMovement.aggregate([
+    const regions = await InventoryMovementModel.aggregate([
       { $match: { movementType: "SALE_OUT" } },
       {
         $group: {
@@ -46,7 +92,7 @@ router.get("/summary", requireAuth, async (req, res) => {
       { $sort: { quantity: -1 } },
     ]);
 
-    const products = await InventoryMovement.aggregate([
+    const products = await InventoryMovementModel.aggregate([
       { $match: { movementType: "SALE_OUT" } },
       {
         $group: {
@@ -59,7 +105,7 @@ router.get("/summary", requireAuth, async (req, res) => {
       { $limit: 5 },
     ]);
 
-    const warehouses = await InventoryMovement.aggregate([
+    const warehouses = await InventoryMovementModel.aggregate([
       { $match: { movementType: "SALE_OUT" } },
       {
         $group: {
@@ -72,7 +118,7 @@ router.get("/summary", requireAuth, async (req, res) => {
       { $limit: 5 },
     ]);
 
-    const weeklyAgg = await InventoryMovement.aggregate([
+    const weeklyAgg = await InventoryMovementModel.aggregate([
       {
         $match: {
           movementType: "SALE_OUT",
