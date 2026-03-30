@@ -14,7 +14,8 @@ function escapeRegExp(value) {
 function buildRoleScope(req) {
   const query = {};
   const userRole = String(req.user?.role || "").trim();
-  const isAdmin = userRole.toLowerCase() === "admin";
+  const normalizedRole = userRole.toLowerCase();
+  const isAdmin = ["admin", "system admin", "company admin"].includes(normalizedRole);
 
   if (req.query.recipientRole) {
     query.recipientRole = String(req.query.recipientRole);
@@ -75,6 +76,7 @@ router.post("/", requireAuth, async (req, res) => {
       body: String(body.body || "").trim(),
       type: String(body.type || "general").trim(),
       priority: String(body.priority || "normal").trim(),
+      senderUserId: req.user?.uid,
       senderName: String(body.senderName || "").trim(),
       senderRole: String(body.senderRole || "").trim(),
       recipientRole: String(body.recipientRole || "").trim(),
@@ -146,6 +148,27 @@ router.patch("/:id/read", requireAuth, async (req, res) => {
     return res.json({ ok: true, message: updated });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to mark message as read" });
+  }
+});
+
+router.delete("/:id", requireAuth, async (req, res) => {
+  try {
+    const MessageModel = await getScopedMessageModel(req, req.body?.companyId || req.query?.companyId, req.body?.companyName || req.query?.companyName);
+    const role = normalizeRole(req.user?.role);
+    const isAdmin = ["admin", "system admin", "company admin"].includes(role);
+    const uid = String(req.user?.uid || "");
+    const current = await MessageModel.findById(req.params.id).lean();
+    if (!current) return res.status(404).json({ ok: false, message: "Message not found" });
+
+    const isSender = uid && String(current.senderUserId || "") === uid;
+    if (!isAdmin && !isSender) {
+      return res.status(403).json({ ok: false, message: "Forbidden" });
+    }
+
+    await MessageModel.findByIdAndDelete(req.params.id);
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to delete message" });
   }
 });
 
