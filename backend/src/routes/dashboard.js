@@ -1,4 +1,5 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const { requireAuth } = require("../utils/auth");
 const InventoryMovement = require("../models/InventoryMovement");
 const Expense = require("../models/Expense");
@@ -11,11 +12,66 @@ const Region = require("../models/Region");
 const Vehicle = require("../models/Vehicle");
 const Message = require("../models/Message");
 const ReturnClaim = require("../models/ReturnClaim");
+const Company = require("../models/Company");
+const { toTenantDatabaseName } = require("../utils/tenantDatabases");
 
 const router = express.Router();
 
 function safeNumber(value) {
   return Number.isFinite(Number(value)) ? Number(value) : 0;
+}
+
+function normalizeRole(role) {
+  return String(role || "").trim().toLowerCase();
+}
+
+function isSystemLevelAdmin(role) {
+  const normalized = normalizeRole(role);
+  return normalized === "admin" || normalized === "system admin";
+}
+
+function asText(value) {
+  return String(value || "").trim();
+}
+
+async function resolveTenantDbName(companyId, companyName = "") {
+  const normalizedCompanyId = asText(companyId);
+  const normalizedCompanyName = asText(companyName);
+  if (!normalizedCompanyId && !normalizedCompanyName) return "";
+  if (normalizedCompanyName) return toTenantDatabaseName(normalizedCompanyName, normalizedCompanyId || "company");
+  const company = await Company.findOne({ companyId: normalizedCompanyId }).select("name").lean();
+  return toTenantDatabaseName(company?.name || normalizedCompanyId, normalizedCompanyId || "company");
+}
+
+function getModelFromDb(db, baseModel) {
+  const modelName = baseModel.modelName;
+  return db.models[modelName] || db.model(modelName, baseModel.schema, baseModel.collection.name);
+}
+
+async function getScopedDashboardModels(req, requestedCompanyId = "", requestedCompanyName = "") {
+  const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? asText(requestedCompanyId) : asText(req.user?.companyId);
+  const scopedCompanyName = isSystemLevelAdmin(req.user?.role) ? asText(requestedCompanyName) : asText(req.user?.companyName);
+  if (!scopedCompanyId) {
+    return { InventoryMovementModel: InventoryMovement, ExpenseModel: Expense, StockTransferModel: StockTransfer, UserModel: User, SalesOrderModel: SalesOrder, ProductModel: Product, WarehouseModel: Warehouse, RegionModel: Region, VehicleModel: Vehicle, MessageModel: Message, ReturnClaimModel: ReturnClaim };
+  }
+  const dbName = await resolveTenantDbName(scopedCompanyId, scopedCompanyName);
+  if (!dbName) {
+    return { InventoryMovementModel: InventoryMovement, ExpenseModel: Expense, StockTransferModel: StockTransfer, UserModel: User, SalesOrderModel: SalesOrder, ProductModel: Product, WarehouseModel: Warehouse, RegionModel: Region, VehicleModel: Vehicle, MessageModel: Message, ReturnClaimModel: ReturnClaim };
+  }
+  const tenantDb = mongoose.connection.useDb(dbName, { useCache: true });
+  return {
+    InventoryMovementModel: getModelFromDb(tenantDb, InventoryMovement),
+    ExpenseModel: getModelFromDb(tenantDb, Expense),
+    StockTransferModel: getModelFromDb(tenantDb, StockTransfer),
+    UserModel: getModelFromDb(tenantDb, User),
+    SalesOrderModel: getModelFromDb(tenantDb, SalesOrder),
+    ProductModel: getModelFromDb(tenantDb, Product),
+    WarehouseModel: getModelFromDb(tenantDb, Warehouse),
+    RegionModel: getModelFromDb(tenantDb, Region),
+    VehicleModel: getModelFromDb(tenantDb, Vehicle),
+    MessageModel: getModelFromDb(tenantDb, Message),
+    ReturnClaimModel: getModelFromDb(tenantDb, ReturnClaim),
+  };
 }
 
 function buildDateSeries({ startDate, days }) {
@@ -40,6 +96,7 @@ function formatYearKey(date) {
 
 router.get("/overview", requireAuth, async (req, res) => {
   try {
+    const { InventoryMovementModel, ExpenseModel, StockTransferModel, UserModel, SalesOrderModel, ProductModel, WarehouseModel, VehicleModel, MessageModel, ReturnClaimModel } = await getScopedDashboardModels(req, req.query?.companyId, req.query?.companyName);
     const startDate = new Date();
     startDate.setHours(0, 0, 0, 0);
     startDate.setDate(startDate.getDate() - 6);
@@ -85,11 +142,11 @@ router.get("/overview", requireAuth, async (req, res) => {
       monthlyRevenueAgg,
       yearlyRevenueAgg,
     ] = await Promise.all([
-      InventoryMovement.aggregate([
+      InventoryMovementModel.aggregate([
         { $match: { movementType: "SALE_OUT" } },
         { $group: { _id: null, orders: { $sum: 1 }, quantity: { $sum: "$quantity" } } },
       ]),
-      InventoryMovement.aggregate([
+      InventoryMovementModel.aggregate([
         {
           $group: {
             _id: null,
@@ -114,7 +171,7 @@ router.get("/overview", requireAuth, async (req, res) => {
           },
         },
       ]),
-      Expense.aggregate([
+      ExpenseModel.aggregate([
         {
           $group: {
             _id: null,
@@ -123,15 +180,15 @@ router.get("/overview", requireAuth, async (req, res) => {
           },
         },
       ]),
-      User.countDocuments({ status: "active" }),
-      User.countDocuments(),
-      Product.countDocuments(),
-      Warehouse.countDocuments(),
-      Vehicle.countDocuments(),
-      Vehicle.countDocuments({ gpsLatitude: { $ne: "" }, gpsLongitude: { $ne: "" } }),
-      Message.countDocuments(),
-      ReturnClaim.countDocuments(),
-      SalesOrder.aggregate([
+      UserModel.countDocuments({ status: "active" }),
+      UserModel.countDocuments(),
+      ProductModel.countDocuments(),
+      WarehouseModel.countDocuments(),
+      VehicleModel.countDocuments(),
+      VehicleModel.countDocuments({ gpsLatitude: { $ne: "" }, gpsLongitude: { $ne: "" } }),
+      MessageModel.countDocuments(),
+      ReturnClaimModel.countDocuments(),
+      SalesOrderModel.aggregate([
         {
           $group: {
             _id: null,
@@ -144,10 +201,10 @@ router.get("/overview", requireAuth, async (req, res) => {
           },
         },
       ]),
-      InventoryMovement.find().sort({ createdAt: -1 }).limit(5).lean(),
-      Expense.find().sort({ createdAt: -1 }).limit(5).lean(),
-      StockTransfer.find().sort({ createdAt: -1 }).limit(5).lean(),
-      InventoryMovement.aggregate([
+      InventoryMovementModel.find().sort({ createdAt: -1 }).limit(5).lean(),
+      ExpenseModel.find().sort({ createdAt: -1 }).limit(5).lean(),
+      StockTransferModel.find().sort({ createdAt: -1 }).limit(5).lean(),
+      InventoryMovementModel.aggregate([
         { $match: { movementType: "SALE_OUT", createdAt: { $gte: startDate } } },
         {
           $group: {
@@ -157,7 +214,7 @@ router.get("/overview", requireAuth, async (req, res) => {
           },
         },
       ]),
-      InventoryMovement.aggregate([
+      InventoryMovementModel.aggregate([
         { $match: { createdAt: { $gte: startDate } } },
         {
           $group: {
@@ -183,7 +240,7 @@ router.get("/overview", requireAuth, async (req, res) => {
           },
         },
       ]),
-      SalesOrder.aggregate([
+      SalesOrderModel.aggregate([
         { $match: { createdAt: { $gte: dailyStart } } },
         {
           $group: {
@@ -193,7 +250,7 @@ router.get("/overview", requireAuth, async (req, res) => {
           },
         },
       ]),
-      SalesOrder.aggregate([
+      SalesOrderModel.aggregate([
         { $match: { createdAt: { $gte: weekStart } } },
         {
           $group: {
@@ -202,7 +259,7 @@ router.get("/overview", requireAuth, async (req, res) => {
           },
         },
       ]),
-      SalesOrder.aggregate([
+      SalesOrderModel.aggregate([
         { $match: { createdAt: { $gte: monthStart } } },
         {
           $group: {
@@ -211,7 +268,7 @@ router.get("/overview", requireAuth, async (req, res) => {
           },
         },
       ]),
-      SalesOrder.aggregate([
+      SalesOrderModel.aggregate([
         { $match: { createdAt: { $gte: yearStart } } },
         {
           $group: {
@@ -372,7 +429,8 @@ router.get("/overview", requireAuth, async (req, res) => {
 
 router.get("/sales-manager", requireAuth, async (req, res) => {
   try {
-    const currentUser = await User.findById(req.user?.uid).lean();
+    const { UserModel, ProductModel, WarehouseModel, RegionModel, SalesOrderModel } = await getScopedDashboardModels(req, req.query?.companyId, req.query?.companyName);
+    const currentUser = await UserModel.findById(req.user?.uid).lean();
     if (!currentUser) {
       return res.status(404).json({ ok: false, message: "User not found" });
     }
@@ -382,18 +440,18 @@ router.get("/sales-manager", requireAuth, async (req, res) => {
     const teamQuery = companyId ? { companyId } : { _id: currentUser._id };
 
     const [teamUsers, activeUsers, productCount, warehouseCount, regionCount] = await Promise.all([
-      User.find(teamQuery).select("_id status").lean(),
-      User.countDocuments({ ...teamQuery, status: "active" }),
-      Product.countDocuments(companyId ? { companyId } : { createdBy: currentUser._id }),
-      Warehouse.countDocuments(companyId ? { companyId } : { createdBy: currentUser._id }),
-      Region.countDocuments(companyId ? { companyId } : { createdBy: currentUser._id }),
+      UserModel.find(teamQuery).select("_id status").lean(),
+      UserModel.countDocuments({ ...teamQuery, status: "active" }),
+      ProductModel.countDocuments(companyId ? { companyId } : { createdBy: currentUser._id }),
+      WarehouseModel.countDocuments(companyId ? { companyId } : { createdBy: currentUser._id }),
+      RegionModel.countDocuments(companyId ? { companyId } : { createdBy: currentUser._id }),
     ]);
 
     const teamIds = teamUsers.map((user) => user._id);
     const orderMatch = teamIds.length ? { createdBy: { $in: teamIds } } : { createdBy: currentUser._id };
 
     const [orderAgg, statusAgg, recentOrders] = await Promise.all([
-      SalesOrder.aggregate([
+      SalesOrderModel.aggregate([
         { $match: orderMatch },
         {
           $group: {
@@ -403,11 +461,11 @@ router.get("/sales-manager", requireAuth, async (req, res) => {
           },
         },
       ]),
-      SalesOrder.aggregate([
+      SalesOrderModel.aggregate([
         { $match: orderMatch },
         { $group: { _id: "$status", total: { $sum: 1 } } },
       ]),
-      SalesOrder.find(orderMatch).sort({ createdAt: -1 }).limit(5).lean(),
+      SalesOrderModel.find(orderMatch).sort({ createdAt: -1 }).limit(5).lean(),
     ]);
 
     const [orderDoc] = orderAgg;
@@ -451,6 +509,7 @@ router.get("/sales-manager", requireAuth, async (req, res) => {
 
 router.get("/operations", requireAuth, async (req, res) => {
   try {
+    const { SalesOrderModel, VehicleModel, WarehouseModel, InventoryMovementModel, StockTransferModel, ExpenseModel, ReturnClaimModel, ProductModel } = await getScopedDashboardModels(req, req.query?.companyId, req.query?.companyName);
     const activityStart = new Date();
     activityStart.setHours(0, 0, 0, 0);
     activityStart.setDate(activityStart.getDate() - 13);
@@ -473,20 +532,20 @@ router.get("/operations", requireAuth, async (req, res) => {
       lowStockItems,
       regionalActivityAgg,
     ] = await Promise.all([
-      SalesOrder.countDocuments(),
-      SalesOrder.aggregate([{ $group: { _id: "$status", total: { $sum: 1 } } }]),
-      SalesOrder.countDocuments({
+      SalesOrderModel.countDocuments(),
+      SalesOrderModel.aggregate([{ $group: { _id: "$status", total: { $sum: 1 } } }]),
+      SalesOrderModel.countDocuments({
         status: { $in: ["dispatched", "completed"] },
         dispatchedAt: { $ne: null },
         expectedDelivery: { $ne: null },
         $expr: { $lte: ["$dispatchedAt", "$expectedDelivery"] },
       }),
-      SalesOrder.countDocuments({
+      SalesOrderModel.countDocuments({
         status: { $in: ["dispatched", "completed"] },
         dispatchedAt: { $ne: null },
         expectedDelivery: { $ne: null },
       }),
-      SalesOrder.aggregate([
+      SalesOrderModel.aggregate([
         { $match: { status: "completed", completedAt: { $ne: null } } },
         {
           $project: {
@@ -497,20 +556,20 @@ router.get("/operations", requireAuth, async (req, res) => {
         },
         { $group: { _id: null, avgHours: { $avg: "$hours" } } },
       ]),
-      Vehicle.countDocuments(),
-      Vehicle.countDocuments({ gpsLatitude: { $ne: "" }, gpsLongitude: { $ne: "" } }),
-      Warehouse.countDocuments(),
-      InventoryMovement.aggregate([
+      VehicleModel.countDocuments(),
+      VehicleModel.countDocuments({ gpsLatitude: { $ne: "" }, gpsLongitude: { $ne: "" } }),
+      WarehouseModel.countDocuments(),
+      InventoryMovementModel.aggregate([
         { $match: { createdAt: { $gte: activityStart } } },
         { $group: { _id: "$warehouseId" } },
       ]),
-      StockTransfer.countDocuments(),
-      StockTransfer.countDocuments({ status: "completed" }),
-      StockTransfer.countDocuments({ status: { $in: ["pending", "approved", "transit-in"] } }),
-      Expense.countDocuments({ status: "pending" }),
-      ReturnClaim.countDocuments({ status: { $in: ["pending", "in_review"] } }),
+      StockTransferModel.countDocuments(),
+      StockTransferModel.countDocuments({ status: "completed" }),
+      StockTransferModel.countDocuments({ status: { $in: ["pending", "approved", "transit-in"] } }),
+      ExpenseModel.countDocuments({ status: "pending" }),
+      ReturnClaimModel.countDocuments({ status: { $in: ["pending", "in_review"] } }),
       (async () => {
-        const summary = await InventoryMovement.aggregate([
+        const summary = await InventoryMovementModel.aggregate([
           {
             $group: {
               _id: { productId: "$productId", warehouseId: "$warehouseId" },
@@ -518,7 +577,7 @@ router.get("/operations", requireAuth, async (req, res) => {
             },
           },
         ]);
-        const products = await Product.find().select("productId minStockLevel").lean();
+        const products = await ProductModel.find().select("productId minStockLevel").lean();
         return products.flatMap((product) => {
           const matches = summary.filter((s) => s._id.productId === product.productId);
           if (!matches.length) {
@@ -537,7 +596,7 @@ router.get("/operations", requireAuth, async (req, res) => {
           }));
         });
       })(),
-      InventoryMovement.aggregate([
+      InventoryMovementModel.aggregate([
         { $match: { movementType: "SALE_OUT", createdAt: { $gte: activityStart } } },
         {
           $group: {
