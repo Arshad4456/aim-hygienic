@@ -71,13 +71,19 @@ function getScopedCompanyContext(req, requestedCompanyId = "", requestedCompanyN
 
 async function getScopedProcurementModels(req, requestedCompanyId = "", requestedCompanyName = "") {
   const { scopedCompanyId, scopedCompanyName } = getScopedCompanyContext(req, requestedCompanyId, requestedCompanyName);
-  if (!scopedCompanyId) return { InventoryMovementModel: InventoryMovement, UserModel: User };
+  if (!scopedCompanyId) {
+    return { InventoryMovementModel: InventoryMovement, UserModel: User, StockTransferModel: StockTransfer, VehicleModel: Vehicle };
+  }
   const dbName = await resolveTenantDbName(scopedCompanyId, scopedCompanyName);
-  if (!dbName) return { InventoryMovementModel: InventoryMovement, UserModel: User };
+  if (!dbName) {
+    return { InventoryMovementModel: InventoryMovement, UserModel: User, StockTransferModel: StockTransfer, VehicleModel: Vehicle };
+  }
   const tenantDb = mongoose.connection.useDb(dbName, { useCache: true });
   return {
     InventoryMovementModel: getModelFromDb(tenantDb, InventoryMovement),
     UserModel: getModelFromDb(tenantDb, User),
+    StockTransferModel: getModelFromDb(tenantDb, StockTransfer),
+    VehicleModel: getModelFromDb(tenantDb, Vehicle),
   };
 }
 
@@ -392,10 +398,11 @@ router.get("/hr", requireAuth, async (req, res) => {
 
 router.get("/logistics", requireAuth, async (req, res) => {
   try {
-    const transferCounts = await StockTransfer.aggregate([
+    const { StockTransferModel, VehicleModel } = await getScopedProcurementModels(req, req.query?.companyId, req.query?.companyName);
+    const transferCounts = await StockTransferModel.aggregate([
       { $group: { _id: { $ifNull: ["$status", "unknown"] }, count: { $sum: 1 } } },
     ]);
-    const vehicleCount = await Vehicle.countDocuments();
+    const vehicleCount = await VehicleModel.countDocuments();
 
     return res.json({
       ok: true,
