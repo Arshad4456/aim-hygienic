@@ -136,12 +136,17 @@ function formatYearKey(date) {
 
 router.get("/overview", requireAuth, async (req, res) => {
   try {
+    const { companyId: salesOrderScopeCompanyId } = await resolveScopedCompanyForRequest(
+      req,
+      req.query?.companyId,
+      req.query?.companyName
+    );
+    const salesOrderScope = salesOrderScopeCompanyId ? { companyId: salesOrderScopeCompanyId } : {};
     const {
       InventoryMovementModel,
       ExpenseModel,
       StockTransferModel,
       UserModel,
-      SalesOrderModel,
       ProductModel,
       WarehouseModel,
       VehicleModel,
@@ -241,7 +246,8 @@ router.get("/overview", requireAuth, async (req, res) => {
       VehicleModel.countDocuments({ gpsLatitude: { $ne: "" }, gpsLongitude: { $ne: "" } }),
       MessageModel.countDocuments(),
       ReturnClaimModel.countDocuments(),
-      SalesOrderModel.aggregate([
+      SalesOrder.aggregate([
+        ...(salesOrderScopeCompanyId ? [{ $match: salesOrderScope }] : []),
         {
           $group: {
             _id: null,
@@ -293,8 +299,8 @@ router.get("/overview", requireAuth, async (req, res) => {
           },
         },
       ]),
-      SalesOrderModel.aggregate([
-        { $match: { createdAt: { $gte: dailyStart } } },
+      SalesOrder.aggregate([
+        { $match: { ...salesOrderScope, createdAt: { $gte: dailyStart } } },
         {
           $group: {
             _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
@@ -303,8 +309,8 @@ router.get("/overview", requireAuth, async (req, res) => {
           },
         },
       ]),
-      SalesOrderModel.aggregate([
-        { $match: { createdAt: { $gte: weekStart } } },
+      SalesOrder.aggregate([
+        { $match: { ...salesOrderScope, createdAt: { $gte: weekStart } } },
         {
           $group: {
             _id: { year: { $isoWeekYear: "$createdAt" }, week: { $isoWeek: "$createdAt" } },
@@ -312,8 +318,8 @@ router.get("/overview", requireAuth, async (req, res) => {
           },
         },
       ]),
-      SalesOrderModel.aggregate([
-        { $match: { createdAt: { $gte: monthStart } } },
+      SalesOrder.aggregate([
+        { $match: { ...salesOrderScope, createdAt: { $gte: monthStart } } },
         {
           $group: {
             _id: { $dateToString: { format: "%Y-%m", date: "$createdAt" } },
@@ -321,8 +327,8 @@ router.get("/overview", requireAuth, async (req, res) => {
           },
         },
       ]),
-      SalesOrderModel.aggregate([
-        { $match: { createdAt: { $gte: yearStart } } },
+      SalesOrder.aggregate([
+        { $match: { ...salesOrderScope, createdAt: { $gte: yearStart } } },
         {
           $group: {
             _id: { $dateToString: { format: "%Y", date: "$createdAt" } },
@@ -588,8 +594,13 @@ router.get("/sales-manager", requireAuth, async (req, res) => {
 
 router.get("/operations", requireAuth, async (req, res) => {
   try {
+    const { companyId: salesOrderScopeCompanyId } = await resolveScopedCompanyForRequest(
+      req,
+      req.query?.companyId,
+      req.query?.companyName
+    );
+    const salesOrderScope = salesOrderScopeCompanyId ? { companyId: salesOrderScopeCompanyId } : {};
     const {
-      SalesOrderModel,
       VehicleModel,
       WarehouseModel,
       InventoryMovementModel,
@@ -622,21 +633,26 @@ router.get("/operations", requireAuth, async (req, res) => {
       lowStockItems,
       regionalActivityAgg,
     ] = await Promise.all([
-      SalesOrderModel.countDocuments(),
-      SalesOrderModel.aggregate([{ $group: { _id: "$status", total: { $sum: 1 } } }]),
-      SalesOrderModel.countDocuments({
+      SalesOrder.countDocuments(salesOrderScope),
+      SalesOrder.aggregate([
+        ...(salesOrderScopeCompanyId ? [{ $match: salesOrderScope }] : []),
+        { $group: { _id: "$status", total: { $sum: 1 } } },
+      ]),
+      SalesOrder.countDocuments({
+        ...salesOrderScope,
         status: { $in: ["dispatched", "completed"] },
         dispatchedAt: { $ne: null },
         expectedDelivery: { $ne: null },
         $expr: { $lte: ["$dispatchedAt", "$expectedDelivery"] },
       }),
-      SalesOrderModel.countDocuments({
+      SalesOrder.countDocuments({
+        ...salesOrderScope,
         status: { $in: ["dispatched", "completed"] },
         dispatchedAt: { $ne: null },
         expectedDelivery: { $ne: null },
       }),
-      SalesOrderModel.aggregate([
-        { $match: { status: "completed", completedAt: { $ne: null } } },
+      SalesOrder.aggregate([
+        { $match: { ...salesOrderScope, status: "completed", completedAt: { $ne: null } } },
         {
           $project: {
             hours: {
