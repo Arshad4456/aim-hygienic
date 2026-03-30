@@ -11,6 +11,7 @@ const StockTransfer = require("../models/StockTransfer");
 const Vehicle = require("../models/Vehicle");
 const Product = require("../models/Product");
 const Message = require("../models/Message");
+const ReturnClaim = require("../models/ReturnClaim");
 const { toTenantDatabaseName } = require("../utils/tenantDatabases");
 
 const router = express.Router();
@@ -103,9 +104,56 @@ async function getScopedProcurementModels(req, requestedCompanyId = "", requeste
   };
 }
 
+async function getScopedReportModels(req, requestedCompanyId = "", requestedCompanyName = "") {
+  const { scopedCompanyId, scopedCompanyName } = getScopedCompanyContext(req, requestedCompanyId, requestedCompanyName);
+  if (!scopedCompanyId) {
+    return {
+      InventoryMovementModel: InventoryMovement,
+      ExpenseModel: Expense,
+      AccountModel: Account,
+      UserModel: User,
+      WarehouseModel: Warehouse,
+      StockTransferModel: StockTransfer,
+      VehicleModel: Vehicle,
+      ProductModel: Product,
+      MessageModel: Message,
+      ReturnClaimModel: ReturnClaim,
+    };
+  }
+  const dbName = await resolveTenantDbName(scopedCompanyId, scopedCompanyName);
+  if (!dbName) {
+    return {
+      InventoryMovementModel: InventoryMovement,
+      ExpenseModel: Expense,
+      AccountModel: Account,
+      UserModel: User,
+      WarehouseModel: Warehouse,
+      StockTransferModel: StockTransfer,
+      VehicleModel: Vehicle,
+      ProductModel: Product,
+      MessageModel: Message,
+      ReturnClaimModel: ReturnClaim,
+    };
+  }
+  const tenantDb = mongoose.connection.useDb(dbName, { useCache: true });
+  return {
+    InventoryMovementModel: getModelFromDb(tenantDb, InventoryMovement),
+    ExpenseModel: getModelFromDb(tenantDb, Expense),
+    AccountModel: getModelFromDb(tenantDb, Account),
+    UserModel: getModelFromDb(tenantDb, User),
+    WarehouseModel: getModelFromDb(tenantDb, Warehouse),
+    StockTransferModel: getModelFromDb(tenantDb, StockTransfer),
+    VehicleModel: getModelFromDb(tenantDb, Vehicle),
+    ProductModel: getModelFromDb(tenantDb, Product),
+    MessageModel: getModelFromDb(tenantDb, Message),
+    ReturnClaimModel: getModelFromDb(tenantDb, ReturnClaim),
+  };
+}
+
 router.get("/overview", requireAuth, async (req, res) => {
   try {
-    const [salesAgg] = await InventoryMovement.aggregate([
+    const { InventoryMovementModel, ExpenseModel, UserModel, ProductModel, WarehouseModel, StockTransferModel } = await getScopedReportModels(req, req.query?.companyId, req.query?.companyName);
+    const [salesAgg] = await InventoryMovementModel.aggregate([
       { $match: { movementType: "SALE_OUT" } },
       {
         $group: {
@@ -116,7 +164,7 @@ router.get("/overview", requireAuth, async (req, res) => {
       },
     ]);
 
-    const [expenseAgg] = await Expense.aggregate([
+    const [expenseAgg] = await ExpenseModel.aggregate([
       {
         $group: {
           _id: null,
@@ -130,14 +178,14 @@ router.get("/overview", requireAuth, async (req, res) => {
       },
     ]);
 
-    const totalUsers = await User.countDocuments();
-    const activeUsers = await User.countDocuments({ status: "active" });
-    const totalProducts = await Product.countDocuments();
-    const totalWarehouses = await Warehouse.countDocuments();
-    const expenseCategories = await Expense.distinct("category");
-    const userRoles = await User.distinct("role");
-    const salesRegions = await InventoryMovement.distinct("regionName", { movementType: "SALE_OUT" });
-    const transferStatuses = await StockTransfer.distinct("status");
+    const totalUsers = await UserModel.countDocuments();
+    const activeUsers = await UserModel.countDocuments({ status: "active" });
+    const totalProducts = await ProductModel.countDocuments();
+    const totalWarehouses = await WarehouseModel.countDocuments();
+    const expenseCategories = await ExpenseModel.distinct("category");
+    const userRoles = await UserModel.distinct("role");
+    const salesRegions = await InventoryMovementModel.distinct("regionName", { movementType: "SALE_OUT" });
+    const transferStatuses = await StockTransferModel.distinct("status");
 
     return res.json({
       ok: true,
@@ -163,7 +211,8 @@ router.get("/overview", requireAuth, async (req, res) => {
 
 router.get("/builder", requireAuth, async (req, res) => {
   try {
-    const [salesAgg] = await InventoryMovement.aggregate([
+    const { InventoryMovementModel, ExpenseModel, StockTransferModel } = await getScopedReportModels(req, req.query?.companyId, req.query?.companyName);
+    const [salesAgg] = await InventoryMovementModel.aggregate([
       { $match: { movementType: "SALE_OUT" } },
       {
         $group: {
@@ -174,7 +223,7 @@ router.get("/builder", requireAuth, async (req, res) => {
       },
     ]);
 
-    const [inventoryAgg] = await InventoryMovement.aggregate([
+    const [inventoryAgg] = await InventoryMovementModel.aggregate([
       {
         $group: {
           _id: null,
@@ -184,7 +233,7 @@ router.get("/builder", requireAuth, async (req, res) => {
       },
     ]);
 
-    const [expenseAgg] = await Expense.aggregate([
+    const [expenseAgg] = await ExpenseModel.aggregate([
       {
         $group: {
           _id: null,
@@ -199,7 +248,7 @@ router.get("/builder", requireAuth, async (req, res) => {
       },
     ]);
 
-    const [transferAgg] = await StockTransfer.aggregate([
+    const [transferAgg] = await StockTransferModel.aggregate([
       {
         $group: {
           _id: null,
@@ -265,7 +314,8 @@ router.get("/builder", requireAuth, async (req, res) => {
 
 router.get("/sales", requireAuth, async (req, res) => {
   try {
-    const rows = await InventoryMovement.aggregate([
+    const { InventoryMovementModel } = await getScopedReportModels(req, req.query?.companyId, req.query?.companyName);
+    const rows = await InventoryMovementModel.aggregate([
       { $match: { movementType: "SALE_OUT" } },
       {
         $group: {
@@ -294,10 +344,11 @@ router.get("/sales", requireAuth, async (req, res) => {
 
 router.get("/inventory", requireAuth, async (req, res) => {
   try {
+    const { InventoryMovementModel, ProductModel } = await getScopedReportModels(req, req.query?.companyId, req.query?.companyName);
     const inTypes = ["PURCHASE_IN", "TRANSFER_IN", "RETURN_IN"];
     const outTypes = ["SALE_OUT", "TRANSFER_OUT"];
 
-    const rows = await InventoryMovement.aggregate([
+    const rows = await InventoryMovementModel.aggregate([
       {
         $group: {
           _id: { $ifNull: ["$warehouseName", "Unassigned"] },
@@ -318,7 +369,7 @@ router.get("/inventory", requireAuth, async (req, res) => {
       { $sort: { lastMovementAt: -1 } },
     ]);
 
-    const totalProducts = await Product.countDocuments();
+    const totalProducts = await ProductModel.countDocuments();
 
     return res.json({
       ok: true,
@@ -390,16 +441,17 @@ router.get("/finance", requireAuth, async (req, res) => {
 
 router.get("/hr", requireAuth, async (req, res) => {
   try {
-    const roleCounts = await User.aggregate([
+    const { UserModel } = await getScopedReportModels(req, req.query?.companyId, req.query?.companyName);
+    const roleCounts = await UserModel.aggregate([
       { $group: { _id: { $ifNull: ["$role", "Unassigned"] }, count: { $sum: 1 } } },
       { $sort: { count: -1 } },
     ]);
 
-    const statusCounts = await User.aggregate([
+    const statusCounts = await UserModel.aggregate([
       { $group: { _id: { $ifNull: ["$status", "unknown"] }, count: { $sum: 1 } } },
     ]);
 
-    const totalUsers = await User.countDocuments();
+    const totalUsers = await UserModel.countDocuments();
 
     return res.json({
       ok: true,
