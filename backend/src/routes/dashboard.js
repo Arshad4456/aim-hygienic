@@ -77,16 +77,24 @@ async function resolveScopedCompanyForRequest(req, requestedCompanyId = "", requ
   };
 }
 
-async function getScopedDashboardModels(req, requestedCompanyId = "", requestedCompanyName = "") {
+async function getScopedDashboardModels(req, requestedCompanyId = "", requestedCompanyName = "", options = {}) {
+  const requireTenantForCompanyUser = Boolean(options.requireTenantForCompanyUser);
+  const systemAdmin = isSystemLevelAdmin(req.user?.role);
   const { companyId: scopedCompanyId, companyName: scopedCompanyName } = await resolveScopedCompanyForRequest(
     req,
     requestedCompanyId,
     requestedCompanyName
   );
+  if (!systemAdmin && requireTenantForCompanyUser && !scopedCompanyId) {
+    throw new Error("TENANT_CONTEXT_REQUIRED");
+  }
   if (!scopedCompanyId) {
     return { InventoryMovementModel: InventoryMovement, ExpenseModel: Expense, StockTransferModel: StockTransfer, UserModel: User, SalesOrderModel: SalesOrder, ProductModel: Product, WarehouseModel: Warehouse, RegionModel: Region, VehicleModel: Vehicle, MessageModel: Message, ReturnClaimModel: ReturnClaim };
   }
   const dbName = await resolveTenantDbName(scopedCompanyId, scopedCompanyName);
+  if (!systemAdmin && requireTenantForCompanyUser && !dbName) {
+    throw new Error("TENANT_DB_REQUIRED");
+  }
   if (!dbName) {
     return { InventoryMovementModel: InventoryMovement, ExpenseModel: Expense, StockTransferModel: StockTransfer, UserModel: User, SalesOrderModel: SalesOrder, ProductModel: Product, WarehouseModel: Warehouse, RegionModel: Region, VehicleModel: Vehicle, MessageModel: Message, ReturnClaimModel: ReturnClaim };
   }
@@ -466,7 +474,12 @@ router.get("/sales-manager", requireAuth, async (req, res) => {
       req.query?.companyId,
       req.query?.companyName
     );
-    const { UserModel, ProductModel, WarehouseModel, RegionModel, SalesOrderModel } = await getScopedDashboardModels(req, req.query?.companyId, req.query?.companyName);
+    const { UserModel, ProductModel, WarehouseModel, RegionModel, SalesOrderModel } = await getScopedDashboardModels(
+      req,
+      req.query?.companyId,
+      req.query?.companyName,
+      { requireTenantForCompanyUser: true }
+    );
     const currentUser = await UserModel.findById(req.user?.uid).lean()
       || await User.findById(req.user?.uid).select("_id companyId companyName").lean();
     if (!currentUser) {
@@ -491,9 +504,11 @@ router.get("/sales-manager", requireAuth, async (req, res) => {
     ]);
 
     const teamIds = teamUsers.map((user) => user._id);
-    const orderMatch = teamIds.length
-      ? { ...orderMatchBase, createdBy: { $in: teamIds } }
-      : { ...orderMatchBase, createdBy: currentUser._id };
+    const orderMatch = companyId
+      ? { companyId }
+      : (teamIds.length
+        ? { ...orderMatchBase, createdBy: { $in: teamIds } }
+        : { ...orderMatchBase, createdBy: currentUser._id });
 
     const [orderAgg, statusAgg, recentOrders] = await Promise.all([
       SalesOrderModel.aggregate([
@@ -548,6 +563,9 @@ router.get("/sales-manager", requireAuth, async (req, res) => {
       recentOrders,
     });
   } catch (e) {
+    if (e?.message === "TENANT_CONTEXT_REQUIRED" || e?.message === "TENANT_DB_REQUIRED") {
+      return res.status(400).json({ ok: false, message: "Tenant company database context is required for sales dashboard" });
+    }
     return res.status(500).json({ ok: false, message: "Failed to load sales dashboard" });
   }
 });
