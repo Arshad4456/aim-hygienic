@@ -46,6 +46,15 @@ export default function MessagesScreen() {
     }
   };
 
+  const deleteMessage = async (id) => {
+    try {
+      await apiClient.delete(`/messages/${id}`);
+      setRows((prev) => prev.filter((row) => row._id !== id));
+    } catch (e) {
+      setErr(e.message || 'Failed to delete message');
+    }
+  };
+
   if (loading) return <Loader />;
 
   return (
@@ -63,7 +72,7 @@ export default function MessagesScreen() {
 
         <ScrollView horizontal style={{ marginTop: 10 }}>
           <View style={styles.table}>
-            <Row head cols={['Title', 'Message', 'Sender', 'Priority', 'Date', 'Status', 'Action']} />
+            <Row head cols={['Title', 'Message', 'Sender', 'Priority', 'Date', 'Status']} />
             {!rows.length ? <Text style={styles.empty}>No messages yet</Text> : rows.map((row) => (
               <Row
                 key={row._id}
@@ -74,10 +83,12 @@ export default function MessagesScreen() {
                   (row.priority || 'normal').toUpperCase(),
                   row.createdAt ? new Date(row.createdAt).toLocaleString() : '-',
                   row.isRead ? 'Read' : 'Unread',
-                  row.isRead ? '—' : 'Mark read',
                 ]}
                 unread={!row.isRead}
-                onAction={!row.isRead ? () => markAsRead(row._id) : undefined}
+                actions={[
+                  ...(!row.isRead ? [{ label: 'Mark read', onPress: () => markAsRead(row._id), tone: 'normal' }] : []),
+                  { label: 'Delete', onPress: () => deleteMessage(row._id), tone: 'danger' },
+                ]}
               />
             ))}
           </View>
@@ -87,20 +98,19 @@ export default function MessagesScreen() {
   );
 }
 
-function Row({ cols, head, unread, onAction }) {
+function Row({ cols, head, unread, actions = [] }) {
   return (
     <View style={[styles.row, head ? styles.head : null, unread ? styles.unread : null]}>
-      {cols.map((c, i) => {
-        const isAction = i === cols.length - 1 && onAction;
-        if (!isAction) {
-          return <Text key={i} style={styles.cell}>{String(c)}</Text>;
-        }
-        return (
-          <Pressable key={i} onPress={onAction} style={styles.actionBtn}>
-            <Text style={styles.actionText}>{String(c)}</Text>
-          </Pressable>
-        );
-      })}
+      {cols.map((c, i) => <Text key={i} style={styles.cell}>{String(c)}</Text>)}
+      <View style={styles.cell}>
+        <View style={styles.actionWrap}>
+          {actions.length ? actions.map((action) => (
+            <Pressable key={action.label} onPress={action.onPress} style={[styles.actionBtn, action.tone === 'danger' ? styles.actionBtnDanger : null]}>
+              <Text style={[styles.actionText, action.tone === 'danger' ? styles.actionTextDanger : null]}>{action.label}</Text>
+            </Pressable>
+          )) : <Text>—</Text>}
+        </View>
+      </View>
     </View>
   );
 }
@@ -112,6 +122,9 @@ const styles = StyleSheet.create({
   refreshText: { color: '#111827', fontSize: 12, fontWeight: '600' },
   actionBtn: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 4, alignSelf: 'center', margin: 4 },
   actionText: { fontSize: 11, color: '#111827' },
+  actionWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingVertical: 4 },
+  actionBtnDanger: { borderColor: '#fecaca', backgroundColor: '#fef2f2' },
+  actionTextDanger: { color: '#b91c1c' },
   title: { fontSize: 22, fontWeight: '700', color: '#111827' },
   subtitle: { marginTop: 4, color: '#6b7280' },
   err: { marginTop: 8, color: '#b91c1c' },

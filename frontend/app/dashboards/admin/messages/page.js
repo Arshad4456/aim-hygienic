@@ -37,6 +37,16 @@ export default function MessagesPage() {
     }
   }
 
+  async function deleteMessage(id) {
+    if (!window.confirm("Delete this message?")) return;
+    try {
+      await apiFetch(`/messages/${id}`, { method: "DELETE" });
+      setRows((prev) => prev.filter((row) => row._id !== id));
+    } catch (e) {
+      setErr(e.message || "Failed to delete message");
+    }
+  }
+
   return (
     <AdminShell title="Messages" user={null}>
       <div className="rounded-2xl bg-white border shadow-sm p-5">
@@ -80,14 +90,22 @@ export default function MessagesPage() {
                     <td className="px-3 py-2 border-b">{row.createdAt ? new Date(row.createdAt).toLocaleString() : "-"}</td>
                     <td className="px-3 py-2 border-b">{row.isRead ? "Read" : "Unread"}</td>
                     <td className="px-3 py-2 border-b">
-                      {row.isRead ? "—" : (
+                      <div className="flex gap-2">
+                        {row.isRead ? null : (
+                          <button
+                            onClick={() => markAsRead(row._id)}
+                            className="rounded-md border px-2 py-1 text-xs hover:bg-white"
+                          >
+                            Mark read
+                          </button>
+                        )}
                         <button
-                          onClick={() => markAsRead(row._id)}
-                          className="rounded-md border px-2 py-1 text-xs hover:bg-white"
+                          onClick={() => deleteMessage(row._id)}
+                          className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100"
                         >
-                          Mark read
+                          Delete
                         </button>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 ))

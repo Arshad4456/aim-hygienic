@@ -6,6 +6,7 @@ const MessageSchema = new mongoose.Schema(
     body: { type: String, trim: true },
     type: { type: String, trim: true, default: "general" },
     priority: { type: String, enum: ["low", "normal", "high", "critical"], default: "normal" },
+    senderUserId: { type: String, trim: true },
     senderName: { type: String, trim: true },
     senderRole: { type: String, trim: true },
     recipientRole: { type: String, trim: true },
