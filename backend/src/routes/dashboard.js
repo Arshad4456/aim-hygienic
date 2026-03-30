@@ -48,9 +48,41 @@ function getModelFromDb(db, baseModel) {
   return db.models[modelName] || db.model(modelName, baseModel.schema, baseModel.collection.name);
 }
 
+async function resolveScopedCompanyForRequest(req, requestedCompanyId = "", requestedCompanyName = "") {
+  if (isSystemLevelAdmin(req.user?.role)) {
+    return {
+      companyId: asText(requestedCompanyId),
+      companyName: asText(requestedCompanyName),
+    };
+  }
+
+  const tokenCompanyId = asText(req.user?.companyId);
+  const tokenCompanyName = asText(req.user?.companyName);
+  if (tokenCompanyId || tokenCompanyName) {
+    return {
+      companyId: tokenCompanyId,
+      companyName: tokenCompanyName,
+    };
+  }
+
+  const normalizedUserId = asText(req.user?.uid);
+  if (!normalizedUserId) {
+    return { companyId: "", companyName: "" };
+  }
+
+  const systemUser = await User.findById(normalizedUserId).select("companyId companyName").lean();
+  return {
+    companyId: asText(systemUser?.companyId),
+    companyName: asText(systemUser?.companyName),
+  };
+}
+
 async function getScopedDashboardModels(req, requestedCompanyId = "", requestedCompanyName = "") {
-  const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? asText(requestedCompanyId) : asText(req.user?.companyId);
-  const scopedCompanyName = isSystemLevelAdmin(req.user?.role) ? asText(requestedCompanyName) : asText(req.user?.companyName);
+  const { companyId: scopedCompanyId, companyName: scopedCompanyName } = await resolveScopedCompanyForRequest(
+    req,
+    requestedCompanyId,
+    requestedCompanyName
+  );
   if (!scopedCompanyId) {
     return { InventoryMovementModel: InventoryMovement, ExpenseModel: Expense, StockTransferModel: StockTransfer, UserModel: User, SalesOrderModel: SalesOrder, ProductModel: Product, WarehouseModel: Warehouse, RegionModel: Region, VehicleModel: Vehicle, MessageModel: Message, ReturnClaimModel: ReturnClaim };
   }
@@ -430,7 +462,8 @@ router.get("/overview", requireAuth, async (req, res) => {
 router.get("/sales-manager", requireAuth, async (req, res) => {
   try {
     const { UserModel, ProductModel, WarehouseModel, RegionModel, SalesOrderModel } = await getScopedDashboardModels(req, req.query?.companyId, req.query?.companyName);
-    const currentUser = await UserModel.findById(req.user?.uid).lean();
+    const currentUser = await UserModel.findById(req.user?.uid).lean()
+      || await User.findById(req.user?.uid).select("_id companyId companyName").lean();
     if (!currentUser) {
       return res.status(404).json({ ok: false, message: "User not found" });
     }
