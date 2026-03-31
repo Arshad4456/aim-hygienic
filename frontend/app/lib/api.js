@@ -39,7 +39,8 @@ function resolveApiCandidates() {
     // In production/browser prefer same-origin /api first to avoid CORS and rely on reverse proxy.
     if (!isLocalHost) {
       // Production web traffic should stay same-origin to avoid CORS mismatch between apex/www.
-      return ["/api"];
+      // If infra-level /api proxy is unhealthy (e.g. transient 502 on one host), fall back to an explicit API base.
+      return ["/api", ...(normalized && normalized !== "/api" ? [toHttpsIfNeeded(normalized)] : [])];
     }
   }
 
