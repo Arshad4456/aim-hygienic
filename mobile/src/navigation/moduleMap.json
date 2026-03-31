@@ -2291,5 +2291,23 @@
     "title": "Dashboard",
     "screenFile": "screens/zoneSM/DashboardScreen.js",
     "endpoints": []
+  },
+  {
+    "key": "supplier:dashboard",
+    "role": "supplier",
+    "modulePath": "",
+    "route": "/dashboards/supplier",
+    "title": "Dashboard",
+    "screenFile": "screens/supplier/DashboardScreen.js",
+    "endpoints": []
+  },
+  {
+    "key": "vendor:dashboard",
+    "role": "vendor",
+    "modulePath": "",
+    "route": "/dashboards/vendor",
+    "title": "Dashboard",
+    "screenFile": "screens/vendor/DashboardScreen.js",
+    "endpoints": []
   }
 ]

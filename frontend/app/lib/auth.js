@@ -28,6 +28,10 @@ export function roleToDashboard(role) {
       return "/dashboards/tse";
     case "salesman":
       return "/dashboards/salesman";
+    case "Supplier":
+      return "/dashboards/supplier";
+    case "Vendor":
+      return "/dashboards/vendor";
     default:
       return "/dashboards/admin";
   }

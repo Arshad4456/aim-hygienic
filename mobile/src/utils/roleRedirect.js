@@ -18,6 +18,8 @@ const ROLE_TO_DASHBOARD = {
   Salesman: 'salesman',
   'Delivery Boy': 'deliveryBoy',
   customer: 'customer',
+  Supplier: 'supplier',
+  Vendor: 'vendor',
 };
 
 export function roleToDashboardKey(role) {
