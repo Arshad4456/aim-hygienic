@@ -108,4 +108,4 @@ function requireRole(...roles) {
   };
 }
 
-module.exports = { signToken, requireAuth, requireRole };
+module.exports = { signToken, verifyToken, requireAuth, requireRole };

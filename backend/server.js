@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
+const http = require("http");
 
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 require("dotenv").config();
@@ -33,8 +34,11 @@ const loansRoutes = require("./src/routes/loans");
 const receiptsRoutes = require("./src/routes/receipts");
 const vehicleManagementRoutes = require("./src/routes/vehicleManagement");
 const locationRoutes = require("./src/routes/location");
+const { createSocketServer } = require("./src/socket");
+const { registerLocationSocket } = require("./src/modules/location/socket");
 
 const app = express();
+const server = http.createServer(app);
 
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "80mb" }));
 
@@ -92,7 +96,10 @@ app.use("/api/admin/users", adminUsersRoutes);
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+const io = createSocketServer(server);
+if (io) registerLocationSocket(io);
+
+server.listen(PORT, () => {
   console.log("Backend running on port", PORT);
 });
 

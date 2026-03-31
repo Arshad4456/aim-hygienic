@@ -4,6 +4,11 @@ const User = require("../../models/User");
 const { resolveTenantDbName, asText } = require("./tenant");
 const { getLocationModelsForDb } = require("./models");
 const { canViewTrackedUser, isSystemAdmin, toCanonicalTrackedRole, isTrackedRole } = require("./helpers/permissions");
+const {
+  emitLocationUserUpdated,
+  emitLocationUserStopped,
+  emitLocationUserOffline,
+} = require("./socket");
 
 function getUserModelForDb(db) {
   return db.models[User.modelName] || db.model(User.modelName, User.schema, User.collection.name);
@@ -83,6 +88,8 @@ async function startDuty(actor, payload) {
 
   await UserLocationHistory.create(livePayload);
 
+  emitLocationUserUpdated(livePayload);
+
   return { status: 200, body: { ok: true, data: { dutySessionId: session._id, startedAt } } };
 }
 
@@ -128,6 +135,8 @@ async function updateLocation(actor, points) {
 
   activeSession.lastSeenAt = lastPoint.recordedAt;
   await activeSession.save();
+
+  emitLocationUserUpdated(lastPoint);
 
   return {
     status: 200,
@@ -181,6 +190,9 @@ async function endDuty(actor, payload) {
   );
 
   await UserLocationHistory.create(livePayload);
+
+  emitLocationUserStopped(livePayload);
+  emitLocationUserOffline(livePayload);
 
   return { status: 200, body: { ok: true, data: { dutySessionId: activeSession._id, endedAt: payload.endedAt } } };
 }
