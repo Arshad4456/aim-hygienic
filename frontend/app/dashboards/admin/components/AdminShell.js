@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Sidebar from "./Sidebar";
 import { adminDashboardSearchItems } from "../../searchItems";
 import { LANGUAGE_OPTIONS, useLanguage } from "../../../lib/language";
+import { translateNode } from "../../../lib/translateNode";
 
 export default function AdminShell({ children, user, title = "Dashboard" }) {
   const router = useRouter();
@@ -323,7 +324,7 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
         </div>
 
         <main className="flex-1 overflow-y-auto">
-          <div className="px-4 md:px-6 py-5">{children}</div>
+          <div className="px-4 md:px-6 py-5">{translateNode(children, t)}</div>
         </main>
       </div>
     </div>
