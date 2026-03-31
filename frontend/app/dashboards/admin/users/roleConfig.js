@@ -18,6 +18,8 @@ export const AIM_USER_ROLES = [
   "Order Booker",
   "Salesman",
   "Delivery Boy",
+  "Supplier",
+  "Vendor",
   "customer",
   "Brand Manager",
 ];
@@ -44,6 +46,8 @@ export const ROLE_EXTRA_FIELDS = {
   "Order Booker": ["warehouse", "region", "zone", "territory", "field"],
   Salesman: ["warehouse", "region", "zone", "territory", "field"],
   "Delivery Boy": ["warehouse", "region", "zone", "territory", "field"],
+  Supplier: ["warehouse"],
+  Vendor: ["warehouse", "businessName"],
   customer: ["businessType", "businessName", "warehouse", "region", "zone", "territory", "field"],
   "Brand Manager": ["businessType", "businessName", "warehouse", "region", "zone", "territory", "field"],
 };
