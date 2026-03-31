@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useAuth } from '../../auth/useAuth';
 import Card from '../../ui/Card';
+import DutyTrackingCard from '../../modules/tracking/DutyTrackingCard';
 
 const dashboardLinks = [
   { title: 'Dashboard', route: 'orderBooker:dashboard' },
@@ -77,6 +78,8 @@ export default function DashboardScreen({ navigation }) {
           </Pressable>
         </View>
       </Card>
+
+      <DutyTrackingCard />
 
       <Card>
         <Text style={styles.sectionTitle}>Modules</Text>
