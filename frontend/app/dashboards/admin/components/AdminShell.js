@@ -103,9 +103,31 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
     const roleItems = canAccessCompanyManagement
       ? adminDashboardSearchItems
       : adminDashboardSearchItems.filter((item) => !item.href.startsWith("/dashboards/admin/companies"));
+
     const value = searchTerm.trim().toLowerCase();
     if (!value) return roleItems;
-    return roleItems.filter((item) => item.title.toLowerCase().includes(value));
+
+    const terms = value.split(/\s+/).filter(Boolean);
+    const ranked = roleItems
+      .map((item) => {
+        const searchable = [item.title, item.href, ...(item.keywords || [])]
+          .join(" ")
+          .toLowerCase();
+        const allTermsMatch = terms.every((term) => searchable.includes(term));
+        if (!allTermsMatch) return null;
+
+        const title = item.title.toLowerCase();
+        const titleStarts = title.startsWith(value);
+        const titleIncludes = title.includes(value);
+        const hrefIncludes = item.href.toLowerCase().includes(value);
+        const score = (titleStarts ? 4 : 0) + (titleIncludes ? 2 : 0) + (hrefIncludes ? 1 : 0);
+        return { item, score };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score || a.item.title.localeCompare(b.item.title))
+      .map((entry) => entry.item);
+
+    return ranked;
   }, [searchTerm, resolvedUser?.role]);
 
   async function toggleFullscreen() {

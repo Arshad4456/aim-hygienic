@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ADMIN_SIDEBAR_MODULES } from './AdminSidebarConfig';
 
 function toGroupTitle(name = '') {
@@ -7,6 +7,26 @@ function toGroupTitle(name = '') {
     .replace(/[-_]/g, ' ')
     .replace(/([a-z])([A-Z])/g, '$1 $2')
     .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+
+function scoreModuleMatch(query, groupTitle, module) {
+  const value = String(query || '').trim().toLowerCase();
+  if (!value) return 0;
+  const terms = value.split(/\s+/).filter(Boolean);
+  const haystack = [groupTitle, module.title, module.modulePath, module.route, module.key]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  const allTermsMatch = terms.every((term) => haystack.includes(term));
+  if (!allTermsMatch) return 0;
+
+  const title = String(module.title || '').toLowerCase();
+  const starts = title.startsWith(value);
+  const includes = title.includes(value);
+  const pathIncludes = String(module.modulePath || '').toLowerCase().includes(value);
+  return (starts ? 4 : 0) + (includes ? 2 : 0) + (pathIncludes ? 1 : 0) + 1;
 }
 
 function buildDefaultGroups(modules) {
@@ -60,6 +80,8 @@ function buildAdminMenu(modules) {
 }
 
 export default function RoleDrawerContent({ roleKey, userRole, modules, activeRoute, onSelect }) {
+  const [searchTerm, setSearchTerm] = useState('');
+
   const items = useMemo(() => {
     if (roleKey === 'admin') {
       const normalizedRole = String(userRole || '').trim().toLowerCase();
@@ -71,17 +93,46 @@ export default function RoleDrawerContent({ roleKey, userRole, modules, activeRo
     return buildDefaultGroups(modules);
   }, [roleKey, userRole, modules]);
 
-  const [expanded, setExpanded] = useState(() => Object.fromEntries(items.map((item, i) => [item.key, i < 4])));
+  const filteredItems = useMemo(() => {
+    const value = String(searchTerm || '').trim();
+    if (!value) return items;
+
+    return items
+      .map((item) => {
+        if (item.type === 'link') {
+          const score = scoreModuleMatch(value, item.title, item.module);
+          if (!score) return null;
+          return { ...item, score };
+        }
+
+        const matches = item.items
+          .map((mod) => ({ mod, score: scoreModuleMatch(value, item.title, mod) }))
+          .filter((entry) => entry.score > 0)
+          .sort((a, b) => b.score - a.score || String(a.mod.title || '').localeCompare(String(b.mod.title || '')))
+          .map((entry) => entry.mod);
+
+        if (!matches.length) return null;
+        return {
+          ...item,
+          items: matches,
+          score: Math.max(...matches.map((mod) => scoreModuleMatch(value, item.title, mod))),
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => (b.score || 0) - (a.score || 0));
+  }, [items, searchTerm]);
+
+  const [expanded, setExpanded] = useState(() => Object.fromEntries(filteredItems.map((item, i) => [item.key, i < 4])));
 
   useEffect(() => {
     setExpanded((prev) => {
       const next = {};
-      items.forEach((item, i) => {
+      filteredItems.forEach((item, i) => {
         next[item.key] = prev[item.key] ?? i < 4;
       });
       return next;
     });
-  }, [items]);
+  }, [filteredItems]);
 
   const toggleGroup = (name) => {
     setExpanded((prev) => ({ ...prev, [name]: !prev[name] }));
@@ -94,7 +145,15 @@ export default function RoleDrawerContent({ roleKey, userRole, modules, activeRo
         <Text style={styles.brandText}>AIM Hygienics</Text>
       </View>
 
-      {items.map((item) => {
+      <TextInput
+        value={searchTerm}
+        onChangeText={setSearchTerm}
+        placeholder="Deep search modules..."
+        placeholderTextColor="#71717a"
+        style={styles.searchInput}
+      />
+
+      {filteredItems.map((item) => {
         if (item.type === 'link') {
           const active = activeRoute === item.module.key;
           return (
@@ -130,6 +189,8 @@ export default function RoleDrawerContent({ roleKey, userRole, modules, activeRo
         );
       })}
 
+      {!filteredItems.length ? <Text style={styles.emptyText}>No modules found for this search.</Text> : null}
+
     </ScrollView>
   );
 }
@@ -147,6 +208,17 @@ const styles = StyleSheet.create({
   },
   brandAvatarText: { color: '#047857', fontWeight: '700' },
   brandText: { marginTop: 6, fontSize: 12, color: '#52525b', fontWeight: '600' },
+  searchInput: {
+    height: 42,
+    borderWidth: 1,
+    borderColor: '#d4d4d8',
+    borderRadius: 12,
+    backgroundColor: '#fafafa',
+    paddingHorizontal: 12,
+    color: '#18181b',
+    fontSize: 14,
+    marginBottom: 8,
+  },
   groupBlock: {
     borderWidth: 1,
     borderColor: '#e4e4e7',
@@ -180,5 +252,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#fafafa',
     paddingVertical: 10,
     paddingHorizontal: 14,
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: '#71717a',
+    fontSize: 13,
+    paddingVertical: 8,
   },
 });
