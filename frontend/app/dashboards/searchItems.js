@@ -101,6 +101,7 @@ export const userDashboardSearchItems = {
     { title: "Secondary Orders", href: "/dashboards/distributor/orders" },
     { title: "Return Stock", href: "/dashboards/distributor/return-stock" },
     { title: "Messages", href: "/dashboards/distributor/messages" },
+    { title: "Live Tracking", href: "/dashboards/distributor/live-tracking" },
     { title: "Account Settings", href: "/dashboards/distributor/settings" },
     { title: "Change Password", href: "/dashboards/distributor/settings/change-password" },
   ],

@@ -3,12 +3,14 @@ const Company = require("../../models/Company");
 const User = require("../../models/User");
 const { resolveTenantDbName, asText } = require("./tenant");
 const { getLocationModelsForDb } = require("./models");
-const { canViewTrackedUser, isSystemAdmin, toCanonicalTrackedRole, isTrackedRole } = require("./helpers/permissions");
+const { canViewTrackedUser, isSystemAdmin, toCanonicalTrackedRole, isTrackedRole, isCompanyAdmin } = require("./helpers/permissions");
 const {
   emitLocationUserUpdated,
   emitLocationUserStopped,
   emitLocationUserOffline,
 } = require("./socket");
+
+const OFFLINE_THRESHOLD_MINUTES = 15;
 
 function getUserModelForDb(db) {
   return db.models[User.modelName] || db.model(User.modelName, User.schema, User.collection.name);
@@ -41,6 +43,46 @@ function toPoint(latitude, longitude) {
   return { type: "Point", coordinates: [longitude, latitude] };
 }
 
+function toPointHash(point) {
+  const lat = Number(point.latitude).toFixed(6);
+  const lng = Number(point.longitude).toFixed(6);
+  const ts = new Date(point.recordedAt || Date.now()).toISOString();
+  return `${lat}:${lng}:${ts}`;
+}
+
+function deriveTrackingStatus(lastSeenAt) {
+  const ts = new Date(lastSeenAt || 0).getTime();
+  if (!Number.isFinite(ts) || ts <= 0) return "unknown";
+  const ageMin = (Date.now() - ts) / 60000;
+  if (ageMin <= 5) return "online";
+  if (ageMin <= OFFLINE_THRESHOLD_MINUTES) return "idle";
+  return "offline";
+}
+
+function isDistributor(viewer) {
+  return toCanonicalTrackedRole(viewer?.role) === "distributor" || String(viewer?.role || "").trim().toLowerCase() === "distributor";
+}
+
+function normalizeAndDeduplicateIncomingPoints(points, activeSession) {
+  const sorted = [...points].sort((a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime());
+  const deduped = [];
+  const seenHashes = new Set();
+  const sessionLastSeenTs = new Date(activeSession?.lastSeenAt || 0).getTime();
+
+  for (const point of sorted) {
+    const hash = toPointHash(point);
+    if (seenHashes.has(hash)) continue;
+
+    const ts = new Date(point.recordedAt).getTime();
+    if (Number.isFinite(sessionLastSeenTs) && sessionLastSeenTs > 0 && ts <= sessionLastSeenTs) continue;
+
+    seenHashes.add(hash);
+    deduped.push({ ...point, pointHash: hash });
+  }
+
+  return deduped;
+}
+
 async function startDuty(actor, payload) {
   const db = await getTenantDbByCompany(actor.companyId, actor.companyName);
   if (!db) return { status: 400, body: { ok: false, message: "Could not resolve tenant database" } };
@@ -63,6 +105,7 @@ async function startDuty(actor, payload) {
     startedAt,
     lastSeenAt: startedAt,
     isActive: true,
+    source: payload.source,
     startLocation: point,
   });
 
@@ -78,6 +121,7 @@ async function startDuty(actor, payload) {
     lastSeenAt: startedAt,
     dutySessionId: String(session._id),
     source: payload.source,
+    pointHash: toPointHash({ latitude: payload.latitude, longitude: payload.longitude, recordedAt: startedAt }),
   };
 
   await UserLiveLocation.findOneAndUpdate(
@@ -86,9 +130,18 @@ async function startDuty(actor, payload) {
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
 
-  await UserLocationHistory.create(livePayload);
+  await UserLocationHistory.updateOne(
+    {
+      companyId: actor.companyId,
+      userId: actor.userId,
+      dutySessionId: livePayload.dutySessionId,
+      pointHash: livePayload.pointHash,
+    },
+    { $setOnInsert: livePayload },
+    { upsert: true }
+  );
 
-  emitLocationUserUpdated(livePayload);
+  emitLocationUserUpdated({ ...livePayload, trackingStatus: "online" });
 
   return { status: 200, body: { ok: true, data: { dutySessionId: session._id, startedAt } } };
 }
@@ -104,7 +157,23 @@ async function updateLocation(actor, points) {
     return { status: 400, body: { ok: false, message: "No active duty session. Start duty first." } };
   }
 
-  const historyDocs = points.map((point) => ({
+  const normalizedPoints = normalizeAndDeduplicateIncomingPoints(points, activeSession);
+  if (!normalizedPoints.length) {
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        data: {
+          dutySessionId: activeSession._id,
+          acceptedPoints: 0,
+          skippedDuplicates: points.length,
+          lastRecordedAt: activeSession.lastSeenAt,
+        },
+      },
+    };
+  }
+
+  const historyDocs = normalizedPoints.map((point) => ({
     userId: actor.userId,
     companyId: actor.companyId,
     distributorId: actor.distributorId,
@@ -115,10 +184,15 @@ async function updateLocation(actor, points) {
     recordedAt: point.recordedAt,
     lastSeenAt: point.recordedAt,
     dutySessionId: String(activeSession._id),
+    pointHash: point.pointHash,
     source: point.source,
   }));
 
-  await UserLocationHistory.insertMany(historyDocs, { ordered: true });
+  try {
+    await UserLocationHistory.insertMany(historyDocs, { ordered: false });
+  } catch (_error) {
+    // duplicates are tolerated due unique dedupe index
+  }
 
   const lastPoint = historyDocs[historyDocs.length - 1];
   await UserLiveLocation.findOneAndUpdate(
@@ -136,7 +210,7 @@ async function updateLocation(actor, points) {
   activeSession.lastSeenAt = lastPoint.recordedAt;
   await activeSession.save();
 
-  emitLocationUserUpdated(lastPoint);
+  emitLocationUserUpdated({ ...lastPoint, trackingStatus: "online" });
 
   return {
     status: 200,
@@ -144,7 +218,8 @@ async function updateLocation(actor, points) {
       ok: true,
       data: {
         dutySessionId: activeSession._id,
-        acceptedPoints: points.length,
+        acceptedPoints: historyDocs.length,
+        skippedDuplicates: points.length - historyDocs.length,
         lastRecordedAt: lastPoint.recordedAt,
       },
     },
@@ -180,6 +255,7 @@ async function endDuty(actor, payload) {
     recordedAt: payload.endedAt,
     lastSeenAt: payload.endedAt,
     dutySessionId: String(activeSession._id),
+    pointHash: toPointHash({ latitude: payload.latitude, longitude: payload.longitude, recordedAt: payload.endedAt }),
     source: payload.source,
   };
 
@@ -189,27 +265,60 @@ async function endDuty(actor, payload) {
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
 
-  await UserLocationHistory.create(livePayload);
+  await UserLocationHistory.updateOne(
+    {
+      companyId: actor.companyId,
+      userId: actor.userId,
+      dutySessionId: livePayload.dutySessionId,
+      pointHash: livePayload.pointHash,
+    },
+    { $setOnInsert: livePayload },
+    { upsert: true }
+  );
 
-  emitLocationUserStopped(livePayload);
-  emitLocationUserOffline(livePayload);
+  const stoppedPayload = { ...livePayload, trackingStatus: "offline" };
+  emitLocationUserStopped(stoppedPayload);
+  emitLocationUserOffline(stoppedPayload);
 
   return { status: 200, body: { ok: true, data: { dutySessionId: activeSession._id, endedAt: payload.endedAt } } };
 }
 
 function createTrackedSnapshot(userDoc, locationDoc) {
+  const lastSeenAt = locationDoc.lastSeenAt || locationDoc.recordedAt || null;
   return {
     userId: locationDoc.userId,
     fullName: userDoc?.fullName || "",
     role: userDoc?.role || locationDoc.role,
     companyId: locationDoc.companyId,
     distributorId: locationDoc.distributorId,
+    regionName: userDoc?.regionName || "",
+    zoneName: userDoc?.zoneName || "",
+    territoryName: userDoc?.territoryName || "",
+    fieldName: userDoc?.fieldName || "",
     latitude: locationDoc.latitude,
     longitude: locationDoc.longitude,
+    speed: locationDoc.speed ?? null,
+    heading: locationDoc.heading ?? null,
     recordedAt: locationDoc.recordedAt,
-    lastSeenAt: locationDoc.lastSeenAt,
+    lastSeenAt,
+    trackingStatus: deriveTrackingStatus(lastSeenAt),
     dutySessionId: locationDoc.dutySessionId || "",
   };
+}
+
+function getLiveQueryForViewer(viewer) {
+  if (isDistributor(viewer)) {
+    return {
+      distributorId: asText(viewer?.distributorId || viewer?.uid),
+      role: { $in: ["salesman", "orderbooker", "Salesman", "Order Booker"] },
+    };
+  }
+
+  if (isSystemAdmin(viewer?.role) || isCompanyAdmin(viewer?.role)) {
+    return {};
+  }
+
+  return { _id: { $exists: false } };
 }
 
 async function listLiveUsers(viewer) {
@@ -220,12 +329,19 @@ async function listLiveUsers(viewer) {
     const { UserLiveLocation } = getLocationModelsForDb(db);
     const UserModel = getUserModelForDb(db);
 
-    const [liveDocs, trackedUsers] = await Promise.all([
-      UserLiveLocation.find({}).sort({ lastSeenAt: -1 }).lean(),
-      UserModel.find({ role: { $in: ["Supplier", "Salesman", "Order Booker"] } })
-        .select("userId fullName role companyId distributorId")
-        .lean(),
-    ]);
+    const liveQuery = getLiveQueryForViewer(viewer);
+    const liveDocs = await UserLiveLocation.find(liveQuery)
+      .sort({ lastSeenAt: -1 })
+      .limit(2500)
+      .select("userId companyId distributorId role latitude longitude recordedAt lastSeenAt dutySessionId speed heading")
+      .lean();
+
+    const userIds = [...new Set(liveDocs.map((doc) => String(doc.userId || "")).filter(Boolean))];
+    const trackedUsers = userIds.length
+      ? await UserModel.find({ userId: { $in: userIds } })
+          .select("userId fullName role companyId distributorId regionName zoneName territoryName fieldName")
+          .lean()
+      : [];
 
     const userMap = new Map(trackedUsers.map((u) => [String(u.userId || u._id), u]));
 
@@ -244,7 +360,18 @@ async function listLiveUsers(viewer) {
     }
   }
 
-  return { status: 200, body: { ok: true, data: { items } } };
+  items.sort((a, b) => new Date(b.lastSeenAt || 0).getTime() - new Date(a.lastSeenAt || 0).getTime());
+
+  return {
+    status: 200,
+    body: {
+      ok: true,
+      data: {
+        items,
+        total: items.length,
+      },
+    },
+  };
 }
 
 async function findAuthorizedTrackedUser(viewer, userId) {
@@ -252,7 +379,7 @@ async function findAuthorizedTrackedUser(viewer, userId) {
 
   for (const { db } of scopedDbs) {
     const UserModel = getUserModelForDb(db);
-    const tracked = await UserModel.findOne({ userId }).select("userId fullName role companyId distributorId").lean();
+    const tracked = await UserModel.findOne({ userId }).select("userId fullName role companyId distributorId regionName zoneName territoryName fieldName").lean();
     if (!tracked) continue;
 
     if (!isTrackedRole(toCanonicalTrackedRole(tracked.role))) return { unauthorized: true };
@@ -280,7 +407,11 @@ async function getHistory(viewer, userId) {
   if (!found || found.unauthorized) return { status: 404, body: { ok: false, message: "User not found" } };
 
   const { UserLocationHistory } = getLocationModelsForDb(found.db);
-  const points = await UserLocationHistory.find({ userId: found.tracked.userId }).sort({ recordedAt: -1 }).limit(1000).lean();
+  const points = await UserLocationHistory.find({ userId: found.tracked.userId })
+    .sort({ recordedAt: -1 })
+    .limit(1000)
+    .select("userId latitude longitude source recordedAt lastSeenAt dutySessionId")
+    .lean();
   return { status: 200, body: { ok: true, data: { userId: found.tracked.userId, points } } };
 }
 
@@ -318,6 +449,7 @@ async function getSummary(viewer, userId) {
         hasActiveDuty: Boolean(activeSession),
         activeDutySessionId: activeSession ? String(activeSession._id) : "",
         lastSeenAt: lastPoint?.lastSeenAt || null,
+        trackingStatus: deriveTrackingStatus(lastPoint?.lastSeenAt || null),
       },
     },
   };

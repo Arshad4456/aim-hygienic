@@ -1,5 +1,5 @@
 const { verifyToken } = require("../../utils/auth");
-const { toCanonicalTrackedRole, isSystemAdmin, normalizeRole } = require("./helpers/permissions");
+const { toCanonicalTrackedRole, isSystemAdmin, isCompanyAdmin, normalizeRole } = require("./helpers/permissions");
 
 let io = null;
 const recentEventKeys = new Map();
@@ -85,7 +85,7 @@ function registerLocationSocket(socketServer) {
     }
 
     const companyId = String(user.companyId || "").trim();
-    if (companyId) {
+    if (companyId && isCompanyAdmin(role)) {
       socket.join(`company_${companyId}`);
     }
 
