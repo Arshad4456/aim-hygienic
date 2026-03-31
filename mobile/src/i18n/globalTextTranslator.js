@@ -22,6 +22,50 @@ export function installGlobalTextTranslator() {
   if (installed) return;
   installed = true;
 
+  try {
+    // Support React automatic JSX runtime used by modern React Native builds.
+    const JSXRuntime = require('react/jsx-runtime');
+    if (JSXRuntime?.jsx) {
+      const originalJsx = JSXRuntime.jsx;
+      JSXRuntime.jsx = function patchedJsx(type, props, key) {
+        const isTextComponent = type === Text || type?.displayName === 'Text' || type?.name === 'Text';
+        const isTextInputComponent = type === TextInput || type?.displayName === 'TextInput' || type?.name === 'TextInput';
+        let nextProps = props;
+
+        if (isTextComponent && props && 'children' in props) {
+          nextProps = { ...nextProps, children: translateChild(props.children) };
+        }
+
+        if (isTextInputComponent && typeof props?.placeholder === 'string') {
+          nextProps = { ...nextProps, placeholder: runtimeTranslator(props.placeholder) };
+        }
+
+        return originalJsx(type, nextProps, key);
+      };
+    }
+
+    if (JSXRuntime?.jsxs) {
+      const originalJsxs = JSXRuntime.jsxs;
+      JSXRuntime.jsxs = function patchedJsxs(type, props, key) {
+        const isTextComponent = type === Text || type?.displayName === 'Text' || type?.name === 'Text';
+        const isTextInputComponent = type === TextInput || type?.displayName === 'TextInput' || type?.name === 'TextInput';
+        let nextProps = props;
+
+        if (isTextComponent && props && 'children' in props) {
+          nextProps = { ...nextProps, children: translateChild(props.children) };
+        }
+
+        if (isTextInputComponent && typeof props?.placeholder === 'string') {
+          nextProps = { ...nextProps, placeholder: runtimeTranslator(props.placeholder) };
+        }
+
+        return originalJsxs(type, nextProps, key);
+      };
+    }
+  } catch (_error) {
+    // If jsx-runtime patching is not available, continue with fallback patches below.
+  }
+
   if (typeof Text?.render === 'function') {
     const originalTextRender = Text.render;
     Text.render = function patchedTextRender(...args) {
