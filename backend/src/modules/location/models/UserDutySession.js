@@ -10,6 +10,7 @@ const UserDutySessionSchema = new mongoose.Schema(
     endedAt: { type: Date },
     lastSeenAt: { type: Date, default: Date.now },
     isActive: { type: Boolean, default: true },
+    source: { type: String, default: "mobile", trim: true },
     startLocation: {
       type: {
         type: String,

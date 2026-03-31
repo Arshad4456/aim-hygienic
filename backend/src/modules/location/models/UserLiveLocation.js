@@ -19,6 +19,7 @@ const UserLiveLocationSchema = new mongoose.Schema(
     recordedAt: { type: Date, default: Date.now },
     lastSeenAt: { type: Date, default: Date.now },
     source: { type: String, default: "mobile", trim: true },
+    dutySessionId: { type: String, trim: true },
   },
   { timestamps: true }
 );
