@@ -79,6 +79,8 @@ const ROLE_PROFILE_FIELDS = {
     "fieldId",
     "fieldName",
   ],
+  Supplier: ["warehouseId", "warehouseName"],
+  Vendor: ["businessName", "warehouseId", "warehouseName"],
   customer: [
     "businessType",
     "businessName",
