@@ -32,19 +32,21 @@ function toHttpsIfNeeded(base) {
 
 function resolveApiCandidates() {
   const normalized = normalizeApiBase(process.env.NEXT_PUBLIC_API_BASE);
-  const candidates = [toHttpsIfNeeded(normalized)];
 
   if (typeof window !== "undefined") {
     const isLocalHost = /^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(window.location.host);
-    const pointsToLocalApi = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(normalized);
 
-    if (!isLocalHost && pointsToLocalApi) {
-      candidates.unshift("/api");
-    } else if (candidates[0] !== "/api") {
-      candidates.push("/api");
+    // In production/browser prefer same-origin /api first to avoid CORS and rely on reverse proxy.
+    if (!isLocalHost) {
+      const external = toHttpsIfNeeded(normalized);
+      return external === "/api" ? ["/api"] : ["/api", external];
     }
   }
 
+  const candidates = [toHttpsIfNeeded(normalized)];
+  if (typeof window !== "undefined" && candidates[0] !== "/api") {
+    candidates.push("/api");
+  }
   return [...new Set(candidates)];
 }
 
