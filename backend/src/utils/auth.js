@@ -21,7 +21,9 @@ function getSecret() {
 function signToken(user) {
   const now = Math.floor(Date.now() / 1000);
   const normalizedRole = String(user?.role || "").trim().toLowerCase();
-  const distributorId = normalizedRole === "distributor" ? String(user?._id || "").trim() : String(user?.distributorId || "").trim();
+  const distributorId = normalizedRole === "distributor"
+    ? String(user?.distributorId || user?.userId || user?._id || "").trim()
+    : String(user?.distributorId || "").trim();
   const payload = {
     uid: user._id.toString(),
     role: user.role,

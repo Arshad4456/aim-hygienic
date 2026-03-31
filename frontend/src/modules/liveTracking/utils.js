@@ -36,6 +36,33 @@ export function markerPosition(latitude, longitude) {
   };
 }
 
+export function formatSpeed(speed) {
+  const value = safeNumber(speed);
+  if (value === null) return "N/A";
+  const kmh = value * 3.6;
+  if (!Number.isFinite(kmh)) return "N/A";
+  return `${kmh.toFixed(1)} km/h`;
+}
+
+export function formatHeading(heading) {
+  const value = safeNumber(heading);
+  if (value === null) return "N/A";
+  return `${Math.round(value)}°`;
+}
+
+export function buildOsmEmbedUrl(latitude, longitude, zoom = 15) {
+  const lat = safeNumber(latitude);
+  const lng = safeNumber(longitude);
+  if (lat === null || lng === null) return "";
+
+  const delta = Math.max(0.005, 0.04 / Math.max(1, zoom - 10));
+  const left = Math.max(-180, lng - delta);
+  const right = Math.min(180, lng + delta);
+  const top = Math.min(90, lat + delta);
+  const bottom = Math.max(-90, lat - delta);
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${left}%2C${bottom}%2C${right}%2C${top}&layer=mapnik&marker=${lat}%2C${lng}`;
+}
+
 export function filterUsers(users, filters) {
   const search = String(filters.search || "").trim().toLowerCase();
   return (users || []).filter((user) => {

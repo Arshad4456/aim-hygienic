@@ -1,21 +1,34 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 import { apiFetch } from "../../../app/lib/api";
-import { formatDateTime, markerPosition } from "./utils";
+import { buildOsmEmbedUrl, formatDateTime, formatHeading, formatSpeed, safeNumber } from "./utils";
 
 export default function RoutePlaybackModule({ userId }) {
+  const params = useParams();
+  const effectiveUserId = String(userId || params?.userId || "").trim();
   const [points, setPoints] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
+
+    if (!effectiveUserId) {
+      setPoints([]);
+      setError("User ID is missing in the route path.");
+      setLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+
     (async () => {
       setLoading(true);
       setError("");
       try {
-        const res = await apiFetch(`/location/history/${encodeURIComponent(userId)}`);
+        const res = await apiFetch(`/location/history/${encodeURIComponent(effectiveUserId)}`);
         if (!active) return;
         setPoints(Array.isArray(res?.data?.points) ? res.data.points : []);
       } catch (e) {
@@ -29,15 +42,20 @@ export default function RoutePlaybackModule({ userId }) {
     return () => {
       active = false;
     };
-  }, [userId]);
+  }, [effectiveUserId]);
 
   const latest = useMemo(() => points[0] || null, [points]);
+  const mapUrl = useMemo(() => {
+    const lat = safeNumber(latest?.latitude);
+    const lng = safeNumber(latest?.longitude);
+    return lat !== null && lng !== null ? buildOsmEmbedUrl(lat, lng, 15) : "";
+  }, [latest]);
 
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border bg-white p-4">
         <div className="text-lg font-semibold text-zinc-900">Route playback</div>
-        <div className="text-sm text-zinc-500">User ID: {userId}</div>
+        <div className="text-sm text-zinc-500">User ID: {effectiveUserId || "—"}</div>
         <div className="text-sm text-zinc-500 mt-1">Total points: {points.length}</div>
       </div>
 
@@ -45,13 +63,18 @@ export default function RoutePlaybackModule({ userId }) {
 
       <div className="rounded-2xl border bg-white p-3">
         <div className="text-sm font-semibold text-zinc-900">Latest location preview</div>
-        <div className="mt-3 relative h-[420px] overflow-hidden rounded-xl border bg-gradient-to-b from-sky-50 to-emerald-50">
-          {latest && markerPosition(latest.latitude, latest.longitude) ? (
-            <span
-              className="absolute -translate-x-1/2 -translate-y-1/2 h-4 w-4 rounded-full bg-emerald-500 border-2 border-white ring-4 ring-emerald-200"
-              style={markerPosition(latest.latitude, latest.longitude)}
+        <div className="mt-3 overflow-hidden rounded-xl border bg-zinc-50">
+          {mapUrl ? (
+            <iframe
+              title="Latest route location map"
+              src={mapUrl}
+              className="h-[420px] w-full border-0"
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
             />
-          ) : null}
+          ) : (
+            <div className="flex h-[420px] items-center justify-center text-sm text-zinc-500">No valid location point found yet.</div>
+          )}
         </div>
       </div>
 
@@ -64,6 +87,8 @@ export default function RoutePlaybackModule({ userId }) {
                 <th className="text-left px-3 py-2 border-b">Recorded at</th>
                 <th className="text-left px-3 py-2 border-b">Latitude</th>
                 <th className="text-left px-3 py-2 border-b">Longitude</th>
+                <th className="text-left px-3 py-2 border-b">Speed</th>
+                <th className="text-left px-3 py-2 border-b">Heading</th>
                 <th className="text-left px-3 py-2 border-b">Source</th>
               </tr>
             </thead>
@@ -73,12 +98,14 @@ export default function RoutePlaybackModule({ userId }) {
                   <td className="px-3 py-2 border-b">{formatDateTime(p.recordedAt)}</td>
                   <td className="px-3 py-2 border-b">{p.latitude ?? "—"}</td>
                   <td className="px-3 py-2 border-b">{p.longitude ?? "—"}</td>
+                  <td className="px-3 py-2 border-b">{formatSpeed(p.speed)}</td>
+                  <td className="px-3 py-2 border-b">{formatHeading(p.heading)}</td>
                   <td className="px-3 py-2 border-b">{p.source || "—"}</td>
                 </tr>
               ))}
               {!points.length && !loading ? (
                 <tr>
-                  <td colSpan={4} className="px-3 py-6 text-center text-zinc-500">No route points found.</td>
+                  <td colSpan={6} className="px-3 py-6 text-center text-zinc-500">No route points found.</td>
                 </tr>
               ) : null}
             </tbody>

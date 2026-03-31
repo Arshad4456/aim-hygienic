@@ -5,6 +5,12 @@ function isFiniteNumber(value) {
   return Number.isFinite(n) ? n : null;
 }
 
+
+function parseOptionalMetric(value) {
+  const n = isFiniteNumber(value);
+  return n === null ? null : n;
+}
+
 function parseCoordinatePair(payload) {
   const latitude = isFiniteNumber(payload?.latitude);
   const longitude = isFiniteNumber(payload?.longitude);
@@ -81,6 +87,10 @@ function validateStartDuty(req, res, next) {
     ...coord.value,
     startedAt: ts.value,
     source: normalizeSource(req.body?.source),
+    accuracy: parseOptionalMetric(req.body?.accuracy),
+    speed: parseOptionalMetric(req.body?.speed),
+    heading: parseOptionalMetric(req.body?.heading),
+    altitude: parseOptionalMetric(req.body?.altitude),
   };
   next();
 }
@@ -107,6 +117,10 @@ function validateUpdate(req, res, next) {
       ...coord.value,
       recordedAt: ts.value,
       source: normalizeSource(point.source),
+      accuracy: parseOptionalMetric(point.accuracy),
+      speed: parseOptionalMetric(point.speed),
+      heading: parseOptionalMetric(point.heading),
+      altitude: parseOptionalMetric(point.altitude),
     });
   }
 
@@ -125,6 +139,10 @@ function validateEndDuty(req, res, next) {
     ...coord.value,
     endedAt: ts.value,
     source: normalizeSource(req.body?.source),
+    accuracy: parseOptionalMetric(req.body?.accuracy),
+    speed: parseOptionalMetric(req.body?.speed),
+    heading: parseOptionalMetric(req.body?.heading),
+    altitude: parseOptionalMetric(req.body?.altitude),
   };
   next();
 }

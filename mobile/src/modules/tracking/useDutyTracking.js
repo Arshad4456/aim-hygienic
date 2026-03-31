@@ -21,6 +21,10 @@ function toPoint(position, source = 'mobile-fg') {
   return {
     latitude: lat,
     longitude: lng,
+    accuracy: Number.isFinite(Number(position?.coords?.accuracy)) ? Number(position.coords.accuracy) : null,
+    speed: Number.isFinite(Number(position?.coords?.speed)) ? Number(position.coords.speed) : null,
+    heading: Number.isFinite(Number(position?.coords?.heading)) ? Number(position.coords.heading) : null,
+    altitude: Number.isFinite(Number(position?.coords?.altitude)) ? Number(position.coords.altitude) : null,
     recordedAt: new Date(position?.timestamp || Date.now()).toISOString(),
     source,
   };
@@ -146,7 +150,7 @@ export function useDutyTracking(currentRole) {
       if (!point) throw new Error('Unable to get current location');
 
       await flushQueue();
-      await postEndDuty({ latitude: point.latitude, longitude: point.longitude, endedAt: point.recordedAt, source: point.source });
+      await postEndDuty({ latitude: point.latitude, longitude: point.longitude, accuracy: point.accuracy, speed: point.speed, heading: point.heading, altitude: point.altitude, endedAt: point.recordedAt, source: point.source });
       await stopBackgroundTracking();
       stopForegroundWatcher();
       await persistStatus({ dutyActive: false, lastError: '' });

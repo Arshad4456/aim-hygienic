@@ -116,6 +116,10 @@ async function startDuty(actor, payload) {
     role: actor.role,
     latitude: payload.latitude,
     longitude: payload.longitude,
+    accuracy: payload.accuracy ?? null,
+    speed: payload.speed ?? null,
+    heading: payload.heading ?? null,
+    altitude: payload.altitude ?? null,
     location: point,
     recordedAt: startedAt,
     lastSeenAt: startedAt,
@@ -180,6 +184,10 @@ async function updateLocation(actor, points) {
     role: actor.role,
     latitude: point.latitude,
     longitude: point.longitude,
+    accuracy: point.accuracy ?? null,
+    speed: point.speed ?? null,
+    heading: point.heading ?? null,
+    altitude: point.altitude ?? null,
     location: toPoint(point.latitude, point.longitude),
     recordedAt: point.recordedAt,
     lastSeenAt: point.recordedAt,
@@ -251,6 +259,10 @@ async function endDuty(actor, payload) {
     role: actor.role,
     latitude: payload.latitude,
     longitude: payload.longitude,
+    accuracy: payload.accuracy ?? null,
+    speed: payload.speed ?? null,
+    heading: payload.heading ?? null,
+    altitude: payload.altitude ?? null,
     location: point,
     recordedAt: payload.endedAt,
     lastSeenAt: payload.endedAt,
@@ -297,8 +309,10 @@ function createTrackedSnapshot(userDoc, locationDoc) {
     fieldName: userDoc?.fieldName || "",
     latitude: locationDoc.latitude,
     longitude: locationDoc.longitude,
+    accuracy: locationDoc.accuracy ?? null,
     speed: locationDoc.speed ?? null,
     heading: locationDoc.heading ?? null,
+    altitude: locationDoc.altitude ?? null,
     recordedAt: locationDoc.recordedAt,
     lastSeenAt,
     trackingStatus: deriveTrackingStatus(lastSeenAt),
@@ -308,8 +322,15 @@ function createTrackedSnapshot(userDoc, locationDoc) {
 
 function getLiveQueryForViewer(viewer) {
   if (isDistributor(viewer)) {
+    const distributorIds = [...new Set([
+      asText(viewer?.distributorId),
+      asText(viewer?.userId),
+      asText(viewer?.uid),
+      asText(viewer?._id),
+    ].filter(Boolean))];
+
     return {
-      distributorId: asText(viewer?.distributorId || viewer?.uid),
+      distributorId: distributorIds.length > 1 ? { $in: distributorIds } : distributorIds[0] || "",
       role: { $in: ["salesman", "orderbooker", "Salesman", "Order Booker"] },
     };
   }
@@ -333,7 +354,7 @@ async function listLiveUsers(viewer) {
     const liveDocs = await UserLiveLocation.find(liveQuery)
       .sort({ lastSeenAt: -1 })
       .limit(2500)
-      .select("userId companyId distributorId role latitude longitude recordedAt lastSeenAt dutySessionId speed heading")
+      .select("userId companyId distributorId role latitude longitude accuracy speed heading altitude recordedAt lastSeenAt dutySessionId")
       .lean();
 
     const userIds = [...new Set(liveDocs.map((doc) => String(doc.userId || "")).filter(Boolean))];
@@ -410,7 +431,7 @@ async function getHistory(viewer, userId) {
   const points = await UserLocationHistory.find({ userId: found.tracked.userId })
     .sort({ recordedAt: -1 })
     .limit(1000)
-    .select("userId latitude longitude source recordedAt lastSeenAt dutySessionId")
+    .select("userId latitude longitude accuracy speed heading altitude source recordedAt lastSeenAt dutySessionId")
     .lean();
   return { status: 200, body: { ok: true, data: { userId: found.tracked.userId, points } } };
 }
