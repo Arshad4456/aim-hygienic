@@ -38,8 +38,8 @@ function resolveApiCandidates() {
 
     // In production/browser prefer same-origin /api first to avoid CORS and rely on reverse proxy.
     if (!isLocalHost) {
-      const external = toHttpsIfNeeded(normalized);
-      return external === "/api" ? ["/api"] : ["/api", external];
+      // Production web traffic should stay same-origin to avoid CORS mismatch between apex/www.
+      return ["/api"];
     }
   }
 
@@ -103,7 +103,7 @@ export async function apiFetch(path, { method = "GET", body, token, credentials 
     }
   }
 
-  if (lastError && !isNetworkError(lastError) && !isRetriableStatus(lastError)) {
+  if (lastError) {
     throw lastError;
   }
 
