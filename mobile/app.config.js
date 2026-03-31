@@ -18,8 +18,20 @@ module.exports = {
     android: {
       package: 'com.aim.erp.mobile',
       versionCode: 1,
+      permissions: ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'ACCESS_BACKGROUND_LOCATION', 'FOREGROUND_SERVICE'],
     },
-    plugins: ['expo-secure-store'],
+    plugins: [
+      'expo-secure-store',
+      [
+        'expo-location',
+        {
+          locationAlwaysAndWhenInUsePermission: 'Allow AIM ERP to track your location during duty even in background.',
+          locationWhenInUsePermission: 'Allow AIM ERP to access your location while using the app.',
+          isAndroidBackgroundLocationEnabled: true,
+          isIosBackgroundLocationEnabled: true,
+        },
+      ],
+    ],
     extra: {
       apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL || 'https://www.aimhygienics.com',
       eas: {
