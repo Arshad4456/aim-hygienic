@@ -116,4 +116,6 @@ export const userDashboardSearchItems = {
     { title: "Account Settings", href: "/dashboards/customer/settings" },
     { title: "Change Password", href: "/dashboards/customer/settings/change-password" },
   ],
+  supplier: [{ title: "Dashboard", href: "/dashboards/supplier" }],
+  vendor: [{ title: "Dashboard", href: "/dashboards/vendor" }],
 };
