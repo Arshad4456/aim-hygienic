@@ -47,14 +47,19 @@ function resolveApiCandidates() {
   const normalized = normalizeApiBase(process.env.NEXT_PUBLIC_API_BASE);
   const normalizedHttps = toHttpsIfNeeded(normalized);
   const fallbackCandidates = isBrowserSafeFallback(normalizedHttps) ? [normalizedHttps] : [];
+  const emergencyFallbackCandidates =
+    normalizedHttps && normalizedHttps !== "/api" && !fallbackCandidates.includes(normalizedHttps)
+      ? [normalizedHttps]
+      : [];
 
   if (typeof window !== "undefined") {
     const isLocalHost = /^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(window.location.host);
 
     // In production/browser prefer same-origin /api first to avoid CORS and rely on reverse proxy.
     if (!isLocalHost) {
-      // Keep production requests same-origin to avoid CORS failures between apex/www hosts.
-      return ["/api", ...fallbackCandidates];
+      // Keep production requests same-origin first to avoid CORS failures between apex/www hosts.
+      // If that fails with a retriable status/network error, apiFetch can retry against NEXT_PUBLIC_API_BASE.
+      return ["/api", ...fallbackCandidates, ...emergencyFallbackCandidates];
     }
   }
 
