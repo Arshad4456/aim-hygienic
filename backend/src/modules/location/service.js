@@ -303,9 +303,13 @@ function createTrackedSnapshot(userDoc, locationDoc) {
     role: userDoc?.role || locationDoc.role,
     companyId: locationDoc.companyId,
     distributorId: locationDoc.distributorId,
+    regionId: userDoc?.regionId || "",
     regionName: userDoc?.regionName || "",
+    zoneId: userDoc?.zoneId || "",
     zoneName: userDoc?.zoneName || "",
+    territoryId: userDoc?.territoryId || "",
     territoryName: userDoc?.territoryName || "",
+    fieldId: userDoc?.fieldId || "",
     fieldName: userDoc?.fieldName || "",
     latitude: locationDoc.latitude,
     longitude: locationDoc.longitude,
@@ -322,15 +326,7 @@ function createTrackedSnapshot(userDoc, locationDoc) {
 
 function getLiveQueryForViewer(viewer) {
   if (isDistributor(viewer)) {
-    const distributorIds = [...new Set([
-      asText(viewer?.distributorId),
-      asText(viewer?.userId),
-      asText(viewer?.uid),
-      asText(viewer?._id),
-    ].filter(Boolean))];
-
     return {
-      distributorId: distributorIds.length > 1 ? { $in: distributorIds } : distributorIds[0] || "",
       role: { $in: ["salesman", "orderbooker", "Salesman", "Order Booker"] },
     };
   }
@@ -360,7 +356,7 @@ async function listLiveUsers(viewer) {
     const userIds = [...new Set(liveDocs.map((doc) => String(doc.userId || "")).filter(Boolean))];
     const trackedUsers = userIds.length
       ? await UserModel.find({ userId: { $in: userIds } })
-          .select("userId fullName role companyId distributorId regionName zoneName territoryName fieldName")
+          .select("userId fullName role companyId distributorId regionId regionName zoneId zoneName territoryId territoryName fieldId fieldName")
           .lean()
       : [];
 
@@ -400,7 +396,7 @@ async function findAuthorizedTrackedUser(viewer, userId) {
 
   for (const { db } of scopedDbs) {
     const UserModel = getUserModelForDb(db);
-    const tracked = await UserModel.findOne({ userId }).select("userId fullName role companyId distributorId regionName zoneName territoryName fieldName").lean();
+    const tracked = await UserModel.findOne({ userId }).select("userId fullName role companyId distributorId regionId regionName zoneId zoneName territoryId territoryName fieldId fieldName").lean();
     if (!tracked) continue;
 
     if (!isTrackedRole(toCanonicalTrackedRole(tracked.role))) return { unauthorized: true };

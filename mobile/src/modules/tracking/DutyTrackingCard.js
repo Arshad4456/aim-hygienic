@@ -12,8 +12,8 @@ function formatTime(value) {
 }
 
 export default function DutyTrackingCard() {
-  const { role } = useAuth();
-  const tracking = useDutyTracking(role);
+  const { user } = useAuth();
+  const tracking = useDutyTracking(user);
 
   if (!tracking.supported) return null;
 
@@ -43,7 +43,11 @@ export default function DutyTrackingCard() {
         </Pressable>
       </View>
 
-      <Pressable style={[styles.btn, styles.syncBtn]} onPress={tracking.syncNow}>
+      <Pressable
+        style={[styles.btn, styles.syncBtn, (!tracking.dutyActive || tracking.isSyncing) && styles.disabled]}
+        onPress={tracking.syncNow}
+        disabled={!tracking.dutyActive || tracking.isSyncing}
+      >
         <Text style={styles.syncText}>{tracking.isSyncing ? 'Syncing…' : 'Sync Now'}</Text>
       </Pressable>
     </Card>

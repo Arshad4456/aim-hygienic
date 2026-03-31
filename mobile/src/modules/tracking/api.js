@@ -14,3 +14,8 @@ export async function postEndDuty(payload) {
   const { data } = await apiClient.post('/location/end-duty', payload);
   return data;
 }
+
+export async function getDutySummary(userId) {
+  const { data } = await apiClient.get(`/location/summary/${encodeURIComponent(String(userId || '').trim())}`);
+  return data;
+}

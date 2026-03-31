@@ -93,11 +93,25 @@ router.post("/login", async (req, res) => {
       token,
       user: {
         id: user._id,
+        userId: user.userId || "",
         username: user.username,
         fullName: user.fullName,
         role: user.role,
-        companyId: user.companyId,
-        companyName: user.companyName,
+        companyId: user.companyId || "",
+        companyName: user.companyName || "",
+        distributorId:
+          String(user?.role || "").trim().toLowerCase() === "distributor"
+            ? user.distributorId || user.userId || user._id || ""
+            : user.distributorId || "",
+        distributorName: user.distributorName || "",
+        regionId: user.regionId || "",
+        regionName: user.regionName || "",
+        zoneId: user.zoneId || "",
+        zoneName: user.zoneName || "",
+        territoryId: user.territoryId || "",
+        territoryName: user.territoryName || "",
+        fieldId: user.fieldId || "",
+        fieldName: user.fieldName || "",
         mobile: user.mobile || user.mobileNumber,
         email: user.email,
         warehouseId: user.warehouseId || "",

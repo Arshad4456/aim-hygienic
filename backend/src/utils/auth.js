@@ -18,22 +18,37 @@ function getSecret() {
   return process.env.JWT_SECRET || "dev-only-secret";
 }
 
+function asText(value) {
+  return String(value || "").trim();
+}
+
 function signToken(user) {
   const now = Math.floor(Date.now() / 1000);
   const normalizedRole = String(user?.role || "").trim().toLowerCase();
-  const distributorId = normalizedRole === "distributor"
-    ? String(user?.distributorId || user?.userId || user?._id || "").trim()
-    : String(user?.distributorId || "").trim();
+  const distributorId =
+    normalizedRole === "distributor"
+      ? asText(user?.distributorId || user?.userId || user?._id)
+      : asText(user?.distributorId);
+
   const payload = {
-    uid: user._id.toString(),
-    role: user.role,
-    username: user.username,
-    warehouse_id: String(user.warehouseId || "").trim(),
-    warehouseId: String(user.warehouseId || "").trim(),
-    userId: String(user.userId || "").trim(),
+    uid: asText(user?._id),
+    role: user?.role,
+    username: user?.username,
+    warehouse_id: asText(user?.warehouseId),
+    warehouseId: asText(user?.warehouseId),
+    userId: asText(user?.userId),
     distributorId,
-    companyId: String(user.companyId || "").trim(),
-    companyName: String(user.companyName || "").trim(),
+    distributorName: asText(user?.distributorName),
+    companyId: asText(user?.companyId),
+    companyName: asText(user?.companyName),
+    regionId: asText(user?.regionId),
+    regionName: asText(user?.regionName),
+    zoneId: asText(user?.zoneId),
+    zoneName: asText(user?.zoneName),
+    territoryId: asText(user?.territoryId),
+    territoryName: asText(user?.territoryName),
+    fieldId: asText(user?.fieldId),
+    fieldName: asText(user?.fieldName),
     exp: now + 7 * 24 * 60 * 60,
   };
 
