@@ -30,21 +30,35 @@ function toHttpsIfNeeded(base) {
   return base;
 }
 
+function isBrowserSafeFallback(base) {
+  if (typeof window === "undefined") return true;
+  if (!base || base === "/api") return false;
+  if (base.startsWith("/")) return true;
+
+  try {
+    const parsed = new URL(base);
+    return parsed.origin === window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
 function resolveApiCandidates() {
   const normalized = normalizeApiBase(process.env.NEXT_PUBLIC_API_BASE);
+  const normalizedHttps = toHttpsIfNeeded(normalized);
+  const fallbackCandidates = isBrowserSafeFallback(normalizedHttps) ? [normalizedHttps] : [];
 
   if (typeof window !== "undefined") {
     const isLocalHost = /^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(window.location.host);
 
     // In production/browser prefer same-origin /api first to avoid CORS and rely on reverse proxy.
     if (!isLocalHost) {
-      // Production web traffic should stay same-origin to avoid CORS mismatch between apex/www.
-      // If infra-level /api proxy is unhealthy (e.g. transient 502 on one host), fall back to an explicit API base.
-      return ["/api", ...(normalized && normalized !== "/api" ? [toHttpsIfNeeded(normalized)] : [])];
+      // Keep production requests same-origin to avoid CORS failures between apex/www hosts.
+      return ["/api", ...fallbackCandidates];
     }
   }
 
-  const candidates = [toHttpsIfNeeded(normalized)];
+  const candidates = [normalizedHttps];
   if (typeof window !== "undefined" && candidates[0] !== "/api") {
     candidates.push("/api");
   }
