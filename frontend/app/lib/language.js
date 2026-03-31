@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 export const LANGUAGE_OPTIONS = [
   { code: "en", label: "English" },
@@ -68,6 +68,9 @@ export function LanguageProvider({ children }) {
     return LANGUAGE_OPTIONS.some((opt) => opt.code === saved) ? saved : "en";
   });
 
+  const [dynamicTranslations, setDynamicTranslations] = useState({});
+  const pendingRef = useRef(new Set());
+
   useEffect(() => {
     if (typeof window !== "undefined") window.localStorage.setItem("aim_language", language);
     if (typeof document !== "undefined") {
@@ -76,12 +79,42 @@ export function LanguageProvider({ children }) {
     }
   }, [language]);
 
+  useEffect(() => {
+    setDynamicTranslations({});
+    pendingRef.current.clear();
+  }, [language]);
+
+  const requestTranslation = useCallback(async (text) => {
+    if (!text || language === "en") return;
+    if (DICTIONARY[language]?.[text] || dynamicTranslations[text] || pendingRef.current.has(text)) return;
+    pendingRef.current.add(text);
+    try {
+      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${language}&dt=t&q=${encodeURIComponent(text)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const translated = Array.isArray(data?.[0]) ? data[0].map((row) => row?.[0] || "").join("") : "";
+      if (translated) {
+        setDynamicTranslations((prev) => ({ ...prev, [text]: translated }));
+      }
+    } catch (_error) {
+      // keep source text if remote translate fails
+    } finally {
+      pendingRef.current.delete(text);
+    }
+  }, [dynamicTranslations, language]);
+
   const value = useMemo(() => ({
     language,
     setLanguage,
     isRTL: RTL_LANGS.has(language),
-    t: (text) => translateText(text, language),
-  }), [language]);
+    t: (text) => {
+      const base = translateText(text, language);
+      if (base !== text || !text || language === "en") return base;
+      if (dynamicTranslations[text]) return dynamicTranslations[text];
+      requestTranslation(text);
+      return text;
+    },
+  }), [language, dynamicTranslations, requestTranslation]);
 
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -9,6 +9,7 @@ import { getRoleModules } from './RoleMenuConfig';
 import { screenRegistry } from './ScreenRegistry';
 import RoleDrawerContent from './RoleDrawerContent';
 import { LANGUAGE_OPTIONS, translateText } from '../i18n/language';
+import { translateNode } from '../i18n/translateNode';
 
 function Header({
   title,
@@ -107,6 +108,8 @@ export default function DrawerNavigator() {
   const [accountOpen, setAccountOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [language, setLanguage] = useState('en');
+  const [dynamicTranslations, setDynamicTranslations] = useState({});
+  const pendingRef = useRef(new Set());
 
   useEffect(() => {
     let mounted = true;
@@ -120,7 +123,37 @@ export default function DrawerNavigator() {
     };
   }, []);
 
-  const t = useCallback((value) => translateText(value, language), [language]);
+  useEffect(() => {
+    setDynamicTranslations({});
+    pendingRef.current.clear();
+  }, [language]);
+
+  const requestTranslation = useCallback(async (text) => {
+    if (!text || language === 'en') return;
+    if (dynamicTranslations[text] || pendingRef.current.has(text)) return;
+    pendingRef.current.add(text);
+    try {
+      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${language}&dt=t&q=${encodeURIComponent(text)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const translated = Array.isArray(data?.[0]) ? data[0].map((row) => row?.[0] || '').join('') : '';
+      if (translated) {
+        setDynamicTranslations((prev) => ({ ...prev, [text]: translated }));
+      }
+    } catch (_error) {
+      // keep original if translation API fails
+    } finally {
+      pendingRef.current.delete(text);
+    }
+  }, [dynamicTranslations, language]);
+
+  const t = useCallback((value) => {
+    const base = translateText(value, language);
+    if (!value || language === 'en' || base !== value) return base;
+    if (dynamicTranslations[value]) return dynamicTranslations[value];
+    requestTranslation(value);
+    return value;
+  }, [dynamicTranslations, language, requestTranslation]);
 
   async function changeLanguage(nextLanguage) {
     setLanguage(nextLanguage);
@@ -186,7 +219,7 @@ export default function DrawerNavigator() {
         t={t}
       />
       <View style={styles.body}>
-        <Current navigation={nav} />
+        {translateNode(<Current navigation={nav} />, t)}
       </View>
 
       <Modal transparent animationType="fade" visible={drawerOpen} onRequestClose={() => setDrawerOpen(false)}>
