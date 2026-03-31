@@ -34,6 +34,7 @@ export function useDutyTracking(currentRole) {
   const [error, setError] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const watchRef = useRef(null);
+  const syncingRef = useRef(false);
 
   const supported = useMemo(() => isTrackingRole(currentRole), [currentRole]);
 
@@ -50,27 +51,33 @@ export function useDutyTracking(currentRole) {
   }, []);
 
   const flushQueue = useCallback(async () => {
-    if (!supported || isSyncing) return;
-    const queue = await getTrackingQueue();
-    if (!queue.length) return;
+    if (!supported || syncingRef.current) return;
 
+    syncingRef.current = true;
     setIsSyncing(true);
+
     try {
-      const chunk = queue.slice(0, BATCH_SIZE);
-      await postLocationUpdate(chunk);
-      const nextCount = await removePointsFromQueue(chunk.length);
-      const syncedAt = new Date().toISOString();
-      await persistStatus({ lastSyncedAt: syncedAt, lastError: '' });
-      setPendingCount(nextCount);
-      setStatus(nextCount ? 'Syncing…' : 'Tracking active');
+      let queue = await getTrackingQueue();
+      while (queue.length > 0) {
+        const chunk = queue.slice(0, BATCH_SIZE);
+        await postLocationUpdate(chunk);
+        const nextCount = await removePointsFromQueue(chunk.length);
+        const syncedAt = new Date().toISOString();
+        await persistStatus({ lastSyncedAt: syncedAt, lastError: '' });
+        setPendingCount(nextCount);
+        queue = await getTrackingQueue();
+      }
+
+      setStatus(dutyActive ? 'Tracking active' : 'Idle');
     } catch (e) {
       const message = String(e?.message || 'Sync failed');
       await persistStatus({ lastError: message });
       setStatus('Waiting for network');
     } finally {
+      syncingRef.current = false;
       setIsSyncing(false);
     }
-  }, [isSyncing, persistStatus, supported]);
+  }, [dutyActive, persistStatus, supported]);
 
   const onLocation = useCallback(
     async (position) => {
@@ -109,34 +116,46 @@ export function useDutyTracking(currentRole) {
     setStatus('Starting duty…');
     setError('');
 
-    await requestPermissions();
-    const position = await Location.getCurrentPositionAsync({ accuracy: 4 });
-    const point = toPoint(position, 'mobile-start');
-    if (!point) throw new Error('Unable to get current location');
+    try {
+      await requestPermissions();
+      const position = await Location.getCurrentPositionAsync({ accuracy: 4 });
+      const point = toPoint(position, 'mobile-start');
+      if (!point) throw new Error('Unable to get current location');
 
-    await postStartDuty(point);
-    await persistStatus({ dutyActive: true, lastError: '' });
-    await ensureForegroundWatcher();
-    await startBackgroundTracking();
+      await postStartDuty(point);
+      await persistStatus({ dutyActive: true, lastError: '' });
+      await ensureForegroundWatcher();
+      await startBackgroundTracking();
 
-    setStatus('Tracking active');
-    await flushQueue();
+      setStatus('Tracking active');
+      await flushQueue();
+    } catch (e) {
+      const message = String(e?.message || 'Could not start duty');
+      await persistStatus({ lastError: message });
+      setStatus('Idle');
+    }
   }, [ensureForegroundWatcher, flushQueue, persistStatus, requestPermissions, supported]);
 
   const endDuty = useCallback(async () => {
     if (!supported) return;
     setStatus('Ending duty…');
 
-    const position = await Location.getCurrentPositionAsync({ accuracy: 4 });
-    const point = toPoint(position, 'mobile-end');
-    if (!point) throw new Error('Unable to get current location');
+    try {
+      const position = await Location.getCurrentPositionAsync({ accuracy: 4 });
+      const point = toPoint(position, 'mobile-end');
+      if (!point) throw new Error('Unable to get current location');
 
-    await flushQueue();
-    await postEndDuty({ latitude: point.latitude, longitude: point.longitude, endedAt: point.recordedAt, source: point.source });
-    await stopBackgroundTracking();
-    stopForegroundWatcher();
-    await persistStatus({ dutyActive: false, lastError: '' });
-    setStatus('Duty ended');
+      await flushQueue();
+      await postEndDuty({ latitude: point.latitude, longitude: point.longitude, endedAt: point.recordedAt, source: point.source });
+      await stopBackgroundTracking();
+      stopForegroundWatcher();
+      await persistStatus({ dutyActive: false, lastError: '' });
+      setStatus('Duty ended');
+    } catch (e) {
+      const message = String(e?.message || 'Could not end duty');
+      await persistStatus({ lastError: message });
+      setStatus('Tracking active');
+    }
   }, [flushQueue, persistStatus, stopForegroundWatcher, supported]);
 
   useEffect(() => {

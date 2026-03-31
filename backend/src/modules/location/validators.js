@@ -17,6 +17,7 @@ function parseCoordinatePair(payload) {
 }
 
 function parseTimestamp(value, fieldName, fallbackNow = false) {
+  const now = Date.now();
   if (value === undefined || value === null || value === "") {
     return fallbackNow ? { ok: true, value: new Date() } : { ok: false, message: `${fieldName} is required` };
   }
@@ -24,6 +25,16 @@ function parseTimestamp(value, fieldName, fallbackNow = false) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return { ok: false, message: `${fieldName} must be a valid timestamp` };
+  }
+
+  const maxFutureMs = 5 * 60 * 1000;
+  if (date.getTime() - now > maxFutureMs) {
+    return { ok: false, message: `${fieldName} cannot be in the far future` };
+  }
+
+  const maxPastMs = 30 * 24 * 60 * 60 * 1000;
+  if (now - date.getTime() > maxPastMs) {
+    return { ok: false, message: `${fieldName} is too old` };
   }
 
   return { ok: true, value: date };

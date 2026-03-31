@@ -1,6 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TRACKING_QUEUE_KEY, TRACKING_STATE_KEY } from './constants';
 
+function pointKey(point) {
+  const lat = Number(point?.latitude);
+  const lng = Number(point?.longitude);
+  const ts = new Date(point?.recordedAt || 0).toISOString();
+  return `${lat.toFixed(6)}:${lng.toFixed(6)}:${ts}`;
+}
+
+
 async function readJson(key, fallback) {
   try {
     const raw = await AsyncStorage.getItem(key);
@@ -20,7 +28,14 @@ export async function addPointsToQueue(points) {
   const normalized = Array.isArray(points) ? points.filter(Boolean) : [];
   if (!normalized.length) return 0;
   const queue = await getTrackingQueue();
-  const next = queue.concat(normalized);
+  const seen = new Set(queue.map(pointKey));
+  const dedupedIncoming = normalized.filter((point) => {
+    const key = pointKey(point);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const next = queue.concat(dedupedIncoming);
   await AsyncStorage.setItem(TRACKING_QUEUE_KEY, JSON.stringify(next));
   return next.length;
 }

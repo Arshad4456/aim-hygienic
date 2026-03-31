@@ -19,6 +19,7 @@ const UserLocationHistorySchema = new mongoose.Schema(
     recordedAt: { type: Date, default: Date.now },
     source: { type: String, default: "mobile", trim: true },
     dutySessionId: { type: String, trim: true },
+    pointHash: { type: String, trim: true },
   },
   { timestamps: true }
 );
@@ -29,6 +30,15 @@ UserLocationHistorySchema.index({ distributorId: 1 });
 UserLocationHistorySchema.index({ recordedAt: -1 });
 UserLocationHistorySchema.index({ location: "2dsphere" });
 UserLocationHistorySchema.index({ companyId: 1, userId: 1, recordedAt: -1 });
+UserLocationHistorySchema.index(
+  { companyId: 1, userId: 1, dutySessionId: 1, pointHash: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      pointHash: { $exists: true, $type: "string", $ne: "" },
+    },
+  }
+);
 
 module.exports = {
   modelName: "UserLocationHistory",
