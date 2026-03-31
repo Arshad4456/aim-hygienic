@@ -4,7 +4,10 @@ import { NavigationContainer } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/auth/AuthProvider';
-import RootNavigator from './src/navigation/RootNavigator';
+import RootNavigator from './src/navigation/rootNavigator';
+import { installGlobalTextTranslator } from './src/i18n/globalTextTranslator';
+
+installGlobalTextTranslator();
 
 export default function App() {
   return (

@@ -10,6 +10,7 @@ import { screenRegistry } from './ScreenRegistry';
 import RoleDrawerContent from './RoleDrawerContent';
 import { LANGUAGE_OPTIONS, translateText } from '../i18n/language';
 import { translateNode } from '../i18n/translateNode';
+import { setRuntimeTranslator } from '../i18n/globalTextTranslator';
 
 function Header({
   title,
@@ -154,6 +155,10 @@ export default function DrawerNavigator() {
     requestTranslation(value);
     return value;
   }, [dynamicTranslations, language, requestTranslation]);
+
+  useEffect(() => {
+    setRuntimeTranslator(t);
+  }, [t]);
 
   async function changeLanguage(nextLanguage) {
     setLanguage(nextLanguage);
