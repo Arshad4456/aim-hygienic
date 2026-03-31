@@ -24,6 +24,8 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
 
   const menuRef = useRef(null);
   const searchRef = useRef(null);
+  const contentRef = useRef(null);
+  const originalTextRef = useRef(new WeakMap());
   const resolvedUser = useMemo(() => {
     if (user && Object.keys(user || {}).length) return user;
     if (typeof window === "undefined") return null;
@@ -82,6 +84,40 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
     if (mobileOpen || showSearchDropdown) window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [mobileOpen, showSearchDropdown]);
+
+  useEffect(() => {
+    const root = contentRef.current;
+    if (!root) return;
+
+    const textWalker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    const textNodes = [];
+    while (textWalker.nextNode()) textNodes.push(textWalker.currentNode);
+
+    textNodes.forEach((node) => {
+      const current = node.nodeValue || "";
+      if (!current.trim()) return;
+      if (!originalTextRef.current.has(node)) {
+        originalTextRef.current.set(node, current);
+      }
+      const source = originalTextRef.current.get(node) || current;
+      const translated = t(source);
+      if (translated !== current) node.nodeValue = translated;
+    });
+
+    const translatableAttrs = ["placeholder", "title", "aria-label"];
+    const elements = root.querySelectorAll("*");
+    elements.forEach((element) => {
+      translatableAttrs.forEach((attr) => {
+        const raw = element.getAttribute(attr);
+        if (!raw || !raw.trim()) return;
+        const key = `i18nSrc${attr}`;
+        if (!element.dataset[key]) element.dataset[key] = raw;
+        const source = element.dataset[key];
+        const translated = t(source);
+        if (translated && translated !== raw) element.setAttribute(attr, translated);
+      });
+    });
+  }, [children, language, t]);
 
   function logout() {
     clearAuthStorage();
@@ -324,7 +360,7 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
         </div>
 
         <main className="flex-1 overflow-y-auto">
-          <div className="px-4 md:px-6 py-5">{translateNode(children, t)}</div>
+          <div ref={contentRef} className="px-4 md:px-6 py-5">{translateNode(children, t)}</div>
         </main>
       </div>
     </div>
