@@ -281,7 +281,7 @@ export default function AddUserPage() {
 
           {requiresCompany ? (
             <SelectField
-              label="Company"
+              label="Select Company"
               value={form.companyId || ""}
               onChange={(companyId) => {
                 const item = companies.find((c) => c.companyId === companyId);
@@ -298,7 +298,7 @@ export default function AddUserPage() {
 
           {roleNeeds.includes("warehouse") ? (
             <SelectField
-              label="Warehouse Name"
+              label="Select Warehouse"
               value={form.warehouseDocId || ""}
               onChange={(docId) => {
                 const item = warehouses.find((w) => w._id === docId);

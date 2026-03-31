@@ -765,7 +765,7 @@ function EditUserModal({
             <InputField label="Role" value={user.role || ""} readOnly />
             {requiresCompany ? (
               <SelectField
-                label="Company"
+                label="Select Company"
                 value={user.companyId || ""}
                 onChange={(companyId) => {
                   const item = companies.find((c) => c.companyId === companyId);
@@ -778,7 +778,7 @@ function EditUserModal({
 
             {roleNeeds.includes("warehouse") ? (
               <SelectField
-                label="Warehouse Name"
+                label="Select Warehouse"
                 value={user.warehouseId || ""}
                 onChange={(warehouseId) => {
                   const item = warehouses.find((w) => w.warehouseId === warehouseId);

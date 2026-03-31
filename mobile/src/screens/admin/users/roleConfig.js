@@ -48,6 +48,8 @@ export const ROLE_EXTRA_FIELDS = {
   'Delivery Boy': ['warehouse', 'region', 'zone', 'territory', 'field'],
   Supplier: ['warehouse'],
   Vendor: ['warehouse', 'businessName'],
+  supplier: ['warehouse'],
+  vendor: ['warehouse', 'businessName'],
   customer: ['businessType', 'businessName', 'warehouse', 'region', 'zone', 'territory', 'field'],
   'Brand Manager': ['businessType', 'businessName', 'warehouse', 'region', 'zone', 'territory', 'field'],
 };

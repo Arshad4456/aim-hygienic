@@ -270,7 +270,7 @@ export default function AddScreen({ navigation }) {
 
           {requiresCompany ? (
             <>
-              <Text style={styles.fieldLabel}>Company</Text>
+              <Text style={styles.fieldLabel}>Select Company</Text>
               <SelectPills
                 options={companies.map((c) => `${c.name} (${c.companyId})`)}
                 value={form.companyName && form.companyId ? `${form.companyName} (${form.companyId})` : ''}
@@ -313,7 +313,7 @@ export default function AddScreen({ navigation }) {
 
           {roleNeeds.includes('warehouse') ? (
             <>
-              <Text style={styles.fieldLabel}>Warehouse Name</Text>
+              <Text style={styles.fieldLabel}>Select Warehouse</Text>
               <SelectPills
                 options={warehouses.map((w) => w.name)}
                 value={form.warehouseName}
