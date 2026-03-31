@@ -1,12 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../auth/useAuth';
 import DashboardHome from '../screens/common/DashboardHome';
 import SettingsScreen from '../screens/common/SettingsScreen';
 import { getRoleModules } from './RoleMenuConfig';
 import { screenRegistry } from './ScreenRegistry';
 import RoleDrawerContent from './RoleDrawerContent';
+import { LANGUAGE_OPTIONS, translateText } from '../i18n/language';
 
 function Header({
   title,
@@ -19,6 +21,7 @@ function Header({
   onMenu,
   onAccount,
   topInset,
+  t,
 }) {
   const userInitials = useMemo(() => {
     const source = user?.fullName || user?.role || 'User';
@@ -48,7 +51,7 @@ function Header({
         <TextInput
           value={searchQuery}
           onChangeText={onSearchChange}
-          placeholder="Search this dashboard..."
+          placeholder={t('Search this dashboard...')}
           placeholderTextColor="#71717a"
           style={styles.searchInput}
         />
@@ -59,11 +62,11 @@ function Header({
               {searchResults.length ? (
                 searchResults.map((item) => (
                   <Pressable key={item.key} onPress={() => onSearchSelect(item.key)} style={styles.searchItem}>
-                    <Text numberOfLines={1} style={styles.searchItemText}>{item.title}</Text>
+                    <Text numberOfLines={1} style={styles.searchItemText}>{t(item.title)}</Text>
                   </Pressable>
                 ))
               ) : (
-                <Text style={styles.searchEmpty}>No match found.</Text>
+                <Text style={styles.searchEmpty}>{t('No match found.')}</Text>
               )}
             </ScrollView>
           </View>
@@ -103,6 +106,30 @@ export default function DrawerNavigator() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [language, setLanguage] = useState('en');
+
+  useEffect(() => {
+    let mounted = true;
+    AsyncStorage.getItem('aim_language')
+      .then((value) => {
+        if (mounted && value) setLanguage(value);
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const t = useCallback((value) => translateText(value, language), [language]);
+
+  async function changeLanguage(nextLanguage) {
+    setLanguage(nextLanguage);
+    try {
+      await AsyncStorage.setItem('aim_language', nextLanguage);
+    } catch (_error) {
+      // ignore persistence failures
+    }
+  }
 
   useEffect(() => {
     setActiveRoute(defaultRoute);
@@ -114,8 +141,8 @@ export default function DrawerNavigator() {
   const filteredModules = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return availableModules;
-    return availableModules.filter((mod) => mod.title.toLowerCase().includes(query));
-  }, [availableModules, searchQuery]);
+    return availableModules.filter((mod) => t(mod.title).toLowerCase().includes(query));
+  }, [availableModules, searchQuery, t]);
 
   const settingsRoute = useMemo(() => {
     const matched = availableModules.find((mod) => (mod.modulePath || '').toLowerCase() === 'settings');
@@ -127,12 +154,12 @@ export default function DrawerNavigator() {
     return matched?.key || null;
   }, [availableModules]);
 
-  const goToRoute = (name) => {
+  const goToRoute = useCallback((name) => {
     if (!screens[name]) return;
     setActiveRoute(name);
     setSearchQuery('');
     setAccountOpen(false);
-  };
+  }, [screens]);
 
   const nav = useMemo(
     () => ({
@@ -140,13 +167,13 @@ export default function DrawerNavigator() {
       jumpTo: (name) => goToRoute(name),
       goBack: () => setActiveRoute(defaultRoute),
     }),
-    [defaultRoute, screens]
+    [defaultRoute, goToRoute]
   );
 
   return (
     <SafeAreaView style={styles.container}>
       <Header
-        title={title}
+        title={t(title)}
         subtitle={user?.role || roleKey}
         user={user}
         searchQuery={searchQuery}
@@ -156,6 +183,7 @@ export default function DrawerNavigator() {
         onMenu={() => setDrawerOpen(true)}
         onAccount={() => setAccountOpen(true)}
         topInset={insets.top}
+        t={t}
       />
       <View style={styles.body}>
         <Current navigation={nav} />
@@ -169,6 +197,7 @@ export default function DrawerNavigator() {
               userRole={user?.role}
               modules={availableModules}
               activeRoute={activeRoute}
+              t={t}
               onSelect={(routeName) => {
                 goToRoute(routeName);
                 setDrawerOpen(false);
@@ -186,13 +215,31 @@ export default function DrawerNavigator() {
             <Text style={styles.accountRole}>{user?.role || roleKey}</Text>
 
             <Pressable style={styles.accountItem} onPress={() => goToRoute(settingsRoute)}>
-              <Text style={styles.accountItemText}>Account Settings</Text>
+              <Text style={styles.accountItemText}>{t('Account Settings')}</Text>
             </Pressable>
             {changePasswordRoute ? (
               <Pressable style={styles.accountItem} onPress={() => goToRoute(changePasswordRoute)}>
-                <Text style={styles.accountItemText}>Change Password</Text>
+                <Text style={styles.accountItemText}>{t('Change Password')}</Text>
               </Pressable>
             ) : null}
+
+            <View style={styles.accountItem}>
+              <Text style={styles.accountLabel}>{t('Language')}</Text>
+              <View style={styles.languageWrap}>
+                {LANGUAGE_OPTIONS.map((option) => {
+                  const active = option.code === language;
+                  return (
+                    <Pressable
+                      key={option.code}
+                      onPress={() => changeLanguage(option.code)}
+                      style={[styles.languageBtn, active ? styles.languageBtnActive : null]}
+                    >
+                      <Text style={[styles.languageBtnText, active ? styles.languageBtnTextActive : null]}>{option.label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
 
             <Pressable
               style={styles.accountItem}
@@ -201,7 +248,7 @@ export default function DrawerNavigator() {
                 await logout();
               }}
             >
-              <Text style={styles.logoutText}>Logout</Text>
+              <Text style={styles.logoutText}>{t('Logout')}</Text>
             </Pressable>
           </View>
         </Pressable>
@@ -278,6 +325,12 @@ const styles = StyleSheet.create({
   accountName: { fontSize: 15, fontWeight: '700', color: '#18181b' },
   accountRole: { fontSize: 12, color: '#71717a', marginBottom: 8 },
   accountItem: { paddingVertical: 10, paddingHorizontal: 8, borderRadius: 10 },
+  accountLabel: { fontSize: 12, color: '#71717a', marginBottom: 8 },
+  languageWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  languageBtn: { borderWidth: 1, borderColor: '#d4d4d8', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
+  languageBtnActive: { backgroundColor: '#dcfce7', borderColor: '#86efac' },
+  languageBtnText: { fontSize: 12, color: '#374151' },
+  languageBtnTextActive: { color: '#166534', fontWeight: '700' },
   accountItemText: { fontSize: 14, color: '#27272a' },
   logoutText: { fontSize: 14, color: '#dc2626', fontWeight: '600' },
 });

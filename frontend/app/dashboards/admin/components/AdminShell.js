@@ -5,9 +5,11 @@ import { clearAuthStorage } from "../../../lib/clientAuth";
 import { useRouter } from "next/navigation";
 import Sidebar from "./Sidebar";
 import { adminDashboardSearchItems } from "../../searchItems";
+import { LANGUAGE_OPTIONS, useLanguage } from "../../../lib/language";
 
 export default function AdminShell({ children, user, title = "Dashboard" }) {
   const router = useRouter();
+  const { language, setLanguage, t, isRTL } = useLanguage();
 
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -103,10 +105,33 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
     const roleItems = canAccessCompanyManagement
       ? adminDashboardSearchItems
       : adminDashboardSearchItems.filter((item) => !item.href.startsWith("/dashboards/admin/companies"));
+
     const value = searchTerm.trim().toLowerCase();
     if (!value) return roleItems;
-    return roleItems.filter((item) => item.title.toLowerCase().includes(value));
-  }, [searchTerm, resolvedUser?.role]);
+
+    const terms = value.split(/\s+/).filter(Boolean);
+    const ranked = roleItems
+      .map((item) => {
+        const localizedTitle = t(item.title);
+        const searchable = [item.title, localizedTitle, item.href, ...(item.keywords || [])]
+          .join(" ")
+          .toLowerCase();
+        const allTermsMatch = terms.every((term) => searchable.includes(term));
+        if (!allTermsMatch) return null;
+
+        const title = localizedTitle.toLowerCase();
+        const titleStarts = title.startsWith(value);
+        const titleIncludes = title.includes(value);
+        const hrefIncludes = item.href.toLowerCase().includes(value);
+        const score = (titleStarts ? 4 : 0) + (titleIncludes ? 2 : 0) + (hrefIncludes ? 1 : 0);
+        return { item: { ...item, localizedTitle }, score };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score || a.item.title.localeCompare(b.item.title))
+      .map((entry) => entry.item);
+
+    return ranked;
+  }, [searchTerm, resolvedUser?.role, t]);
 
   async function toggleFullscreen() {
     if (typeof document === "undefined") return;
@@ -122,13 +147,13 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
   }
 
   function onSearchSelect(item) {
-    setSearchTerm(item.title);
+    setSearchTerm(item.localizedTitle || item.title);
     setShowSearchDropdown(false);
     router.push(item.href);
   }
 
   return (
-    <div className="h-screen bg-zinc-50 flex overflow-hidden">
+    <div className="h-screen bg-zinc-50 flex overflow-hidden" dir={isRTL ? "rtl" : "ltr"}>
       <div className="hidden md:flex h-screen">
         <Sidebar user={resolvedUser} variant="desktop" collapsed={collapsed} />
       </div>
@@ -169,8 +194,8 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
               </button>
 
               <div className="leading-tight">
-                <div className="text-xs text-zinc-500">AIM Hygienic ERP</div>
-                <div className="text-lg font-semibold text-zinc-900">{title}</div>
+                <div className="text-xs text-zinc-500">{t("AIM Hygienic ERP")}</div>
+                <div className="text-lg font-semibold text-zinc-900">{t(title)}</div>
               </div>
             </div>
 
@@ -193,7 +218,7 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
                     setShowSearchDropdown(true);
                   }}
                   onFocus={() => setShowSearchDropdown(true)}
-                  placeholder="Search this dashboard..."
+                  placeholder={t("Search this dashboard...")}
                   className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200"
                 />
 
@@ -207,11 +232,11 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
                           onClick={() => onSearchSelect(item)}
                           className="w-full text-left px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
                         >
-                          {item.title}
+                          {item.localizedTitle || t(item.title)}
                         </button>
                       ))
                     ) : (
-                      <div className="px-3 py-2 text-sm text-zinc-500">No results found.</div>
+                      <div className="px-3 py-2 text-sm text-zinc-500">{t("No results found.")}</div>
                     )}
                   </div>
                 ) : null}
@@ -225,10 +250,10 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
                 >
                   <div className="text-right hidden sm:block leading-tight whitespace-nowrap">
                     <div className="text-sm font-medium text-zinc-900">
-                      {resolvedUser?.fullName || "System Admin"}
+                      {resolvedUser?.fullName || t("System Admin")}
                     </div>
                     <div className="text-xs text-zinc-500">
-                      {resolvedUser?.role || "admin"} • {resolvedUser?.companyName || "AIM Hygienic"}
+                      {resolvedUser?.role || t("Admin")} • {resolvedUser?.companyName || "AIM Hygienic"}
                     </div>
                   </div>
                   <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
@@ -240,9 +265,9 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
                   <div className="absolute right-0 mt-2 w-56 rounded-2xl border bg-white shadow-lg p-2 z-50">
                     <div className="px-3 py-2">
                       <div className="text-sm font-semibold text-zinc-900">
-                        {resolvedUser?.fullName || "System Admin"}
+                        {resolvedUser?.fullName || t("System Admin")}
                       </div>
-                      <div className="text-xs text-zinc-500">{resolvedUser?.username || "admin"}</div>
+                      <div className="text-xs text-zinc-500">{resolvedUser?.username || t("Admin")}</div>
                     </div>
 
                     <div className="h-px bg-zinc-100 my-1" />
@@ -254,7 +279,7 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
                       }}
                       className="w-full text-left rounded-xl px-3 py-2 text-sm hover:bg-zinc-50"
                     >
-                      Account Settings
+                      {t("Account Settings")}
                     </button>
 
                     <button
@@ -264,16 +289,31 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
                       }}
                       className="w-full text-left rounded-xl px-3 py-2 text-sm hover:bg-zinc-50"
                     >
-                      Change Password
+                      {t("Change Password")}
                     </button>
 
                     <div className="h-px bg-zinc-100 my-1" />
+
+                    <div className="px-3 py-2">
+                      <div className="text-xs text-zinc-500 mb-1">{t("Language")}</div>
+                      <select
+                        value={language}
+                        onChange={(event) => setLanguage(event.target.value)}
+                        className="w-full rounded-lg border border-zinc-200 px-2 py-1.5 text-sm"
+                      >
+                        {LANGUAGE_OPTIONS.map((option) => (
+                          <option key={option.code} value={option.code}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
                     <button
                       onClick={logout}
                       className="w-full text-left rounded-xl px-3 py-2 text-sm hover:bg-zinc-50 text-red-600"
                     >
-                      Logout
+                      {t("Logout")}
                     </button>
                   </div>
                 ) : null}
