@@ -62,7 +62,9 @@ async function fetchJson(url, { method, body, headers, credentials }) {
 
   if (!res.ok) {
     const msg = data?.message || data?.error || `Request failed (${res.status})`;
-    throw new Error(msg);
+    const error = new Error(msg);
+    error.status = res.status;
+    throw error;
   }
 
   return data;
@@ -70,6 +72,11 @@ async function fetchJson(url, { method, body, headers, credentials }) {
 
 function isNetworkError(error) {
   return /Failed to fetch|NetworkError|Could not reach the API server/i.test(error?.message || "");
+}
+
+function isRetriableStatus(error) {
+  const status = Number(error?.status || 0);
+  return status === 502 || status === 503 || status === 504;
 }
 
 export async function apiFetch(path, { method = "GET", body, token, credentials } = {}) {
@@ -90,13 +97,13 @@ export async function apiFetch(path, { method = "GET", body, token, credentials 
       return await fetchJson(`${baseUrl}${path}`, { method, body, headers, credentials });
     } catch (error) {
       lastError = error;
-      if (!canRetryAcrossBases || !isNetworkError(error)) {
+      if (!canRetryAcrossBases || (!isNetworkError(error) && !isRetriableStatus(error))) {
         throw error;
       }
     }
   }
 
-  if (lastError && !isNetworkError(lastError)) {
+  if (lastError && !isNetworkError(lastError) && !isRetriableStatus(lastError)) {
     throw lastError;
   }
 
