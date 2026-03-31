@@ -45,8 +45,8 @@ export default function LoginPage() {
       Salesman: "/dashboards/salesman",
       "Delivery Boy": "/dashboards/deliveryBoy",
       customer: "/dashboards/customer",
-      "Supplier": "/dashboards/supplier",
-      "Vendor": "/dashboards/vendor"
+      Supplier: "/dashboards/supplier",
+      Vendor: "/dashboards/vendor",
     };
     return map[role] || "/dashboards/admin";
   };
