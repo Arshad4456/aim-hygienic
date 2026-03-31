@@ -43,9 +43,11 @@ const server = http.createServer(app);
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "80mb" }));
 
 // CORS for your live domain
-const allowedOrigins = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(",").map((value) => value.trim())
-  : ["https://aimhygienics.com", "https://www.aimhygienics.com", "http://localhost:3000"];
+const defaultAllowedOrigins = ["https://aimhygienics.com", "https://www.aimhygienics.com", "http://localhost:3000"];
+const envAllowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(",").map((value) => value.trim()).filter(Boolean)
+  : [];
+const allowedOrigins = [...new Set([...defaultAllowedOrigins, ...envAllowedOrigins])];
 
 app.use(
   cors({
