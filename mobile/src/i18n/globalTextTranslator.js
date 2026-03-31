@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text } from 'react-native';
+import { Text, TextInput } from 'react-native';
 
 let installed = false;
 let runtimeTranslator = (value) => value;
@@ -19,15 +19,47 @@ export function setRuntimeTranslator(translator) {
 }
 
 export function installGlobalTextTranslator() {
-  if (installed || typeof Text?.render !== 'function') return;
+  if (installed) return;
   installed = true;
 
-  const originalRender = Text.render;
-  Text.render = function patchedTextRender(...args) {
-    const rendered = originalRender.call(this, ...args);
-    if (!rendered?.props) return rendered;
-    const translatedChildren = translateChild(rendered.props.children);
-    if (translatedChildren === rendered.props.children) return rendered;
-    return React.cloneElement(rendered, { ...rendered.props }, translatedChildren);
+  if (typeof Text?.render === 'function') {
+    const originalTextRender = Text.render;
+    Text.render = function patchedTextRender(...args) {
+      const rendered = originalTextRender.call(this, ...args);
+      if (!rendered?.props) return rendered;
+      const translatedChildren = translateChild(rendered.props.children);
+      if (translatedChildren === rendered.props.children) return rendered;
+      return React.cloneElement(rendered, { ...rendered.props }, translatedChildren);
+    };
+  }
+
+  if (typeof TextInput?.render === 'function') {
+    const originalInputRender = TextInput.render;
+    TextInput.render = function patchedInputRender(...args) {
+      const rendered = originalInputRender.call(this, ...args);
+      if (!rendered?.props || typeof rendered.props.placeholder !== 'string') return rendered;
+      const translatedPlaceholder = runtimeTranslator(rendered.props.placeholder);
+      if (translatedPlaceholder === rendered.props.placeholder) return rendered;
+      return React.cloneElement(rendered, { ...rendered.props, placeholder: translatedPlaceholder });
+    };
+  }
+
+  const originalCreateElement = React.createElement;
+  React.createElement = function patchedCreateElement(type, props, ...children) {
+    let nextProps = props;
+    let nextChildren = children;
+
+    const isTextComponent = type === Text || type?.displayName === 'Text' || type?.name === 'Text';
+    const isTextInputComponent = type === TextInput || type?.displayName === 'TextInput' || type?.name === 'TextInput';
+
+    if (isTextComponent) {
+      nextChildren = children.map((child) => translateChild(child));
+    }
+
+    if (isTextInputComponent && typeof props?.placeholder === 'string') {
+      nextProps = { ...props, placeholder: runtimeTranslator(props.placeholder) };
+    }
+
+    return originalCreateElement(type, nextProps, ...nextChildren);
   };
 }
