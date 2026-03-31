@@ -10,11 +10,13 @@ function toGroupTitle(name = '') {
 }
 
 
-function scoreModuleMatch(query, groupTitle, module) {
+function scoreModuleMatch(query, groupTitle, module, t = (value) => value) {
   const value = String(query || '').trim().toLowerCase();
   if (!value) return 0;
   const terms = value.split(/\s+/).filter(Boolean);
-  const haystack = [groupTitle, module.title, module.modulePath, module.route, module.key]
+  const translatedGroupTitle = t(groupTitle);
+  const translatedTitle = t(module.title);
+  const haystack = [groupTitle, translatedGroupTitle, module.title, translatedTitle, module.modulePath, module.route, module.key]
     .filter(Boolean)
     .join(' ')
     .toLowerCase();
@@ -22,7 +24,7 @@ function scoreModuleMatch(query, groupTitle, module) {
   const allTermsMatch = terms.every((term) => haystack.includes(term));
   if (!allTermsMatch) return 0;
 
-  const title = String(module.title || '').toLowerCase();
+  const title = String(translatedTitle || module.title || '').toLowerCase();
   const starts = title.startsWith(value);
   const includes = title.includes(value);
   const pathIncludes = String(module.modulePath || '').toLowerCase().includes(value);
@@ -79,7 +81,7 @@ function buildAdminMenu(modules) {
   }).filter(Boolean);
 }
 
-export default function RoleDrawerContent({ roleKey, userRole, modules, activeRoute, onSelect }) {
+export default function RoleDrawerContent({ roleKey, userRole, modules, activeRoute, onSelect, t = (v) => v }) {
   const [searchTerm, setSearchTerm] = useState('');
 
   const items = useMemo(() => {
@@ -100,13 +102,13 @@ export default function RoleDrawerContent({ roleKey, userRole, modules, activeRo
     return items
       .map((item) => {
         if (item.type === 'link') {
-          const score = scoreModuleMatch(value, item.title, item.module);
+          const score = scoreModuleMatch(value, item.title, item.module, t);
           if (!score) return null;
           return { ...item, score };
         }
 
         const matches = item.items
-          .map((mod) => ({ mod, score: scoreModuleMatch(value, item.title, mod) }))
+          .map((mod) => ({ mod, score: scoreModuleMatch(value, item.title, mod, t) }))
           .filter((entry) => entry.score > 0)
           .sort((a, b) => b.score - a.score || String(a.mod.title || '').localeCompare(String(b.mod.title || '')))
           .map((entry) => entry.mod);
@@ -115,12 +117,12 @@ export default function RoleDrawerContent({ roleKey, userRole, modules, activeRo
         return {
           ...item,
           items: matches,
-          score: Math.max(...matches.map((mod) => scoreModuleMatch(value, item.title, mod))),
+          score: Math.max(...matches.map((mod) => scoreModuleMatch(value, item.title, mod, t))),
         };
       })
       .filter(Boolean)
       .sort((a, b) => (b.score || 0) - (a.score || 0));
-  }, [items, searchTerm]);
+  }, [items, searchTerm, t]);
 
   const [expanded, setExpanded] = useState(() => Object.fromEntries(filteredItems.map((item, i) => [item.key, i < 4])));
 
@@ -148,7 +150,7 @@ export default function RoleDrawerContent({ roleKey, userRole, modules, activeRo
       <TextInput
         value={searchTerm}
         onChangeText={setSearchTerm}
-        placeholder="Deep search modules..."
+        placeholder={t('Deep search modules...')}
         placeholderTextColor="#71717a"
         style={styles.searchInput}
       />
@@ -162,7 +164,7 @@ export default function RoleDrawerContent({ roleKey, userRole, modules, activeRo
               style={[styles.linkItem, active ? styles.itemActive : null]}
               onPress={() => onSelect(item.module.key)}
             >
-              <Text style={styles.subLabel}>{item.title}</Text>
+              <Text style={styles.subLabel}>{t(item.title)}</Text>
             </Pressable>
           );
         }
@@ -170,7 +172,7 @@ export default function RoleDrawerContent({ roleKey, userRole, modules, activeRo
         return (
           <View key={item.key} style={styles.groupBlock}>
             <Pressable style={styles.groupHeader} onPress={() => toggleGroup(item.key)}>
-              <Text style={styles.groupTitle}>{item.title}</Text>
+              <Text style={styles.groupTitle}>{t(item.title)}</Text>
               <Text style={styles.chevron}>{expanded[item.key] ? '▾' : '▸'}</Text>
             </Pressable>
 
@@ -181,7 +183,7 @@ export default function RoleDrawerContent({ roleKey, userRole, modules, activeRo
                     style={[styles.subItem, activeRoute === mod.key ? styles.itemActive : null]}
                     onPress={() => onSelect(mod.key)}
                   >
-                    <Text style={styles.subLabel}>{mod.title}</Text>
+                    <Text style={styles.subLabel}>{t(mod.title)}</Text>
                   </Pressable>
                 ))
               : null}
@@ -189,7 +191,7 @@ export default function RoleDrawerContent({ roleKey, userRole, modules, activeRo
         );
       })}
 
-      {!filteredItems.length ? <Text style={styles.emptyText}>No modules found for this search.</Text> : null}
+      {!filteredItems.length ? <Text style={styles.emptyText}>{t('No modules found for this search.')}</Text> : null}
 
     </ScrollView>
   );

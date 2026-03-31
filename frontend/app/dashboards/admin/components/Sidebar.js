@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { useLanguage } from "../../../lib/language";
 
 function Icon({ name }) {
   // No extra library required — simple, safe icons
@@ -58,13 +59,12 @@ let adminSidebarOpenCache = { ...defaultOpenState };
 export default function Sidebar({ user, variant = "desktop", onClose, collapsed = false }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { t, isRTL } = useLanguage();
 
   const [open, setOpen] = useState(() => ({ ...adminSidebarOpenCache }));
-  const userRole = useMemo(() => {
-    if (user?.role) return String(user.role).trim().toLowerCase();
-    if (typeof window !== "undefined") return String(window.sessionStorage.getItem("aim_role") || "").trim().toLowerCase();
-    return "";
-  }, [user?.role]);
+  const userRole = user?.role
+    ? String(user.role).trim().toLowerCase()
+    : (typeof window !== "undefined" ? String(window.sessionStorage.getItem("aim_role") || "").trim().toLowerCase() : "");
   const canAccessCompanyManagement = userRole === "admin" || userRole === "system admin";
 
   const menu = useMemo(
@@ -287,6 +287,7 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
 
   return (
     <aside
+      dir={isRTL ? "rtl" : "ltr"}
       className={[
         "h-screen flex flex-col border-r bg-white",
         variant === "desktop" ? "hidden md:flex" : "flex",
@@ -302,8 +303,8 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
 
           {!collapsed ? (
             <div className="leading-tight">
-              <div className="font-semibold text-zinc-900">Admin</div>
-              <div className="text-xs text-zinc-500">{user?.fullName || "System Admin"}</div>
+              <div className="font-semibold text-zinc-900">{t("Admin")}</div>
+              <div className="text-xs text-zinc-500">{user?.fullName || t("System Admin")}</div>
             </div>
           ) : null}
         </div>
@@ -333,11 +334,11 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
                   "w-full flex items-center justify-between rounded-xl px-3 py-2 text-sm mb-1",
                   active ? "bg-emerald-50 text-emerald-700" : "text-zinc-700 hover:bg-zinc-50",
                 ].join(" ")}
-                title={collapsed ? item.title : undefined}
+                title={collapsed ? t(item.title) : undefined}
               >
                 <span className="flex items-center gap-2">
                   <Icon name={item.icon} />
-                  {!collapsed ? <span>{item.title}</span> : null}
+                  {!collapsed ? <span>{t(item.title)}</span> : null}
                 </span>
 
                 {!collapsed && item.badge ? (
@@ -357,11 +358,11 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
               <button
                 onClick={() => toggleOpen(item.key)}
                 className="w-full flex items-center justify-between rounded-xl px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
-                title={collapsed ? item.title : undefined}
+                title={collapsed ? t(item.title) : undefined}
               >
                 <span className="flex items-center gap-2">
                   <Icon name={item.icon} />
-                  {!collapsed ? <span>{item.title}</span> : null}
+                  {!collapsed ? <span>{t(item.title)}</span> : null}
                 </span>
 
                 {!collapsed ? <span className="text-zinc-400">{isOpen ? "▾" : "▸"}</span> : null}
@@ -380,7 +381,7 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
                             onClick={() => toggleOpen(key)}
                             className="w-full flex items-center justify-between rounded-lg px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50"
                           >
-                            <span>{c.title}</span>
+                            <span>{t(c.title)}</span>
                             <span className="text-zinc-400">{nestedOpen ? "▾" : "▸"}</span>
                           </button>
                           {nestedOpen ? (
@@ -396,7 +397,7 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
                                       : "text-zinc-600 hover:bg-zinc-50",
                                   ].join(" ")}
                                 >
-                                  {cc.title}
+                                  {t(cc.title)}
                                 </button>
                               ))}
                             </div>
@@ -416,7 +417,7 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
                         ].join(" ")}
                       >
                         <span className="flex items-center justify-between">
-                          <span>{c.title}</span>
+                          <span>{t(c.title)}</span>
                           {c.badge ? (
                             <span className="ml-2 rounded-full bg-red-100 text-red-600 text-[10px] px-2 py-0.5">
                               {c.badge}
@@ -435,7 +436,7 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
 
       {/* Footer removed (logout removed as requested) */}
       <div className="shrink-0 border-t px-3 py-3 text-xs text-zinc-500">
-        {!collapsed ? "AIM Hygienic ERP" : "ERP"}
+        {!collapsed ? t("AIM Hygienic ERP") : "ERP"}
       </div>
     </aside>
   );
