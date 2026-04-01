@@ -293,6 +293,26 @@ function applyDateRange(match, field, range) {
   return match;
 }
 
+function applyDateRangeWithFallback(match, primaryField, fallbackField, range) {
+  if (!range?.start || !primaryField) return match;
+  const between = { $gte: range.start, $lte: range.end || new Date() };
+  if (!fallbackField) {
+    match[primaryField] = between;
+    return match;
+  }
+  match.$and = [
+    ...(match.$and || []),
+    {
+      $or: [
+        { [primaryField]: between },
+        { [primaryField]: { $exists: false }, [fallbackField]: between },
+        { [primaryField]: null, [fallbackField]: between },
+      ],
+    },
+  ];
+  return match;
+}
+
 function applyDistributorScope(match, scope, { field = "territoryId", territoryNameField = "territoryName", distributorField = "distributorId" } = {}) {
   if (!isDistributor(scope.role)) return match;
   const scoped = [];
@@ -310,11 +330,11 @@ function buildSalesOrderMatch(scope, periodRange) {
     territoryNameField: "territoryName",
     distributorField: "distributorId",
   });
-  applyDateRange(match, "orderDate", periodRange);
+  applyDateRangeWithFallback(match, "orderDate", "createdAt", periodRange);
   return match;
 }
 
-function buildPrimaryPaymentMatch(scope, periodRange) {
+function buildPrimaryPaymentMatch(scope, periodRange, { includeDate = true } = {}) {
   const match = {};
   if (scope.companyId && !scope.tenantScoped) match.companyId = scope.companyId;
   if (isDistributor(scope.role)) {
@@ -326,7 +346,7 @@ function buildPrimaryPaymentMatch(scope, periodRange) {
     if (scope.territoryName) scoped.push({ territoryName: scope.territoryName });
     if (scoped.length) match.$or = scoped;
   }
-  applyDateRange(match, "payDate", periodRange);
+  if (includeDate) applyDateRangeWithFallback(match, "payDate", "createdAt", periodRange);
   return match;
 }
 
@@ -959,7 +979,7 @@ async function gatherReportBundle(req) {
     transfers,
     returnClaims,
   ] = await Promise.all([
-    PrimaryPaymentModel.find(buildPrimaryPaymentMatch(scope, periodRange)).sort({ payDate: -1, createdAt: -1 }).limit(1500).lean(),
+    PrimaryPaymentModel.find(buildPrimaryPaymentMatch(scope, periodRange, { includeDate: false })).sort({ payDate: -1, createdAt: -1 }).limit(1500).lean(),
     SecondaryPaymentModel.find(buildPrimaryPaymentMatch(scope, periodRange)).sort({ paidDate: -1, createdAt: -1 }).limit(1500).lean(),
     ProductModel.find(applyCommonScopeFilter({}, scope)).select("productId name category minStockLevel companyId companyName").limit(3000).lean(),
     InventoryMovementModel.find(buildInventoryMatch(scope, warehouseHints)).sort({ createdAt: -1 }).limit(4000).lean(),
