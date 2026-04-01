@@ -61,9 +61,15 @@ export default function ReportsSectionPage({ sectionKey, companyId = "", company
         if (companyId) query.set("companyId", companyId);
         if (companyName) query.set("companyName", companyName);
         const suffix = query.toString() ? `?${query.toString()}` : "";
-        const data = await apiFetch(`${meta.endpoint}${suffix}`);
-        if (!mounted) return;
-        setReport(data);
+        if (Array.isArray(meta.endpoints) && meta.endpoints.length) {
+          const sections = await Promise.all(meta.endpoints.map((endpoint) => apiFetch(`${endpoint}${suffix}`)));
+          if (!mounted) return;
+          setReport({ sections });
+        } else {
+          const data = await apiFetch(`${meta.endpoint}${suffix}`);
+          if (!mounted) return;
+          setReport(data);
+        }
       } catch (e) {
         if (!mounted) return;
         setError(e.message || `Failed to load ${meta.title}`);
@@ -75,7 +81,7 @@ export default function ReportsSectionPage({ sectionKey, companyId = "", company
     return () => {
       mounted = false;
     };
-  }, [meta.endpoint, meta.title, companyId, companyName]);
+  }, [meta.endpoint, meta.endpoints, meta.title, companyId, companyName]);
 
   const metrics = meta.metrics(report || {});
 
@@ -95,7 +101,12 @@ export default function ReportsSectionPage({ sectionKey, companyId = "", company
 
       <div className="grid gap-5 xl:grid-cols-2">
         {meta.panels.map((panel) => (
-          <TableBlock key={panel.key} title={panel.title} columns={panel.columns} rows={panel.rows(report || {})} />
+          <TableBlock
+            key={panel.key}
+            title={panel.title}
+            columns={typeof panel.columns === "function" ? panel.columns(report || {}) : panel.columns}
+            rows={panel.rows(report || {})}
+          />
         ))}
       </div>
 

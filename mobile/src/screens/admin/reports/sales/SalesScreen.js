@@ -6,7 +6,7 @@ import Loader from '../../../../ui/Loader';
 
 export default function SalesScreen() {
   const [loading, setLoading] = useState(true);
-  const [rows, setRows] = useState([]);
+  const [sections, setSections] = useState([]);
   const [err, setErr] = useState('');
 
   useEffect(() => {
@@ -15,9 +15,17 @@ export default function SalesScreen() {
       if (!mounted) return;
       setErr('');
       try {
-        const data = await apiClient.get('/reports/sales');
+        const [primaryRes, secondaryRes, returnRes] = await Promise.all([
+          apiClient.get('/reports/detail/primary-sales'),
+          apiClient.get('/reports/detail/secondary-sales'),
+          apiClient.get('/reports/detail/return-stock'),
+        ]);
         if (!mounted) return;
-        setRows(data?.data?.regions || []);
+        setSections([
+          primaryRes?.data || null,
+          secondaryRes?.data || null,
+          returnRes?.data || null,
+        ].filter(Boolean));
       } catch (e) {
         if (!mounted) return;
         setErr(e.message || 'Failed to load sales report');
@@ -30,16 +38,17 @@ export default function SalesScreen() {
   }, []);
 
   const highlights = useMemo(() => {
-    const totalOrders = rows.reduce((sum, row) => sum + Number(row.orders || 0), 0);
-    const totalQuantity = rows.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
-    const topRegion = rows[0]?.region || '—';
+    const allCards = sections.flatMap((section) => section.cards || []);
+    const totalCards = allCards.length;
+    const trackedSections = sections.length;
+    const returnClaims = sections.find((section) => section.section === 'return-stock')?.cards?.[0]?.value || '—';
     return [
-      { label: 'Sales Orders', value: formatNumber(totalOrders) },
-      { label: 'Units Sold', value: formatNumber(totalQuantity) },
-      { label: 'Top Region', value: topRegion },
-      { label: 'Regions Covered', value: formatNumber(rows.length) },
+      { label: 'Reports Loaded', value: formatNumber(trackedSections) },
+      { label: 'KPIs Available', value: formatNumber(totalCards) },
+      { label: 'Sale Types', value: 'Primary, Secondary, Return' },
+      { label: 'Return Claims', value: returnClaims },
     ];
-  }, [rows]);
+  }, [sections]);
 
   if (loading) return <Loader />;
 
@@ -47,30 +56,33 @@ export default function SalesScreen() {
     <ScrollView contentContainerStyle={styles.content}>
       <Card>
         <Text style={styles.title}>Sales Performance</Text>
-        <Text style={styles.subtitle}>Revenue, order velocity, and regional performance snapshots.</Text>
+        <Text style={styles.subtitle}>Primary sale, secondary sale, and return sale data in one report module.</Text>
         {err ? <Text style={styles.err}>{err}</Text> : null}
 
         <View style={styles.metricsWrap}>{highlights.map((item) => <Metric key={item.label} {...item} />)}</View>
+      </Card>
 
-        <ScrollView horizontal style={{ marginTop: 8 }}>
-          <View style={styles.table}>
-            <Row head cols={['Region', 'Orders', 'Units Sold', 'Last Movement']} />
-            {!rows.length ? (
-              <Text style={styles.empty}>No sales movements found</Text>
-            ) : rows.map((row) => (
-              <Row
-                key={row.region}
-                cols={[
-                  row.region || '—',
-                  formatNumber(row.orders),
-                  formatNumber(row.quantity),
-                  row.lastMovementAt ? new Date(row.lastMovementAt).toLocaleDateString() : '—',
-                ]}
-              />
+      {sections.map((section) => (
+        <Card key={section.section || section.title}>
+          <Text style={styles.sectionTitle}>{section.title || 'Sales Report'}</Text>
+          <Text style={styles.sectionSubtitle}>{section.subtitle || 'No summary available.'}</Text>
+          <View style={styles.metricsWrap}>
+            {(section.cards || []).map((card) => (
+              <Metric key={`${section.section}-${card.label}`} label={card.label} value={card.value} helper={card.helper} />
             ))}
           </View>
-        </ScrollView>
-      </Card>
+          <ScrollView horizontal style={{ marginTop: 8 }}>
+            <View style={styles.table}>
+              <Row head cols={section.columns || ['Label', 'Value']} />
+              {!(section.rows || []).length ? (
+                <Text style={styles.empty}>No rows available</Text>
+              ) : (section.rows || []).slice(0, 15).map((row, index) => (
+                <Row key={`${section.section}-${index}`} cols={row} />
+              ))}
+            </View>
+          </ScrollView>
+        </Card>
+      ))}
     </ScrollView>
   );
 }
@@ -80,8 +92,14 @@ function formatNumber(value) {
   return Number(value).toLocaleString();
 }
 
-function Metric({ label, value }) {
-  return <View style={styles.metricCard}><Text style={styles.metricLabel}>{label}</Text><Text style={styles.metricValue}>{value}</Text></View>;
+function Metric({ label, value, helper }) {
+  return (
+    <View style={styles.metricCard}>
+      <Text style={styles.metricLabel}>{label}</Text>
+      <Text style={styles.metricValue}>{value}</Text>
+      {helper ? <Text style={styles.metricHelper}>{helper}</Text> : null}
+    </View>
+  );
 }
 
 function Row({ cols, head }) {
@@ -97,6 +115,9 @@ const styles = StyleSheet.create({
   metricCard: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, padding: 10, backgroundColor: '#fafafa' },
   metricLabel: { fontSize: 12, color: '#6b7280' },
   metricValue: { marginTop: 4, fontWeight: '700', color: '#111827' },
+  metricHelper: { marginTop: 4, fontSize: 12, color: '#6b7280' },
+  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
+  sectionSubtitle: { marginTop: 4, color: '#6b7280' },
   table: { minWidth: 760, borderWidth: 1, borderColor: '#e4e4e7', borderRadius: 10, overflow: 'hidden' },
   row: { flexDirection: 'row', borderBottomWidth: 1, borderColor: '#f4f4f5' },
   head: { backgroundColor: '#f8fafc' },
