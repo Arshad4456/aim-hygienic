@@ -288,7 +288,7 @@ export default function ReportsCommandCenter({ basePath = "/dashboards/admin/rep
           ["Top territories", leaderboards.territories || []],
           ["Top customers", leaderboards.customers || []],
           ...(isDistributor ? [] : [["Top distributors", leaderboards.distributors || []]]),
-          ["Top field team", leaderboards.salesmen || []],
+          ["Top suppliers", leaderboards.suppliers || []],
         ].map(([title, rows]) => (
           <div key={title} className="rounded-[30px] border border-zinc-200 bg-white p-6 shadow-sm">
             <div className="text-2xl font-semibold text-zinc-950">{title}</div>
