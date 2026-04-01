@@ -13,8 +13,8 @@ const dashboardLinks = [
   { title: 'Primary Order Request', route: 'distributor:primary-order-request' },
   { title: 'Secondary Orders', route: 'distributor:orders' },
   { title: 'Return Stock', route: 'distributor:return-stock' },
-  { title: 'Live Tracking', route: 'distributor:live-tracking' },
   { title: 'Messages', route: 'distributor:messages' },
+  { title: 'Live Tracking', route: 'distributor:live-tracking' },
   { title: 'Account Settings', route: 'distributor:settings' },
   { title: 'Change Password', route: 'distributor:settings/change-password' },
 ];

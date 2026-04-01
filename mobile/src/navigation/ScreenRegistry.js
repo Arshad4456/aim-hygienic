@@ -106,6 +106,7 @@ import S100 from '../screens/distributor/receipts/ReceiptsScreen';
 import S101 from '../screens/distributor/return-stock/ReturnStockScreen';
 import S102 from '../screens/distributor/settings/change-password/ChangePasswordScreen';
 import S103 from '../screens/distributor/settings/SettingsScreen';
+import S103a from '../screens/distributor/live-tracking/LiveTrackingScreen';
 import S104 from '../screens/fieldSM/DashboardScreen';
 import S105 from '../screens/hrAssistant/DashboardScreen';
 import S106 from '../screens/kpo/DashboardScreen';
@@ -128,7 +129,6 @@ import S122 from '../screens/warehouseManager/warehouse-inventory/WarehouseInven
 import S123 from '../screens/zoneSM/DashboardScreen';
 import S124 from '../screens/supplier/DashboardScreen';
 import S125 from '../screens/vendor/DashboardScreen';
-import S103a from '../screens/distributor/live-tracking/LiveTrackingScreen';
 
 export const screenRegistry = {
   'accountOfficer:dashboard': S0,
@@ -238,8 +238,8 @@ export const screenRegistry = {
   'distributor:receipts': S100,
   'distributor:return-stock': S101,
   'distributor:settings/change-password': S102,
-  'distributor:settings': S103,
   'distributor:live-tracking': S103a,
+  'distributor:settings': S103,
   'fieldSM:dashboard': S104,
   'hrAssistant:dashboard': S105,
   'kpo:dashboard': S106,

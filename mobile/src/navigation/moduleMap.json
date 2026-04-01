@@ -2104,6 +2104,20 @@
     "endpoints": []
   },
   {
+    "key": "distributor:live-tracking",
+    "role": "distributor",
+    "modulePath": "live-tracking",
+    "route": "/dashboards/distributor/live-tracking",
+    "title": "Live Tracking",
+    "screenFile": "screens/distributor/live-tracking/LiveTrackingScreen.js",
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/location/live-users"
+      }
+    ]
+  },
+  {
     "key": "distributor:settings",
     "role": "distributor",
     "modulePath": "settings",
@@ -2309,15 +2323,5 @@
     "title": "Dashboard",
     "screenFile": "screens/vendor/DashboardScreen.js",
     "endpoints": []
-  },
-
-  {
-  "key": "distributor:live-tracking",
-  "role": "distributor",
-  "modulePath": "live-tracking",
-  "route": "/dashboards/distributor/live-tracking",
-  "title": "Live Tracking",
-  "screenFile": "screens/distributor/live-tracking/LiveTrackingScreen.js",
-  "endpoints": ["/location/live-users"]
-}
+  }
 ]
