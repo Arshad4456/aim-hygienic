@@ -323,14 +323,14 @@ function applyDistributorScope(match, scope, { field = "territoryId", territoryN
   return match;
 }
 
-function buildSalesOrderMatch(scope, periodRange) {
+function buildSalesOrderMatch(scope, periodRange, { includeDate = true } = {}) {
   const match = applyCommonScopeFilter({}, scope);
   applyDistributorScope(match, scope, {
     field: "territoryId",
     territoryNameField: "territoryName",
     distributorField: "distributorId",
   });
-  applyDateRangeWithFallback(match, "orderDate", "createdAt", periodRange);
+  if (includeDate) applyDateRangeWithFallback(match, "orderDate", "createdAt", periodRange);
   return match;
 }
 
@@ -474,7 +474,7 @@ function countBy(list, accessor) {
   return Array.from(map.entries()).map(([key, count]) => ({ key, count }));
 }
 
-function buildLeaderboards(orders) {
+function buildLeaderboards(orders, users = []) {
   const territoryMap = buildGroupMap();
   const regionMap = buildGroupMap();
   const zoneMap = buildGroupMap();
@@ -482,6 +482,7 @@ function buildLeaderboards(orders) {
   const customerMap = buildGroupMap();
   const warehouseMap = buildGroupMap();
   const salesmanMap = buildGroupMap();
+  const supplierMap = buildGroupMap();
 
   for (const order of orders) {
     const quantity = sumOrderQuantity(order);
@@ -493,6 +494,7 @@ function buildLeaderboards(orders) {
     const distributor = order.distributorName || "Unassigned distributor";
     const warehouse = order.toWarehouseName || "Unassigned warehouse";
     const salesman = order.salesmanId || order.orderBookerId || order.fromEntityName || "Unassigned field user";
+    const supplier = normalizeRole(order.fromEntityRole) === "supplier" ? (order.fromEntityName || "Unassigned supplier") : "";
 
     addToGroup(territoryMap, territory, { quantity, amount, customer, lastDate: order.orderDate || order.createdAt });
     addToGroup(regionMap, region, { quantity, amount, customer, lastDate: order.orderDate || order.createdAt });
@@ -501,6 +503,16 @@ function buildLeaderboards(orders) {
     addToGroup(customerMap, customer, { quantity, amount, customer, lastDate: order.orderDate || order.createdAt });
     addToGroup(warehouseMap, warehouse, { quantity, amount, customer, lastDate: order.orderDate || order.createdAt });
     addToGroup(salesmanMap, salesman, { quantity, amount, customer, lastDate: order.orderDate || order.createdAt });
+    if (supplier) addToGroup(supplierMap, supplier, { quantity, amount, customer, lastDate: order.orderDate || order.createdAt });
+  }
+
+  for (const user of users || []) {
+    const role = normalizeRole(user.role);
+    if (user.territoryName) addToGroup(territoryMap, user.territoryName, { orders: 0, amount: 0 });
+    if (role === "customer") addToGroup(customerMap, user.customerName || user.fullName || user.username || "Customer", { orders: 0, amount: 0 });
+    if (role === "distributor") addToGroup(distributorMap, user.distributorName || user.fullName || user.username || "Distributor", { orders: 0, amount: 0 });
+    if (role === "salesman" || role === "order booker") addToGroup(salesmanMap, user.fullName || user.username || "Field user", { orders: 0, amount: 0 });
+    if (role === "supplier") addToGroup(supplierMap, user.supplierName || user.fullName || user.username || "Supplier", { orders: 0, amount: 0 });
   }
 
   return {
@@ -511,6 +523,7 @@ function buildLeaderboards(orders) {
     customers: finalizeGroupMap(customerMap, { limit: 12 }),
     warehouses: finalizeGroupMap(warehouseMap, { limit: 10 }),
     salesmen: finalizeGroupMap(salesmanMap, { limit: 12 }),
+    suppliers: finalizeGroupMap(supplierMap, { limit: 12 }),
   };
 }
 
@@ -965,8 +978,17 @@ async function gatherReportBundle(req) {
     .sort({ orderDate: -1, createdAt: -1 })
     .limit(2500)
     .lean();
+  const fallbackOrders = orders.length
+    ? []
+    : await SalesOrderModel.find(buildSalesOrderMatch(scope, periodRange, { includeDate: false }))
+      .select("orderNo saleType sourceType customerName customerId distributorName distributorId territoryName territoryId zoneName zoneId regionName regionId fieldName salesmanId orderBookerId fromEntityName fromEntityRole status orderDate createdAt updatedAt toWarehouseName totalAmount items podUrl proofOfDeliveryImageUrl dispatchedAt deliveredAt invoiceNo")
+      .sort({ orderDate: -1, createdAt: -1 })
+      .limit(2500)
+      .lean();
+  const scopedOrders = orders.length ? orders : fallbackOrders;
+  const usedOrderFallback = !orders.length && fallbackOrders.length > 0;
 
-  const warehouseHints = Array.from(new Set(orders.map((item) => item.toWarehouseName).filter(Boolean)));
+  const warehouseHints = Array.from(new Set(scopedOrders.map((item) => item.toWarehouseName).filter(Boolean)));
 
   const [
     primaryPayments,
@@ -1003,27 +1025,28 @@ async function gatherReportBundle(req) {
     ? await ReceiptModel.find(receiptFilter).sort({ paymentDate: -1, createdAt: -1 }).limit(1500).lean()
     : [];
 
-  const saleBreakdown = buildSaleBreakdown(orders);
-  const statusMix = buildStatusMix(orders);
-  const leaderboards = buildLeaderboards(orders);
-  const productPerformance = buildProductPerformance(orders);
+  const saleBreakdown = buildSaleBreakdown(scopedOrders);
+  const statusMix = buildStatusMix(scopedOrders);
+  const leaderboards = buildLeaderboards(scopedOrders, users);
+  const productPerformance = buildProductPerformance(scopedOrders);
   const inventorySnapshot = buildInventorySnapshot(inventoryMovements, products);
   const expenseSnapshot = buildExpenseSnapshot(expenses);
   const teamSnapshot = buildTeamSnapshot(users);
   const recoverySnapshot = buildRecoverySnapshot(primaryPayments, secondaryPayments, receipts);
   const returnsSnapshot = buildReturnsSnapshot(returnClaims, inventorySnapshot);
-  const deliverySnapshot = buildDeliverySnapshot(orders);
+  const deliverySnapshot = buildDeliverySnapshot(scopedOrders);
   const insights = buildInsightMessages({ saleBreakdown, inventorySnapshot, recoverySnapshot, expenseSnapshot, teamSnapshot, deliverySnapshot, leaderboards, returnsSnapshot });
-  const alerts = buildAlerts({ inventorySnapshot, recoverySnapshot, deliverySnapshot, returnsSnapshot, saleBreakdown, orders });
-  const activity = buildRecentActivity(orders, receipts, expenses);
-  const companySummary = buildCompanySummary(users, orders);
+  const alerts = buildAlerts({ inventorySnapshot, recoverySnapshot, deliverySnapshot, returnsSnapshot, saleBreakdown, orders: scopedOrders });
+  const activity = buildRecentActivity(scopedOrders, receipts, expenses);
+  const companySummary = buildCompanySummary(users, scopedOrders);
 
   return {
     scope,
     periodRange,
     models,
     users,
-    orders,
+    orders: scopedOrders,
+    usedOrderFallback,
     receipts,
     expenses,
     primaryPayments,
@@ -1051,7 +1074,7 @@ async function gatherReportBundle(req) {
 }
 
 function buildOverviewPayload(bundle) {
-  const { scope, periodRange, saleBreakdown, inventorySnapshot, expenseSnapshot, teamSnapshot, recoverySnapshot, deliverySnapshot, returnsSnapshot, alerts, leaderboards, activity, companySummary, warehouses, vehicles, transfers, insights } = bundle;
+  const { scope, periodRange, saleBreakdown, inventorySnapshot, expenseSnapshot, teamSnapshot, recoverySnapshot, deliverySnapshot, returnsSnapshot, alerts, leaderboards, activity, companySummary, warehouses, vehicles, transfers, insights, usedOrderFallback } = bundle;
   const totalOrders = saleBreakdown.primary.orders + saleBreakdown.secondary.orders;
   const totalRevenue = saleBreakdown.primary.amount + saleBreakdown.secondary.amount;
 
@@ -1069,7 +1092,7 @@ function buildOverviewPayload(bundle) {
         : "Monitor company performance across sales, returns, inventory, suppliers, customers, distributors, delivery, expenses, areas, and exceptions.",
     },
     spotlight: [
-      { key: "revenue", label: "Total Revenue", value: formatCurrency(totalRevenue), helper: `${formatNumber(totalOrders)} orders in ${periodRange.label.toLowerCase()}`, tone: "emerald" },
+      { key: "revenue", label: "Total Revenue", value: formatCurrency(totalRevenue), helper: usedOrderFallback ? `${formatNumber(totalOrders)} orders in accessible history` : `${formatNumber(totalOrders)} orders in ${periodRange.label.toLowerCase()}`, tone: "emerald" },
       { key: "primary", label: "Primary Sales", value: formatCurrency(saleBreakdown.primary.amount), helper: `${formatNumber(saleBreakdown.primary.orders)} distributor-facing orders`, tone: "sky" },
       { key: "secondary", label: "Secondary Sales", value: formatCurrency(saleBreakdown.secondary.amount), helper: `${formatNumber(saleBreakdown.secondary.orders)} market execution orders`, tone: "indigo" },
       { key: "outstanding", label: "Outstanding", value: formatCurrency(recoverySnapshot.outstanding), helper: `${formatNumber(recoverySnapshot.overdueRows.length)} overdue records`, tone: "rose" },
@@ -1096,6 +1119,7 @@ function buildOverviewPayload(bundle) {
       customers: leaderboards.customers.slice(0, 6),
       distributors: leaderboards.distributors.slice(0, 6),
       salesmen: leaderboards.salesmen.slice(0, 6),
+      suppliers: leaderboards.suppliers.slice(0, 6),
       companies: companySummary.slice(0, 6),
     },
     sectionsPreview: [
