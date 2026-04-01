@@ -15,6 +15,7 @@ const dashboardLinks = [
   { title: 'Return Stock', route: 'distributor:return-stock' },
   { title: 'Messages', route: 'distributor:messages' },
   { title: 'Live Tracking', route: 'distributor:live-tracking' },
+  { title: 'Reports', route: 'distributor:reports' },
   { title: 'Account Settings', route: 'distributor:settings' },
   { title: 'Change Password', route: 'distributor:settings/change-password' },
 ];

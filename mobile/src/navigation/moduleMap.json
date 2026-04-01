@@ -2323,5 +2323,23 @@
     "title": "Dashboard",
     "screenFile": "screens/vendor/DashboardScreen.js",
     "endpoints": []
+  },
+  {
+    "key": "distributor:reports",
+    "role": "distributor",
+    "modulePath": "reports",
+    "route": "/dashboards/distributor/reports",
+    "title": "Reports",
+    "screenFile": "screens/distributor/reports/ReportsScreen.js",
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/reports/dashboard"
+      },
+      {
+        "method": "GET",
+        "path": "/reports/overview"
+      }
+    ]
   }
 ]
