@@ -23,7 +23,7 @@ export default function ReportsCommandCenter({ basePath = "/dashboards/admin/rep
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
-  const [period, setPeriod] = useState("this_month");
+  const [period, setPeriod] = useState("ytd");
 
   const companyName = useMemo(() => selectedCompany?.name || selectedCompany?.companyName || "", [selectedCompany]);
 
