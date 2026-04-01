@@ -6,7 +6,7 @@ import ReportsCommandCenter from "../../../../src/modules/reports/ReportsCommand
 export default function ReportsModulePage() {
   return (
     <AdminShell title="Reports" user={null}>
-      <ReportsCommandCenter viewer="management" />
+      <ReportsCommandCenter basePath="/dashboards/admin/reports" isDistributor={false} />
     </AdminShell>
   );
 }

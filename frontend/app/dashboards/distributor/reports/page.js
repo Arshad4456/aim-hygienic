@@ -8,12 +8,12 @@ export default function DistributorReportsPage() {
   return (
     <UserDashboardShell
       title="Distributor Reports"
-      subtitle="Territory-level performance, recovery, and team intelligence."
+      subtitle="Territory-focused revenue, team, customer, and recovery reporting."
       roleKey="Distributor"
       links={userDashboardSearchItems.distributor || []}
       showAccountCards
     >
-      <ReportsCommandCenter viewer="distributor" />
+      <ReportsCommandCenter basePath="/dashboards/distributor/reports" isDistributor />
     </UserDashboardShell>
   );
 }

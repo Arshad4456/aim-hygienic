@@ -2041,6 +2041,24 @@
     "endpoints": []
   },
   {
+    "key": "distributor:reports",
+    "role": "distributor",
+    "modulePath": "reports",
+    "route": "/dashboards/distributor/reports",
+    "title": "Reports",
+    "screenFile": "screens/distributor/reports/ReportsScreen.js",
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/reports/command-center"
+      },
+      {
+        "method": "GET",
+        "path": "/reports/detail/:section"
+      }
+    ]
+  },
+  {
     "key": "distributor:payments",
     "role": "distributor",
     "modulePath": "payments",
@@ -2093,20 +2111,6 @@
     "title": "Return Stock",
     "screenFile": "screens/distributor/return-stock/ReturnStockScreen.js",
     "endpoints": []
-  },
-  {
-    "key": "distributor:reports",
-    "role": "distributor",
-    "modulePath": "reports",
-    "route": "/dashboards/distributor/reports",
-    "title": "Reports",
-    "screenFile": "screens/distributor/reports/ReportsScreen.js",
-    "endpoints": [
-      {
-        "method": "GET",
-        "path": "/reports/overview"
-      }
-    ]
   },
   {
     "key": "distributor:settings/change-password",
