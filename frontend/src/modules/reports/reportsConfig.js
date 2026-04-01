@@ -1,22 +1,3 @@
-export const reportSections = [
-  { key: 'overview', title: 'Executive pulse', caption: 'Revenue, recovery, risk, operations' },
-  { key: 'sales', title: 'Sales reports', caption: 'Trend, customer, product, area' },
-  { key: 'orders', title: 'Order reports', caption: 'Status, aging, dispatch, delivery' },
-  { key: 'recovery', title: 'Recovery & payments', caption: 'Outstanding, receipts, due returns' },
-  { key: 'inventory', title: 'Inventory & warehouse', caption: 'Stock risk, warehouse health' },
-  { key: 'customers', title: 'Customer performance', caption: 'Active accounts, sales value' },
-  { key: 'team', title: 'People & activity', caption: 'Users, coverage, productivity' },
-  { key: 'delivery', title: 'Delivery & POD', caption: 'Completion, POD exceptions' },
-  { key: 'expenses', title: 'Expense intelligence', caption: 'Spending, approvals, categories' },
-  { key: 'areas', title: 'Area performance', caption: 'Region, zone, territory, field' },
-  { key: 'vehicles', title: 'Vehicles & logistics', caption: 'Fleet, transfers, movements' },
-  { key: 'exceptions', title: 'Critical watchlist', caption: 'Overdues, low stock, delays' },
-];
-
-export function reportHref(basePath, key) {
-  return `${basePath}/${key}`;
-}
-
 export function formatTimestamp(value) {
   if (!value) return '—';
   try {
@@ -37,7 +18,7 @@ export function downloadJson(filename, payload) {
   URL.revokeObjectURL(url);
 }
 
-export function buildPrintHtml({ title, subtitle, generatedAt, cards = [], rows = [], columns = [] }) {
+export function buildPrintHtml({ title, subtitle, generatedAt, cards = [], rows = [], columns = [], insights = [] }) {
   const cardsHtml = cards
     .map((card) => `
       <div class="card">
@@ -47,6 +28,10 @@ export function buildPrintHtml({ title, subtitle, generatedAt, cards = [], rows 
       </div>
     `)
     .join('');
+
+  const insightsHtml = insights.length
+    ? `<div class="insights"><h2>Insights</h2><ul>${insights.map((item) => `<li>${escapeHtml(String(item))}</li>`).join('')}</ul></div>`
+    : '';
 
   const headerCells = columns.map((column) => `<th>${escapeHtml(column)}</th>`).join('');
   const bodyRows = rows
@@ -62,11 +47,14 @@ export function buildPrintHtml({ title, subtitle, generatedAt, cards = [], rows 
       body { font-family: Arial, sans-serif; color: #111827; padding: 24px; }
       h1 { margin: 0 0 8px; }
       p.meta { color: #6b7280; margin: 0 0 20px; }
-      .cards { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; margin-bottom: 20px; }
+      .cards { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-bottom: 20px; }
       .card { border: 1px solid #d1d5db; border-radius: 14px; padding: 14px; }
       .label { font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: .08em; }
       .value { font-size: 26px; font-weight: 700; margin-top: 10px; }
       .helper { font-size: 12px; color: #6b7280; margin-top: 8px; }
+      .insights { border: 1px solid #d1d5db; border-radius: 14px; padding: 16px; margin-bottom: 20px; }
+      .insights h2 { margin: 0 0 12px; font-size: 18px; }
+      .insights ul { margin: 0; padding-left: 20px; }
       table { width: 100%; border-collapse: collapse; margin-top: 14px; }
       th, td { border: 1px solid #d1d5db; padding: 10px; text-align: left; font-size: 12px; vertical-align: top; }
       th { background: #f3f4f6; }
@@ -77,6 +65,7 @@ export function buildPrintHtml({ title, subtitle, generatedAt, cards = [], rows 
     <h1>${escapeHtml(title)}</h1>
     <p class="meta">${escapeHtml(subtitle || '')}<br/>Generated at: ${escapeHtml(formatTimestamp(generatedAt))}</p>
     <div class="cards">${cardsHtml}</div>
+    ${insightsHtml}
     <table>
       <thead><tr>${headerCells}</tr></thead>
       <tbody>${bodyRows}</tbody>
