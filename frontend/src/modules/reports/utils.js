@@ -9,6 +9,10 @@ export function formatCurrency(value) {
 }
 
 export function formatValue(value, format) {
+  if (typeof value === "string") {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return value;
+  }
   if (format === "currency") return formatCurrency(value);
   return formatNumber(value);
 }
@@ -45,36 +49,39 @@ export function toneClasses(tone = "zinc") {
 export const SECTION_META = {
   sales: {
     title: "Sales & Order Intelligence",
-    subtitle: "Order movement, region performance, sale types, and recent commercial activity.",
-    endpoint: "/reports/sales",
+    subtitle: "Primary, secondary, and return sale performance with unified visibility.",
+    endpoints: ["/reports/detail/primary-sales", "/reports/detail/secondary-sales", "/reports/detail/return-stock"],
     metrics: (report) => {
-      const totalOrders = (report.regions || []).reduce((sum, row) => sum + Number(row.orders || 0), 0);
-      const totalValue = (report.regions || []).reduce((sum, row) => sum + Number(row.value || 0), 0);
+      const sections = report.sections || [];
+      const primary = sections.find((row) => row.section === "primary-sales");
+      const secondary = sections.find((row) => row.section === "secondary-sales");
+      const returns = sections.find((row) => row.section === "return-stock");
+      const getCardValue = (section, label) => section?.cards?.find((card) => card.label === label)?.value || "—";
       return [
-        { label: "Orders", value: totalOrders },
-        { label: "Sales value", value: totalValue, format: "currency" },
-        { label: "Coverage buckets", value: report.regions?.length || 0 },
-        { label: "Recent orders", value: report.recentOrders?.length || 0 },
+        { label: "Primary revenue", value: getCardValue(primary, "Revenue") },
+        { label: "Secondary revenue", value: getCardValue(secondary, "Revenue") },
+        { label: "Return claims", value: getCardValue(returns, "Return claims") },
+        { label: "Sale sections", value: sections.length || 0 },
       ];
     },
     panels: [
       {
-        key: "regions",
-        title: "Coverage performance",
-        columns: ["Region / Territory", "Orders", "Items", "Value", "Last movement"],
-        rows: (report) => (report.regions || []).map((row) => [row.region, formatNumber(row.orders), formatNumber(row.quantity), formatCurrency(row.value), shortDate(row.lastMovementAt)]),
+        key: "primary",
+        title: "Primary sales details",
+        columns: (report) => report.sections?.find((section) => section.section === "primary-sales")?.columns || ["Label", "Value"],
+        rows: (report) => report.sections?.find((section) => section.section === "primary-sales")?.rows || [],
       },
       {
-        key: "statuses",
-        title: "Order status mix",
-        columns: ["Status", "Count", "Value"],
-        rows: (report) => (report.statuses || []).map((row) => [row.status, formatNumber(row.count), formatCurrency(row.value)]),
+        key: "secondary",
+        title: "Secondary sales details",
+        columns: (report) => report.sections?.find((section) => section.section === "secondary-sales")?.columns || ["Label", "Value"],
+        rows: (report) => report.sections?.find((section) => section.section === "secondary-sales")?.rows || [],
       },
       {
-        key: "recentOrders",
-        title: "Recent orders",
-        columns: ["Order No", "Customer", "Sale Type", "Status", "Amount", "Created"],
-        rows: (report) => (report.recentOrders || []).map((row) => [row.orderNo, row.customerName, row.saleType, row.status, formatCurrency(row.totalAmount), formatDateTime(row.createdAt)]),
+        key: "returns",
+        title: "Return sale details",
+        columns: (report) => report.sections?.find((section) => section.section === "return-stock")?.columns || ["Label", "Value"],
+        rows: (report) => report.sections?.find((section) => section.section === "return-stock")?.rows || [],
       },
     ],
   },
