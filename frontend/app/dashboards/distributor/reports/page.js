@@ -2,18 +2,18 @@
 
 import UserDashboardShell from "../../components/userDashboardShell";
 import { userDashboardSearchItems } from "../../searchItems";
-import { ReportsDashboardModule } from "../../../../src/modules/reports";
+import ReportsCommandCenter from "../../../../src/modules/reports/ReportsCommandCenter";
 
 export default function DistributorReportsPage() {
   return (
     <UserDashboardShell
       title="Distributor Reports"
-      subtitle="Commercial, collection, and territory reporting designed for distributor operations."
+      subtitle="Territory-level performance, recovery, and team intelligence."
       roleKey="Distributor"
       links={userDashboardSearchItems.distributor || []}
       showAccountCards
     >
-      <ReportsDashboardModule variant="distributor" />
+      <ReportsCommandCenter viewer="distributor" />
     </UserDashboardShell>
   );
 }
