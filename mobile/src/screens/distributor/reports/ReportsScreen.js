@@ -1,6 +1,6 @@
 import React from 'react';
-import ReportsCenterScreen from '../../shared/reports/ReportsCenterScreen';
+import CommandCenterScreen from '../../shared/reports/CommandCenterScreen';
 
-export default function ReportsScreen(props) {
-  return <ReportsCenterScreen {...props} variant="distributor" />;
+export default function ReportsScreen() {
+  return <CommandCenterScreen variant="distributor" />;
 }

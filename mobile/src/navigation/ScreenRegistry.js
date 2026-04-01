@@ -106,30 +106,27 @@ import S100 from '../screens/distributor/receipts/ReceiptsScreen';
 import S101 from '../screens/distributor/return-stock/ReturnStockScreen';
 import S102 from '../screens/distributor/settings/change-password/ChangePasswordScreen';
 import S103 from '../screens/distributor/settings/SettingsScreen';
-import S103a from '../screens/distributor/live-tracking/LiveTrackingScreen';
-import S103b from '../screens/distributor/reports/ReportsScreen';
-import S104 from '../screens/fieldSM/DashboardScreen';
-import S105 from '../screens/hrAssistant/DashboardScreen';
-import S106 from '../screens/kpo/DashboardScreen';
-import S107 from '../screens/manageDirector/DashboardScreen';
-import S108 from '../screens/nationalSM/DashboardScreen';
-import S109 from '../screens/orderBooker/orders/OrdersScreen';
-import S110 from '../screens/orderBooker/DashboardScreen';
-import S111 from '../screens/orderBooker/receipts/ReceiptsScreen';
-import S112 from '../screens/regionalSM/DashboardScreen';
-import S113 from '../screens/salesman/orders/OrdersScreen';
-import S114 from '../screens/salesman/DashboardScreen';
-import S115 from '../screens/territorySM/DashboardScreen';
-import S116 from '../screens/warehouseManager/order-management/OrderManagementScreen';
-import S117 from '../screens/warehouseManager/orders/OrdersScreen';
-import S118 from '../screens/warehouseManager/DashboardScreen';
-import S119 from '../screens/warehouseManager/payments/PaymentsScreen';
-import S120 from '../screens/warehouseManager/payments/primary/PrimaryScreen';
-import S121 from '../screens/warehouseManager/payments/secondary/SecondaryScreen';
-import S122 from '../screens/warehouseManager/warehouse-inventory/WarehouseInventoryScreen';
-import S123 from '../screens/zoneSM/DashboardScreen';
-import S124 from '../screens/supplier/DashboardScreen';
-import S125 from '../screens/vendor/DashboardScreen';
+import S104 from '../screens/distributor/reports/ReportsScreen';
+import S105 from '../screens/fieldSM/DashboardScreen';
+import S106 from '../screens/hrAssistant/DashboardScreen';
+import S107 from '../screens/kpo/DashboardScreen';
+import S108 from '../screens/manageDirector/DashboardScreen';
+import S109 from '../screens/nationalSM/DashboardScreen';
+import S110 from '../screens/orderBooker/orders/OrdersScreen';
+import S111 from '../screens/orderBooker/DashboardScreen';
+import S112 from '../screens/orderBooker/receipts/ReceiptsScreen';
+import S113 from '../screens/regionalSM/DashboardScreen';
+import S114 from '../screens/salesman/orders/OrdersScreen';
+import S115 from '../screens/salesman/DashboardScreen';
+import S116 from '../screens/territorySM/DashboardScreen';
+import S117 from '../screens/warehouseManager/order-management/OrderManagementScreen';
+import S118 from '../screens/warehouseManager/orders/OrdersScreen';
+import S119 from '../screens/warehouseManager/DashboardScreen';
+import S120 from '../screens/warehouseManager/payments/PaymentsScreen';
+import S121 from '../screens/warehouseManager/payments/primary/PrimaryScreen';
+import S122 from '../screens/warehouseManager/payments/secondary/SecondaryScreen';
+import S123 from '../screens/warehouseManager/warehouse-inventory/WarehouseInventoryScreen';
+import S124 from '../screens/zoneSM/DashboardScreen';
 
 export const screenRegistry = {
   'accountOfficer:dashboard': S0,
@@ -239,29 +236,26 @@ export const screenRegistry = {
   'distributor:receipts': S100,
   'distributor:return-stock': S101,
   'distributor:settings/change-password': S102,
-  'distributor:live-tracking': S103a,
-  'distributor:reports': S103b,
   'distributor:settings': S103,
-  'fieldSM:dashboard': S104,
-  'hrAssistant:dashboard': S105,
-  'kpo:dashboard': S106,
-  'manageDirector:dashboard': S107,
-  'nationalSM:dashboard': S108,
-  'orderBooker:orders': S109,
-  'orderBooker:dashboard': S110,
-  'orderBooker:receipts': S111,
-  'regionalSM:dashboard': S112,
-  'salesman:orders': S113,
-  'salesman:dashboard': S114,
-  'territorySM:dashboard': S115,
-  'warehouseManager:order-management': S116,
-  'warehouseManager:orders': S117,
-  'warehouseManager:dashboard': S118,
-  'warehouseManager:payments': S119,
-  'warehouseManager:payments/primary': S120,
-  'warehouseManager:payments/secondary': S121,
-  'warehouseManager:warehouse-inventory': S122,
-  'zoneSM:dashboard': S123,
-  'supplier:dashboard': S124,
-  'vendor:dashboard': S125,
+  'distributor:reports': S104,
+  'fieldSM:dashboard': S105,
+  'hrAssistant:dashboard': S106,
+  'kpo:dashboard': S107,
+  'manageDirector:dashboard': S108,
+  'nationalSM:dashboard': S109,
+  'orderBooker:orders': S110,
+  'orderBooker:dashboard': S111,
+  'orderBooker:receipts': S112,
+  'regionalSM:dashboard': S113,
+  'salesman:orders': S114,
+  'salesman:dashboard': S115,
+  'territorySM:dashboard': S116,
+  'warehouseManager:order-management': S117,
+  'warehouseManager:orders': S118,
+  'warehouseManager:dashboard': S119,
+  'warehouseManager:payments': S120,
+  'warehouseManager:payments/primary': S121,
+  'warehouseManager:payments/secondary': S122,
+  'warehouseManager:warehouse-inventory': S123,
+  'zoneSM:dashboard': S124,
 };

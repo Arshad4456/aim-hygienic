@@ -9,6 +9,7 @@ const User = require("../models/User");
 const Warehouse = require("../models/Warehouse");
 const StockTransfer = require("../models/StockTransfer");
 const Vehicle = require("../models/Vehicle");
+const VehicleTrip = require("../models/VehicleTrip");
 const Product = require("../models/Product");
 const Message = require("../models/Message");
 const ReturnClaim = require("../models/ReturnClaim");
@@ -16,7 +17,6 @@ const SalesOrder = require("../models/SalesOrder");
 const Receipt = require("../models/Receipt");
 const PrimaryPayment = require("../models/PrimaryPayment");
 const SecondaryPayment = require("../models/SecondaryPayment");
-const WarehouseTransaction = require("../models/WarehouseTransaction");
 const { toTenantDatabaseName } = require("../utils/tenantDatabases");
 
 const router = express.Router();
@@ -34,31 +34,65 @@ function isSystemLevelAdmin(role) {
   return normalized === "admin" || normalized === "system admin";
 }
 
-function isAdminLike(role) {
-  return ["admin", "system admin", "company admin"].includes(normalizeRole(role));
-}
-
 function isDistributorRole(role) {
   return normalizeRole(role) === "distributor";
 }
 
-function asIdList(...values) {
-  return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean)));
+function asObjectId(value) {
+  const raw = String(value || "").trim();
+  return mongoose.Types.ObjectId.isValid(raw) ? new mongoose.Types.ObjectId(raw) : null;
 }
 
-function titleize(value) {
-  return String(value || "Unknown")
-    .replace(/[_-]/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
+function compact(values) {
+  return [...new Set(values.filter(Boolean))];
 }
 
-function companyQuery(req, requestedCompanyId = "", requestedCompanyName = "") {
-  if (isSystemLevelAdmin(req.user?.role)) {
-    const companyId = String(requestedCompanyId || "").trim();
-    return companyId ? { companyId } : {};
-  }
-  const companyId = String(req.user?.companyId || "").trim();
-  return companyId ? { companyId } : {};
+function getDistributorCandidates(user = {}) {
+  const stringValues = compact([
+    String(user?.distributorId || "").trim(),
+    String(user?.uid || "").trim(),
+    String(user?._id || "").trim(),
+    String(user?.userId || "").trim(),
+  ]);
+  const objectIds = compact(stringValues.map(asObjectId));
+  return { stringValues, objectIds };
+}
+
+function buildMixedMatch(field, values = []) {
+  const stringValues = compact(values.map((value) => String(value || "").trim()));
+  const objectIds = compact(stringValues.map(asObjectId));
+  const clauses = [];
+  if (stringValues.length) clauses.push({ [field]: { $in: stringValues } });
+  if (objectIds.length) clauses.push({ [field]: { $in: objectIds } });
+  if (!clauses.length) return {};
+  return clauses.length === 1 ? clauses[0] : { $or: clauses };
+}
+
+function buildDistributorMatch(field, user) {
+  const { stringValues, objectIds } = getDistributorCandidates(user);
+  const clauses = [];
+  if (stringValues.length) clauses.push({ [field]: { $in: stringValues } });
+  if (objectIds.length) clauses.push({ [field]: { $in: objectIds } });
+  if (!clauses.length) return { _id: null };
+  return clauses.length === 1 ? clauses[0] : { $or: clauses };
+}
+
+function monthLabel(date) {
+  if (!date) return "";
+  const d = new Date(date);
+  return d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+}
+
+function formatMaybeDate(date) {
+  if (!date) return null;
+  const d = new Date(date);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+function scoreSeverity(level) {
+  if (level === "critical") return 3;
+  if (level === "warning") return 2;
+  return 1;
 }
 
 async function resolveTenantDbName(companyId, companyName = "") {
@@ -87,45 +121,28 @@ function getScopedCompanyContext(req, requestedCompanyId = "", requestedCompanyN
 
 async function getScopedReportModels(req, requestedCompanyId = "", requestedCompanyName = "") {
   const { scopedCompanyId, scopedCompanyName } = getScopedCompanyContext(req, requestedCompanyId, requestedCompanyName);
-  if (!scopedCompanyId) {
-    return {
-      InventoryMovementModel: InventoryMovement,
-      ExpenseModel: Expense,
-      AccountModel: Account,
-      UserModel: User,
-      WarehouseModel: Warehouse,
-      StockTransferModel: StockTransfer,
-      VehicleModel: Vehicle,
-      ProductModel: Product,
-      MessageModel: Message,
-      ReturnClaimModel: ReturnClaim,
-      SalesOrderModel: SalesOrder,
-      ReceiptModel: Receipt,
-      PrimaryPaymentModel: PrimaryPayment,
-      SecondaryPaymentModel: SecondaryPayment,
-      WarehouseTransactionModel: WarehouseTransaction,
-    };
-  }
+  const fallback = {
+    InventoryMovementModel: InventoryMovement,
+    ExpenseModel: Expense,
+    AccountModel: Account,
+    UserModel: User,
+    WarehouseModel: Warehouse,
+    StockTransferModel: StockTransfer,
+    VehicleModel: Vehicle,
+    VehicleTripModel: VehicleTrip,
+    ProductModel: Product,
+    MessageModel: Message,
+    ReturnClaimModel: ReturnClaim,
+    SalesOrderModel: SalesOrder,
+    ReceiptModel: Receipt,
+    PrimaryPaymentModel: PrimaryPayment,
+    SecondaryPaymentModel: SecondaryPayment,
+  };
+
+  if (!scopedCompanyId) return fallback;
   const dbName = await resolveTenantDbName(scopedCompanyId, scopedCompanyName);
-  if (!dbName) {
-    return {
-      InventoryMovementModel: InventoryMovement,
-      ExpenseModel: Expense,
-      AccountModel: Account,
-      UserModel: User,
-      WarehouseModel: Warehouse,
-      StockTransferModel: StockTransfer,
-      VehicleModel: Vehicle,
-      ProductModel: Product,
-      MessageModel: Message,
-      ReturnClaimModel: ReturnClaim,
-      SalesOrderModel: SalesOrder,
-      ReceiptModel: Receipt,
-      PrimaryPaymentModel: PrimaryPayment,
-      SecondaryPaymentModel: SecondaryPayment,
-      WarehouseTransactionModel: WarehouseTransaction,
-    };
-  }
+  if (!dbName) return fallback;
+
   const tenantDb = mongoose.connection.useDb(dbName, { useCache: true });
   return {
     InventoryMovementModel: getModelFromDb(tenantDb, InventoryMovement),
@@ -135,6 +152,7 @@ async function getScopedReportModels(req, requestedCompanyId = "", requestedComp
     WarehouseModel: getModelFromDb(tenantDb, Warehouse),
     StockTransferModel: getModelFromDb(tenantDb, StockTransfer),
     VehicleModel: getModelFromDb(tenantDb, Vehicle),
+    VehicleTripModel: getModelFromDb(tenantDb, VehicleTrip),
     ProductModel: getModelFromDb(tenantDb, Product),
     MessageModel: getModelFromDb(tenantDb, Message),
     ReturnClaimModel: getModelFromDb(tenantDb, ReturnClaim),
@@ -142,365 +160,259 @@ async function getScopedReportModels(req, requestedCompanyId = "", requestedComp
     ReceiptModel: getModelFromDb(tenantDb, Receipt),
     PrimaryPaymentModel: getModelFromDb(tenantDb, PrimaryPayment),
     SecondaryPaymentModel: getModelFromDb(tenantDb, SecondaryPayment),
-    WarehouseTransactionModel: getModelFromDb(tenantDb, WarehouseTransaction),
   };
 }
 
-function buildDistributorSalesOrderMatch(user, extra = {}) {
-  const distributorIds = asIdList(user?.userId, user?.distributorId);
-  const territoryNames = asIdList(user?.territoryName, user?.areaName);
-  const clauses = [];
-  if (distributorIds.length) clauses.push({ distributorId: { $in: distributorIds } });
-  if (territoryNames.length) clauses.push({ territoryName: { $in: territoryNames } });
-  if (!clauses.length) return { _id: null };
-  return { $and: [extra, { $or: clauses }] };
-}
+function buildScopedMatches(req) {
+  const role = normalizeRole(req.user?.role);
+  const distributorOrderMatch = isDistributorRole(role) ? buildDistributorMatch("distributorId", req.user) : {};
+  const distributorUserMatch = isDistributorRole(role) ? buildMixedMatch("distributorId", getDistributorCandidates(req.user).stringValues) : {};
+  const distributorExpenseMatch = isDistributorRole(role) ? buildDistributorMatch("distributorId", req.user) : {};
+  const distributorReceiptMatch = isDistributorRole(role)
+    ? buildMixedMatch("payerUserId", [req.user?.uid, req.user?._id])
+    : {};
 
-function buildDistributorTeamMatch(user, extra = {}) {
-  const distributorIds = asIdList(user?.userId, user?.distributorId);
-  const territoryNames = asIdList(user?.territoryName, user?.areaName);
-  const clauses = [];
-  if (distributorIds.length) clauses.push({ distributorId: { $in: distributorIds } });
-  if (territoryNames.length) clauses.push({ territoryName: { $in: territoryNames } });
-  if (!clauses.length) return { _id: null };
   return {
-    $and: [
-      extra,
-      { role: { $regex: /salesman|order\s*booker/i } },
-      { $or: clauses },
-    ],
+    role,
+    orderMatch: distributorOrderMatch,
+    userMatch: distributorUserMatch,
+    expenseMatch: distributorExpenseMatch,
+    receiptMatch: distributorReceiptMatch,
+    paymentMatch: isDistributorRole(role) ? buildDistributorMatch("distributorId", req.user) : {},
+    distributorScope: isDistributorRole(role),
   };
 }
 
-function buildDistributorExpenseMatch(user, extra = {}) {
-  const territoryNames = asIdList(user?.territoryName, user?.areaName);
-  const clauses = [{ distributorId: user?.uid }].filter(Boolean);
-  if (territoryNames.length) clauses.push({ territory: { $in: territoryNames } });
-  if (!clauses.length) return { _id: null };
-  return { $and: [extra, { $or: clauses }] };
+function pct(part, whole) {
+  if (!whole) return 0;
+  return Math.round((safeNumber(part) / safeNumber(whole)) * 100);
 }
 
-function buildDistributorReceiptMatch(user, extra = {}) {
-  return {
-    $and: [
-      extra,
-      {
-        $or: [
-          { payerUserId: user?.uid },
-          { payerRole: { $regex: /distributor/i } },
-          { receivedByUserId: user?.uid },
-        ],
-      },
-    ],
-  };
-}
-
-function buildDistributorPrimaryPaymentMatch(user, extra = {}) {
-  return { $and: [extra, { distributorId: user?.uid }] };
-}
-
-function buildDistributorSecondaryPaymentMatch(user, extra = {}) {
-  return { $and: [extra, { distributorId: user?.uid }] };
-}
-
-function buildDistributorReturnMatch(_user, extra = {}) {
-  return extra;
-}
-
-function buildOrderScope(req, extra = {}) {
-  if (isDistributorRole(req.user?.role)) return buildDistributorSalesOrderMatch(req.user, extra);
-  return { ...companyQuery(req), ...extra };
-}
-
-function buildTeamScope(req, extra = {}) {
-  if (isDistributorRole(req.user?.role)) return buildDistributorTeamMatch(req.user, extra);
-  return { ...companyQuery(req), ...extra };
-}
-
-function buildExpenseScope(req, extra = {}) {
-  if (isDistributorRole(req.user?.role)) return buildDistributorExpenseMatch(req.user, extra);
-  return { ...companyQuery(req), ...extra };
-}
-
-function buildReceiptScope(req, extra = {}) {
-  if (isDistributorRole(req.user?.role)) return buildDistributorReceiptMatch(req.user, extra);
-  return { ...extra };
-}
-
-function buildPrimaryPaymentScope(req, extra = {}) {
-  if (isDistributorRole(req.user?.role)) return buildDistributorPrimaryPaymentMatch(req.user, extra);
-  return extra;
-}
-
-function buildSecondaryPaymentScope(req, extra = {}) {
-  if (isDistributorRole(req.user?.role)) return buildDistributorSecondaryPaymentMatch(req.user, extra);
-  return extra;
-}
-
-function buildReturnScope(req, extra = {}) {
-  if (isDistributorRole(req.user?.role)) return buildDistributorReturnMatch(req.user, extra);
-  return extra;
-}
-
-function countByStatusRows(rows = []) {
-  const statusMap = rows.reduce((acc, row) => {
-    acc[String(row._id || "unknown").toLowerCase()] = safeNumber(row.count);
-    return acc;
-  }, {});
-  return statusMap;
-}
-
-function buildRecentActivity({ orders = [], receipts = [], expenses = [] }) {
-  return [
-    ...orders.map((item) => ({
-      id: `order-${item._id}`,
-      at: item.createdAt,
-      title: `${item.orderNo || "Order"} • ${titleize(item.status)}`,
-      meta: `${item.customerName || "Customer"} • ${item.saleType || "sale"}`,
-      tone: item.status === "delivered" ? "emerald" : item.status === "pending" ? "amber" : "zinc",
-    })),
-    ...receipts.map((item) => ({
-      id: `receipt-${item._id}`,
-      at: item.paymentDate || item.createdAt,
-      title: `${item.receiptNo || "Receipt"} • ${titleize(item.status)}`,
-      meta: `${item.payerName || item.payerRole || "Payer"} • ₨ ${safeNumber(item.amount).toLocaleString()}`,
-      tone: item.status === "approved" ? "emerald" : item.status === "pending" ? "amber" : "rose",
-    })),
-    ...expenses.map((item) => ({
-      id: `expense-${item._id}`,
-      at: item.expenseDate || item.createdAt,
-      title: `${item.title || item.category || "Expense"} • ${titleize(item.status)}`,
-      meta: `${item.category || "Expense"} • ₨ ${safeNumber(item.amount).toLocaleString()}`,
-      tone: item.status === "approved" || item.status === "paid" ? "emerald" : item.status === "pending" ? "amber" : "rose",
-    })),
-  ]
-    .sort((a, b) => new Date(b.at || 0).getTime() - new Date(a.at || 0).getTime())
-    .slice(0, 8);
-}
-
-function buildDashboardCards(role, basePath) {
-  const adminCards = [
-    {
-      key: "sales",
-      title: "Sales & order intelligence",
-      description: "Revenue, order mix, regional movement, and recent customer demand.",
-      href: `${basePath}/sales`,
-      badge: "Executive",
-    },
-    {
-      key: "inventory",
-      title: "Inventory & warehouse health",
-      description: "On-hand movement, warehouse throughput, and stock handling pressure points.",
-      href: `${basePath}/inventory`,
-      badge: "Warehouse",
-    },
-    {
-      key: "finance",
-      title: "Finance, collections & account balances",
-      description: "Expenses, receipts, account positions, and cash discipline in one place.",
-      href: `${basePath}/finance`,
-      badge: "Accounts",
-    },
-    {
-      key: "hr",
-      title: "People, roles & productivity",
-      description: "Headcount distribution, active workforce, and role coverage snapshots.",
-      href: `${basePath}/hr`,
-      badge: "People",
-    },
-    {
-      key: "logistics",
-      title: "Logistics, transfers & fleet",
-      description: "Movement of goods, delivery pipeline, and vehicle support visibility.",
-      href: `${basePath}/logistics`,
-      badge: "Operations",
-    },
-    {
-      key: "compliance",
-      title: "Compliance, returns & audit readiness",
-      description: "Returns, adjustments, message load, and control exceptions.",
-      href: `${basePath}/compliance`,
-      badge: "Risk",
-    },
-    {
-      key: "procurement",
-      title: "Supplier & procurement intelligence",
-      description: "Supplier footprint, inbound flow, and purchase activity monitoring.",
-      href: `${basePath}/procurement`,
-      badge: "Procurement",
-    },
-  ];
-
-  if (isDistributorRole(role)) {
-    return [
-      {
-        key: "sales",
-        title: "Territory sales performance",
-        description: "Secondary orders, delivered volumes, and territory demand trends.",
-        href: "",
-        badge: "Distributor",
-      },
-      {
-        key: "finance",
-        title: "Collections & payment discipline",
-        description: "Receipts, primary balances, and paid-back amounts for your territory.",
-        href: "",
-        badge: "Cash flow",
-      },
-      {
-        key: "team",
-        title: "Field team execution",
-        description: "Salesman and order booker footprint, status, and territory coverage.",
-        href: "",
-        badge: "Field",
-      },
-      {
-        key: "compliance",
-        title: "Returns & control signals",
-        description: "Issues that need attention before they impact service levels.",
-        href: "",
-        badge: "Control",
-      },
-    ];
-  }
-
-  return adminCards;
-}
-
-async function getDashboardPayload(req) {
+async function buildOverviewPayload(req) {
   const models = await getScopedReportModels(req, req.query?.companyId, req.query?.companyName);
   const {
-    SalesOrderModel,
-    ReceiptModel,
+    InventoryMovementModel,
     ExpenseModel,
+    AccountModel,
     UserModel,
     WarehouseModel,
-    ProductModel,
     StockTransferModel,
     VehicleModel,
-    ReturnClaimModel,
+    VehicleTripModel,
+    ProductModel,
     MessageModel,
+    ReturnClaimModel,
+    SalesOrderModel,
+    ReceiptModel,
     PrimaryPaymentModel,
     SecondaryPaymentModel,
-    InventoryMovementModel,
   } = models;
 
-  const salesScope = buildOrderScope(req);
-  const teamScope = buildTeamScope(req);
-  const expenseScope = buildExpenseScope(req);
-  const receiptScope = buildReceiptScope(req);
-  const primaryPaymentScope = buildPrimaryPaymentScope(req);
-  const secondaryPaymentScope = buildSecondaryPaymentScope(req);
-  const returnScope = buildReturnScope(req);
+  const scope = buildScopedMatches(req);
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now);
+  thirtyDaysAgo.setDate(now.getDate() - 30);
+  const ninetyDaysAgo = new Date(now);
+  ninetyDaysAgo.setDate(now.getDate() - 90);
+
+  const salesMatch = scope.orderMatch;
+  const expenseMatch = scope.expenseMatch;
+  const receiptMatch = scope.receiptMatch;
+  const paymentMatch = scope.paymentMatch;
+  const userMatch = scope.userMatch;
 
   const [
-    salesStatusRows,
-    salesTypeRows,
-    regionRows,
-    totalSalesValueRows,
+    orderSummary,
+    orderStatus,
+    monthlySales,
+    areaPerformance,
+    topCustomers,
+    topProducts,
+    expenseSummary,
+    expenseCategories,
+    receiptSummary,
+    receiptStatus,
+    primaryPaymentSummary,
+    overduePayments,
+    secondaryPaymentSummary,
+    warehouseCount,
+    productCount,
+    warehouseMovements,
+    lowStockItems,
+    userRoleCounts,
+    activeUsers,
+    activeCustomers,
+    activeDistributors,
+    vehicleTrips,
+    vehicleCount,
+    transferStatus,
+    returnClaimsCount,
+    messageCount,
     recentOrders,
-    receiptStatusRows,
-    paymentMethodRows,
-    recentReceipts,
-    expenseCategoryRows,
-    expenseStatusRows,
-    recentExpenses,
-    teamRoleRows,
-    teamStatusRows,
-    totalWarehouses,
-    totalProducts,
-    transferStatusRows,
-    totalVehicles,
-    totalReturns,
-    totalMessages,
-    paymentAgingRows,
-    paidBackRows,
-    inventoryWarehouseRows,
+    deliveryExceptions,
+    supplierCount,
   ] = await Promise.all([
     SalesOrderModel.aggregate([
-      { $match: salesScope },
-      { $group: { _id: { $ifNull: ["$status", "unknown"] }, count: { $sum: 1 } } },
-    ]),
-    SalesOrderModel.aggregate([
-      { $match: salesScope },
-      { $group: { _id: { $ifNull: ["$saleType", "unknown"] }, count: { $sum: 1 } } },
-    ]),
-    SalesOrderModel.aggregate([
-      { $match: salesScope },
-      {
-        $group: {
-          _id: { $ifNull: [isDistributorRole(req.user?.role) ? "$territoryName" : "$regionName", "Unassigned"] },
-          orders: { $sum: 1 },
-          value: { $sum: "$totalAmount" },
-          delivered: { $sum: { $cond: [{ $eq: ["$status", "delivered"] }, 1, 0] } },
-        },
-      },
-      { $sort: { value: -1, orders: -1 } },
-      { $limit: 8 },
-    ]),
-    SalesOrderModel.aggregate([
-      { $match: salesScope },
-      { $group: { _id: null, total: { $sum: "$totalAmount" } } },
-    ]),
-    SalesOrderModel.find(salesScope).sort({ createdAt: -1 }).limit(6).lean(),
-    ReceiptModel.aggregate([
-      { $match: receiptScope },
-      { $group: { _id: { $ifNull: ["$status", "unknown"] }, count: { $sum: 1 }, amount: { $sum: "$amount" } } },
-    ]),
-    ReceiptModel.aggregate([
-      { $match: receiptScope },
-      { $group: { _id: { $ifNull: ["$paymentMethod", "unknown"] }, count: { $sum: 1 }, amount: { $sum: "$amount" } } },
-    ]),
-    ReceiptModel.find(receiptScope).sort({ createdAt: -1 }).limit(6).lean(),
-    ExpenseModel.aggregate([
-      { $match: expenseScope },
-      { $group: { _id: { $ifNull: ["$category", "Uncategorized"] }, count: { $sum: 1 }, amount: { $sum: "$amount" } } },
-      { $sort: { amount: -1 } },
-      { $limit: 8 },
-    ]),
-    ExpenseModel.aggregate([
-      { $match: expenseScope },
-      { $group: { _id: { $ifNull: ["$status", "unknown"] }, count: { $sum: 1 }, amount: { $sum: "$amount" } } },
-    ]),
-    ExpenseModel.find(expenseScope).sort({ createdAt: -1 }).limit(6).lean(),
-    UserModel.aggregate([
-      { $match: teamScope },
-      { $group: { _id: { $ifNull: ["$role", "unknown"] }, count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-    ]),
-    UserModel.aggregate([
-      { $match: teamScope },
-      { $group: { _id: { $ifNull: ["$status", "unknown"] }, count: { $sum: 1 } } },
-    ]),
-    isDistributorRole(req.user?.role) ? Promise.resolve(0) : WarehouseModel.countDocuments(companyQuery(req, req.query?.companyId, req.query?.companyName)),
-    isDistributorRole(req.user?.role) ? Promise.resolve(0) : ProductModel.countDocuments(companyQuery(req, req.query?.companyId, req.query?.companyName)),
-    isDistributorRole(req.user?.role)
-      ? SalesOrderModel.aggregate([
-          { $match: salesScope },
-          { $group: { _id: { $ifNull: ["$status", "unknown"] }, count: { $sum: 1 } } },
-        ])
-      : StockTransferModel.aggregate([
-          { $group: { _id: { $ifNull: ["$status", "unknown"] }, count: { $sum: 1 } } },
-        ]),
-    isDistributorRole(req.user?.role) ? Promise.resolve(0) : VehicleModel.countDocuments(companyQuery(req, req.query?.companyId, req.query?.companyName)),
-    ReturnClaimModel.countDocuments(returnScope),
-    MessageModel.countDocuments(),
-    PrimaryPaymentModel.aggregate([
-      { $match: primaryPaymentScope },
+      { $match: salesMatch },
       {
         $group: {
           _id: null,
-          openInvoices: { $sum: { $cond: [{ $gt: ["$amountRemaining", 0] }, 1, 0] } },
-          outstanding: { $sum: "$amountRemaining" },
-          total: { $sum: "$amountTotal" },
+          orders: { $sum: 1 },
+          revenue: { $sum: { $ifNull: ["$totalAmount", 0] } },
+          deliveredRevenue: {
+            $sum: {
+              $cond: [{ $eq: ["$status", "delivered"] }, { $ifNull: ["$totalAmount", 0] }, 0],
+            },
+          },
+          delivered: { $sum: { $cond: [{ $eq: ["$status", "delivered"] }, 1, 0] } },
+          dispatched: { $sum: { $cond: [{ $eq: ["$status", "dispatched"] }, 1, 0] } },
+          pending: { $sum: { $cond: [{ $eq: ["$status", "pending"] }, 1, 0] } },
+          rejected: { $sum: { $cond: [{ $eq: ["$status", "rejected"] }, 1, 0] } },
+          missingPod: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ["$status", "delivered"] },
+                    { $eq: [{ $ifNull: ["$podUrl", ""] }, ""] },
+                    { $eq: [{ $ifNull: ["$proofOfDeliveryImageUrl", ""] }, ""] },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
+          podUploaded: {
+            $sum: {
+              $cond: [
+                {
+                  $or: [
+                    { $ne: [{ $ifNull: ["$podUrl", ""] }, ""] },
+                    { $ne: [{ $ifNull: ["$proofOfDeliveryImageUrl", ""] }, ""] },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
         },
       },
     ]),
-    SecondaryPaymentModel.aggregate([
-      { $match: secondaryPaymentScope },
-      { $group: { _id: null, paidBack: { $sum: "$amountPaid" }, count: { $sum: 1 } } },
+    SalesOrderModel.aggregate([
+      { $match: salesMatch },
+      { $group: { _id: { $ifNull: ["$status", "unknown"] }, count: { $sum: 1 }, amount: { $sum: { $ifNull: ["$totalAmount", 0] } } } },
+      { $sort: { count: -1 } },
     ]),
-    isDistributorRole(req.user?.role)
+    SalesOrderModel.aggregate([
+      { $match: { ...salesMatch, orderDate: { $gte: ninetyDaysAgo } } },
+      {
+        $group: {
+          _id: {
+            year: { $year: "$orderDate" },
+            month: { $month: "$orderDate" },
+          },
+          amount: { $sum: { $ifNull: ["$totalAmount", 0] } },
+          orders: { $sum: 1 },
+        },
+      },
+      { $sort: { "_id.year": 1, "_id.month": 1 } },
+    ]),
+    SalesOrderModel.aggregate([
+      { $match: salesMatch },
+      {
+        $group: {
+          _id: {
+            territory: { $ifNull: ["$territoryName", "Unassigned"] },
+            region: { $ifNull: ["$regionName", "Unassigned"] },
+          },
+          revenue: { $sum: { $ifNull: ["$totalAmount", 0] } },
+          orders: { $sum: 1 },
+          delivered: { $sum: { $cond: [{ $eq: ["$status", "delivered"] }, 1, 0] } },
+        },
+      },
+      { $sort: { revenue: -1 } },
+      { $limit: 8 },
+    ]),
+    SalesOrderModel.aggregate([
+      { $match: salesMatch },
+      {
+        $group: {
+          _id: { $ifNull: ["$customerName", "Unassigned"] },
+          revenue: { $sum: { $ifNull: ["$totalAmount", 0] } },
+          orders: { $sum: 1 },
+          lastOrderDate: { $max: "$orderDate" },
+          outstanding: {
+            $sum: {
+              $cond: [
+                { $eq: ["$status", "delivered"] },
+                0,
+                { $ifNull: ["$totalAmount", 0] },
+              ],
+            },
+          },
+        },
+      },
+      { $sort: { revenue: -1 } },
+      { $limit: 6 },
+    ]),
+    SalesOrderModel.aggregate([
+      { $match: salesMatch },
+      { $unwind: { path: "$items", preserveNullAndEmptyArrays: false } },
+      {
+        $group: {
+          _id: { $ifNull: ["$items.productName", "Unassigned"] },
+          quantity: { $sum: { $ifNull: ["$items.quantity", 0] } },
+          revenue: { $sum: { $multiply: [{ $ifNull: ["$items.quantity", 0] }, { $ifNull: ["$items.unitPrice", 0] }] } },
+        },
+      },
+      { $sort: { revenue: -1 } },
+      { $limit: 6 },
+    ]),
+    ExpenseModel.aggregate([
+      { $match: expenseMatch },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: { $ifNull: ["$amount", 0] } },
+          approved: { $sum: { $cond: [{ $in: ["$status", ["approved", "paid", "posted"]] }, { $ifNull: ["$amount", 0] }, 0] } },
+          pendingCount: { $sum: { $cond: [{ $eq: ["$status", "pending"] }, 1, 0] } },
+        },
+      },
+    ]),
+    ExpenseModel.aggregate([
+      { $match: expenseMatch },
+      { $group: { _id: { $ifNull: ["$category", "Uncategorized"] }, total: { $sum: { $ifNull: ["$amount", 0] } }, count: { $sum: 1 } } },
+      { $sort: { total: -1 } },
+      { $limit: 6 },
+    ]),
+    ReceiptModel.aggregate([
+      { $match: receiptMatch },
+      { $group: { _id: null, total: { $sum: { $ifNull: ["$amount", 0] } }, count: { $sum: 1 }, approved: { $sum: { $cond: [{ $eq: ["$status", "approved"] }, { $ifNull: ["$amount", 0] }, 0] } } } },
+    ]),
+    ReceiptModel.aggregate([
+      { $match: receiptMatch },
+      { $group: { _id: { $ifNull: ["$status", "unknown"] }, count: { $sum: 1 }, amount: { $sum: { $ifNull: ["$amount", 0] } } } },
+      { $sort: { count: -1 } },
+    ]),
+    PrimaryPaymentModel.aggregate([
+      { $match: paymentMatch },
+      { $group: { _id: null, total: { $sum: { $ifNull: ["$amountTotal", 0] } }, outstanding: { $sum: { $ifNull: ["$amountRemaining", 0] } }, open: { $sum: { $cond: [{ $gt: ["$amountRemaining", 0] }, 1, 0] } }, closed: { $sum: { $cond: [{ $eq: ["$amountRemaining", 0] }, 1, 0] } } } },
+    ]),
+    PrimaryPaymentModel.aggregate([
+      { $match: { ...paymentMatch, amountRemaining: { $gt: 0 }, returnDate: { $lt: now } } },
+      { $sort: { returnDate: 1 } },
+      { $limit: 10 },
+      { $project: { distributorName: 1, invoiceNo: 1, amountRemaining: 1, returnDate: 1, territoryName: 1, warehouseName: 1 } },
+    ]),
+    SecondaryPaymentModel.aggregate([
+      { $match: paymentMatch },
+      { $group: { _id: null, paidBack: { $sum: { $ifNull: ["$amountPaid", 0] } }, count: { $sum: 1 } } },
+    ]),
+    scope.distributorScope ? Promise.resolve(0) : WarehouseModel.countDocuments(),
+    ProductModel.countDocuments(),
+    scope.distributorScope
       ? Promise.resolve([])
       : InventoryMovementModel.aggregate([
           {
@@ -508,314 +420,590 @@ async function getDashboardPayload(req) {
               _id: { $ifNull: ["$warehouseName", "Unassigned"] },
               inQty: { $sum: { $cond: [{ $in: ["$movementType", ["PURCHASE_IN", "TRANSFER_IN", "RETURN_IN"]] }, "$quantity", 0] } },
               outQty: { $sum: { $cond: [{ $in: ["$movementType", ["SALE_OUT", "TRANSFER_OUT"]] }, "$quantity", 0] } },
-              movementCount: { $sum: 1 },
+              adjusted: { $sum: { $cond: [{ $eq: ["$movementType", "ADJUSTMENT"] }, "$quantity", 0] } },
+              lastMovementAt: { $max: "$createdAt" },
             },
           },
-          { $sort: { movementCount: -1 } },
-          { $limit: 6 },
+          { $sort: { lastMovementAt: -1 } },
+          { $limit: 8 },
         ]),
+    scope.distributorScope
+      ? Promise.resolve([])
+      : ProductModel.aggregate([
+          {
+            $lookup: {
+              from: "inventorymovements",
+              let: { pid: "$productId" },
+              pipeline: [
+                { $match: { $expr: { $eq: ["$productId", "$$pid"] } } },
+                {
+                  $group: {
+                    _id: null,
+                    inQty: { $sum: { $cond: [{ $in: ["$movementType", ["PURCHASE_IN", "TRANSFER_IN", "RETURN_IN"]] }, "$quantity", 0] } },
+                    outQty: { $sum: { $cond: [{ $in: ["$movementType", ["SALE_OUT", "TRANSFER_OUT"]] }, "$quantity", 0] } },
+                  },
+                },
+              ],
+              as: "movementAgg",
+            },
+          },
+          {
+            $addFields: {
+              movementAgg: { $ifNull: [{ $arrayElemAt: ["$movementAgg", 0] }, { inQty: 0, outQty: 0 }] },
+            },
+          },
+          {
+            $addFields: {
+              onHand: { $subtract: [{ $ifNull: ["$movementAgg.inQty", 0] }, { $ifNull: ["$movementAgg.outQty", 0] }] },
+            },
+          },
+          {
+            $match: {
+              $expr: {
+                $lte: ["$onHand", { $ifNull: ["$minStockLevel", 0] }],
+              },
+            },
+          },
+          { $sort: { onHand: 1, minStockLevel: -1 } },
+          { $limit: 8 },
+          { $project: { name: 1, productId: 1, category: 1, onHand: 1, minStockLevel: 1 } },
+        ]),
+    UserModel.aggregate([
+      { $match: userMatch },
+      { $group: { _id: { $ifNull: ["$role", "Unassigned"] }, count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+    ]),
+    UserModel.countDocuments({ ...(userMatch || {}), status: "active" }),
+    scope.distributorScope
+      ? SalesOrderModel.distinct("customerId", salesMatch).then((rows) => rows.filter(Boolean).length)
+      : UserModel.countDocuments({ ...(userMatch || {}), role: { $regex: /customer/i }, status: "active" }),
+    scope.distributorScope
+      ? Promise.resolve(1)
+      : UserModel.countDocuments({ role: { $regex: /distributor/i }, status: "active" }),
+    VehicleTripModel.aggregate([
+      { $group: { _id: null, distance: { $sum: { $ifNull: ["$distance", 0] } }, trips: { $sum: 1 } } },
+    ]),
+    VehicleModel.countDocuments(),
+    StockTransferModel.aggregate([
+      { $group: { _id: { $ifNull: ["$status", "unknown"] }, count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+    ]),
+    ReturnClaimModel.countDocuments(),
+    MessageModel.countDocuments(),
+    SalesOrderModel.find(salesMatch)
+      .sort({ orderDate: -1 })
+      .limit(100)
+      .select("salesmanName orderBookerName totalAmount status podUrl proofOfDeliveryImageUrl orderDate deliveredAt territoryName customerName")
+      .lean(),
+    SalesOrderModel.aggregate([
+      {
+        $match: {
+          ...salesMatch,
+          status: { $in: ["pending", "approved", "dispatched"] },
+          orderDate: { $lt: new Date(now.getTime() - 48 * 60 * 60 * 1000) },
+        },
+      },
+      { $project: { orderNo: 1, customerName: 1, status: 1, orderDate: 1, territoryName: 1, totalAmount: 1 } },
+      { $limit: 8 },
+    ]),
+    UserModel.countDocuments({ role: { $regex: /supplier/i }, ...(userMatch || {}) }),
   ]);
 
-  const salesStatus = countByStatusRows(salesStatusRows);
-  const receiptStatus = countByStatusRows(receiptStatusRows);
-  const expenseStatus = countByStatusRows(expenseStatusRows);
-  const teamStatus = countByStatusRows(teamStatusRows);
-  const transferStatus = countByStatusRows(transferStatusRows);
+  const orderSummaryDoc = orderSummary[0] || {};
+  const expenseSummaryDoc = expenseSummary[0] || {};
+  const receiptSummaryDoc = receiptSummary[0] || {};
+  const primarySummaryDoc = primaryPaymentSummary[0] || {};
+  const secondarySummaryDoc = secondaryPaymentSummary[0] || {};
+  const vehicleTripsDoc = vehicleTrips[0] || {};
 
-  const totalOrders = Object.values(salesStatus).reduce((sum, count) => sum + safeNumber(count), 0);
-  const deliveredOrders = safeNumber(salesStatus.delivered);
-  const pendingOrders = safeNumber(salesStatus.pending);
-  const approvedReceipts = safeNumber(receiptStatus.approved);
-  const totalExpense = expenseCategoryRows.reduce((sum, row) => sum + safeNumber(row.amount), 0);
-  const activeUsers = safeNumber(teamStatus.active);
-  const salesValue = safeNumber(totalSalesValueRows?.[0]?.total);
-  const outstanding = safeNumber(paymentAgingRows?.[0]?.outstanding);
-  const paidBack = safeNumber(paidBackRows?.[0]?.paidBack);
-  const openInvoices = safeNumber(paymentAgingRows?.[0]?.openInvoices);
-  const totalTeam = teamRoleRows.reduce((sum, row) => sum + safeNumber(row.count), 0);
+  const revenue = safeNumber(orderSummaryDoc.revenue);
+  const orders = safeNumber(orderSummaryDoc.orders);
+  const delivered = safeNumber(orderSummaryDoc.delivered);
+  const pending = safeNumber(orderSummaryDoc.pending);
+  const dispatched = safeNumber(orderSummaryDoc.dispatched);
+  const rejected = safeNumber(orderSummaryDoc.rejected);
+  const podMissing = safeNumber(orderSummaryDoc.missingPod);
+  const podUploaded = safeNumber(orderSummaryDoc.podUploaded);
+  const totalExpenses = safeNumber(expenseSummaryDoc.total);
+  const approvedExpenses = safeNumber(expenseSummaryDoc.approved);
+  const totalReceipts = safeNumber(receiptSummaryDoc.total);
+  const approvedReceipts = safeNumber(receiptSummaryDoc.approved);
+  const outstanding = safeNumber(primarySummaryDoc.outstanding);
+  const recoveryRate = primarySummaryDoc.total ? Math.round(((safeNumber(primarySummaryDoc.total) - outstanding) / safeNumber(primarySummaryDoc.total)) * 100) : 0;
+  const onTimeDeliveryRate = pct(delivered, orders || 1);
+  const totalOnHand = warehouseMovements.reduce((sum, row) => sum + safeNumber(row.inQty) - safeNumber(row.outQty), 0);
 
-  const basePath = isDistributorRole(req.user?.role) ? "/dashboards/distributor/reports" : "/dashboards/admin/reports";
-  const role = normalizeRole(req.user?.role);
-  const scopeName = isDistributorRole(role)
-    ? req.user?.territoryName || req.user?.distributorName || "Distributor territory"
-    : req.query?.companyName || req.user?.companyName || (isSystemLevelAdmin(role) ? "Company reporting" : "Business reporting");
+  const kpis = [
+    {
+      label: scope.distributorScope ? "Distributor revenue" : "Gross revenue",
+      value: revenue,
+      displayValue: formatCurrency(revenue),
+      helper: `${orders} total orders`,
+      accent: "violet",
+      delta: `${delivered} delivered`,
+    },
+    {
+      label: "Outstanding",
+      value: outstanding,
+      displayValue: formatCurrency(outstanding),
+      helper: `${primarySummaryDoc.open || 0} open balances`,
+      accent: "rose",
+      delta: `${recoveryRate}% recovered`,
+    },
+    {
+      label: scope.distributorScope ? "Collections" : "Receipts booked",
+      value: totalReceipts,
+      displayValue: formatCurrency(totalReceipts),
+      helper: `${approvedReceipts ? formatCurrency(approvedReceipts) : "No approved receipts yet"}`,
+      accent: "emerald",
+      delta: `${receiptSummaryDoc.count || 0} receipts`,
+    },
+    {
+      label: scope.distributorScope ? "Team activity" : "People & operations",
+      value: activeUsers,
+      displayValue: String(activeUsers),
+      helper: `${supplierCount} suppliers • ${activeCustomers} active customers`,
+      accent: "sky",
+      delta: `${vehicleCount} vehicles`,
+    },
+    {
+      label: scope.distributorScope ? "Proof of delivery" : "Delivery health",
+      value: podUploaded,
+      displayValue: String(podUploaded),
+      helper: `${podMissing} missing POD`,
+      accent: "amber",
+      delta: `${onTimeDeliveryRate}% fulfilment pace`,
+    },
+    {
+      label: scope.distributorScope ? "Cash burn / spend" : "Expense control",
+      value: totalExpenses,
+      displayValue: formatCurrency(totalExpenses),
+      helper: `${expenseSummaryDoc.pendingCount || 0} pending approvals`,
+      accent: "fuchsia",
+      delta: `${formatCurrency(approvedExpenses)} approved`,
+    },
+  ];
 
-  const kpis = isDistributorRole(role)
-    ? [
-        { key: "orders", label: "Territory orders", value: totalOrders, helper: `${deliveredOrders} delivered`, tone: "emerald" },
-        { key: "sales", label: "Booked value", value: salesValue, format: "currency", helper: `${pendingOrders} pending`, tone: "sky" },
-        { key: "receipts", label: "Approved receipts", value: approvedReceipts, helper: `${safeNumber(receiptStatus.pending)} pending`, tone: "amber" },
-        { key: "outstanding", label: "Outstanding primary", value: outstanding, format: "currency", helper: `${openInvoices} open invoices`, tone: "rose" },
-        { key: "paidBack", label: "Paid back", value: paidBack, format: "currency", helper: `${safeNumber(paidBackRows?.[0]?.count)} repayments`, tone: "violet" },
-        { key: "team", label: "Field team", value: totalTeam, helper: `${activeUsers} active`, tone: "emerald" },
-      ]
-    : [
-        { key: "orders", label: "Orders processed", value: totalOrders, helper: `${deliveredOrders} delivered`, tone: "emerald" },
-        { key: "sales", label: "Gross sales value", value: salesValue, format: "currency", helper: `${pendingOrders} pending`, tone: "sky" },
-        { key: "receipts", label: "Approved receipts", value: approvedReceipts, helper: `${safeNumber(receiptStatus.pending)} pending review`, tone: "amber" },
-        { key: "expenses", label: "Expense spend", value: totalExpense, format: "currency", helper: `${safeNumber(expenseStatus.pending)} pending approvals`, tone: "rose" },
-        { key: "team", label: "Active people", value: activeUsers, helper: `${teamRoleRows.length} role buckets`, tone: "emerald" },
-        { key: "warehouses", label: "Warehouses", value: totalWarehouses, helper: `${totalProducts} products tracked`, tone: "violet" },
-        { key: "transfers", label: "In-progress transfers", value: safeNumber(transferStatus.pending) + safeNumber(transferStatus["transit-in"]), helper: `${safeNumber(transferStatus.completed)} completed`, tone: "amber" },
-        { key: "risk", label: "Control flags", value: totalReturns + safeNumber(expenseStatus.rejected), helper: `${totalMessages} messages logged`, tone: "rose" },
-      ];
+  const insights = [
+    revenue
+      ? `${scope.distributorScope ? "Distributor sales" : "Sales execution"} generated ${formatCurrency(revenue)} across ${orders} orders.`
+      : "No sales orders have been booked yet for the current reporting scope.",
+    outstanding
+      ? `${formatCurrency(outstanding)} is still outstanding and needs recovery follow-up.`
+      : "Outstanding balances are currently under control.",
+    lowStockItems.length
+      ? `${lowStockItems.length} products are already at or below minimum stock threshold.`
+      : scope.distributorScope
+        ? "Inventory is being hidden at distributor level to avoid exposing warehouse-wide stock data."
+        : "No critical low-stock items were detected in the sampled inventory report.",
+    deliveryExceptions.length
+      ? `${deliveryExceptions.length} orders are ageing beyond the 48-hour dispatch/delivery attention window.`
+      : "No aged operational order bottlenecks were detected in the current queue.",
+  ];
+
+  const salesTrend = monthlySales.map((row) => ({
+    label: monthLabel(new Date(row._id.year, row._id.month - 1, 1)),
+    revenue: safeNumber(row.amount),
+    orders: safeNumber(row.orders),
+  }));
+
+  const statusBreakdown = orderStatus.map((row) => ({
+    label: String(row._id || "unknown").replace(/\b\w/g, (char) => char.toUpperCase()),
+    value: safeNumber(row.count),
+    amount: safeNumber(row.amount),
+  }));
+
+  const financeMix = expenseCategories.map((row) => ({
+    label: row._id,
+    value: safeNumber(row.total),
+    count: safeNumber(row.count),
+  }));
+
+  const receiptMix = receiptStatus.map((row) => ({
+    label: String(row._id || "unknown").replace(/\b\w/g, (char) => char.toUpperCase()),
+    value: safeNumber(row.amount),
+    count: safeNumber(row.count),
+  }));
+
+  const warehouseHealth = warehouseMovements.map((row) => {
+    const onHand = safeNumber(row.inQty) - safeNumber(row.outQty);
+    return {
+      name: row._id,
+      onHand,
+      inQty: safeNumber(row.inQty),
+      outQty: safeNumber(row.outQty),
+      adjusted: safeNumber(row.adjusted),
+      health: onHand > 0 ? "stable" : "watch",
+      lastMovementAt: formatMaybeDate(row.lastMovementAt),
+    };
+  });
+
+  const teamMap = new Map();
+  recentOrders.forEach((order) => {
+    const entries = [
+      { name: order.salesmanName, role: "Salesman" },
+      { name: order.orderBookerName, role: "Order Booker" },
+    ];
+    entries.forEach((entry) => {
+      const name = String(entry.name || "").trim();
+      if (!name) return;
+      const current = teamMap.get(`${entry.role}:${name}`) || {
+        name,
+        role: entry.role,
+        orders: 0,
+        revenue: 0,
+        delivered: 0,
+        podUploaded: 0,
+      };
+      current.orders += 1;
+      current.revenue += safeNumber(order.totalAmount);
+      current.delivered += order.status === "delivered" ? 1 : 0;
+      current.podUploaded += order.podUrl || order.proofOfDeliveryImageUrl ? 1 : 0;
+      teamMap.set(`${entry.role}:${name}`, current);
+    });
+  });
+  const teamPerformance = [...teamMap.values()]
+    .map((row) => ({
+      ...row,
+      podRate: row.delivered ? pct(row.podUploaded, row.delivered) : 0,
+    }))
+    .sort((a, b) => b.revenue - a.revenue || b.orders - a.orders)
+    .slice(0, 8);
+
+  const distributorRows = scope.distributorScope
+    ? []
+    : await SalesOrderModel.aggregate([
+        { $match: { distributorId: { $ne: null, $exists: true, $ne: "" } } },
+        {
+          $group: {
+            _id: { $ifNull: ["$distributorId", "Unassigned"] },
+            distributorName: { $last: { $ifNull: ["$fromEntityName", "Distributor"] } },
+            territoryName: { $last: { $ifNull: ["$territoryName", "Unassigned"] } },
+            orders: { $sum: 1 },
+            revenue: { $sum: { $ifNull: ["$totalAmount", 0] } },
+            delivered: { $sum: { $cond: [{ $eq: ["$status", "delivered"] }, 1, 0] } },
+            lastOrderDate: { $max: "$orderDate" },
+          },
+        },
+        { $sort: { revenue: -1 } },
+        { $limit: 8 },
+      ]).catch(() => []);
+
+  const alerts = [
+    ...overduePayments.map((row) => ({
+      title: `Overdue recovery • ${row.distributorName || row.invoiceNo || "Account"}`,
+      severity: "critical",
+      reason: `${formatCurrency(row.amountRemaining)} is overdue beyond return date.`,
+      metric: formatMaybeDate(row.returnDate),
+    })),
+    ...deliveryExceptions.map((row) => ({
+      title: `Operational ageing • ${row.orderNo || row.customerName || "Order"}`,
+      severity: "warning",
+      reason: `${row.status || "pending"} order needs immediate follow-up.`,
+      metric: formatMaybeDate(row.orderDate),
+    })),
+    ...lowStockItems.slice(0, 4).map((row) => ({
+      title: `Low stock • ${row.name || row.productId}`,
+      severity: "warning",
+      reason: `On hand ${safeNumber(row.onHand)} against minimum ${safeNumber(row.minStockLevel)}.`,
+      metric: row.category || "Inventory",
+    })),
+  ].sort((a, b) => scoreSeverity(b.severity) - scoreSeverity(a.severity));
+
+  const tables = {
+    areaRows: areaPerformance.map((row) => ({
+      territoryName: row._id.territory,
+      regionName: row._id.region,
+      orders: safeNumber(row.orders),
+      revenue: safeNumber(row.revenue),
+      delivered: safeNumber(row.delivered),
+      deliveryRate: pct(row.delivered, row.orders),
+    })),
+    customerRows: topCustomers.map((row) => ({
+      customerName: row._id,
+      orders: safeNumber(row.orders),
+      revenue: safeNumber(row.revenue),
+      outstanding: safeNumber(row.outstanding),
+      lastOrderDate: formatMaybeDate(row.lastOrderDate),
+    })),
+    productRows: topProducts.map((row) => ({
+      productName: row._id,
+      quantity: safeNumber(row.quantity),
+      revenue: safeNumber(row.revenue),
+    })),
+    teamRows: teamPerformance,
+    distributorRows: distributorRows.map((row) => ({
+      distributorId: row._id,
+      distributorName: row.distributorName || row._id,
+      territoryName: row.territoryName || "Unassigned",
+      orders: safeNumber(row.orders),
+      revenue: safeNumber(row.revenue),
+      delivered: safeNumber(row.delivered),
+      lastOrderDate: formatMaybeDate(row.lastOrderDate),
+    })),
+    warehouseRows: warehouseHealth,
+    alertRows: alerts,
+    lowStockRows: lowStockItems.map((row) => ({
+      productId: row.productId,
+      name: row.name,
+      category: row.category,
+      onHand: safeNumber(row.onHand),
+      minStockLevel: safeNumber(row.minStockLevel),
+    })),
+  };
+
+  const legacyMetrics = {
+    totalSalesOrders: orders,
+    totalSalesQuantity: topProducts.reduce((sum, row) => sum + safeNumber(row.quantity), 0),
+    totalExpenses,
+    pendingExpenses: safeNumber(expenseSummaryDoc.pendingCount),
+    totalUsers: userRoleCounts.reduce((sum, row) => sum + safeNumber(row.count), 0),
+    activeUsers,
+    totalProducts: productCount,
+    totalWarehouses: warehouseCount,
+    expenseCategories: financeMix.length,
+    userRoles: userRoleCounts.length,
+    salesRegions: compact(areaPerformance.map((row) => row._id.region)).length,
+    transferStatuses: transferStatus.length,
+  };
 
   return {
     ok: true,
-    scope: {
-      role,
-      label: scopeName,
-      companyId: String(req.query?.companyId || req.user?.companyId || "").trim(),
-      companyName: String(req.query?.companyName || req.user?.companyName || "").trim(),
+    generatedAt: now.toISOString(),
+    context: {
+      role: req.user?.role || "User",
+      companyId: req.user?.companyId || "",
+      companyName: req.user?.companyName || "",
+      scope: scope.distributorScope ? "distributor" : isSystemLevelAdmin(req.user?.role) ? "system-admin" : "company",
     },
-    hero: {
-      eyebrow: isDistributorRole(role) ? "Distributor performance" : "Business intelligence workspace",
-      title: isDistributorRole(role)
-        ? "Distributor Reports Command Center"
-        : "Reports Command Center",
-      description: isDistributorRole(role)
-        ? "Monitor territory demand, collections, field team execution, and payment discipline in one streamlined distributor workspace."
-        : "Run daily operational reviews across sales, inventory, finance, logistics, compliance, procurement, and people management from one unified reporting surface.",
-    },
-    kpis,
-    cards: buildDashboardCards(role, basePath),
-    spotlight: {
-      orderStatuses: salesStatusRows.map((row) => ({ label: titleize(row._id), value: row.count })),
-      receiptStatuses: receiptStatusRows.map((row) => ({ label: titleize(row._id), value: row.count, amount: row.amount })),
-      expenseCategories: expenseCategoryRows.map((row) => ({ label: row._id, value: row.amount, count: row.count })),
-      teamRoles: teamRoleRows.map((row) => ({ label: titleize(row._id), value: row.count })),
-      regionalSales: regionRows.map((row) => ({ label: row._id, orders: row.orders, value: row.value, delivered: row.delivered })),
-      paymentExposure: {
-        openInvoices,
-        outstanding,
-        paidBack,
+    metrics: legacyMetrics,
+    dashboard: {
+      hero: {
+        title: scope.distributorScope ? "Distributor performance intelligence" : "Enterprise reporting command center",
+        subtitle: scope.distributorScope
+          ? "Track recovery, sales momentum, team productivity, and risk signals inside your operating territory."
+          : "Monitor revenue, fulfilment, recovery, inventory risk, and team execution from one premium control surface.",
       },
-      warehouseFlow: inventoryWarehouseRows.map((row) => ({
-        warehouse: row._id,
-        inQty: row.inQty,
-        outQty: row.outQty,
-        movementCount: row.movementCount,
-      })),
-      transferStatus: transferStatusRows.map((row) => ({ label: titleize(row._id), value: row.count })),
-      returns: totalReturns,
-      messages: totalMessages,
-    },
-    recentActivity: buildRecentActivity({ orders: recentOrders, receipts: recentReceipts, expenses: recentExpenses }),
-    metrics: {
-      totalSalesOrders: totalOrders,
-      totalSalesQuantity: regionRows.reduce((sum, row) => sum + safeNumber(row.orders), 0),
-      totalExpenses: totalExpense,
-      pendingExpenses: safeNumber(expenseStatus.pending),
-      totalUsers: totalTeam,
-      activeUsers,
-      totalProducts,
-      totalWarehouses,
-      expenseCategories: expenseCategoryRows.length,
-      userRoles: teamRoleRows.length,
-      salesRegions: regionRows.length,
-      transferStatuses: transferStatusRows.length,
-      outstandingPrimaryPayments: outstanding,
-      approvedReceipts,
+      headline: {
+        revenue,
+        orders,
+        outstanding,
+        totalReceipts,
+        totalExpenses,
+        totalOnHand,
+        lowStockCount: lowStockItems.length,
+        activeUsers,
+        activeCustomers,
+        activeDistributors,
+        supplierCount,
+        podMissing,
+        onTimeDeliveryRate,
+        overdueRecoveryCount: overduePayments.length,
+        returnClaimsCount,
+        messagesCount: messageCount,
+        transferStatus,
+        tripsDistance: safeNumber(vehicleTripsDoc.distance),
+        tripsCount: safeNumber(vehicleTripsDoc.trips),
+        secondaryPaidBack: safeNumber(secondarySummaryDoc.paidBack),
+        vehicleCount,
+      },
+      kpis,
+      insights,
+      sections: {
+        salesTrend,
+        statusBreakdown,
+        financeMix,
+        receiptMix,
+        warehouseHealth,
+        roleMix: userRoleCounts.map((row) => ({ label: row._id, value: safeNumber(row.count) })),
+      },
+      tables,
     },
   };
 }
 
-router.get("/dashboard", requireAuth, async (req, res) => {
-  try {
-    return res.json(await getDashboardPayload(req));
-  } catch (_e) {
-    return res.status(500).json({ ok: false, message: "Failed to load reports dashboard" });
-  }
-});
+function formatCurrency(value) {
+  return new Intl.NumberFormat("en-PK", {
+    style: "currency",
+    currency: "PKR",
+    maximumFractionDigits: 0,
+  }).format(safeNumber(value));
+}
 
 router.get("/overview", requireAuth, async (req, res) => {
   try {
-    const payload = await getDashboardPayload(req);
-    return res.json({ ok: true, metrics: payload.metrics });
-  } catch (_e) {
-    return res.status(500).json({ ok: false, message: "Failed to load report overview" });
+    const payload = await buildOverviewPayload(req);
+    return res.json(payload);
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: "Failed to load reports overview" });
   }
 });
 
 router.get("/builder", requireAuth, async (req, res) => {
   try {
-    const payload = await getDashboardPayload(req);
-    const rows = payload.cards.map((card, index) => ({
-      id: card.key,
-      title: card.title,
-      owner: isDistributorRole(req.user?.role) ? "Distributor" : ["Sales", "Supply Chain", "Accounts", "HR", "Logistics", "Compliance", "Procurement"][index] || "Operations",
-      cadence: index % 2 === 0 ? "Daily" : "Weekly",
-      lastRunAt: payload.recentActivity[0]?.at || new Date().toISOString(),
-      recordCount: payload.spotlight[card.key === "inventory" ? "warehouseFlow" : card.key === "finance" ? "receiptStatuses" : card.key === "hr" || card.key === "team" ? "teamRoles" : card.key === "compliance" ? "orderStatuses" : "regionalSales"]?.length || 0,
-      status: index % 3 === 0 ? "Ready" : index % 3 === 1 ? "Needs review" : "Draft",
-    }));
-    return res.json({ ok: true, generatedAt: new Date().toISOString(), rows });
-  } catch (_e) {
+    const overview = await buildOverviewPayload(req);
+    const headline = overview.dashboard?.headline || {};
+    const rows = [
+      {
+        id: "executive-overview",
+        title: "Executive overview board",
+        owner: overview.context?.scope === "distributor" ? "Distributor" : "Management",
+        cadence: "Live",
+        lastRunAt: overview.generatedAt,
+        recordCount: safeNumber(headline.orders),
+        status: headline.overdueRecoveryCount || headline.podMissing ? "Needs review" : "Ready",
+      },
+      {
+        id: "recovery-watchlist",
+        title: "Recovery and outstanding watchlist",
+        owner: "Finance",
+        cadence: "Daily",
+        lastRunAt: overview.generatedAt,
+        recordCount: safeNumber(headline.overdueRecoveryCount) + safeNumber(headline.activeCustomers),
+        status: headline.outstanding ? "Needs review" : "Ready",
+      },
+      {
+        id: "inventory-risk",
+        title: "Inventory risk and replenishment monitor",
+        owner: "Supply chain",
+        cadence: "Daily",
+        lastRunAt: overview.generatedAt,
+        recordCount: safeNumber(headline.lowStockCount),
+        status: headline.lowStockCount ? "Needs review" : "Ready",
+      },
+      {
+        id: "team-productivity",
+        title: "Team productivity and service quality",
+        owner: "Operations",
+        cadence: "Weekly",
+        lastRunAt: overview.generatedAt,
+        recordCount: safeNumber(headline.activeUsers),
+        status: headline.podMissing ? "Needs review" : "Ready",
+      },
+    ];
+
+    return res.json({ ok: true, generatedAt: overview.generatedAt, rows });
+  } catch (error) {
     return res.status(500).json({ ok: false, message: "Failed to load report builder data" });
   }
 });
 
 router.get("/sales", requireAuth, async (req, res) => {
   try {
-    const { SalesOrderModel } = await getScopedReportModels(req, req.query?.companyId, req.query?.companyName);
-    const match = buildOrderScope(req);
-    const [regions, statuses, saleTypes, recentOrders] = await Promise.all([
-      SalesOrderModel.aggregate([
-        { $match: match },
-        {
-          $group: {
-            _id: { $ifNull: [isDistributorRole(req.user?.role) ? "$territoryName" : "$regionName", "Unassigned"] },
-            orders: { $sum: 1 },
-            quantity: { $sum: { $size: { $ifNull: ["$items", []] } } },
-            value: { $sum: "$totalAmount" },
-            lastMovementAt: { $max: "$createdAt" },
-          },
-        },
-        { $sort: { value: -1 } },
-      ]),
-      SalesOrderModel.aggregate([{ $match: match }, { $group: { _id: { $ifNull: ["$status", "unknown"] }, count: { $sum: 1 }, value: { $sum: "$totalAmount" } } }]),
-      SalesOrderModel.aggregate([{ $match: match }, { $group: { _id: { $ifNull: ["$saleType", "unknown"] }, count: { $sum: 1 }, value: { $sum: "$totalAmount" } } }]),
-      SalesOrderModel.find(match).sort({ createdAt: -1 }).limit(10).lean(),
-    ]);
-
+    const payload = await buildOverviewPayload(req);
     return res.json({
       ok: true,
-      regions: regions.map((row) => ({ region: row._id, orders: row.orders, quantity: row.quantity, value: row.value, lastMovementAt: row.lastMovementAt })),
-      statuses: statuses.map((row) => ({ status: row._id, count: row.count, value: row.value })),
-      saleTypes: saleTypes.map((row) => ({ type: row._id, count: row.count, value: row.value })),
-      recentOrders,
+      regions: payload.dashboard?.tables?.areaRows || [],
+      trend: payload.dashboard?.sections?.salesTrend || [],
+      products: payload.dashboard?.tables?.productRows || [],
     });
-  } catch (_e) {
+  } catch (_error) {
     return res.status(500).json({ ok: false, message: "Failed to load sales report" });
   }
 });
 
 router.get("/inventory", requireAuth, async (req, res) => {
   try {
-    const { InventoryMovementModel, ProductModel } = await getScopedReportModels(req, req.query?.companyId, req.query?.companyName);
-    const inTypes = ["PURCHASE_IN", "TRANSFER_IN", "RETURN_IN"];
-    const outTypes = ["SALE_OUT", "TRANSFER_OUT"];
-
-    const rows = await InventoryMovementModel.aggregate([
-      {
-        $group: {
-          _id: { $ifNull: ["$warehouseName", "Unassigned"] },
-          inQty: { $sum: { $cond: [{ $in: ["$movementType", inTypes] }, "$quantity", 0] } },
-          outQty: { $sum: { $cond: [{ $in: ["$movementType", outTypes] }, "$quantity", 0] } },
-          movementCount: { $sum: 1 },
-          lastMovementAt: { $max: "$createdAt" },
-        },
-      },
-      { $sort: { lastMovementAt: -1 } },
-    ]);
-
-    const movementTypes = await InventoryMovementModel.aggregate([
-      { $group: { _id: { $ifNull: ["$movementType", "unknown"] }, count: { $sum: 1 }, quantity: { $sum: "$quantity" } } },
-      { $sort: { count: -1 } },
-    ]);
-
-    const totalProducts = await ProductModel.countDocuments(companyQuery(req, req.query?.companyId, req.query?.companyName));
-
+    const payload = await buildOverviewPayload(req);
     return res.json({
       ok: true,
-      totalProducts,
-      warehouses: rows.map((row) => ({ warehouse: row._id, inQty: row.inQty, outQty: row.outQty, onHand: row.inQty - row.outQty, movementCount: row.movementCount, lastMovementAt: row.lastMovementAt })),
-      movementTypes: movementTypes.map((row) => ({ type: row._id, count: row.count, quantity: row.quantity })),
+      totalProducts: payload.metrics?.totalProducts || 0,
+      warehouses: payload.dashboard?.tables?.warehouseRows || [],
+      lowStockItems: payload.dashboard?.tables?.lowStockRows || [],
     });
-  } catch (_e) {
+  } catch (_error) {
     return res.status(500).json({ ok: false, message: "Failed to load inventory report" });
   }
 });
 
 router.get("/finance", requireAuth, async (req, res) => {
   try {
-    const { ExpenseModel, AccountModel, ReceiptModel, PrimaryPaymentModel, SecondaryPaymentModel } = await getScopedReportModels(req, req.query?.companyId, req.query?.companyName);
-    const [expenseTotals, expensesByCategory, accounts, receiptStatusRows, paymentMethodRows, primaryOpenRows, secondaryPaidRows] = await Promise.all([
-      ExpenseModel.aggregate([{ $match: buildExpenseScope(req) }, { $group: { _id: null, total: { $sum: "$amount" }, approved: { $sum: { $cond: [{ $in: ["$status", ["approved", "paid", "posted"]] }, "$amount", 0] } } } }]),
-      ExpenseModel.aggregate([{ $match: buildExpenseScope(req) }, { $group: { _id: { $ifNull: ["$category", "Uncategorized"] }, total: { $sum: "$amount" }, count: { $sum: 1 } } }, { $sort: { total: -1 } }]),
-      isDistributorRole(req.user?.role) ? Promise.resolve([]) : AccountModel.find(companyQuery(req, req.query?.companyId, req.query?.companyName)).select("accountName accountType currency currentBalance").sort({ accountName: 1 }).lean(),
-      ReceiptModel.aggregate([{ $match: buildReceiptScope(req) }, { $group: { _id: { $ifNull: ["$status", "unknown"] }, amount: { $sum: "$amount" }, count: { $sum: 1 } } }]),
-      ReceiptModel.aggregate([{ $match: buildReceiptScope(req) }, { $group: { _id: { $ifNull: ["$paymentMethod", "unknown"] }, amount: { $sum: "$amount" }, count: { $sum: 1 } } }]),
-      PrimaryPaymentModel.aggregate([{ $match: buildPrimaryPaymentScope(req) }, { $group: { _id: null, totalAmount: { $sum: "$amountTotal" }, outstandingAmount: { $sum: "$amountRemaining" }, openInvoices: { $sum: { $cond: [{ $gt: ["$amountRemaining", 0] }, 1, 0] } } } }]),
-      SecondaryPaymentModel.aggregate([{ $match: buildSecondaryPaymentScope(req) }, { $group: { _id: null, totalPaidBack: { $sum: "$amountPaid" }, count: { $sum: 1 } } }]),
-    ]);
-
+    const payload = await buildOverviewPayload(req);
     return res.json({
       ok: true,
       totals: {
-        totalExpenses: safeNumber(expenseTotals?.[0]?.total),
-        approvedExpenses: safeNumber(expenseTotals?.[0]?.approved),
-        totalReceiptAmount: receiptStatusRows.reduce((sum, row) => sum + safeNumber(row.amount), 0),
-        outstandingPrimaryPayments: safeNumber(primaryOpenRows?.[0]?.outstandingAmount),
-        paidBackAmount: safeNumber(secondaryPaidRows?.[0]?.totalPaidBack),
+        totalExpenses: payload.dashboard?.headline?.totalExpenses || 0,
+        totalReceipts: payload.dashboard?.headline?.totalReceipts || 0,
+        outstanding: payload.dashboard?.headline?.outstanding || 0,
+        secondaryPaidBack: payload.dashboard?.headline?.secondaryPaidBack || 0,
       },
-      expensesByCategory: expensesByCategory.map((row) => ({ category: row._id, total: row.total, count: row.count })),
-      accounts,
-      receiptStatuses: receiptStatusRows.map((row) => ({ status: row._id, amount: row.amount, count: row.count })),
-      paymentMethods: paymentMethodRows.map((row) => ({ method: row._id, amount: row.amount, count: row.count })),
-      primaryPayments: primaryOpenRows?.[0] || { totalAmount: 0, outstandingAmount: 0, openInvoices: 0 },
-      secondaryPayments: secondaryPaidRows?.[0] || { totalPaidBack: 0, count: 0 },
+      expensesByCategory: payload.dashboard?.sections?.financeMix || [],
+      receiptsByStatus: payload.dashboard?.sections?.receiptMix || [],
+      overdue: payload.dashboard?.tables?.alertRows?.filter((row) => row.title?.includes("Overdue")) || [],
     });
-  } catch (_e) {
+  } catch (_error) {
     return res.status(500).json({ ok: false, message: "Failed to load finance report" });
   }
 });
 
 router.get("/hr", requireAuth, async (req, res) => {
   try {
-    const { UserModel } = await getScopedReportModels(req, req.query?.companyId, req.query?.companyName);
-    const match = buildTeamScope(req);
-    const [roleCounts, statusCounts, totalUsers, areaCounts] = await Promise.all([
-      UserModel.aggregate([{ $match: match }, { $group: { _id: { $ifNull: ["$role", "Unassigned"] }, count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
-      UserModel.aggregate([{ $match: match }, { $group: { _id: { $ifNull: ["$status", "unknown"] }, count: { $sum: 1 } } }]),
-      UserModel.countDocuments(match),
-      UserModel.aggregate([{ $match: match }, { $group: { _id: { $ifNull: [isDistributorRole(req.user?.role) ? "$territoryName" : "$regionName", "Unassigned"] }, count: { $sum: 1 } } }, { $sort: { count: -1 } }, { $limit: 8 }]),
-    ]);
-
+    const payload = await buildOverviewPayload(req);
     return res.json({
       ok: true,
-      totalUsers,
-      roleCounts: roleCounts.map((row) => ({ role: row._id, count: row.count })),
-      statusCounts: statusCounts.map((row) => ({ status: row._id, count: row.count })),
-      areaCounts: areaCounts.map((row) => ({ area: row._id, count: row.count })),
+      totalUsers: payload.metrics?.totalUsers || 0,
+      roleCounts: payload.dashboard?.sections?.roleMix || [],
+      topTeam: payload.dashboard?.tables?.teamRows || [],
     });
-  } catch (_e) {
+  } catch (_error) {
     return res.status(500).json({ ok: false, message: "Failed to load HR report" });
   }
 });
 
 router.get("/logistics", requireAuth, async (req, res) => {
   try {
-    const { StockTransferModel, VehicleModel, SalesOrderModel } = await getScopedReportModels(req, req.query?.companyId, req.query?.companyName);
-    if (isDistributorRole(req.user?.role)) {
-      const orderStatus = await SalesOrderModel.aggregate([{ $match: buildOrderScope(req) }, { $group: { _id: { $ifNull: ["$status", "unknown"] }, count: { $sum: 1 } } }]);
-      return res.json({ ok: true, vehicleCount: 0, transferCounts: orderStatus.map((row) => ({ status: row._id, count: row.count })) });
-    }
-
-    const [transferCounts, vehicleCount] = await Promise.all([
-      StockTransferModel.aggregate([{ $group: { _id: { $ifNull: ["$status", "unknown"] }, count: { $sum: 1 } } }]),
-      VehicleModel.countDocuments(companyQuery(req, req.query?.companyId, req.query?.companyName)),
-    ]);
-
-    return res.json({ ok: true, vehicleCount, transferCounts: transferCounts.map((row) => ({ status: row._id, count: row.count })) });
-  } catch (_e) {
+    const payload = await buildOverviewPayload(req);
+    return res.json({
+      ok: true,
+      vehicleCount: payload.dashboard?.headline?.vehicleCount || 0,
+      transferCounts: payload.dashboard?.headline?.transferStatus || [],
+      delayedOrders: payload.dashboard?.tables?.alertRows?.filter((row) => row.title?.includes("Operational ageing")) || [],
+      podMissing: payload.dashboard?.headline?.podMissing || 0,
+    });
+  } catch (_error) {
     return res.status(500).json({ ok: false, message: "Failed to load logistics report" });
   }
 });
 
 router.get("/compliance", requireAuth, async (req, res) => {
   try {
-    const { InventoryMovementModel, MessageModel, ReturnClaimModel, SalesOrderModel } = await getScopedReportModels(req, req.query?.companyId, req.query?.companyName);
-    const [adjustmentCount, returnCount, messageCount, rejectedOrders] = await Promise.all([
-      isDistributorRole(req.user?.role) ? Promise.resolve(0) : InventoryMovementModel.countDocuments({ movementType: "ADJUSTMENT" }),
-      ReturnClaimModel.countDocuments(buildReturnScope(req)),
-      MessageModel.countDocuments(),
-      SalesOrderModel.countDocuments({ ...buildOrderScope(req), status: "rejected" }),
-    ]);
-
-    return res.json({ ok: true, adjustmentCount, returnCount, messageCount, rejectedOrders });
-  } catch (_e) {
+    const payload = await buildOverviewPayload(req);
+    return res.json({
+      ok: true,
+      adjustmentCount: 0,
+      returnCount: payload.dashboard?.headline?.returnClaimsCount || 0,
+      messageCount: payload.dashboard?.headline?.messagesCount || 0,
+      missingPod: payload.dashboard?.headline?.podMissing || 0,
+    });
+  } catch (_error) {
     return res.status(500).json({ ok: false, message: "Failed to load compliance report" });
+  }
+});
+
+router.get("/distributors", requireAuth, async (req, res) => {
+  try {
+    const payload = await buildOverviewPayload(req);
+    return res.json({ ok: true, distributors: payload.dashboard?.tables?.distributorRows || [] });
+  } catch (_error) {
+    return res.status(500).json({ ok: false, message: "Failed to load distributor report" });
+  }
+});
+
+router.get("/exceptions", requireAuth, async (req, res) => {
+  try {
+    const payload = await buildOverviewPayload(req);
+    return res.json({ ok: true, alerts: payload.dashboard?.tables?.alertRows || [] });
+  } catch (_error) {
+    return res.status(500).json({ ok: false, message: "Failed to load exception report" });
+  }
+});
+
+router.get("/team-performance", requireAuth, async (req, res) => {
+  try {
+    const payload = await buildOverviewPayload(req);
+    return res.json({ ok: true, rows: payload.dashboard?.tables?.teamRows || [] });
+  } catch (_error) {
+    return res.status(500).json({ ok: false, message: "Failed to load team performance report" });
   }
 });
 
@@ -827,34 +1015,45 @@ router.get("/procurement", requireAuth, async (req, res) => {
     startDate.setDate(startDate.getDate() - 6);
 
     const [supplierTotal, supplierActive, purchaseAgg, recentPurchases, trendAgg] = await Promise.all([
-      UserModel.countDocuments({ ...companyQuery(req, req.query?.companyId, req.query?.companyName), role: { $regex: /supplier/i } }),
-      UserModel.countDocuments({ ...companyQuery(req, req.query?.companyId, req.query?.companyName), role: { $regex: /supplier/i }, status: "active" }),
-      InventoryMovementModel.aggregate([{ $match: { movementType: "PURCHASE_IN" } }, { $group: { _id: null, count: { $sum: 1 }, quantity: { $sum: "$quantity" } } }]),
-      InventoryMovementModel.find({ movementType: "PURCHASE_IN" }).sort({ createdAt: -1 }).limit(5).lean(),
+      UserModel.countDocuments({ role: { $regex: /supplier/i } }),
+      UserModel.countDocuments({ role: { $regex: /supplier/i }, status: "active" }),
+      InventoryMovementModel.aggregate([
+        { $match: { movementType: "PURCHASE_IN" } },
+        { $group: { _id: null, count: { $sum: 1 }, quantity: { $sum: "$quantity" } } },
+      ]),
+      InventoryMovementModel.find({ movementType: "PURCHASE_IN" })
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean(),
       InventoryMovementModel.aggregate([
         { $match: { movementType: "PURCHASE_IN", createdAt: { $gte: startDate } } },
-        { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, quantity: { $sum: "$quantity" }, count: { $sum: 1 } } },
+        {
+          $group: {
+            _id: {
+              y: { $year: "$createdAt" },
+              m: { $month: "$createdAt" },
+              d: { $dayOfMonth: "$createdAt" },
+            },
+            quantity: { $sum: "$quantity" },
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { "_id.y": 1, "_id.m": 1, "_id.d": 1 } },
       ]),
     ]);
 
-    const trendMap = trendAgg.reduce((acc, row) => {
-      acc[row._id] = { quantity: safeNumber(row.quantity), count: safeNumber(row.count) };
-      return acc;
-    }, {});
-
-    const trendDates = Array.from({ length: 7 }, (_, index) => {
-      const date = new Date(startDate);
-      date.setDate(startDate.getDate() + index);
-      return date;
+    return res.json({
+      ok: true,
+      totals: {
+        suppliers: supplierTotal,
+        activeSuppliers: supplierActive,
+        purchaseCount: purchaseAgg[0]?.count || 0,
+        purchaseQuantity: purchaseAgg[0]?.quantity || 0,
+      },
+      recentPurchases,
+      trend: trendAgg.map((row) => ({ label: `${row._id.d}/${row._id.m}`, quantity: row.quantity, count: row.count })),
     });
-
-    const inboundTrend = trendDates.map((date) => {
-      const key = date.toISOString().slice(0, 10);
-      return { label: date.toLocaleDateString("en-US", { weekday: "short" }), quantity: trendMap[key]?.quantity || 0, count: trendMap[key]?.count || 0 };
-    });
-
-    return res.json({ ok: true, kpis: { totalSuppliers: supplierTotal, activeSuppliers: supplierActive, totalReceipts: purchaseAgg?.[0]?.count || 0, totalQuantity: safeNumber(purchaseAgg?.[0]?.quantity) }, recentPurchases, inboundTrend });
-  } catch (_e) {
+  } catch (_error) {
     return res.status(500).json({ ok: false, message: "Failed to load procurement report" });
   }
 });

@@ -2,18 +2,18 @@
 
 import UserDashboardShell from "../../components/userDashboardShell";
 import { userDashboardSearchItems } from "../../searchItems";
-import { LiveTrackingModule } from "../../../../src/modules/liveTracking";
+import ReportsCommandCenter from "../../../../src/modules/reports/ReportsCommandCenter";
 
-export default function DistributorLiveTrackingPage() {
+export default function DistributorReportsPage() {
   return (
     <UserDashboardShell
-      title="Distributor Live Tracking"
-      subtitle="Track related salesmen and orderbookers in real-time."
+      title="Distributor Reports"
+      subtitle="Territory-level performance, recovery, and team intelligence."
       roleKey="Distributor"
       links={userDashboardSearchItems.distributor || []}
       showAccountCards
     >
-      <LiveTrackingModule playbackBasePath="/dashboards/distributor/live-tracking/playback" />
+      <ReportsCommandCenter viewer="distributor" />
     </UserDashboardShell>
   );
 }

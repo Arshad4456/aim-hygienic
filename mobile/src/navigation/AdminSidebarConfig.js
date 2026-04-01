@@ -159,13 +159,7 @@ export const ADMIN_SIDEBAR_MODULES = [
   { type: 'link', key: 'messages', title: 'Messages', modulePath: 'messages' },
   { type: 'link', key: 'live-tracking', title: 'User Live Tracking', modulePath: 'live-tracking' },
   { type: 'group', key: 'reports', title: 'Reports', children: [
-    { title: 'Module Overview', modulePath: 'reports' },
-    { title: 'Sales', modulePath: 'reports/sales' },
-    { title: 'Finance', modulePath: 'reports/finance' },
-    { title: 'Logistics', modulePath: 'reports/logistics' },
-    { title: 'Inventory', modulePath: 'reports/inventory' },
-    { title: 'HR', modulePath: 'reports/hr' },
-    { title: 'Compliance', modulePath: 'reports/compliance' },
+    { title: 'Command Center', modulePath: 'reports' },
   ] },
   { type: 'group', key: 'settings', title: 'Settings', children: [
     { title: 'Account Settings', modulePath: 'settings' },
