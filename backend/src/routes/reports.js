@@ -978,17 +978,8 @@ async function gatherReportBundle(req) {
     .sort({ orderDate: -1, createdAt: -1 })
     .limit(2500)
     .lean();
-  const fallbackOrders = orders.length
-    ? []
-    : await SalesOrderModel.find(buildSalesOrderMatch(scope, periodRange, { includeDate: false }))
-      .select("orderNo saleType sourceType customerName customerId distributorName distributorId territoryName territoryId zoneName zoneId regionName regionId fieldName salesmanId orderBookerId fromEntityName fromEntityRole status orderDate createdAt updatedAt toWarehouseName totalAmount items podUrl proofOfDeliveryImageUrl dispatchedAt deliveredAt invoiceNo")
-      .sort({ orderDate: -1, createdAt: -1 })
-      .limit(2500)
-      .lean();
-  const scopedOrders = orders.length ? orders : fallbackOrders;
-  const usedOrderFallback = !orders.length && fallbackOrders.length > 0;
 
-  const warehouseHints = Array.from(new Set(scopedOrders.map((item) => item.toWarehouseName).filter(Boolean)));
+  const warehouseHints = Array.from(new Set(orders.map((item) => item.toWarehouseName).filter(Boolean)));
 
   const [
     primaryPayments,
@@ -1025,28 +1016,27 @@ async function gatherReportBundle(req) {
     ? await ReceiptModel.find(receiptFilter).sort({ paymentDate: -1, createdAt: -1 }).limit(1500).lean()
     : [];
 
-  const saleBreakdown = buildSaleBreakdown(scopedOrders);
-  const statusMix = buildStatusMix(scopedOrders);
-  const leaderboards = buildLeaderboards(scopedOrders, users);
-  const productPerformance = buildProductPerformance(scopedOrders);
+  const saleBreakdown = buildSaleBreakdown(orders);
+  const statusMix = buildStatusMix(orders);
+  const leaderboards = buildLeaderboards(orders, users);
+  const productPerformance = buildProductPerformance(orders);
   const inventorySnapshot = buildInventorySnapshot(inventoryMovements, products);
   const expenseSnapshot = buildExpenseSnapshot(expenses);
   const teamSnapshot = buildTeamSnapshot(users);
   const recoverySnapshot = buildRecoverySnapshot(primaryPayments, secondaryPayments, receipts);
   const returnsSnapshot = buildReturnsSnapshot(returnClaims, inventorySnapshot);
-  const deliverySnapshot = buildDeliverySnapshot(scopedOrders);
+  const deliverySnapshot = buildDeliverySnapshot(orders);
   const insights = buildInsightMessages({ saleBreakdown, inventorySnapshot, recoverySnapshot, expenseSnapshot, teamSnapshot, deliverySnapshot, leaderboards, returnsSnapshot });
-  const alerts = buildAlerts({ inventorySnapshot, recoverySnapshot, deliverySnapshot, returnsSnapshot, saleBreakdown, orders: scopedOrders });
-  const activity = buildRecentActivity(scopedOrders, receipts, expenses);
-  const companySummary = buildCompanySummary(users, scopedOrders);
+  const alerts = buildAlerts({ inventorySnapshot, recoverySnapshot, deliverySnapshot, returnsSnapshot, saleBreakdown, orders });
+  const activity = buildRecentActivity(orders, receipts, expenses);
+  const companySummary = buildCompanySummary(users, orders);
 
   return {
     scope,
     periodRange,
     models,
     users,
-    orders: scopedOrders,
-    usedOrderFallback,
+    orders,
     receipts,
     expenses,
     primaryPayments,
@@ -1074,7 +1064,7 @@ async function gatherReportBundle(req) {
 }
 
 function buildOverviewPayload(bundle) {
-  const { scope, periodRange, saleBreakdown, inventorySnapshot, expenseSnapshot, teamSnapshot, recoverySnapshot, deliverySnapshot, returnsSnapshot, alerts, leaderboards, activity, companySummary, warehouses, vehicles, transfers, insights, usedOrderFallback } = bundle;
+  const { scope, periodRange, saleBreakdown, inventorySnapshot, expenseSnapshot, teamSnapshot, recoverySnapshot, deliverySnapshot, returnsSnapshot, alerts, leaderboards, activity, companySummary, warehouses, vehicles, transfers, insights } = bundle;
   const totalOrders = saleBreakdown.primary.orders + saleBreakdown.secondary.orders;
   const totalRevenue = saleBreakdown.primary.amount + saleBreakdown.secondary.amount;
 
@@ -1092,7 +1082,7 @@ function buildOverviewPayload(bundle) {
         : "Monitor company performance across sales, returns, inventory, suppliers, customers, distributors, delivery, expenses, areas, and exceptions.",
     },
     spotlight: [
-      { key: "revenue", label: "Total Revenue", value: formatCurrency(totalRevenue), helper: usedOrderFallback ? `${formatNumber(totalOrders)} orders in accessible history` : `${formatNumber(totalOrders)} orders in ${periodRange.label.toLowerCase()}`, tone: "emerald" },
+      { key: "revenue", label: "Total Revenue", value: formatCurrency(totalRevenue), helper: `${formatNumber(totalOrders)} orders in ${periodRange.label.toLowerCase()}`, tone: "emerald" },
       { key: "primary", label: "Primary Sales", value: formatCurrency(saleBreakdown.primary.amount), helper: `${formatNumber(saleBreakdown.primary.orders)} distributor-facing orders`, tone: "sky" },
       { key: "secondary", label: "Secondary Sales", value: formatCurrency(saleBreakdown.secondary.amount), helper: `${formatNumber(saleBreakdown.secondary.orders)} market execution orders`, tone: "indigo" },
       { key: "outstanding", label: "Outstanding", value: formatCurrency(recoverySnapshot.outstanding), helper: `${formatNumber(recoverySnapshot.overdueRows.length)} overdue records`, tone: "rose" },
