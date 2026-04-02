@@ -10,6 +10,7 @@ const StockTransfer = require("../models/StockTransfer");
 const Vehicle = require("../models/Vehicle");
 const Message = require("../models/Message");
 const ReturnClaim = require("../models/ReturnClaim");
+const WarehouseTransaction = require("../models/WarehouseTransaction");
 const SalesOrder = require("../models/SalesOrder");
 const Receipt = require("../models/Receipt");
 const PrimaryPayment = require("../models/PrimaryPayment");
@@ -37,6 +38,10 @@ function asText(value) {
 function safeNumber(value) {
   return Number.isFinite(Number(value)) ? Number(value) : 0;
 }
+
+const ORDER_TRANSACTION_TYPE = "SALE_STOCK";
+const PRIMARY_SOURCE_ROLES = ["brand manager"];
+const SECONDARY_SOURCE_ROLES = ["distributor", "order booker", "orderbooker", "customer", "salesman"];
 
 function formatNumber(value) {
   return safeNumber(value).toLocaleString("en-PK");
@@ -324,6 +329,8 @@ async function getScopedModels(req, requestedCompanyId = "", requestedCompanyNam
       VehicleModel: Vehicle,
       MessageModel: Message,
       ReturnClaimModel: ReturnClaim,
+      WarehouseTransactionModel: WarehouseTransaction,
+      orderBaseMatch: {},
       SalesOrderModel: SalesOrder,
       ReceiptModel: Receipt,
       PrimaryPaymentModel: PrimaryPayment,
@@ -355,6 +362,8 @@ async function getScopedModels(req, requestedCompanyId = "", requestedCompanyNam
       VehicleModel: Vehicle,
       MessageModel: Message,
       ReturnClaimModel: ReturnClaim,
+      WarehouseTransactionModel: WarehouseTransaction,
+      orderBaseMatch: { companyId: scopedCompanyId },
       SalesOrderModel: SalesOrder,
       ReceiptModel: Receipt,
       PrimaryPaymentModel: PrimaryPayment,
@@ -373,13 +382,13 @@ async function getScopedModels(req, requestedCompanyId = "", requestedCompanyNam
   }
 
   const tenantDb = mongoose.connection.useDb(dbName, { useCache: true });
-  const tenantSalesOrderCollectionName = SalesOrder.collection?.name || "salesorders";
-  let usePrimarySalesOrders = false;
+  const tenantOrderCollectionName = WarehouseTransaction.collection?.name || "warehousetransactions";
+  let usePrimaryOrders = false;
   try {
-    const hasTenantSalesOrders = await tenantDb.db.listCollections({ name: tenantSalesOrderCollectionName }).hasNext();
-    usePrimarySalesOrders = !hasTenantSalesOrders;
+    const hasTenantOrders = await tenantDb.db.listCollections({ name: tenantOrderCollectionName }).hasNext();
+    usePrimaryOrders = !hasTenantOrders;
   } catch (_error) {
-    usePrimarySalesOrders = false;
+    usePrimaryOrders = false;
   }
 
   return {
@@ -394,8 +403,9 @@ async function getScopedModels(req, requestedCompanyId = "", requestedCompanyNam
     VehicleModel: getModelFromDb(tenantDb, Vehicle),
     MessageModel: getModelFromDb(tenantDb, Message),
     ReturnClaimModel: getModelFromDb(tenantDb, ReturnClaim),
-    SalesOrderModel: usePrimarySalesOrders ? SalesOrder : getModelFromDb(tenantDb, SalesOrder),
-    salesOrderBaseMatch: usePrimarySalesOrders ? { companyId: scopedCompanyId } : {},
+    WarehouseTransactionModel: usePrimaryOrders ? WarehouseTransaction : getModelFromDb(tenantDb, WarehouseTransaction),
+    orderBaseMatch: usePrimaryOrders ? { companyId: scopedCompanyId } : {},
+    SalesOrderModel: usePrimaryOrders ? SalesOrder : getModelFromDb(tenantDb, SalesOrder),
     ReceiptModel: getModelFromDb(tenantDb, Receipt),
     PrimaryPaymentModel: getModelFromDb(tenantDb, PrimaryPayment),
     SecondaryPaymentModel: getModelFromDb(tenantDb, SecondaryPayment),
@@ -413,7 +423,7 @@ async function getScopedModels(req, requestedCompanyId = "", requestedCompanyNam
 }
 
 function scopedOrderQuery(models, scope, query = {}) {
-  const base = { ...(models?.salesOrderBaseMatch || {}), ...(query || {}) };
+  const base = { ...(models?.orderBaseMatch || {}), ...(query || {}) };
   return distributorOrderScope(scope, base);
 }
 
@@ -469,10 +479,12 @@ function distributorOrderScope(scope, base = {}) {
   const or = [];
   if (scope.distributorId) or.push({ distributorId: scope.distributorId });
   if (scope.territoryName) or.push({ territoryName: scope.territoryName });
+  if (scope.territoryName) or.push({ territory: scope.territoryName });
   if (scope.teamUserTextIds?.length) {
     or.push({ customerId: { $in: scope.teamUserTextIds } });
     or.push({ orderBookerId: { $in: scope.teamUserTextIds } });
     or.push({ salesmanId: { $in: scope.teamUserTextIds } });
+    or.push({ createdBy: { $in: scope.teamUserTextIds.map(toObjectId).filter(Boolean) } });
   }
   if (!or.length) return { ...base, _id: null };
   return addOrScope(base, or);
@@ -526,17 +538,17 @@ function distributorMessageScope(scope, base = {}) {
 }
 
 async function getScopedOrderRefs(models, scope, currentRange) {
-  const match = scopedOrderQuery(models, scope, applyDateFilter({}, "createdAt", currentRange));
-  const rows = await models.SalesOrderModel.find(match).select("_id orderNo").limit(5000).lean();
+  const match = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE }, "transactionAt", currentRange));
+  const rows = await models.WarehouseTransactionModel.find(match).select("_id transactionCode").limit(5000).lean();
   return {
     orderIds: rows.map((row) => row._id).filter(Boolean),
-    orderNos: rows.map((row) => row.orderNo).filter(Boolean),
+    orderNos: rows.map((row) => row.transactionCode).filter(Boolean),
   };
 }
 
 async function buildDashboardModule(models, scope, currentRange, previousRange, currentLabel, previousLabel) {
-  const currentOrderMatch = scopedOrderQuery(models, scope, applyDateFilter({}, "createdAt", currentRange));
-  const previousOrderMatch = scopedOrderQuery(models, scope, applyDateFilter({}, "createdAt", previousRange));
+  const currentOrderMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE }, "transactionAt", currentRange));
+  const previousOrderMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE }, "transactionAt", previousRange));
   const currentExpenseMatch = distributorExpenseScope(scope, applyDateFilter({}, "createdAt", currentRange));
   const previousExpenseMatch = distributorExpenseScope(scope, applyDateFilter({}, "createdAt", previousRange));
 
@@ -549,17 +561,17 @@ async function buildDashboardModule(models, scope, currentRange, previousRange, 
     recentOrders,
     statusMix,
   ] = await Promise.all([
-    models.SalesOrderModel.countDocuments(currentOrderMatch),
-    models.SalesOrderModel.countDocuments(previousOrderMatch),
+    models.WarehouseTransactionModel.countDocuments(currentOrderMatch),
+    models.WarehouseTransactionModel.countDocuments(previousOrderMatch),
     models.ExpenseModel.aggregate([{ $match: currentExpenseMatch }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
     models.ExpenseModel.aggregate([{ $match: previousExpenseMatch }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
     scope.isDistributor
       ? models.UserModel.countDocuments(addOrScope({}, [scope.territoryName ? { territoryName: scope.territoryName } : null, scope.distributorId ? { distributorId: scope.distributorId } : null]))
       : models.UserModel.countDocuments(),
-    models.SalesOrderModel.find(currentOrderMatch).sort({ createdAt: -1 }).limit(5).select("orderNo customerName status totalAmount createdAt territoryName").lean(),
-    models.SalesOrderModel.aggregate([
+    models.WarehouseTransactionModel.find(currentOrderMatch).sort({ transactionAt: -1 }).limit(5).select("transactionCode toEntityName requestStatus grandTotal transactionAt territory").lean(),
+    models.WarehouseTransactionModel.aggregate([
       { $match: currentOrderMatch },
-      { $group: { _id: "$status", count: { $sum: 1 }, amount: { $sum: "$totalAmount" } } },
+      { $group: { _id: "$requestStatus", count: { $sum: 1 }, amount: { $sum: "$grandTotal" } } },
       { $sort: { count: -1 } },
     ]),
   ]);
@@ -597,12 +609,12 @@ async function buildDashboardModule(models, scope, currentRange, previousRange, 
           { key: "createdAt", label: "Created" },
         ],
         recentOrders.map((row) => ({
-          orderNo: row.orderNo || "—",
-          customerName: row.customerName || "—",
-          territoryName: row.territoryName || "—",
-          status: titleCase(row.status),
-          totalAmount: formatCurrency(row.totalAmount),
-          createdAt: formatDate(row.createdAt),
+          orderNo: row.transactionCode || "—",
+          customerName: row.toEntityName || "—",
+          territoryName: row.territory || "—",
+          status: titleCase(row.requestStatus),
+          totalAmount: formatCurrency(row.grandTotal),
+          createdAt: formatDate(row.transactionAt),
         })),
         recentOrders.length,
         "Latest order activity that needs business attention."
@@ -832,12 +844,12 @@ async function buildTerritoryModule(models, scope, currentRange, previousRange, 
 }
 
 async function buildSalesModule(models, scope, currentRange, previousRange, currentLabel, previousLabel) {
-  const currentMatch = scopedOrderQuery(models, scope, applyDateFilter({}, "createdAt", currentRange));
-  const previousMatch = scopedOrderQuery(models, scope, applyDateFilter({}, "createdAt", previousRange));
-  const primaryMatch = scopedOrderQuery(models, scope, applyDateFilter({ saleType: "primary" }, "createdAt", currentRange));
-  const secondaryMatch = scopedOrderQuery(models, scope, applyDateFilter({ saleType: "secondary" }, "createdAt", currentRange));
-  const primaryPreviousMatch = scopedOrderQuery(models, scope, applyDateFilter({ saleType: "primary" }, "createdAt", previousRange));
-  const secondaryPreviousMatch = scopedOrderQuery(models, scope, applyDateFilter({ saleType: "secondary" }, "createdAt", previousRange));
+  const currentMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE }, "transactionAt", currentRange));
+  const previousMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE }, "transactionAt", previousRange));
+  const primaryMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE, requestSourceRole: { $in: PRIMARY_SOURCE_ROLES } }, "transactionAt", currentRange));
+  const secondaryMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE, requestSourceRole: { $in: SECONDARY_SOURCE_ROLES } }, "transactionAt", currentRange));
+  const primaryPreviousMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE, requestSourceRole: { $in: PRIMARY_SOURCE_ROLES } }, "transactionAt", previousRange));
+  const secondaryPreviousMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE, requestSourceRole: { $in: SECONDARY_SOURCE_ROLES } }, "transactionAt", previousRange));
   const claimBase = scope.isDistributor
     ? await getScopedOrderRefs(models, scope, currentRange).then((scopedOrders) => (
         scopedOrders.orderIds?.length || scopedOrders.orderNos?.length
@@ -872,21 +884,21 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
     returnStatusAgg,
     returnRecentClaims,
   ] = await Promise.all([
-    models.SalesOrderModel.countDocuments(currentMatch),
-    models.SalesOrderModel.countDocuments(previousMatch),
-    models.SalesOrderModel.aggregate([{ $match: currentMatch }, { $group: { _id: null, total: { $sum: "$totalAmount" }, units: { $sum: { $sum: "$items.quantity" } } } }]),
-    models.SalesOrderModel.aggregate([{ $match: previousMatch }, { $group: { _id: null, total: { $sum: "$totalAmount" }, units: { $sum: { $sum: "$items.quantity" } } } }]),
-    models.SalesOrderModel.aggregate([{ $match: currentMatch }, { $group: { _id: "$status", count: { $sum: 1 }, total: { $sum: "$totalAmount" } } }, { $sort: { count: -1 } }]),
-    models.SalesOrderModel.aggregate([{ $match: currentMatch }, { $group: { _id: { $ifNull: ["$territoryName", "Unassigned"] }, count: { $sum: 1 }, total: { $sum: "$totalAmount" } } }, { $sort: { total: -1 } }, { $limit: 8 }]),
-    models.SalesOrderModel.find(currentMatch).sort({ createdAt: -1 }).limit(8).select("orderNo customerName territoryName status totalAmount saleType createdAt").lean(),
-    models.SalesOrderModel.countDocuments(primaryMatch),
-    models.SalesOrderModel.countDocuments(primaryPreviousMatch),
-    models.SalesOrderModel.aggregate([{ $match: primaryMatch }, { $group: { _id: "$status", count: { $sum: 1 }, total: { $sum: "$totalAmount" } } }, { $sort: { count: -1 } }]),
-    models.SalesOrderModel.find(primaryMatch).sort({ createdAt: -1 }).limit(8).select("orderNo customerName territoryName status totalAmount createdAt").lean(),
-    models.SalesOrderModel.countDocuments(secondaryMatch),
-    models.SalesOrderModel.countDocuments(secondaryPreviousMatch),
-    models.SalesOrderModel.aggregate([{ $match: secondaryMatch }, { $group: { _id: "$status", count: { $sum: 1 }, total: { $sum: "$totalAmount" } } }, { $sort: { count: -1 } }]),
-    models.SalesOrderModel.find(secondaryMatch).sort({ createdAt: -1 }).limit(8).select("orderNo customerName territoryName status totalAmount createdAt").lean(),
+    models.WarehouseTransactionModel.countDocuments(currentMatch),
+    models.WarehouseTransactionModel.countDocuments(previousMatch),
+    models.WarehouseTransactionModel.aggregate([{ $match: currentMatch }, { $group: { _id: null, total: { $sum: "$grandTotal" }, units: { $sum: { $sum: "$items.totalPacks" } } } }]),
+    models.WarehouseTransactionModel.aggregate([{ $match: previousMatch }, { $group: { _id: null, total: { $sum: "$grandTotal" }, units: { $sum: { $sum: "$items.totalPacks" } } } }]),
+    models.WarehouseTransactionModel.aggregate([{ $match: currentMatch }, { $group: { _id: "$requestStatus", count: { $sum: 1 }, total: { $sum: "$grandTotal" } } }, { $sort: { count: -1 } }]),
+    models.WarehouseTransactionModel.aggregate([{ $match: currentMatch }, { $group: { _id: { $ifNull: ["$territory", "Unassigned"] }, count: { $sum: 1 }, total: { $sum: "$grandTotal" } } }, { $sort: { total: -1 } }, { $limit: 8 }]),
+    models.WarehouseTransactionModel.find(currentMatch).sort({ transactionAt: -1 }).limit(8).select("transactionCode toEntityName territory requestStatus grandTotal requestSourceRole transactionAt").lean(),
+    models.WarehouseTransactionModel.countDocuments(primaryMatch),
+    models.WarehouseTransactionModel.countDocuments(primaryPreviousMatch),
+    models.WarehouseTransactionModel.aggregate([{ $match: primaryMatch }, { $group: { _id: "$requestStatus", count: { $sum: 1 }, total: { $sum: "$grandTotal" } } }, { $sort: { count: -1 } }]),
+    models.WarehouseTransactionModel.find(primaryMatch).sort({ transactionAt: -1 }).limit(8).select("transactionCode toEntityName territory requestStatus grandTotal transactionAt").lean(),
+    models.WarehouseTransactionModel.countDocuments(secondaryMatch),
+    models.WarehouseTransactionModel.countDocuments(secondaryPreviousMatch),
+    models.WarehouseTransactionModel.aggregate([{ $match: secondaryMatch }, { $group: { _id: "$requestStatus", count: { $sum: 1 }, total: { $sum: "$grandTotal" } } }, { $sort: { count: -1 } }]),
+    models.WarehouseTransactionModel.find(secondaryMatch).sort({ transactionAt: -1 }).limit(8).select("transactionCode toEntityName territory requestStatus grandTotal transactionAt").lean(),
     models.ReturnClaimModel.countDocuments(currentClaimsMatch),
     models.ReturnClaimModel.countDocuments(previousClaimsMatch),
     models.ReturnClaimModel.aggregate([{ $match: claimBase }, { $group: { _id: "$status", count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
@@ -896,7 +908,7 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
   const currentRevenue = safeNumber(currentSalesAgg?.[0]?.total);
   const previousRevenue = safeNumber(previousSalesAgg?.[0]?.total);
   const currentUnits = safeNumber(currentSalesAgg?.[0]?.units);
-  const pendingOrders = statusAgg.find((row) => row._id === "pending")?.count || 0;
+  const pendingOrders = statusAgg.find((row) => String(row._id || "").toUpperCase() === "PENDING")?.count || 0;
   const topTerritory = territoryAgg[0]?._id || "—";
 
   const segments = [
@@ -907,11 +919,11 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
       badge: 'Primary flow',
       kpis: [
         { label: 'Orders', value: formatNumber(primaryCurrentCount), note: currentLabel },
-        { label: 'Pending', value: formatNumber(primaryStatusAgg.find((row) => row._id === 'pending')?.count), note: 'Need approval' },
-        { label: 'Approved value', value: formatCurrency(primaryStatusAgg.find((row) => row._id === 'approved')?.total), note: 'Approved total' },
+        { label: 'Pending', value: formatNumber(primaryStatusAgg.find((row) => String(row._id || "").toUpperCase() === 'PENDING')?.count), note: 'Need approval' },
+        { label: 'Approved value', value: formatCurrency(primaryStatusAgg.find((row) => String(row._id || "").toUpperCase() === 'APPROVED')?.total), note: 'Approved total' },
         { label: 'Trend', value: compareBlock(primaryCurrentCount, primaryPreviousCount, currentLabel, previousLabel).deltaText, note: `${currentLabel} vs ${previousLabel}` },
       ],
-      alerts: [primaryStatusAgg.find((row) => row._id === 'pending')?.count ? 'Primary orders are waiting for approval action.' : ''],
+      alerts: [primaryStatusAgg.find((row) => String(row._id || "").toUpperCase() === 'PENDING')?.count ? 'Primary orders are waiting for approval action.' : ''],
       insights: [primaryCurrentCount ? 'Primary order flow can be matched against payment and warehouse readiness.' : 'No primary order activity found in this period.'],
       tables: [
         table(
@@ -932,12 +944,12 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
             { key: 'createdAt', label: 'Created' },
           ],
           primaryRecentOrders.map((row) => ({
-            orderNo: row.orderNo || '—',
-            customerName: row.customerName || '—',
-            territoryName: row.territoryName || '—',
-            status: titleCase(row.status),
-            totalAmount: formatCurrency(row.totalAmount),
-            createdAt: formatDate(row.createdAt),
+            orderNo: row.transactionCode || '—',
+            customerName: row.toEntityName || '—',
+            territoryName: row.territory || '—',
+            status: titleCase(row.requestStatus),
+            totalAmount: formatCurrency(row.grandTotal),
+            createdAt: formatDate(row.transactionAt),
           })),
           primaryCurrentCount,
           'Latest primary orders captured in the current scope.'
@@ -951,11 +963,11 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
       badge: 'Secondary flow',
       kpis: [
         { label: 'Orders', value: formatNumber(secondaryCurrentCount), note: currentLabel },
-        { label: 'Pending', value: formatNumber(secondaryStatusAgg.find((row) => row._id === 'pending')?.count), note: 'Pipeline backlog' },
-        { label: 'Delivered value', value: formatCurrency(secondaryStatusAgg.find((row) => row._id === 'delivered')?.total), note: 'Delivered total' },
+        { label: 'Pending', value: formatNumber(secondaryStatusAgg.find((row) => String(row._id || "").toUpperCase() === 'PENDING')?.count), note: 'Pipeline backlog' },
+        { label: 'Delivered value', value: formatCurrency(secondaryStatusAgg.find((row) => String(row._id || "").toUpperCase() === 'DELIVERED')?.total), note: 'Delivered total' },
         { label: 'Trend', value: compareBlock(secondaryCurrentCount, secondaryPreviousCount, currentLabel, previousLabel).deltaText, note: `${currentLabel} vs ${previousLabel}` },
       ],
-      alerts: [secondaryStatusAgg.find((row) => row._id === 'pending')?.count > 10 ? 'Secondary order backlog is high and needs action.' : ''],
+      alerts: [secondaryStatusAgg.find((row) => String(row._id || "").toUpperCase() === 'PENDING')?.count > 10 ? 'Secondary order backlog is high and needs action.' : ''],
       insights: [topTerritory !== '—' ? `${topTerritory} is leading the current secondary order movement.` : 'Territory performance will appear when order volume is available.'],
       tables: [
         table(
@@ -976,12 +988,12 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
             { key: 'createdAt', label: 'Created' },
           ],
           secondaryRecentOrders.map((row) => ({
-            orderNo: row.orderNo || '—',
-            customerName: row.customerName || '—',
-            territoryName: row.territoryName || '—',
-            status: titleCase(row.status),
-            totalAmount: formatCurrency(row.totalAmount),
-            createdAt: formatDate(row.createdAt),
+            orderNo: row.transactionCode || '—',
+            customerName: row.toEntityName || '—',
+            territoryName: row.territory || '—',
+            status: titleCase(row.requestStatus),
+            totalAmount: formatCurrency(row.grandTotal),
+            createdAt: formatDate(row.transactionAt),
           })),
           secondaryCurrentCount,
           'Latest secondary orders captured in the current scope.'
@@ -1076,13 +1088,13 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
           { key: 'createdAt', label: 'Created' },
         ],
         recentOrders.map((row) => ({
-          orderNo: row.orderNo || '—',
-          customerName: row.customerName || '—',
-          saleType: titleCase(row.saleType || 'secondary'),
-          territoryName: row.territoryName || '—',
-          status: titleCase(row.status),
-          totalAmount: formatCurrency(row.totalAmount),
-          createdAt: formatDate(row.createdAt),
+          orderNo: row.transactionCode || '—',
+          customerName: row.toEntityName || '—',
+          saleType: titleCase(row.requestSourceRole || 'secondary'),
+          territoryName: row.territory || '—',
+          status: titleCase(row.requestStatus),
+          totalAmount: formatCurrency(row.grandTotal),
+          createdAt: formatDate(row.transactionAt),
         })),
         currentOrders,
         'Latest order lines that can be reviewed immediately.'
@@ -1262,11 +1274,11 @@ async function buildProcurementModule(models, scope, currentRange, previousRange
 }
 
 async function buildLogisticsModule(models, scope, currentRange, previousRange, currentLabel, previousLabel) {
-  const currentDispatchMatch = scopedOrderQuery(models, scope, applyDateFilter({ status: { $in: ["dispatched", "delivered"] } }, "createdAt", currentRange));
-  const previousDispatchMatch = scopedOrderQuery(models, scope, applyDateFilter({ status: { $in: ["dispatched", "delivered"] } }, "createdAt", previousRange));
+  const currentDispatchMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE, requestStatus: { $in: ["DISPATCHED", "DELIVERED"] } }, "transactionAt", currentRange));
+  const previousDispatchMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE, requestStatus: { $in: ["DISPATCHED", "DELIVERED"] } }, "transactionAt", previousRange));
   const [currentDispatches, previousDispatches, vehicles, tripAgg, recentTrips, maintenanceCount] = await Promise.all([
-    models.SalesOrderModel.countDocuments(currentDispatchMatch),
-    models.SalesOrderModel.countDocuments(previousDispatchMatch),
+    models.WarehouseTransactionModel.countDocuments(currentDispatchMatch),
+    models.WarehouseTransactionModel.countDocuments(previousDispatchMatch),
     models.VehicleModel.countDocuments(),
     models.VehicleTripModel.aggregate([{ $match: applyDateFilter({}, "createdAt", currentRange) }, { $group: { _id: "$tripType", distance: { $sum: "$distance" }, count: { $sum: 1 } } }, { $sort: { distance: -1 } }]),
     models.VehicleTripModel.find(applyDateFilter({}, "createdAt", currentRange)).sort({ createdAt: -1 }).limit(8).select("tripType fromPlace toPlace distance tripDate").lean(),
@@ -1759,13 +1771,13 @@ async function buildVehicleModule(models, scope, currentRange, previousRange, cu
 }
 
 async function buildPrimaryOrderRequestModule(models, scope, currentRange, previousRange, currentLabel, previousLabel) {
-  const currentMatch = scopedOrderQuery(models, scope, applyDateFilter({ saleType: "primary" }, "createdAt", currentRange));
-  const previousMatch = scopedOrderQuery(models, scope, applyDateFilter({ saleType: "primary" }, "createdAt", previousRange));
+  const currentMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE, requestSourceRole: { $in: PRIMARY_SOURCE_ROLES } }, "transactionAt", currentRange));
+  const previousMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE, requestSourceRole: { $in: PRIMARY_SOURCE_ROLES } }, "transactionAt", previousRange));
   const [currentOrders, previousOrders, statusAgg, recentRows] = await Promise.all([
-    models.SalesOrderModel.countDocuments(currentMatch),
-    models.SalesOrderModel.countDocuments(previousMatch),
-    models.SalesOrderModel.aggregate([{ $match: scopedOrderQuery(models, scope, { saleType: "primary" }) }, { $group: { _id: "$status", count: { $sum: 1 }, total: { $sum: "$totalAmount" } } }, { $sort: { count: -1 } }]),
-    models.SalesOrderModel.find(currentMatch).sort({ createdAt: -1 }).limit(8).select("orderNo customerName status totalAmount createdAt").lean(),
+    models.WarehouseTransactionModel.countDocuments(currentMatch),
+    models.WarehouseTransactionModel.countDocuments(previousMatch),
+    models.WarehouseTransactionModel.aggregate([{ $match: scopedOrderQuery(models, scope, { transactionType: ORDER_TRANSACTION_TYPE, requestSourceRole: { $in: PRIMARY_SOURCE_ROLES } }) }, { $group: { _id: "$requestStatus", count: { $sum: 1 }, total: { $sum: "$grandTotal" } } }, { $sort: { count: -1 } }]),
+    models.WarehouseTransactionModel.find(currentMatch).sort({ transactionAt: -1 }).limit(8).select("transactionCode toEntityName requestStatus grandTotal transactionAt").lean(),
   ]);
 
   return moduleCard("primary-order-request", "Primary Order Request", "Primary order requests and their approval velocity for distributor operations.", {
@@ -1774,11 +1786,11 @@ async function buildPrimaryOrderRequestModule(models, scope, currentRange, previ
     kpis: [
       { label: "Requests", value: formatNumber(currentOrders), note: currentLabel },
       { label: "Top state", value: titleCase(statusAgg[0]?._id || "—"), note: statusAgg[0] ? formatNumber(statusAgg[0].count) : "No requests" },
-      { label: "Approved value", value: formatCurrency(statusAgg.find((row) => row._id === "approved")?.total), note: "Approved total" },
-      { label: "Pending", value: formatNumber(statusAgg.find((row) => row._id === "pending")?.count), note: "Awaiting approval" },
+      { label: "Approved value", value: formatCurrency(statusAgg.find((row) => String(row._id || "").toUpperCase() === "APPROVED")?.total), note: "Approved total" },
+      { label: "Pending", value: formatNumber(statusAgg.find((row) => String(row._id || "").toUpperCase() === "PENDING")?.count), note: "Awaiting approval" },
     ],
     comparison: compareBlock(currentOrders, previousOrders, currentLabel, previousLabel),
-    alerts: [statusAgg.find((row) => row._id === "pending")?.count ? "Primary order requests are waiting for approval." : ""],
+    alerts: [statusAgg.find((row) => String(row._id || "").toUpperCase() === "PENDING")?.count ? "Primary order requests are waiting for approval." : ""],
     insights: [currentOrders ? "Primary order requests can be compared against payment and receipt flow." : "No primary order requests found in this period."],
     tables: [
       table(
@@ -1798,11 +1810,11 @@ async function buildPrimaryOrderRequestModule(models, scope, currentRange, previ
           { key: "createdAt", label: "Created" },
         ],
         recentRows.map((row) => ({
-          orderNo: row.orderNo || "—",
-          customerName: row.customerName || "—",
-          status: titleCase(row.status),
-          totalAmount: formatCurrency(row.totalAmount),
-          createdAt: formatDate(row.createdAt),
+          orderNo: row.transactionCode || "—",
+          customerName: row.toEntityName || "—",
+          status: titleCase(row.requestStatus),
+          totalAmount: formatCurrency(row.grandTotal),
+          createdAt: formatDate(row.transactionAt),
         })),
         currentOrders,
         "Latest primary order requests in distributor scope."
@@ -1813,8 +1825,8 @@ async function buildPrimaryOrderRequestModule(models, scope, currentRange, previ
 
 async function buildReportsMeta(models, scope, modules, currentRange, previousRange, currentLabel, previousLabel) {
   const [currentOrders, previousOrders, currentExpensesAgg, previousExpensesAgg] = await Promise.all([
-    models.SalesOrderModel.countDocuments(scopedOrderQuery(models, scope, applyDateFilter({}, "createdAt", currentRange))),
-    models.SalesOrderModel.countDocuments(scopedOrderQuery(models, scope, applyDateFilter({}, "createdAt", previousRange))),
+    models.WarehouseTransactionModel.countDocuments(scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE }, "transactionAt", currentRange))),
+    models.WarehouseTransactionModel.countDocuments(scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE }, "transactionAt", previousRange))),
     models.ExpenseModel.aggregate([{ $match: distributorExpenseScope(scope, applyDateFilter({}, "createdAt", currentRange)) }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
     models.ExpenseModel.aggregate([{ $match: distributorExpenseScope(scope, applyDateFilter({}, "createdAt", previousRange)) }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
   ]);
