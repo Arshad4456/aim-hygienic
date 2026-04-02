@@ -3,10 +3,10 @@
 import AdminShell from "../../components/AdminShell";
 import { ReportFocusView } from "../../../components/reports/ReportsWorkspace";
 
-export default function ComplianceReportPage() {
+export default function AdminReportFocusPage({ params }) {
   return (
     <AdminShell title="Reports" user={null}>
-      <ReportFocusView moduleKey="compliance" basePath="/dashboards/admin/reports" />
+      <ReportFocusView moduleKey={params?.moduleKey} basePath="/dashboards/admin/reports" />
     </AdminShell>
   );
 }

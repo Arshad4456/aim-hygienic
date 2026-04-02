@@ -12,7 +12,22 @@ const Vehicle = require("../models/Vehicle");
 const Product = require("../models/Product");
 const Message = require("../models/Message");
 const ReturnClaim = require("../models/ReturnClaim");
+const SalesOrder = require("../models/SalesOrder");
+const Receipt = require("../models/Receipt");
+const PrimaryPayment = require("../models/PrimaryPayment");
+const SecondaryPayment = require("../models/SecondaryPayment");
+const Loan = require("../models/Loan");
+const LoanPayment = require("../models/LoanPayment");
+const Region = require("../models/Region");
+const Zone = require("../models/Zone");
+const Area = require("../models/Area");
+const Field = require("../models/Field");
+const VehicleTrip = require("../models/VehicleTrip");
+const VehicleRefuel = require("../models/VehicleRefuel");
+const VehicleMaintenance = require("../models/VehicleMaintenance");
+const { getLocationModelsForDb } = require("../modules/location/models");
 const { toTenantDatabaseName } = require("../utils/tenantDatabases");
+const { buildMasterReport, buildFocusedReport } = require("../services/reportsMaster");
 
 const router = express.Router();
 
@@ -118,6 +133,20 @@ async function getScopedReportModels(req, requestedCompanyId = "", requestedComp
       ProductModel: Product,
       MessageModel: Message,
       ReturnClaimModel: ReturnClaim,
+      SalesOrderModel: SalesOrder,
+      ReceiptModel: Receipt,
+      PrimaryPaymentModel: PrimaryPayment,
+      SecondaryPaymentModel: SecondaryPayment,
+      LoanModel: Loan,
+      LoanPaymentModel: LoanPayment,
+      RegionModel: Region,
+      ZoneModel: Zone,
+      AreaModel: Area,
+      FieldModel: Field,
+      VehicleTripModel: VehicleTrip,
+      VehicleRefuelModel: VehicleRefuel,
+      VehicleMaintenanceModel: VehicleMaintenance,
+      locationModels: null,
     };
   }
   const dbName = await resolveTenantDbName(scopedCompanyId, scopedCompanyName);
@@ -133,6 +162,20 @@ async function getScopedReportModels(req, requestedCompanyId = "", requestedComp
       ProductModel: Product,
       MessageModel: Message,
       ReturnClaimModel: ReturnClaim,
+      SalesOrderModel: SalesOrder,
+      ReceiptModel: Receipt,
+      PrimaryPaymentModel: PrimaryPayment,
+      SecondaryPaymentModel: SecondaryPayment,
+      LoanModel: Loan,
+      LoanPaymentModel: LoanPayment,
+      RegionModel: Region,
+      ZoneModel: Zone,
+      AreaModel: Area,
+      FieldModel: Field,
+      VehicleTripModel: VehicleTrip,
+      VehicleRefuelModel: VehicleRefuel,
+      VehicleMaintenanceModel: VehicleMaintenance,
+      locationModels: null,
     };
   }
   const tenantDb = mongoose.connection.useDb(dbName, { useCache: true });
@@ -147,8 +190,51 @@ async function getScopedReportModels(req, requestedCompanyId = "", requestedComp
     ProductModel: getModelFromDb(tenantDb, Product),
     MessageModel: getModelFromDb(tenantDb, Message),
     ReturnClaimModel: getModelFromDb(tenantDb, ReturnClaim),
+    SalesOrderModel: getModelFromDb(tenantDb, SalesOrder),
+    ReceiptModel: getModelFromDb(tenantDb, Receipt),
+    PrimaryPaymentModel: getModelFromDb(tenantDb, PrimaryPayment),
+    SecondaryPaymentModel: getModelFromDb(tenantDb, SecondaryPayment),
+    LoanModel: getModelFromDb(tenantDb, Loan),
+    LoanPaymentModel: getModelFromDb(tenantDb, LoanPayment),
+    RegionModel: getModelFromDb(tenantDb, Region),
+    ZoneModel: getModelFromDb(tenantDb, Zone),
+    AreaModel: getModelFromDb(tenantDb, Area),
+    FieldModel: getModelFromDb(tenantDb, Field),
+    VehicleTripModel: getModelFromDb(tenantDb, VehicleTrip),
+    VehicleRefuelModel: getModelFromDb(tenantDb, VehicleRefuel),
+    VehicleMaintenanceModel: getModelFromDb(tenantDb, VehicleMaintenance),
+    locationModels: getLocationModelsForDb(tenantDb),
   };
 }
+
+
+router.get("/master", requireAuth, async (req, res) => {
+  try {
+    const report = await buildMasterReport(req, {
+      period: String(req.query?.period || "month").toLowerCase(),
+      companyId: req.query?.companyId || "",
+      companyName: req.query?.companyName || "",
+    });
+    return res.json({ ok: true, ...report });
+  } catch (error) {
+    const status = Number(error?.statusCode || error?.status || 500);
+    return res.status(status).json({ ok: false, message: error.message || "Failed to build master report" });
+  }
+});
+
+router.get("/focus/:moduleKey", requireAuth, async (req, res) => {
+  try {
+    const report = await buildFocusedReport(req, req.params.moduleKey, {
+      period: String(req.query?.period || "month").toLowerCase(),
+      companyId: req.query?.companyId || "",
+      companyName: req.query?.companyName || "",
+    });
+    return res.json({ ok: true, ...report });
+  } catch (error) {
+    const status = Number(error?.statusCode || error?.status || 500);
+    return res.status(status).json({ ok: false, message: error.message || "Failed to build focused report" });
+  }
+});
 
 router.get("/overview", requireAuth, async (req, res) => {
   try {

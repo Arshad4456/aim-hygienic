@@ -2118,6 +2118,20 @@
     ]
   },
   {
+    "key": "distributor:reports",
+    "role": "distributor",
+    "modulePath": "reports",
+    "route": "/dashboards/distributor/reports",
+    "title": "Reports",
+    "screenFile": "screens/distributor/reports/ReportsScreen.js",
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/reports/master?period=${period}"
+      }
+    ]
+  },
+  {
     "key": "distributor:settings",
     "role": "distributor",
     "modulePath": "settings",

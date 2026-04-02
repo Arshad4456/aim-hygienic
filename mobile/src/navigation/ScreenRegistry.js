@@ -107,6 +107,7 @@ import S101 from '../screens/distributor/return-stock/ReturnStockScreen';
 import S102 from '../screens/distributor/settings/change-password/ChangePasswordScreen';
 import S103 from '../screens/distributor/settings/SettingsScreen';
 import S103a from '../screens/distributor/live-tracking/LiveTrackingScreen';
+import S103b from '../screens/distributor/reports/ReportsScreen';
 import S104 from '../screens/fieldSM/DashboardScreen';
 import S105 from '../screens/hrAssistant/DashboardScreen';
 import S106 from '../screens/kpo/DashboardScreen';
@@ -239,6 +240,7 @@ export const screenRegistry = {
   'distributor:return-stock': S101,
   'distributor:settings/change-password': S102,
   'distributor:live-tracking': S103a,
+  'distributor:reports': S103b,
   'distributor:settings': S103,
   'fieldSM:dashboard': S104,
   'hrAssistant:dashboard': S105,
