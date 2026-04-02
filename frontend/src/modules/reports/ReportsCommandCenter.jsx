@@ -18,6 +18,33 @@ const PERIODS = [
   ["ytd", "YTD"],
 ];
 
+const REQUIRED_SPOTLIGHT_CARDS = [
+  {
+    key: "revenue",
+    label: "Total Revenue",
+    value: "Rs 0",
+    helper: "0 orders in year to date",
+  },
+  {
+    key: "primary",
+    label: "Primary Sales",
+    value: "Rs 0",
+    helper: "0 distributor-facing orders",
+  },
+  {
+    key: "secondary",
+    label: "Secondary Sales",
+    value: "Rs 0",
+    helper: "0 market execution orders",
+  },
+  {
+    key: "delivery",
+    label: "POD Compliance",
+    value: "0%",
+    helper: "0 deliveries missing POD",
+  },
+];
+
 export default function ReportsCommandCenter({ basePath = "/dashboards/admin/reports", isDistributor = false }) {
   const { companies, companyDocId, setCompanyDocId, selectedCompany, canSelectCompany } = useCompanyScope();
   const [data, setData] = useState(null);
@@ -75,7 +102,13 @@ export default function ReportsCommandCenter({ basePath = "/dashboards/admin/rep
     setTimeout(() => win.print(), 250);
   }
 
-  const spotlight = data?.spotlight || [];
+  const spotlight = useMemo(() => {
+    const raw = Array.isArray(data?.spotlight) ? data.spotlight : [];
+    const byKey = new Map(raw.map((item) => [item?.key, item]));
+    const ensured = REQUIRED_SPOTLIGHT_CARDS.map((fallback) => byKey.get(fallback.key) || fallback);
+    const extras = raw.filter((item) => item?.key && !REQUIRED_SPOTLIGHT_CARDS.some((required) => required.key === item.key));
+    return [...ensured, ...extras];
+  }, [data?.spotlight]);
   const navigator = data?.navigator || [];
   const alerts = data?.alerts || [];
   const leaderboards = data?.leaderboards || {};
