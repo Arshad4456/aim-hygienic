@@ -373,6 +373,15 @@ async function getScopedModels(req, requestedCompanyId = "", requestedCompanyNam
   }
 
   const tenantDb = mongoose.connection.useDb(dbName, { useCache: true });
+  const tenantSalesOrderCollectionName = SalesOrder.collection?.name || "salesorders";
+  let usePrimarySalesOrders = false;
+  try {
+    const hasTenantSalesOrders = await tenantDb.db.listCollections({ name: tenantSalesOrderCollectionName }).hasNext();
+    usePrimarySalesOrders = !hasTenantSalesOrders;
+  } catch (_error) {
+    usePrimarySalesOrders = false;
+  }
+
   return {
     CompanyModel: Company,
     UserModel: getModelFromDb(tenantDb, User),
@@ -385,7 +394,8 @@ async function getScopedModels(req, requestedCompanyId = "", requestedCompanyNam
     VehicleModel: getModelFromDb(tenantDb, Vehicle),
     MessageModel: getModelFromDb(tenantDb, Message),
     ReturnClaimModel: getModelFromDb(tenantDb, ReturnClaim),
-    SalesOrderModel: getModelFromDb(tenantDb, SalesOrder),
+    SalesOrderModel: usePrimarySalesOrders ? SalesOrder : getModelFromDb(tenantDb, SalesOrder),
+    salesOrderBaseMatch: usePrimarySalesOrders ? { companyId: scopedCompanyId } : {},
     ReceiptModel: getModelFromDb(tenantDb, Receipt),
     PrimaryPaymentModel: getModelFromDb(tenantDb, PrimaryPayment),
     SecondaryPaymentModel: getModelFromDb(tenantDb, SecondaryPayment),
@@ -400,6 +410,11 @@ async function getScopedModels(req, requestedCompanyId = "", requestedCompanyNam
     VehicleMaintenanceModel: getModelFromDb(tenantDb, VehicleMaintenance),
     locationModels: getLocationModelsForDb(tenantDb),
   };
+}
+
+function scopedOrderQuery(models, scope, query = {}) {
+  const base = { ...(models?.salesOrderBaseMatch || {}), ...(query || {}) };
+  return distributorOrderScope(scope, base);
 }
 
 async function resolveRoleScope(models, rawScope) {
@@ -511,7 +526,7 @@ function distributorMessageScope(scope, base = {}) {
 }
 
 async function getScopedOrderRefs(models, scope, currentRange) {
-  const match = distributorOrderScope(scope, applyDateFilter({}, "createdAt", currentRange));
+  const match = scopedOrderQuery(models, scope, applyDateFilter({}, "createdAt", currentRange));
   const rows = await models.SalesOrderModel.find(match).select("_id orderNo").limit(5000).lean();
   return {
     orderIds: rows.map((row) => row._id).filter(Boolean),
@@ -520,8 +535,8 @@ async function getScopedOrderRefs(models, scope, currentRange) {
 }
 
 async function buildDashboardModule(models, scope, currentRange, previousRange, currentLabel, previousLabel) {
-  const currentOrderMatch = distributorOrderScope(scope, applyDateFilter({}, "createdAt", currentRange));
-  const previousOrderMatch = distributorOrderScope(scope, applyDateFilter({}, "createdAt", previousRange));
+  const currentOrderMatch = scopedOrderQuery(models, scope, applyDateFilter({}, "createdAt", currentRange));
+  const previousOrderMatch = scopedOrderQuery(models, scope, applyDateFilter({}, "createdAt", previousRange));
   const currentExpenseMatch = distributorExpenseScope(scope, applyDateFilter({}, "createdAt", currentRange));
   const previousExpenseMatch = distributorExpenseScope(scope, applyDateFilter({}, "createdAt", previousRange));
 
@@ -817,12 +832,12 @@ async function buildTerritoryModule(models, scope, currentRange, previousRange, 
 }
 
 async function buildSalesModule(models, scope, currentRange, previousRange, currentLabel, previousLabel) {
-  const currentMatch = distributorOrderScope(scope, applyDateFilter({}, "createdAt", currentRange));
-  const previousMatch = distributorOrderScope(scope, applyDateFilter({}, "createdAt", previousRange));
-  const primaryMatch = distributorOrderScope(scope, applyDateFilter({ saleType: "primary" }, "createdAt", currentRange));
-  const secondaryMatch = distributorOrderScope(scope, applyDateFilter({ saleType: "secondary" }, "createdAt", currentRange));
-  const primaryPreviousMatch = distributorOrderScope(scope, applyDateFilter({ saleType: "primary" }, "createdAt", previousRange));
-  const secondaryPreviousMatch = distributorOrderScope(scope, applyDateFilter({ saleType: "secondary" }, "createdAt", previousRange));
+  const currentMatch = scopedOrderQuery(models, scope, applyDateFilter({}, "createdAt", currentRange));
+  const previousMatch = scopedOrderQuery(models, scope, applyDateFilter({}, "createdAt", previousRange));
+  const primaryMatch = scopedOrderQuery(models, scope, applyDateFilter({ saleType: "primary" }, "createdAt", currentRange));
+  const secondaryMatch = scopedOrderQuery(models, scope, applyDateFilter({ saleType: "secondary" }, "createdAt", currentRange));
+  const primaryPreviousMatch = scopedOrderQuery(models, scope, applyDateFilter({ saleType: "primary" }, "createdAt", previousRange));
+  const secondaryPreviousMatch = scopedOrderQuery(models, scope, applyDateFilter({ saleType: "secondary" }, "createdAt", previousRange));
   const claimBase = scope.isDistributor
     ? await getScopedOrderRefs(models, scope, currentRange).then((scopedOrders) => (
         scopedOrders.orderIds?.length || scopedOrders.orderNos?.length
@@ -1247,8 +1262,8 @@ async function buildProcurementModule(models, scope, currentRange, previousRange
 }
 
 async function buildLogisticsModule(models, scope, currentRange, previousRange, currentLabel, previousLabel) {
-  const currentDispatchMatch = distributorOrderScope(scope, applyDateFilter({ status: { $in: ["dispatched", "delivered"] } }, "createdAt", currentRange));
-  const previousDispatchMatch = distributorOrderScope(scope, applyDateFilter({ status: { $in: ["dispatched", "delivered"] } }, "createdAt", previousRange));
+  const currentDispatchMatch = scopedOrderQuery(models, scope, applyDateFilter({ status: { $in: ["dispatched", "delivered"] } }, "createdAt", currentRange));
+  const previousDispatchMatch = scopedOrderQuery(models, scope, applyDateFilter({ status: { $in: ["dispatched", "delivered"] } }, "createdAt", previousRange));
   const [currentDispatches, previousDispatches, vehicles, tripAgg, recentTrips, maintenanceCount] = await Promise.all([
     models.SalesOrderModel.countDocuments(currentDispatchMatch),
     models.SalesOrderModel.countDocuments(previousDispatchMatch),
@@ -1310,7 +1325,7 @@ async function buildFinanceModule(models, scope, currentRange, previousRange, cu
     models.ReceiptModel.aggregate([{ $match: previousReceiptMatch }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
     models.ReceiptModel.aggregate([{ $match: distributorReceiptScope(scope, scopedOrders.orderIds, {}) }, { $group: { _id: "$status", count: { $sum: 1 }, total: { $sum: "$amount" } } }, { $sort: { count: -1 } }]),
     models.ReceiptModel.find(currentReceiptMatch).sort({ createdAt: -1 }).limit(8).select("receiptNo payerName paymentMethod amount status paymentDate linkedInvoiceNo").lean(),
-    models.SalesOrderModel.find(distributorOrderScope(scope, { invoiceNo: { $exists: true, $ne: "" } })).sort({ invoiceGeneratedAt: -1 }).limit(8).select("invoiceNo orderNo customerName status totalAmount invoiceGeneratedAt").lean(),
+    models.SalesOrderModel.find(scopedOrderQuery(models, scope, { invoiceNo: { $exists: true, $ne: "" } })).sort({ invoiceGeneratedAt: -1 }).limit(8).select("invoiceNo orderNo customerName status totalAmount invoiceGeneratedAt").lean(),
   ]);
 
   const currentTotal = safeNumber(currentReceiptsAgg?.[0]?.total);
@@ -1511,7 +1526,7 @@ async function buildComplianceModule(models, scope, currentRange, previousRange,
     models.ReturnClaimModel.countDocuments(previousMatch),
     models.ReturnClaimModel.aggregate([{ $match: claimBase }, { $group: { _id: "$status", count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
     models.ReturnClaimModel.find(currentMatch).sort({ createdAt: -1 }).limit(8).select("orderNo customerName reason status quantity createdAt").lean(),
-    models.SalesOrderModel.countDocuments(distributorOrderScope(scope, { status: "delivered", podUrl: { $exists: true, $ne: "" } })),
+    models.SalesOrderModel.countDocuments(scopedOrderQuery(models, scope, { status: "delivered", podUrl: { $exists: true, $ne: "" } })),
   ]);
 
   return moduleCard(scope.isDistributor ? "return-stock" : "compliance", scope.isDistributor ? "Return Stock" : "Quality & Compliance", scope.isDistributor ? "Return requests, resolution pace, and returned order visibility in the territory." : "Returns, customer issues, and proof-of-delivery backed compliance visibility.", {
@@ -1744,12 +1759,12 @@ async function buildVehicleModule(models, scope, currentRange, previousRange, cu
 }
 
 async function buildPrimaryOrderRequestModule(models, scope, currentRange, previousRange, currentLabel, previousLabel) {
-  const currentMatch = distributorOrderScope(scope, applyDateFilter({ saleType: "primary" }, "createdAt", currentRange));
-  const previousMatch = distributorOrderScope(scope, applyDateFilter({ saleType: "primary" }, "createdAt", previousRange));
+  const currentMatch = scopedOrderQuery(models, scope, applyDateFilter({ saleType: "primary" }, "createdAt", currentRange));
+  const previousMatch = scopedOrderQuery(models, scope, applyDateFilter({ saleType: "primary" }, "createdAt", previousRange));
   const [currentOrders, previousOrders, statusAgg, recentRows] = await Promise.all([
     models.SalesOrderModel.countDocuments(currentMatch),
     models.SalesOrderModel.countDocuments(previousMatch),
-    models.SalesOrderModel.aggregate([{ $match: distributorOrderScope(scope, { saleType: "primary" }) }, { $group: { _id: "$status", count: { $sum: 1 }, total: { $sum: "$totalAmount" } } }, { $sort: { count: -1 } }]),
+    models.SalesOrderModel.aggregate([{ $match: scopedOrderQuery(models, scope, { saleType: "primary" }) }, { $group: { _id: "$status", count: { $sum: 1 }, total: { $sum: "$totalAmount" } } }, { $sort: { count: -1 } }]),
     models.SalesOrderModel.find(currentMatch).sort({ createdAt: -1 }).limit(8).select("orderNo customerName status totalAmount createdAt").lean(),
   ]);
 
@@ -1798,8 +1813,8 @@ async function buildPrimaryOrderRequestModule(models, scope, currentRange, previ
 
 async function buildReportsMeta(models, scope, modules, currentRange, previousRange, currentLabel, previousLabel) {
   const [currentOrders, previousOrders, currentExpensesAgg, previousExpensesAgg] = await Promise.all([
-    models.SalesOrderModel.countDocuments(distributorOrderScope(scope, applyDateFilter({}, "createdAt", currentRange))),
-    models.SalesOrderModel.countDocuments(distributorOrderScope(scope, applyDateFilter({}, "createdAt", previousRange))),
+    models.SalesOrderModel.countDocuments(scopedOrderQuery(models, scope, applyDateFilter({}, "createdAt", currentRange))),
+    models.SalesOrderModel.countDocuments(scopedOrderQuery(models, scope, applyDateFilter({}, "createdAt", previousRange))),
     models.ExpenseModel.aggregate([{ $match: distributorExpenseScope(scope, applyDateFilter({}, "createdAt", currentRange)) }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
     models.ExpenseModel.aggregate([{ $match: distributorExpenseScope(scope, applyDateFilter({}, "createdAt", previousRange)) }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
   ]);
