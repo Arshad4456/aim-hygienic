@@ -214,17 +214,36 @@ function table(title, columns, rows, count, description = "") {
   };
 }
 
+function ensureNarrativeRows(rows, fallbackText) {
+  const normalized = Array.isArray(rows) ? rows.filter(Boolean) : [];
+  return normalized.length ? normalized : [fallbackText];
+}
+
+function normalizeSegment(segment = {}, moduleTitle = "Module") {
+  return {
+    key: asText(segment.key) || `segment-${Date.now()}`,
+    title: segment.title || moduleTitle,
+    description: segment.description || "",
+    badge: segment.badge || "Detailed analysis",
+    kpis: Array.isArray(segment.kpis) ? segment.kpis : [],
+    alerts: ensureNarrativeRows(segment.alerts, `No critical alerts in ${segment.title || moduleTitle} for the selected period.`),
+    insights: ensureNarrativeRows(segment.insights, `Performance is stable in ${segment.title || moduleTitle}. Review the detailed tables for action opportunities.`),
+    tables: Array.isArray(segment.tables) ? segment.tables : [],
+  };
+}
+
 function moduleCard(key, title, description, data = {}) {
   return {
     key,
     title,
     description,
-    routeSegment: key,
+    routeSegment: data.routeSegment || key,
     kpis: Array.isArray(data.kpis) ? data.kpis : [],
     comparison: data.comparison || compareBlock(0, 0, "Current", "Previous"),
-    alerts: Array.isArray(data.alerts) ? data.alerts.filter(Boolean) : [],
-    insights: Array.isArray(data.insights) ? data.insights.filter(Boolean) : [],
+    alerts: ensureNarrativeRows(data.alerts, `No critical alerts in ${title} for the selected period.`),
+    insights: ensureNarrativeRows(data.insights, `Performance is stable in ${title}. Review the detailed tables for action opportunities.`),
     tables: Array.isArray(data.tables) ? data.tables : [],
+    segments: Array.isArray(data.segments) ? data.segments.map((segment) => normalizeSegment(segment, title)) : [],
     heroTone: data.heroTone || "indigo",
     badge: data.badge || "Operational intelligence",
   };
@@ -800,72 +819,261 @@ async function buildTerritoryModule(models, scope, currentRange, previousRange, 
 async function buildSalesModule(models, scope, currentRange, previousRange, currentLabel, previousLabel) {
   const currentMatch = distributorOrderScope(scope, applyDateFilter({}, "createdAt", currentRange));
   const previousMatch = distributorOrderScope(scope, applyDateFilter({}, "createdAt", previousRange));
-  const [currentOrders, previousOrders, currentSalesAgg, previousSalesAgg, statusAgg, territoryAgg, recentOrders] = await Promise.all([
+  const primaryMatch = distributorOrderScope(scope, applyDateFilter({ saleType: "primary" }, "createdAt", currentRange));
+  const secondaryMatch = distributorOrderScope(scope, applyDateFilter({ saleType: "secondary" }, "createdAt", currentRange));
+  const primaryPreviousMatch = distributorOrderScope(scope, applyDateFilter({ saleType: "primary" }, "createdAt", previousRange));
+  const secondaryPreviousMatch = distributorOrderScope(scope, applyDateFilter({ saleType: "secondary" }, "createdAt", previousRange));
+  const claimBase = scope.isDistributor
+    ? await getScopedOrderRefs(models, scope, currentRange).then((scopedOrders) => (
+        scopedOrders.orderIds?.length || scopedOrders.orderNos?.length
+          ? addOrScope({}, [
+              scopedOrders.orderIds?.length ? { orderId: { $in: scopedOrders.orderIds } } : null,
+              scopedOrders.orderNos?.length ? { orderNo: { $in: scopedOrders.orderNos } } : null,
+            ])
+          : { _id: null }
+      ))
+    : {};
+  const currentClaimsMatch = applyDateFilter(claimBase, "createdAt", currentRange);
+  const previousClaimsMatch = applyDateFilter(claimBase, "createdAt", previousRange);
+
+  const [
+    currentOrders,
+    previousOrders,
+    currentSalesAgg,
+    previousSalesAgg,
+    statusAgg,
+    territoryAgg,
+    recentOrders,
+    primaryCurrentCount,
+    primaryPreviousCount,
+    primaryStatusAgg,
+    primaryRecentOrders,
+    secondaryCurrentCount,
+    secondaryPreviousCount,
+    secondaryStatusAgg,
+    secondaryRecentOrders,
+    returnCurrentCount,
+    returnPreviousCount,
+    returnStatusAgg,
+    returnRecentClaims,
+  ] = await Promise.all([
     models.SalesOrderModel.countDocuments(currentMatch),
     models.SalesOrderModel.countDocuments(previousMatch),
     models.SalesOrderModel.aggregate([{ $match: currentMatch }, { $group: { _id: null, total: { $sum: "$totalAmount" }, units: { $sum: { $sum: "$items.quantity" } } } }]),
     models.SalesOrderModel.aggregate([{ $match: previousMatch }, { $group: { _id: null, total: { $sum: "$totalAmount" }, units: { $sum: { $sum: "$items.quantity" } } } }]),
     models.SalesOrderModel.aggregate([{ $match: currentMatch }, { $group: { _id: "$status", count: { $sum: 1 }, total: { $sum: "$totalAmount" } } }, { $sort: { count: -1 } }]),
     models.SalesOrderModel.aggregate([{ $match: currentMatch }, { $group: { _id: { $ifNull: ["$territoryName", "Unassigned"] }, count: { $sum: 1 }, total: { $sum: "$totalAmount" } } }, { $sort: { total: -1 } }, { $limit: 8 }]),
-    models.SalesOrderModel.find(currentMatch).sort({ createdAt: -1 }).limit(8).select("orderNo customerName territoryName status totalAmount createdAt").lean(),
+    models.SalesOrderModel.find(currentMatch).sort({ createdAt: -1 }).limit(8).select("orderNo customerName territoryName status totalAmount saleType createdAt").lean(),
+    models.SalesOrderModel.countDocuments(primaryMatch),
+    models.SalesOrderModel.countDocuments(primaryPreviousMatch),
+    models.SalesOrderModel.aggregate([{ $match: primaryMatch }, { $group: { _id: "$status", count: { $sum: 1 }, total: { $sum: "$totalAmount" } } }, { $sort: { count: -1 } }]),
+    models.SalesOrderModel.find(primaryMatch).sort({ createdAt: -1 }).limit(8).select("orderNo customerName territoryName status totalAmount createdAt").lean(),
+    models.SalesOrderModel.countDocuments(secondaryMatch),
+    models.SalesOrderModel.countDocuments(secondaryPreviousMatch),
+    models.SalesOrderModel.aggregate([{ $match: secondaryMatch }, { $group: { _id: "$status", count: { $sum: 1 }, total: { $sum: "$totalAmount" } } }, { $sort: { count: -1 } }]),
+    models.SalesOrderModel.find(secondaryMatch).sort({ createdAt: -1 }).limit(8).select("orderNo customerName territoryName status totalAmount createdAt").lean(),
+    models.ReturnClaimModel.countDocuments(currentClaimsMatch),
+    models.ReturnClaimModel.countDocuments(previousClaimsMatch),
+    models.ReturnClaimModel.aggregate([{ $match: claimBase }, { $group: { _id: "$status", count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
+    models.ReturnClaimModel.find(currentClaimsMatch).sort({ createdAt: -1 }).limit(8).select("orderNo customerName reason status quantity createdAt").lean(),
   ]);
 
   const currentRevenue = safeNumber(currentSalesAgg?.[0]?.total);
   const previousRevenue = safeNumber(previousSalesAgg?.[0]?.total);
   const currentUnits = safeNumber(currentSalesAgg?.[0]?.units);
+  const pendingOrders = statusAgg.find((row) => row._id === "pending")?.count || 0;
+  const topTerritory = territoryAgg[0]?._id || "—";
 
-  return moduleCard(scope.isDistributor ? "orders" : "sales", scope.isDistributor ? "Secondary Orders" : "Order Management", scope.isDistributor ? "Territory-scoped order performance, pipeline quality, and recent secondary order flow." : "Sales orders, pipeline status, and territory performance for business growth.", {
-    badge: scope.isDistributor ? "Territory orders" : "Sales performance",
-    heroTone: "emerald",
+  const segments = [
+    {
+      key: 'primary-orders',
+      title: 'Primary Orders',
+      description: 'Primary order requests, value flow, and approval pipeline visibility.',
+      badge: 'Primary flow',
+      kpis: [
+        { label: 'Orders', value: formatNumber(primaryCurrentCount), note: currentLabel },
+        { label: 'Pending', value: formatNumber(primaryStatusAgg.find((row) => row._id === 'pending')?.count), note: 'Need approval' },
+        { label: 'Approved value', value: formatCurrency(primaryStatusAgg.find((row) => row._id === 'approved')?.total), note: 'Approved total' },
+        { label: 'Trend', value: compareBlock(primaryCurrentCount, primaryPreviousCount, currentLabel, previousLabel).deltaText, note: `${currentLabel} vs ${previousLabel}` },
+      ],
+      alerts: [primaryStatusAgg.find((row) => row._id === 'pending')?.count ? 'Primary orders are waiting for approval action.' : ''],
+      insights: [primaryCurrentCount ? 'Primary order flow can be matched against payment and warehouse readiness.' : 'No primary order activity found in this period.'],
+      tables: [
+        table(
+          'Primary order status performance',
+          [{ key: 'status', label: 'Status' }, { key: 'count', label: 'Orders' }, { key: 'total', label: 'Order value' }],
+          primaryStatusAgg.map((row) => ({ status: titleCase(row._id), count: formatNumber(row.count), total: formatCurrency(row.total) })),
+          primaryStatusAgg.length,
+          'Primary order pipeline health by status.'
+        ),
+        table(
+          'Recent primary orders',
+          [
+            { key: 'orderNo', label: 'Order #' },
+            { key: 'customerName', label: 'Customer' },
+            { key: 'territoryName', label: 'Territory' },
+            { key: 'status', label: 'Status' },
+            { key: 'totalAmount', label: 'Amount' },
+            { key: 'createdAt', label: 'Created' },
+          ],
+          primaryRecentOrders.map((row) => ({
+            orderNo: row.orderNo || '—',
+            customerName: row.customerName || '—',
+            territoryName: row.territoryName || '—',
+            status: titleCase(row.status),
+            totalAmount: formatCurrency(row.totalAmount),
+            createdAt: formatDate(row.createdAt),
+          })),
+          primaryCurrentCount,
+          'Latest primary orders captured in the current scope.'
+        ),
+      ],
+    },
+    {
+      key: 'secondary-orders',
+      title: 'Secondary Orders',
+      description: 'Secondary order performance, territory momentum, and fulfillment quality.',
+      badge: 'Secondary flow',
+      kpis: [
+        { label: 'Orders', value: formatNumber(secondaryCurrentCount), note: currentLabel },
+        { label: 'Pending', value: formatNumber(secondaryStatusAgg.find((row) => row._id === 'pending')?.count), note: 'Pipeline backlog' },
+        { label: 'Delivered value', value: formatCurrency(secondaryStatusAgg.find((row) => row._id === 'delivered')?.total), note: 'Delivered total' },
+        { label: 'Trend', value: compareBlock(secondaryCurrentCount, secondaryPreviousCount, currentLabel, previousLabel).deltaText, note: `${currentLabel} vs ${previousLabel}` },
+      ],
+      alerts: [secondaryStatusAgg.find((row) => row._id === 'pending')?.count > 10 ? 'Secondary order backlog is high and needs action.' : ''],
+      insights: [topTerritory !== '—' ? `${topTerritory} is leading the current secondary order movement.` : 'Territory performance will appear when order volume is available.'],
+      tables: [
+        table(
+          'Secondary order status performance',
+          [{ key: 'status', label: 'Status' }, { key: 'count', label: 'Orders' }, { key: 'total', label: 'Order value' }],
+          secondaryStatusAgg.map((row) => ({ status: titleCase(row._id), count: formatNumber(row.count), total: formatCurrency(row.total) })),
+          secondaryStatusAgg.length,
+          'Secondary order pipeline health by status.'
+        ),
+        table(
+          'Recent secondary orders',
+          [
+            { key: 'orderNo', label: 'Order #' },
+            { key: 'customerName', label: 'Customer' },
+            { key: 'territoryName', label: 'Territory' },
+            { key: 'status', label: 'Status' },
+            { key: 'totalAmount', label: 'Amount' },
+            { key: 'createdAt', label: 'Created' },
+          ],
+          secondaryRecentOrders.map((row) => ({
+            orderNo: row.orderNo || '—',
+            customerName: row.customerName || '—',
+            territoryName: row.territoryName || '—',
+            status: titleCase(row.status),
+            totalAmount: formatCurrency(row.totalAmount),
+            createdAt: formatDate(row.createdAt),
+          })),
+          secondaryCurrentCount,
+          'Latest secondary orders captured in the current scope.'
+        ),
+      ],
+    },
+    {
+      key: 'return-stock-orders',
+      title: 'Return Stock Orders',
+      description: 'Return stock pressure, claim resolution pace, and recent return activity.',
+      badge: 'Return flow',
+      kpis: [
+        { label: 'Claims', value: formatNumber(returnCurrentCount), note: currentLabel },
+        { label: 'Requested', value: formatNumber(returnStatusAgg.find((row) => row._id === 'requested')?.count), note: 'Need review' },
+        { label: 'Resolved', value: formatNumber(returnStatusAgg.find((row) => row._id === 'resolved')?.count), note: 'Closed loop' },
+        { label: 'Trend', value: compareBlock(returnCurrentCount, returnPreviousCount, currentLabel, previousLabel).deltaText, note: `${currentLabel} vs ${previousLabel}` },
+      ],
+      alerts: [returnStatusAgg.find((row) => row._id === 'requested')?.count ? 'Return stock claims are waiting for review or approval.' : ''],
+      insights: [returnCurrentCount ? 'Return stock analysis can help reduce repeat damage and delivery issues.' : 'No return stock claims found in this period.'],
+      tables: [
+        table(
+          'Return stock status mix',
+          [{ key: 'status', label: 'Status' }, { key: 'count', label: 'Claims' }],
+          returnStatusAgg.map((row) => ({ status: titleCase(row._id), count: formatNumber(row.count) })),
+          returnStatusAgg.length,
+          'Return stock claim lifecycle visibility.'
+        ),
+        table(
+          'Recent return stock claims',
+          [
+            { key: 'orderNo', label: 'Order #' },
+            { key: 'customerName', label: 'Customer' },
+            { key: 'reason', label: 'Reason' },
+            { key: 'status', label: 'Status' },
+            { key: 'quantity', label: 'Qty' },
+            { key: 'createdAt', label: 'Created' },
+          ],
+          returnRecentClaims.map((row) => ({
+            orderNo: row.orderNo || '—',
+            customerName: row.customerName || '—',
+            reason: row.reason || '—',
+            status: titleCase(row.status),
+            quantity: formatNumber(row.quantity),
+            createdAt: formatDate(row.createdAt),
+          })),
+          returnCurrentCount,
+          'Latest return stock claims that need monitoring.'
+        ),
+      ],
+    },
+  ];
+
+  return moduleCard(scope.isDistributor ? 'orders' : 'sales', scope.isDistributor ? 'Order Management' : 'Order Management', 'Primary orders, secondary orders, and return stock visibility for stronger business control.', {
+    badge: scope.isDistributor ? 'Territory orders' : 'Sales performance',
+    heroTone: 'emerald',
     kpis: [
-      { label: "Orders", value: formatNumber(currentOrders), note: currentLabel },
-      { label: "Sales value", value: formatCurrency(currentRevenue), note: currentLabel },
-      { label: "Units ordered", value: formatNumber(currentUnits), note: "Line item volume" },
-      { label: "Top territory", value: territoryAgg[0]?._id || "—", note: territoryAgg[0] ? formatCurrency(territoryAgg[0].total) : "No sales" },
+      { label: 'Orders', value: formatNumber(currentOrders), note: currentLabel },
+      { label: 'Sales value', value: formatCurrency(currentRevenue), note: currentLabel },
+      { label: 'Units ordered', value: formatNumber(currentUnits), note: 'Line item volume' },
+      { label: 'Top territory', value: topTerritory, note: territoryAgg[0] ? formatCurrency(territoryAgg[0].total) : 'No sales' },
     ],
     comparison: compareBlock(currentRevenue, previousRevenue, currentLabel, previousLabel),
     alerts: [
-      statusAgg.find((row) => row._id === "pending")?.count > 10 ? "There is a high backlog of pending orders that needs action." : "",
-      currentRevenue < previousRevenue ? "Sales value is below the previous comparison period." : "",
+      pendingOrders > 10 ? 'There is a high backlog of pending orders that needs action.' : '',
+      currentRevenue < previousRevenue ? 'Sales value is below the previous comparison period.' : '',
     ],
-    insights: [territoryAgg[0]?._id ? `${territoryAgg[0]._id} is the top-performing territory by order value.` : ""],
+    insights: [topTerritory !== '—' ? `${topTerritory} is the top-performing territory by order value.` : ''],
     tables: [
       table(
-        "Order status performance",
-        [{ key: "status", label: "Status" }, { key: "count", label: "Orders" }, { key: "total", label: "Order value" }],
+        'Order status performance',
+        [{ key: 'status', label: 'Status' }, { key: 'count', label: 'Orders' }, { key: 'total', label: 'Order value' }],
         statusAgg.map((row) => ({ status: titleCase(row._id), count: formatNumber(row.count), total: formatCurrency(row.total) })),
         statusAgg.length,
-        "Pipeline health by order status."
+        'Pipeline health by order status.'
       ),
       table(
-        "Top territories",
-        [{ key: "territory", label: "Territory" }, { key: "count", label: "Orders" }, { key: "total", label: "Order value" }],
+        'Top territories',
+        [{ key: 'territory', label: 'Territory' }, { key: 'count', label: 'Orders' }, { key: 'total', label: 'Order value' }],
         territoryAgg.map((row) => ({ territory: row._id, count: formatNumber(row.count), total: formatCurrency(row.total) })),
         territoryAgg.length,
-        "Highest-value territories in the selected period."
+        'Highest-value territories in the selected period.'
       ),
       table(
-        "Recent orders",
+        'Recent orders',
         [
-          { key: "orderNo", label: "Order #" },
-          { key: "customerName", label: "Customer" },
-          { key: "territoryName", label: "Territory" },
-          { key: "status", label: "Status" },
-          { key: "totalAmount", label: "Amount" },
-          { key: "createdAt", label: "Created" },
+          { key: 'orderNo', label: 'Order #' },
+          { key: 'customerName', label: 'Customer' },
+          { key: 'saleType', label: 'Order type' },
+          { key: 'territoryName', label: 'Territory' },
+          { key: 'status', label: 'Status' },
+          { key: 'totalAmount', label: 'Amount' },
+          { key: 'createdAt', label: 'Created' },
         ],
         recentOrders.map((row) => ({
-          orderNo: row.orderNo || "—",
-          customerName: row.customerName || "—",
-          territoryName: row.territoryName || "—",
+          orderNo: row.orderNo || '—',
+          customerName: row.customerName || '—',
+          saleType: titleCase(row.saleType || 'secondary'),
+          territoryName: row.territoryName || '—',
           status: titleCase(row.status),
           totalAmount: formatCurrency(row.totalAmount),
           createdAt: formatDate(row.createdAt),
         })),
         currentOrders,
-        "Latest order lines that can be reviewed immediately."
+        'Latest order lines that can be reviewed immediately.'
       ),
     ],
+    segments,
   });
 }
 
@@ -1598,8 +1806,8 @@ async function buildReportsMeta(models, scope, modules, currentRange, previousRa
 
   const currentExpense = safeNumber(currentExpensesAgg?.[0]?.total);
   const previousExpense = safeNumber(previousExpensesAgg?.[0]?.total);
-  const alerts = modules.flatMap((module) => module.alerts || []).filter(Boolean);
-  const insights = modules.flatMap((module) => module.insights || []).filter(Boolean);
+  const alerts = uniq(modules.flatMap((module) => module.alerts || []).filter(Boolean));
+  const insights = uniq(modules.flatMap((module) => module.insights || []).filter(Boolean));
 
   return {
     headlineKpis: [
@@ -1610,8 +1818,8 @@ async function buildReportsMeta(models, scope, modules, currentRange, previousRa
     ],
     orderComparison: compareBlock(currentOrders, previousOrders, currentLabel, previousLabel),
     expenseComparison: compareBlock(currentExpense, previousExpense, currentLabel, previousLabel),
-    alerts: alerts.slice(0, 8),
-    insights: insights.slice(0, 8),
+    alerts: ensureNarrativeRows(alerts.slice(0, 8), `No critical alerts found in ${scope.scopeLabel || "current scope"} for the selected period.`),
+    insights: ensureNarrativeRows(insights.slice(0, 8), `Performance is stable across ${scope.scopeLabel || "current scope"}. Use module tables to find improvement opportunities.`),
     cards: modules.map(summarizeCard),
   };
 }

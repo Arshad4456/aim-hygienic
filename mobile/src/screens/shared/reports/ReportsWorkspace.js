@@ -32,7 +32,10 @@ export function ReportsHubScreen({ roleLabel = 'Reports' }) {
         const payload = response?.data || {};
         setData(payload);
         const firstKey = payload?.modules?.[0]?.key || '';
-        setSelectedKey((prev) => prev || firstKey);
+        setSelectedKey((prev) => {
+          const stillExists = (payload?.modules || []).some((module) => module.key === prev);
+          return stillExists ? prev : firstKey;
+        });
       })
       .catch((err) => {
         if (!mounted) return;
@@ -96,15 +99,24 @@ export function ReportsHubScreen({ roleLabel = 'Reports' }) {
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
       <Card style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>Alerts and insights</Text>
+        <Text style={styles.sectionHint}>Priority notes before drilling into module KPI cards.</Text>
+        <View style={styles.infoGrid}>
+          <InfoList title='Alerts' items={summary.alerts} emptyText='No important alerts in this period.' />
+          <InfoList title='What looks good' items={summary.insights} emptyText='Insights will appear when data is available.' />
+        </View>
+      </Card>
+
+      <Card style={styles.sectionCard}>
         <View style={styles.sectionHeadRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.sectionTitle}>KPI cards by module</Text>
-            <Text style={styles.sectionHint}>Tap any module card to load its detailed report below.</Text>
+            <Text style={styles.sectionHint}>Swipe these cards horizontally and tap any one to load its detailed report below.</Text>
           </View>
           <Pill text={`${modules.length} modules`} />
         </View>
 
-        <View style={styles.moduleGrid}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.moduleCarousel}>
           {(summary.cards || []).map((card) => {
             const active = selectedKey === card.key;
             return (
@@ -113,7 +125,10 @@ export function ReportsHubScreen({ roleLabel = 'Reports' }) {
                 onPress={() => setSelectedKey(card.key)}
                 style={[styles.moduleCard, active ? styles.moduleCardActive : null]}
               >
-                <Text style={[styles.moduleCardTitle, active ? styles.moduleCardTitleActive : null]}>{card.title}</Text>
+                <View style={styles.moduleCardTopRow}>
+                  <Text style={[styles.moduleCardTitle, active ? styles.moduleCardTitleActive : null]}>{card.title}</Text>
+                  <Pill text={`${card.alertCount || 0} alerts`} small inverse={active} />
+                </View>
                 <Text style={[styles.moduleCardDesc, active ? styles.moduleCardDescActive : null]}>{card.description}</Text>
                 <View style={[styles.moduleCardMetricBox, active ? styles.moduleCardMetricBoxActive : null]}>
                   <Text style={[styles.moduleCardMetricLabel, active ? styles.moduleCardMetricLabelActive : null]}>{card.primaryMetric?.label || 'Metric'}</Text>
@@ -121,13 +136,13 @@ export function ReportsHubScreen({ roleLabel = 'Reports' }) {
                   <Text style={[styles.moduleCardMetricNote, active ? styles.moduleCardMetricNoteActive : null]}>{card.primaryMetric?.note || card.badge}</Text>
                 </View>
                 <View style={styles.moduleCardFooter}>
-                  <Pill text={card.badge} small />
-                  <Text style={[styles.deltaText, deltaToneStyle(card.comparison?.tone)]}>{card.comparison?.deltaText || '0.0%'}</Text>
+                  <Pill text={card.badge} small inverse={active} />
+                  <Text style={[styles.deltaText, active ? styles.deltaTextActive : deltaToneStyle(card.comparison?.tone)]}>{card.comparison?.deltaText || '0.0%'}</Text>
                 </View>
               </Pressable>
             );
           })}
-        </View>
+        </ScrollView>
       </Card>
 
       <Card style={styles.sectionCard}>
@@ -136,14 +151,6 @@ export function ReportsHubScreen({ roleLabel = 'Reports' }) {
         <View style={styles.compareWrap}>
           <CompareBlock title='Orders' block={summary.orderComparison} />
           <CompareBlock title='Expenses' block={summary.expenseComparison} currency />
-        </View>
-      </Card>
-
-      <Card style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>Alerts and insights</Text>
-        <View style={styles.infoGrid}>
-          <InfoList title='Alerts' items={summary.alerts} emptyText='No important alerts in this period.' />
-          <InfoList title='What looks good' items={summary.insights} emptyText='Insights will appear when data is available.' />
         </View>
       </Card>
 
@@ -160,6 +167,13 @@ export function ReportModuleScreen({ moduleKey }) {
 
   useEffect(() => {
     let mounted = true;
+    if (!moduleKey) {
+      setLoading(false);
+      return () => {
+        mounted = false;
+      };
+    }
+
     setLoading(true);
     setError('');
 
@@ -213,6 +227,22 @@ export function ReportModuleScreen({ moduleKey }) {
 }
 
 function ModuleDetail({ module }) {
+  const segments = Array.isArray(module?.segments) ? module.segments.filter(Boolean) : [];
+  const [activeSegmentKey, setActiveSegmentKey] = useState(segments[0]?.key || '');
+
+  useEffect(() => {
+    setActiveSegmentKey(segments[0]?.key || '');
+  }, [module?.key, segments?.[0]?.key]);
+
+  const activeSegment = useMemo(
+    () => segments.find((segment) => segment.key === activeSegmentKey) || segments[0] || null,
+    [segments, activeSegmentKey]
+  );
+
+  const detailSource = activeSegment || module;
+  const alerts = withFallbackItems(detailSource?.alerts, `No critical alerts in ${detailSource?.title || module?.title || 'this module'} for the selected period.`);
+  const insights = withFallbackItems(detailSource?.insights, `Performance is stable in ${detailSource?.title || module?.title || 'this module'}. Review the detailed tables for action opportunities.`);
+
   return (
     <Card style={styles.sectionCard}>
       <View style={styles.moduleHeaderRow}>
@@ -226,8 +256,34 @@ function ModuleDetail({ module }) {
         </View>
       </View>
 
+      {segments.length ? (
+        <View style={styles.segmentSection}>
+          <Text style={styles.segmentLabel}>Order report options</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.segmentRow}>
+            {segments.map((segment) => {
+              const active = activeSegment?.key === segment.key;
+              return (
+                <Pressable
+                  key={segment.key}
+                  onPress={() => setActiveSegmentKey(segment.key)}
+                  style={[styles.segmentChip, active ? styles.segmentChipActive : null]}
+                >
+                  <Text style={[styles.segmentChipText, active ? styles.segmentChipTextActive : null]}>{segment.title}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+          {activeSegment?.description ? <Text style={styles.segmentHint}>{activeSegment.description}</Text> : null}
+        </View>
+      ) : null}
+
+      <View style={styles.infoGrid}>
+        <InfoList title='Alerts' items={alerts} emptyText='No module alerts right now.' light />
+        <InfoList title='Insights' items={insights} emptyText='Insights will appear when data is available.' light />
+      </View>
+
       <View style={styles.metricGrid}>
-        {(module.kpis || []).map((kpi) => (
+        {(detailSource?.kpis || []).map((kpi) => (
           <View key={kpi.label} style={styles.metricCard}>
             <Text style={styles.metricLabel}>{kpi.label}</Text>
             <Text style={styles.metricValue}>{kpi.value}</Text>
@@ -236,14 +292,9 @@ function ModuleDetail({ module }) {
         ))}
       </View>
 
-      <View style={styles.infoGrid}>
-        <InfoList title='Alerts' items={module.alerts} emptyText='No module alerts right now.' light />
-        <InfoList title='Insights' items={module.insights} emptyText='Insights will appear when data is available.' light />
-      </View>
-
       <View style={styles.tablesWrap}>
-        {(module.tables || []).map((table) => (
-          <TableCard key={table.title} table={table} />
+        {(detailSource?.tables || []).map((table) => (
+          <TableCard key={`${detailSource?.key || module.key}-${table.title}`} table={table} />
         ))}
       </View>
     </Card>
@@ -265,7 +316,7 @@ function TableCard({ table }) {
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
-        <View style={styles.tableWrap}>
+        <View style={[styles.tableWrap, { minWidth: Math.max(columns.length * 170, 760) }]}>
           <View style={styles.tableHeaderRow}>
             {columns.map((column) => (
               <Text key={column.key} style={[styles.tableCell, styles.tableHeaderCell]}>{column.label}</Text>
@@ -334,6 +385,11 @@ function Pill({ text, inverse = false, small = false }) {
   );
 }
 
+function withFallbackItems(items, fallbackText) {
+  const rows = Array.isArray(items) ? items.filter(Boolean) : [];
+  return rows.length ? rows : [fallbackText];
+}
+
 function deltaToneStyle(tone) {
   if (tone === 'positive') return styles.deltaPositive;
   if (tone === 'negative') return styles.deltaNegative;
@@ -380,10 +436,11 @@ const styles = StyleSheet.create({
   sectionHeadRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 },
   sectionTitle: { fontSize: 18, fontWeight: '800', color: '#0f172a' },
   sectionHint: { marginTop: 4, fontSize: 12, lineHeight: 18, color: '#64748b' },
-  moduleGrid: { marginTop: 12, gap: 10 },
-  moduleCard: { borderRadius: 20, padding: 14, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#f8fafc' },
+  moduleCarousel: { marginTop: 12, gap: 12, paddingRight: 4 },
+  moduleCard: { width: 296, borderRadius: 20, padding: 14, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#f8fafc' },
   moduleCardActive: { backgroundColor: '#0f172a', borderColor: '#0f172a' },
-  moduleCardTitle: { fontSize: 15, fontWeight: '800', color: '#0f172a' },
+  moduleCardTopRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 },
+  moduleCardTitle: { flex: 1, fontSize: 15, fontWeight: '800', color: '#0f172a' },
   moduleCardTitleActive: { color: '#ffffff' },
   moduleCardDesc: { marginTop: 6, fontSize: 12, lineHeight: 18, color: '#64748b' },
   moduleCardDescActive: { color: '#cbd5e1' },
@@ -417,6 +474,14 @@ const styles = StyleSheet.create({
   moduleBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   moduleTitle: { marginTop: 10, fontSize: 22, lineHeight: 28, fontWeight: '800', color: '#0f172a' },
   moduleHint: { marginTop: 8, fontSize: 13, lineHeight: 20, color: '#64748b' },
+  segmentSection: { marginTop: 14 },
+  segmentLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 1.2, textTransform: 'uppercase', color: '#94a3b8' },
+  segmentRow: { marginTop: 10, gap: 8, paddingRight: 4 },
+  segmentChip: { borderRadius: 999, paddingHorizontal: 14, paddingVertical: 9, backgroundColor: '#f1f5f9' },
+  segmentChipActive: { backgroundColor: '#0f172a' },
+  segmentChipText: { fontSize: 12, fontWeight: '700', color: '#475569' },
+  segmentChipTextActive: { color: '#ffffff' },
+  segmentHint: { marginTop: 10, fontSize: 12, lineHeight: 18, color: '#64748b' },
   metricGrid: { marginTop: 14, gap: 10 },
   metricCard: { borderRadius: 18, padding: 14, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#f8fafc' },
   metricLabel: { fontSize: 12, color: '#64748b' },
@@ -426,11 +491,11 @@ const styles = StyleSheet.create({
   tableCard: { borderRadius: 20, padding: 14, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#f8fafc' },
   tableTitle: { fontSize: 15, fontWeight: '800', color: '#0f172a' },
   tableHint: { marginTop: 4, fontSize: 12, lineHeight: 18, color: '#64748b' },
-  tableWrap: { minWidth: 760, borderRadius: 18, overflow: 'hidden', borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#ffffff' },
+  tableWrap: { borderRadius: 18, overflow: 'hidden', borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#ffffff' },
   tableHeaderRow: { flexDirection: 'row', backgroundColor: '#f1f5f9', borderBottomWidth: 1, borderColor: '#e2e8f0' },
-  tableBodyScroll: { maxHeight: 320 },
+  tableBodyScroll: { maxHeight: 296 },
   tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderColor: '#f1f5f9' },
-  tableCell: { width: 180, paddingHorizontal: 10, paddingVertical: 10, fontSize: 12, lineHeight: 17, color: '#0f172a' },
+  tableCell: { width: 170, paddingHorizontal: 10, paddingVertical: 10, fontSize: 12, lineHeight: 17, color: '#0f172a' },
   tableHeaderCell: { fontWeight: '800', color: '#334155' },
   emptyText: { padding: 14, fontSize: 12, color: '#64748b' },
   pill: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#f1f5f9', alignSelf: 'flex-start' },
@@ -440,6 +505,7 @@ const styles = StyleSheet.create({
   pillTextInverse: { color: '#ffffff' },
   pillTextSmall: { fontSize: 10 },
   deltaText: { fontSize: 12, fontWeight: '800' },
+  deltaTextActive: { color: '#ffffff' },
   deltaPositive: { color: '#047857' },
   deltaNegative: { color: '#be123c' },
   deltaNeutral: { color: '#475569' },

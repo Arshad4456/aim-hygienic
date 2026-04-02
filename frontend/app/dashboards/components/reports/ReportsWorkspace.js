@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 import { apiFetch } from "../../../lib/api";
 
 const PERIODS = [
@@ -99,7 +100,7 @@ export function ReportsMasterView({ basePath, roleLabel }) {
                 {(summary.cards || []).map((card) => (
                   <Link
                     key={card.key}
-                    href={`${basePath}/${card.routeSegment}`}
+                    href={`${basePath}/${card.routeSegment || card.key}`}
                     className="group relative overflow-hidden rounded-[26px] border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
                   >
                     <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-indigo-500 via-sky-500 to-emerald-500" />
@@ -150,6 +151,11 @@ export function ReportsMasterView({ basePath, roleLabel }) {
 }
 
 export function ReportFocusView({ moduleKey, basePath }) {
+  const params = useParams();
+  const resolvedModuleKey = useMemo(() => {
+    const raw = moduleKey || params?.moduleKey;
+    return typeof raw === "string" ? raw : Array.isArray(raw) ? raw[0] : "";
+  }, [moduleKey, params]);
   const [period, setPeriod] = useState("month");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -157,10 +163,17 @@ export function ReportFocusView({ moduleKey, basePath }) {
 
   useEffect(() => {
     let cancelled = false;
+    if (!resolvedModuleKey) {
+      setLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
     setLoading(true);
     setError("");
 
-    apiFetch(`/reports/focus/${moduleKey}?period=${period}`)
+    apiFetch(`/reports/focus/${resolvedModuleKey}?period=${period}`)
       .then((response) => {
         if (!cancelled) setData(response);
       })
@@ -174,7 +187,7 @@ export function ReportFocusView({ moduleKey, basePath }) {
     return () => {
       cancelled = true;
     };
-  }, [moduleKey, period]);
+  }, [resolvedModuleKey, period]);
 
   const module = data?.module;
 
@@ -213,6 +226,7 @@ export function ReportFocusView({ moduleKey, basePath }) {
         </div>
       </div>
 
+      {!resolvedModuleKey && !loading ? <ErrorBanner message="Module route is not ready yet. Please retry from the reports dashboard." /> : null}
       {error ? <ErrorBanner message={error} /> : null}
       {loading ? <LoadingBlock /> : null}
       {!loading && !error && module ? <ModuleSection module={module} basePath={basePath} compact /> : null}
@@ -234,7 +248,7 @@ function ReportsHero({ roleLabel, meta, period, setPeriod, headlineKpis, alerts,
           <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-100">
             <span className="rounded-full border border-white/20 bg-white/10 px-3 py-2">{meta?.scopeLabel || "Current scope"}</span>
             <span className="rounded-full border border-white/20 bg-white/10 px-3 py-2">{meta?.currentLabel || "This month"}</span>
-            <span className="rounded-full border border-white/20 bg-white/10 px-3 py-2">Generated {meta?.generatedAt ? new Date(meta.generatedAt).toLocaleString() : "now"}</span>
+            <span className="rounded-full border border-white/20 bg-white/10 px-3 py-2">Generated {meta?.generatedAt ? formatGeneratedAt(meta.generatedAt) : "now"}</span>
           </div>
         </div>
         <div className="rounded-[26px] border border-white/15 bg-white/10 p-4 backdrop-blur">
@@ -277,8 +291,19 @@ function ReportsHero({ roleLabel, meta, period, setPeriod, headlineKpis, alerts,
 }
 
 function ModuleSection({ module, basePath, compact }) {
-  const kpis = Array.isArray(module?.kpis) ? module.kpis : [];
-  const tables = Array.isArray(module?.tables) ? module.tables : [];
+  const segments = Array.isArray(module?.segments) ? module.segments.filter(Boolean) : [];
+  const [activeSegmentKey, setActiveSegmentKey] = useState(segments[0]?.key || "");
+
+  useEffect(() => {
+    setActiveSegmentKey(segments[0]?.key || "");
+  }, [module?.key, segments[0]?.key]);
+
+  const activeSegment = segments.find((segment) => segment.key === activeSegmentKey) || segments[0] || null;
+  const detailSource = activeSegment || module;
+  const kpis = Array.isArray(detailSource?.kpis) ? detailSource.kpis : [];
+  const tables = Array.isArray(detailSource?.tables) ? detailSource.tables : [];
+  const alerts = withFallbackItems(detailSource?.alerts, `No critical alerts in ${detailSource?.title || module?.title || "this module"} for the selected period.`);
+  const insights = withFallbackItems(detailSource?.insights, `Performance is stable in ${detailSource?.title || module?.title || "this module"}. Review the detailed tables for action opportunities.`);
 
   return (
     <section id={`module-${module.key}`} className="overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-sm">
@@ -299,7 +324,7 @@ function ModuleSection({ module, basePath, compact }) {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {!compact ? (
-                <Link href={`${basePath}/${module.routeSegment}`} className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">
+                <Link href={`${basePath}/${module.routeSegment || module.key}`} className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">
                   Open focused report
                 </Link>
               ) : null}
@@ -308,6 +333,31 @@ function ModuleSection({ module, basePath, compact }) {
               </span>
             </div>
           </div>
+
+          {segments.length ? (
+            <div className="mt-6">
+              <div className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Order report options</div>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {segments.map((segment) => (
+                  <button
+                    key={segment.key}
+                    type="button"
+                    onClick={() => setActiveSegmentKey(segment.key)}
+                    className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition ${
+                      activeSegment?.key === segment.key
+                        ? "bg-slate-900 text-white shadow-sm"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    {segment.title}
+                  </button>
+                ))}
+              </div>
+              {activeSegment?.description ? (
+                <div className="mt-3 text-sm text-slate-500">{activeSegment.description}</div>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {kpis.map((kpi) => (
@@ -320,15 +370,15 @@ function ModuleSection({ module, basePath, compact }) {
           </div>
 
           <div className="mt-6 grid gap-4 lg:grid-cols-2">
-            <ListPanel title="Alerts" items={module.alerts} emptyText="No alerts in this module right now." light />
-            <ListPanel title="Insights" items={module.insights} emptyText="Insights will show when enough data is available." light />
+            <ListPanel title="Alerts" items={alerts} emptyText="No alerts in this module right now." light />
+            <ListPanel title="Insights" items={insights} emptyText="Insights will show when enough data is available." light />
           </div>
         </div>
       </div>
 
       <div className="grid gap-5 p-6">
         {tables.map((table) => (
-          <DataTable key={table.title} table={table} />
+          <DataTable key={`${detailSource?.key || module.key}-${table.title}`} table={table} />
         ))}
       </div>
     </section>
@@ -338,6 +388,7 @@ function ModuleSection({ module, basePath, compact }) {
 function DataTable({ table }) {
   const columns = Array.isArray(table.columns) ? table.columns : [];
   const rows = Array.isArray(table.rows) ? table.rows : [];
+  const tableMinWidth = Math.max(columns.length * 170, 760);
 
   return (
     <div className="rounded-[26px] border border-slate-200 bg-slate-50/70 p-4">
@@ -352,37 +403,39 @@ function DataTable({ table }) {
       </div>
 
       <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        <div className="max-h-[320px] overflow-auto">
-          <table className="min-w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-slate-100">
-              <tr>
-                {columns.map((column) => (
-                  <th key={column.key} className="border-b border-slate-200 px-4 py-3 text-left font-semibold text-slate-700 whitespace-nowrap">
-                    {column.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length ? (
-                rows.map((row, index) => (
-                  <tr key={`${table.title}-${index}`} className="odd:bg-white even:bg-slate-50/60 hover:bg-cyan-50/40">
-                    {columns.map((column) => (
-                      <td key={column.key} className="border-b border-slate-100 px-4 py-3 align-top text-slate-700 break-words">
-                        {String(row?.[column.key] ?? "—")}
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              ) : (
+        <div className="max-h-[296px] overflow-auto">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" style={{ minWidth: `${tableMinWidth}px` }}>
+              <thead className="sticky top-0 z-10 bg-slate-100">
                 <tr>
-                  <td colSpan={Math.max(columns.length, 1)} className="px-4 py-10 text-center text-slate-500">
-                    No data available for this table.
-                  </td>
+                  {columns.map((column) => (
+                    <th key={column.key} className="min-w-[170px] border-b border-slate-200 px-4 py-3 text-left font-semibold text-slate-700 whitespace-nowrap">
+                      {column.label}
+                    </th>
+                  ))}
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rows.length ? (
+                  rows.map((row, index) => (
+                    <tr key={`${table.title}-${index}`} className="odd:bg-white even:bg-slate-50/60 hover:bg-cyan-50/40">
+                      {columns.map((column) => (
+                        <td key={column.key} className="min-w-[170px] border-b border-slate-100 px-4 py-3 align-top text-slate-700">
+                          <div className="max-w-[280px] break-words">{String(row?.[column.key] ?? "—")}</div>
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={Math.max(columns.length, 1)} className="px-4 py-10 text-center text-slate-500">
+                      No data available for this table.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
@@ -446,6 +499,11 @@ function ListPanel({ title, items, emptyText, light = false }) {
   );
 }
 
+function withFallbackItems(items, fallbackText) {
+  const rows = Array.isArray(items) ? items.filter(Boolean) : [];
+  return rows.length ? rows : [fallbackText];
+}
+
 function ErrorBanner({ message }) {
   return (
     <div className="rounded-[24px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -488,4 +546,9 @@ function formatNumber(value) {
 
 function formatMoney(value) {
   return `PKR ${formatNumber(value)}`;
+}
+
+function formatGeneratedAt(value) {
+  const text = String(value || "");
+  return text ? text.replace("T", " ").replace(/\..*/, "") : "now";
 }
