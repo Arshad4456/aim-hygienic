@@ -39,9 +39,26 @@ function safeNumber(value) {
   return Number.isFinite(Number(value)) ? Number(value) : 0;
 }
 
-const ORDER_TRANSACTION_TYPE = "SALE_STOCK";
+const ORDER_TRANSACTION_TYPES = ["SALE_STOCK", "STOCK_OUT", "RETURN_TO_SD", "PURCHASING_OUT"];
 const PRIMARY_SOURCE_ROLES = ["brand manager"];
 const SECONDARY_SOURCE_ROLES = ["distributor", "order booker", "orderbooker", "customer", "salesman"];
+
+function sourceRoleFilter(roles = []) {
+  const normalized = roles.map((role) => String(role || "").trim().toLowerCase()).filter(Boolean);
+  if (!normalized.length) return {};
+  return {
+    $expr: {
+      $in: [
+        { $toLower: { $ifNull: ["$requestSourceRole", ""] } },
+        normalized,
+      ],
+    },
+  };
+}
+
+function orderTransactionFilter() {
+  return { transactionType: { $in: ORDER_TRANSACTION_TYPES } };
+}
 
 function formatNumber(value) {
   return safeNumber(value).toLocaleString("en-PK");
@@ -538,7 +555,7 @@ function distributorMessageScope(scope, base = {}) {
 }
 
 async function getScopedOrderRefs(models, scope, currentRange) {
-  const match = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE }, "transactionAt", currentRange));
+  const match = scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter() }, "transactionAt", currentRange));
   const rows = await models.WarehouseTransactionModel.find(match).select("_id transactionCode").limit(5000).lean();
   return {
     orderIds: rows.map((row) => row._id).filter(Boolean),
@@ -547,8 +564,8 @@ async function getScopedOrderRefs(models, scope, currentRange) {
 }
 
 async function buildDashboardModule(models, scope, currentRange, previousRange, currentLabel, previousLabel) {
-  const currentOrderMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE }, "transactionAt", currentRange));
-  const previousOrderMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE }, "transactionAt", previousRange));
+  const currentOrderMatch = scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter() }, "transactionAt", currentRange));
+  const previousOrderMatch = scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter() }, "transactionAt", previousRange));
   const currentExpenseMatch = distributorExpenseScope(scope, applyDateFilter({}, "createdAt", currentRange));
   const previousExpenseMatch = distributorExpenseScope(scope, applyDateFilter({}, "createdAt", previousRange));
 
@@ -844,12 +861,12 @@ async function buildTerritoryModule(models, scope, currentRange, previousRange, 
 }
 
 async function buildSalesModule(models, scope, currentRange, previousRange, currentLabel, previousLabel) {
-  const currentMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE }, "transactionAt", currentRange));
-  const previousMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE }, "transactionAt", previousRange));
-  const primaryMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE, requestSourceRole: { $in: PRIMARY_SOURCE_ROLES } }, "transactionAt", currentRange));
-  const secondaryMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE, requestSourceRole: { $in: SECONDARY_SOURCE_ROLES } }, "transactionAt", currentRange));
-  const primaryPreviousMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE, requestSourceRole: { $in: PRIMARY_SOURCE_ROLES } }, "transactionAt", previousRange));
-  const secondaryPreviousMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE, requestSourceRole: { $in: SECONDARY_SOURCE_ROLES } }, "transactionAt", previousRange));
+  const currentMatch = scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter() }, "transactionAt", currentRange));
+  const previousMatch = scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter() }, "transactionAt", previousRange));
+  const primaryMatch = scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter(), ...sourceRoleFilter(PRIMARY_SOURCE_ROLES) }, "transactionAt", currentRange));
+  const secondaryMatch = scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter(), ...sourceRoleFilter(SECONDARY_SOURCE_ROLES) }, "transactionAt", currentRange));
+  const primaryPreviousMatch = scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter(), ...sourceRoleFilter(PRIMARY_SOURCE_ROLES) }, "transactionAt", previousRange));
+  const secondaryPreviousMatch = scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter(), ...sourceRoleFilter(SECONDARY_SOURCE_ROLES) }, "transactionAt", previousRange));
   const claimBase = scope.isDistributor
     ? await getScopedOrderRefs(models, scope, currentRange).then((scopedOrders) => (
         scopedOrders.orderIds?.length || scopedOrders.orderNos?.length
@@ -1274,8 +1291,8 @@ async function buildProcurementModule(models, scope, currentRange, previousRange
 }
 
 async function buildLogisticsModule(models, scope, currentRange, previousRange, currentLabel, previousLabel) {
-  const currentDispatchMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE, requestStatus: { $in: ["DISPATCHED", "DELIVERED"] } }, "transactionAt", currentRange));
-  const previousDispatchMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE, requestStatus: { $in: ["DISPATCHED", "DELIVERED"] } }, "transactionAt", previousRange));
+  const currentDispatchMatch = scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter(), requestStatus: { $in: ["DISPATCHED", "DELIVERED"] } }, "transactionAt", currentRange));
+  const previousDispatchMatch = scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter(), requestStatus: { $in: ["DISPATCHED", "DELIVERED"] } }, "transactionAt", previousRange));
   const [currentDispatches, previousDispatches, vehicles, tripAgg, recentTrips, maintenanceCount] = await Promise.all([
     models.WarehouseTransactionModel.countDocuments(currentDispatchMatch),
     models.WarehouseTransactionModel.countDocuments(previousDispatchMatch),
@@ -1771,12 +1788,12 @@ async function buildVehicleModule(models, scope, currentRange, previousRange, cu
 }
 
 async function buildPrimaryOrderRequestModule(models, scope, currentRange, previousRange, currentLabel, previousLabel) {
-  const currentMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE, requestSourceRole: { $in: PRIMARY_SOURCE_ROLES } }, "transactionAt", currentRange));
-  const previousMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE, requestSourceRole: { $in: PRIMARY_SOURCE_ROLES } }, "transactionAt", previousRange));
+  const currentMatch = scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter(), ...sourceRoleFilter(PRIMARY_SOURCE_ROLES) }, "transactionAt", currentRange));
+  const previousMatch = scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter(), ...sourceRoleFilter(PRIMARY_SOURCE_ROLES) }, "transactionAt", previousRange));
   const [currentOrders, previousOrders, statusAgg, recentRows] = await Promise.all([
     models.WarehouseTransactionModel.countDocuments(currentMatch),
     models.WarehouseTransactionModel.countDocuments(previousMatch),
-    models.WarehouseTransactionModel.aggregate([{ $match: scopedOrderQuery(models, scope, { transactionType: ORDER_TRANSACTION_TYPE, requestSourceRole: { $in: PRIMARY_SOURCE_ROLES } }) }, { $group: { _id: "$requestStatus", count: { $sum: 1 }, total: { $sum: "$grandTotal" } } }, { $sort: { count: -1 } }]),
+    models.WarehouseTransactionModel.aggregate([{ $match: scopedOrderQuery(models, scope, { ...orderTransactionFilter(), ...sourceRoleFilter(PRIMARY_SOURCE_ROLES) }) }, { $group: { _id: "$requestStatus", count: { $sum: 1 }, total: { $sum: "$grandTotal" } } }, { $sort: { count: -1 } }]),
     models.WarehouseTransactionModel.find(currentMatch).sort({ transactionAt: -1 }).limit(8).select("transactionCode toEntityName requestStatus grandTotal transactionAt").lean(),
   ]);
 
@@ -1825,8 +1842,8 @@ async function buildPrimaryOrderRequestModule(models, scope, currentRange, previ
 
 async function buildReportsMeta(models, scope, modules, currentRange, previousRange, currentLabel, previousLabel) {
   const [currentOrders, previousOrders, currentExpensesAgg, previousExpensesAgg] = await Promise.all([
-    models.WarehouseTransactionModel.countDocuments(scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE }, "transactionAt", currentRange))),
-    models.WarehouseTransactionModel.countDocuments(scopedOrderQuery(models, scope, applyDateFilter({ transactionType: ORDER_TRANSACTION_TYPE }, "transactionAt", previousRange))),
+    models.WarehouseTransactionModel.countDocuments(scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter() }, "transactionAt", currentRange))),
+    models.WarehouseTransactionModel.countDocuments(scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter() }, "transactionAt", previousRange))),
     models.ExpenseModel.aggregate([{ $match: distributorExpenseScope(scope, applyDateFilter({}, "createdAt", currentRange)) }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
     models.ExpenseModel.aggregate([{ $match: distributorExpenseScope(scope, applyDateFilter({}, "createdAt", previousRange)) }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
   ]);
