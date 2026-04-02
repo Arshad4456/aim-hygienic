@@ -176,6 +176,7 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
           { title: "Vehicle List", href: "/dashboards/admin/vehicle-management/vehicles" },
           { title: "Fuel Management", href: "/dashboards/admin/vehicle-management/fuel-management" },
           { title: "Vehicle Maintenance", href: "/dashboards/admin/vehicle-management/maintenance" },
+          { title: "Vehicle Reports", href: "/dashboards/admin/vehicle-management/reports" },
         ],
       },
 
