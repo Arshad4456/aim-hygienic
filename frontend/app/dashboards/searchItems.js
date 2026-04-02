@@ -92,6 +92,7 @@ export const userDashboardSearchItems = {
   territorySM: [{ title: "Dashboard", href: "/dashboards/territorySM" }],
   distributor: [
     { title: "Dashboard", href: "/dashboards/distributor" },
+    { title: "Reports", href: "/dashboards/distributor/reports" },
     { title: "Expense", href: "/dashboards/distributor/expense" },
     { title: "Receipts", href: "/dashboards/distributor/receipts" },
     { title: "Payments", href: "/dashboards/distributor/payments" },
