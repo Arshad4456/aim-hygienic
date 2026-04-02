@@ -292,13 +292,11 @@ function ReportsHero({ roleLabel, meta, period, setPeriod, headlineKpis, alerts,
 
 function ModuleSection({ module, basePath, compact }) {
   const segments = Array.isArray(module?.segments) ? module.segments.filter(Boolean) : [];
-  const [activeSegmentKey, setActiveSegmentKey] = useState(segments[0]?.key || "");
-
-  useEffect(() => {
-    setActiveSegmentKey(segments[0]?.key || "");
-  }, [module?.key, segments[0]?.key]);
-
-  const activeSegment = segments.find((segment) => segment.key === activeSegmentKey) || segments[0] || null;
+  const [activeSegmentKey, setActiveSegmentKey] = useState("");
+  const resolvedSegmentKey = segments.some((segment) => segment.key === activeSegmentKey)
+    ? activeSegmentKey
+    : pickDefaultSegmentKey(segments);
+  const activeSegment = segments.find((segment) => segment.key === resolvedSegmentKey) || segments[0] || null;
   const detailSource = activeSegment || module;
   const kpis = Array.isArray(detailSource?.kpis) ? detailSource.kpis : [];
   const tables = Array.isArray(detailSource?.tables) ? detailSource.tables : [];
@@ -344,7 +342,7 @@ function ModuleSection({ module, basePath, compact }) {
                     type="button"
                     onClick={() => setActiveSegmentKey(segment.key)}
                     className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition ${
-                      activeSegment?.key === segment.key
+                      resolvedSegmentKey === segment.key
                         ? "bg-slate-900 text-white shadow-sm"
                         : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                     }`}
@@ -383,6 +381,29 @@ function ModuleSection({ module, basePath, compact }) {
       </div>
     </section>
   );
+}
+
+function pickDefaultSegmentKey(segments = []) {
+  if (!Array.isArray(segments) || !segments.length) return "";
+  const withData = segments.find((segment) => segmentHasData(segment));
+  return withData?.key || segments[0]?.key || "";
+}
+
+function segmentHasData(segment) {
+  if (!segment) return false;
+  const hasTableRows = Array.isArray(segment.tables) && segment.tables.some((table) => Array.isArray(table?.rows) && table.rows.length > 0);
+  if (hasTableRows) return true;
+  const kpis = Array.isArray(segment.kpis) ? segment.kpis : [];
+  return kpis.some((kpi) => extractFirstNumber(kpi?.value) > 0);
+}
+
+function extractFirstNumber(value) {
+  const text = String(value || "");
+  const match = text.match(/-?\d+(?:[.,]\d+)?/);
+  if (!match) return 0;
+  const normalized = match[0].replace(/,/g, "");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function DataTable({ table }) {
