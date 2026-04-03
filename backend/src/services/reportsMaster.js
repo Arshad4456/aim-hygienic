@@ -944,7 +944,7 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
     models.SalesOrderModel.find(secondaryMatch).sort({ orderDate: -1, createdAt: -1 }).limit(8).select("orderNo customerName territoryName status totalAmount orderDate sourceType").lean(),
     models.ReturnClaimModel.countDocuments(currentClaimsMatch),
     models.ReturnClaimModel.countDocuments(previousClaimsMatch),
-    models.ReturnClaimModel.aggregate([{ $match: currentClaimsMatch }, { $group: { _id: "$status", count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
+    models.ReturnClaimModel.aggregate([{ $match: currentMatch }, { $group: { _id: "$status", count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
     models.ReturnClaimModel.find(currentClaimsMatch).sort({ createdAt: -1 }).limit(8).select("orderNo customerName reason status quantity createdAt").lean(),
   ]);
 
