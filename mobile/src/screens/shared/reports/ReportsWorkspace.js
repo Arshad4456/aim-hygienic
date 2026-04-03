@@ -50,7 +50,10 @@ export function ReportsHubScreen({ roleLabel = 'Reports' }) {
     };
   }, [period]);
 
-  const modules = Array.isArray(data?.modules) ? data.modules : [];
+  const modules = useMemo(
+    () => (Array.isArray(data?.modules) ? data.modules : []),
+    [data?.modules]
+  );
   const summary = data?.summary || {};
   const selectedModule = useMemo(
     () => modules.find((item) => item.key === selectedKey) || modules[0] || null,
@@ -229,16 +232,22 @@ export function ReportModuleScreen({ moduleKey }) {
 }
 
 function ModuleDetail({ module }) {
-  const segments = Array.isArray(module?.segments) ? module.segments.filter(Boolean) : [];
-  const [activeSegmentKey, setActiveSegmentKey] = useState(segments[0]?.key || '');
+  const segments = useMemo(() => (
+    Array.isArray(module?.segments) ? module.segments.filter(Boolean) : []
+  ), [module?.segments]);
+  const [activeSegmentKey, setActiveSegmentKey] = useState('');
+  const firstSegmentKey = segments[0]?.key || '';
+  const effectiveSegmentKey = segments.some((segment) => segment.key === activeSegmentKey)
+    ? activeSegmentKey
+    : firstSegmentKey;
 
   useEffect(() => {
-    setActiveSegmentKey(segments[0]?.key || '');
-  }, [module?.key, segments?.[0]?.key]);
+    setActiveSegmentKey('');
+  }, [module?.key]);
 
   const activeSegment = useMemo(
-    () => segments.find((segment) => segment.key === activeSegmentKey) || segments[0] || null,
-    [segments, activeSegmentKey]
+    () => segments.find((segment) => segment.key === effectiveSegmentKey) || segments[0] || null,
+    [segments, effectiveSegmentKey]
   );
 
   const detailSource = activeSegment || module;

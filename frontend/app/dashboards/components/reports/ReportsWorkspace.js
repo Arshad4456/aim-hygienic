@@ -39,11 +39,15 @@ export function ReportsMasterView({ basePath, roleLabel }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const handlePeriodChange = (nextPeriod) => {
+    if (nextPeriod === period) return;
+    setPeriod(nextPeriod);
+    setLoading(true);
+    setError("");
+  };
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError("");
 
     apiFetch(`/reports/master?period=${period}`)
       .then((response) => {
@@ -72,7 +76,7 @@ export function ReportsMasterView({ basePath, roleLabel }) {
         roleLabel={roleLabel}
         meta={data?.meta}
         period={period}
-        setPeriod={setPeriod}
+        setPeriod={handlePeriodChange}
         headlineKpis={summary.headlineKpis || []}
         alerts={summary.alerts || []}
         insights={summary.insights || []}
@@ -154,18 +158,19 @@ export function ReportFocusView({ moduleKey, basePath }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const canFetch = Boolean(resolvedModuleKey);
+  const handlePeriodChange = (nextPeriod) => {
+    if (nextPeriod === period) return;
+    setPeriod(nextPeriod);
+    setLoading(true);
+    setError("");
+  };
 
   useEffect(() => {
     let cancelled = false;
-    if (!resolvedModuleKey) {
-      setLoading(false);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    setLoading(true);
-    setError("");
+    if (!resolvedModuleKey) return () => {
+      cancelled = true;
+    };
 
     apiFetch(`/reports/focus/${resolvedModuleKey}?period=${period}`)
       .then((response) => {
@@ -183,7 +188,7 @@ export function ReportFocusView({ moduleKey, basePath }) {
     };
   }, [resolvedModuleKey, period]);
 
-  const module = data?.module;
+  const reportModule = data?.module;
 
   return (
     <div className="space-y-6">
@@ -191,15 +196,15 @@ export function ReportFocusView({ moduleKey, basePath }) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Focused report</div>
-            <div className="mt-2 text-2xl font-semibold text-slate-900 break-words">{module?.title || "Module report"}</div>
-            <div className="mt-2 max-w-3xl text-sm text-slate-500 break-words">{module?.description || "Detailed module analytics and business insight."}</div>
+            <div className="mt-2 text-2xl font-semibold text-slate-900 break-words">{reportModule?.title || "Module report"}</div>
+            <div className="mt-2 max-w-3xl text-sm text-slate-500 break-words">{reportModule?.description || "Detailed module analytics and business insight."}</div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {PERIODS.map((item) => (
               <button
                 key={item.key}
                 type="button"
-                onClick={() => setPeriod(item.key)}
+                onClick={() => handlePeriodChange(item.key)}
                 className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
                   period === item.key
                     ? "bg-slate-900 text-white shadow-sm"
@@ -220,10 +225,10 @@ export function ReportFocusView({ moduleKey, basePath }) {
         </div>
       </div>
 
-      {!resolvedModuleKey && !loading ? <ErrorBanner message="Module route is not ready yet. Please retry from the reports dashboard." /> : null}
+      {!resolvedModuleKey ? <ErrorBanner message="Module route is not ready yet. Please retry from the reports dashboard." /> : null}
       {error ? <ErrorBanner message={error} /> : null}
-      {loading ? <LoadingBlock /> : null}
-      {!loading && !error && module ? <ModuleSection module={module} basePath={basePath} compact /> : null}
+      {canFetch && loading ? <LoadingBlock /> : null}
+      {!loading && !error && reportModule ? <ModuleSection module={reportModule} basePath={basePath} compact /> : null}
     </div>
   );
 }
@@ -286,13 +291,11 @@ function ReportsHero({ roleLabel, meta, period, setPeriod, headlineKpis, alerts,
 
 function ModuleSection({ module, basePath, compact }) {
   const segments = Array.isArray(module?.segments) ? module.segments.filter(Boolean) : [];
-  const [activeSegmentKey, setActiveSegmentKey] = useState(segments[0]?.key || "");
-
-  useEffect(() => {
-    setActiveSegmentKey(segments[0]?.key || "");
-  }, [module?.key, segments[0]?.key]);
-
-  const activeSegment = segments.find((segment) => segment.key === activeSegmentKey) || segments[0] || null;
+  const [activeSegmentKey, setActiveSegmentKey] = useState("");
+  const effectiveSegmentKey = segments.some((segment) => segment.key === activeSegmentKey)
+    ? activeSegmentKey
+    : (segments[0]?.key || "");
+  const activeSegment = segments.find((segment) => segment.key === effectiveSegmentKey) || segments[0] || null;
   const detailSource = activeSegment || module;
   const kpis = Array.isArray(detailSource?.kpis) ? detailSource.kpis : [];
   const tables = Array.isArray(detailSource?.tables) ? detailSource.tables : [];
