@@ -2219,23 +2219,15 @@ async function buildPrimaryOrderRequestModule(models, scope, currentRange, previ
 }
 
 async function buildReportsMeta(models, scope, modules, currentRange, previousRange, currentLabel, previousLabel) {
-  const [currentOrders, previousOrders, currentExpensesAgg, previousExpensesAgg, currentGivenLoansAgg, previousGivenLoansAgg, currentReceivedLoansAgg, previousReceivedLoansAgg] = await Promise.all([
+  const [currentOrders, previousOrders, currentExpensesAgg, previousExpensesAgg] = await Promise.all([
     models.SalesOrderModel.countDocuments(scopedSalesOrderQuery(models, scope, applyDateFilter({}, "orderDate", currentRange))),
     models.SalesOrderModel.countDocuments(scopedSalesOrderQuery(models, scope, applyDateFilter({}, "orderDate", previousRange))),
     models.ExpenseModel.aggregate([{ $match: distributorExpenseScope(scope, applyDateFilter({}, "createdAt", currentRange)) }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
     models.ExpenseModel.aggregate([{ $match: distributorExpenseScope(scope, applyDateFilter({}, "createdAt", previousRange)) }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
-    models.LoanModel.aggregate([{ $match: { ...applyDateFilter({}, "loanDate", currentRange), loanType: "given" } }, { $group: { _id: null, total: { $sum: "$principalAmount" } } }]),
-    models.LoanModel.aggregate([{ $match: { ...applyDateFilter({}, "loanDate", previousRange), loanType: "given" } }, { $group: { _id: null, total: { $sum: "$principalAmount" } } }]),
-    models.LoanModel.aggregate([{ $match: { ...applyDateFilter({}, "loanDate", currentRange), loanType: "received" } }, { $group: { _id: null, total: { $sum: "$principalAmount" } } }]),
-    models.LoanModel.aggregate([{ $match: { ...applyDateFilter({}, "loanDate", previousRange), loanType: "received" } }, { $group: { _id: null, total: { $sum: "$principalAmount" } } }]),
   ]);
 
   const currentExpense = safeNumber(currentExpensesAgg?.[0]?.total);
   const previousExpense = safeNumber(previousExpensesAgg?.[0]?.total);
-  const currentGivenLoans = safeNumber(currentGivenLoansAgg?.[0]?.total);
-  const previousGivenLoans = safeNumber(previousGivenLoansAgg?.[0]?.total);
-  const currentReceivedLoans = safeNumber(currentReceivedLoansAgg?.[0]?.total);
-  const previousReceivedLoans = safeNumber(previousReceivedLoansAgg?.[0]?.total);
   const alerts = uniq(modules.flatMap((module) => module.alerts || []).filter(Boolean));
   const insights = uniq(modules.flatMap((module) => module.insights || []).filter(Boolean));
 
@@ -2248,8 +2240,6 @@ async function buildReportsMeta(models, scope, modules, currentRange, previousRa
     ],
     orderComparison: compareBlock(currentOrders, previousOrders, currentLabel, previousLabel),
     expenseComparison: compareBlock(currentExpense, previousExpense, currentLabel, previousLabel),
-    givenLoanComparison: compareBlock(currentGivenLoans, previousGivenLoans, currentLabel, previousLabel),
-    receivedLoanComparison: compareBlock(currentReceivedLoans, previousReceivedLoans, currentLabel, previousLabel),
     alerts: ensureNarrativeRows(alerts.slice(0, 8), `No critical alerts found in ${scope.scopeLabel || "current scope"} for the selected period.`),
     insights: ensureNarrativeRows(insights.slice(0, 8), `Performance is stable across ${scope.scopeLabel || "current scope"}. Use module tables to find improvement opportunities.`),
     cards: modules.map(summarizeCard),
