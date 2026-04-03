@@ -41,8 +41,8 @@ function safeNumber(value) {
 }
 
 const ORDER_TRANSACTION_TYPES = ["SALE_STOCK", "STOCK_OUT", "RETURN_TO_SD", "PURCHASING_OUT"];
-const PRIMARY_SOURCE_ROLES = ["brand manager"];
-const SECONDARY_SOURCE_ROLES = ["distributor", "order booker", "orderbooker", "customer", "salesman"];
+const PRIMARY_SOURCE_ROLES = ["brand manager", "brand", "distributor"];
+const SECONDARY_SOURCE_ROLES = ["order management", "order booker", "orderbooker", "customer", "salesman", "admin"];
 
 function sourceRoleFilter(roles = []) {
   const normalized = roles.map((role) => String(role || "").trim().toLowerCase()).filter(Boolean);
@@ -50,7 +50,11 @@ function sourceRoleFilter(roles = []) {
   return {
     $expr: {
       $in: [
-        { $toLower: { $ifNull: ["$requestSourceRole", ""] } },
+        {
+          $toLower: {
+            $ifNull: ["$requestSourceRole", { $ifNull: ["$fromEntityType", ""] }],
+          },
+        },
         normalized,
       ],
     },
@@ -59,6 +63,21 @@ function sourceRoleFilter(roles = []) {
 
 function orderTransactionFilter() {
   return { transactionType: { $in: ORDER_TRANSACTION_TYPES } };
+}
+
+function sumTransactionItemsExpression(path = "$items") {
+  return {
+    $reduce: {
+      input: { $ifNull: [path, []] },
+      initialValue: 0,
+      in: {
+        $add: [
+          "$$value",
+          { $ifNull: ["$$this.totalPacks", { $ifNull: ["$$this.quantity", 0] }] },
+        ],
+      },
+    },
+  };
 }
 
 function formatNumber(value) {
@@ -783,7 +802,25 @@ async function buildInventoryModule(models, scope, currentRange, previousRange, 
     applyDateFilter({ transactionType: { $in: ORDER_TRANSACTION_TYPES } }, "transactionAt", currentRange)
   );
   const currentReturnTxnMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: "RETURN_STOCK" }, "transactionAt", currentRange));
-  const [warehouses, currentMoves, previousMoves, movementTypeAgg, warehouseAgg, recentMoves, topDistributorAgg, mostReturnAgg, topBrandAgg] = await Promise.all([
+  const now = new Date();
+  const nearExpiryCutoff = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+
+  const [
+    warehouses,
+    currentMoves,
+    previousMoves,
+    movementTypeAgg,
+    warehouseAgg,
+    recentMoves,
+    topDistributorAgg,
+    mostReturnAgg,
+    topBrandAgg,
+    stockSummaryAgg,
+    productMeta,
+    nearExpiryRows,
+    expiredRows,
+    damageRows,
+  ] = await Promise.all([
     models.WarehouseModel.countDocuments(),
     models.InventoryMovementModel.countDocuments(currentMovementMatch),
     models.InventoryMovementModel.countDocuments(previousMovementMatch),
@@ -838,63 +875,426 @@ async function buildInventoryModule(models, scope, currentRange, previousRange, 
       { $sort: { quantity: -1 } },
       { $limit: 1 },
     ]),
+    models.InventoryMovementModel.aggregate([
+      {
+        $group: {
+          _id: { productId: "$productId", warehouseId: "$warehouseId" },
+          productId: { $first: "$productId" },
+          productName: { $first: "$productName" },
+          warehouseId: { $first: "$warehouseId" },
+          warehouseName: { $first: "$warehouseName" },
+          quantity: { $sum: "$quantity" },
+          lastMovementAt: { $max: "$createdAt" },
+        },
+      },
+      { $match: { quantity: { $gt: 0 } } },
+      { $sort: { quantity: 1, lastMovementAt: -1 } },
+    ]),
+    models.ProductModel.find({}).select("productId name minStockLevel").lean(),
+    models.InventoryMovementModel.aggregate([
+      {
+        $match: {
+          batchExpiryDate: { $gte: now, $lte: nearExpiryCutoff },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            productId: "$productId",
+            warehouseId: "$warehouseId",
+            manufactureDate: "$batchManufactureDate",
+            expiryDate: "$batchExpiryDate",
+          },
+          productName: { $first: "$productName" },
+          warehouseName: { $first: "$warehouseName" },
+          quantity: { $sum: "$quantity" },
+        },
+      },
+      { $match: { quantity: { $gt: 0 } } },
+      {
+        $project: {
+          _id: 0,
+          productId: "$_id.productId",
+          warehouseId: "$_id.warehouseId",
+          productName: 1,
+          warehouseName: 1,
+          quantity: 1,
+          manufactureDate: "$_id.manufactureDate",
+          expiryDate: "$_id.expiryDate",
+        },
+      },
+      { $sort: { expiryDate: 1, quantity: -1 } },
+    ]),
+    models.InventoryMovementModel.aggregate([
+      {
+        $match: {
+          batchExpiryDate: { $lt: now },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            productId: "$productId",
+            warehouseId: "$warehouseId",
+            expiryDate: "$batchExpiryDate",
+          },
+          productName: { $first: "$productName" },
+          warehouseName: { $first: "$warehouseName" },
+          quantity: { $sum: "$quantity" },
+        },
+      },
+      { $match: { quantity: { $gt: 0 } } },
+      {
+        $project: {
+          _id: 0,
+          productId: "$_id.productId",
+          warehouseId: "$_id.warehouseId",
+          productName: 1,
+          warehouseName: 1,
+          quantity: 1,
+          expiryDate: "$_id.expiryDate",
+        },
+      },
+      { $sort: { expiryDate: 1, quantity: -1 } },
+    ]),
+    models.WarehouseTransactionModel.aggregate([
+      { $match: applyDateFilter({ transactionType: "DAMAGE_STOCK" }, "transactionAt", currentRange) },
+      { $unwind: { path: "$items", preserveNullAndEmptyArrays: false } },
+      {
+        $group: {
+          _id: {
+            transactionCode: "$transactionCode",
+            transactionAt: "$transactionAt",
+            warehouseName: "$warehouseName",
+            productId: "$items.productId",
+            productName: "$items.productName",
+            expiryDate: "$items.expiryDate",
+          },
+          quantity: { $sum: { $ifNull: ["$items.totalPacks", 0] } },
+          amount: { $sum: { $ifNull: ["$items.totalPrice", 0] } },
+          note: { $first: "$note" },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          transactionCode: "$_id.transactionCode",
+          transactionAt: "$_id.transactionAt",
+          warehouseName: "$_id.warehouseName",
+          productId: "$_id.productId",
+          productName: "$_id.productName",
+          expiryDate: "$_id.expiryDate",
+          quantity: 1,
+          amount: 1,
+          note: 1,
+        },
+      },
+      { $sort: { transactionAt: -1 } },
+    ]),
   ]);
 
-  return moduleCard("inventory", "Warehouse & Inventory", "Stock movements, warehouse load, and inventory velocity for the selected period.", {
+  const productMetaMap = new Map(
+    (productMeta || []).map((row) => [
+      asText(row.productId),
+      {
+        name: row.name || row.productName || "—",
+        minStockLevel: safeNumber(row.minStockLevel),
+      },
+    ])
+  );
+
+  const stockSummaryRows = (stockSummaryAgg || []).map((row) => {
+    const productInfo = productMetaMap.get(asText(row.productId || row._id?.productId)) || {};
+    const quantity = safeNumber(row.quantity);
+    const minStockLevel = safeNumber(productInfo.minStockLevel);
+    return {
+      productId: row.productId || row._id?.productId || "",
+      productName: row.productName || productInfo.name || "—",
+      warehouseId: row.warehouseId || row._id?.warehouseId || "",
+      warehouseName: row.warehouseName || "—",
+      quantity,
+      minStockLevel,
+      shortage: Math.max(minStockLevel - quantity, 0),
+      stockStatus: quantity <= 0 ? "Out of stock" : quantity <= minStockLevel ? "Low stock" : "Healthy",
+      lastMovementAt: row.lastMovementAt,
+    };
+  });
+
+  const productsWithoutStock = (productMeta || [])
+    .filter((row) => safeNumber(row.minStockLevel) > 0)
+    .filter((row) => !stockSummaryRows.some((stockRow) => asText(stockRow.productId) === asText(row.productId)))
+    .map((row) => ({
+      productId: row.productId || "",
+      productName: row.name || "—",
+      warehouseId: "",
+      warehouseName: "Unassigned warehouse",
+      quantity: 0,
+      minStockLevel: safeNumber(row.minStockLevel),
+      shortage: safeNumber(row.minStockLevel),
+      stockStatus: "Out of stock",
+      lastMovementAt: null,
+    }));
+
+  const lowStockRows = [...stockSummaryRows, ...productsWithoutStock]
+    .filter((row) => row.quantity <= row.minStockLevel)
+    .sort((a, b) => {
+      if (b.shortage !== a.shortage) return b.shortage - a.shortage;
+      if (a.quantity !== b.quantity) return a.quantity - b.quantity;
+      return String(a.productName || "").localeCompare(String(b.productName || ""));
+    });
+
+  const totalOnHand = stockSummaryRows.reduce((sum, row) => sum + safeNumber(row.quantity), 0);
+  const nearExpiryQty = nearExpiryRows.reduce((sum, row) => sum + safeNumber(row.quantity), 0);
+  const expiredQty = expiredRows.reduce((sum, row) => sum + safeNumber(row.quantity), 0);
+  const damagedQty = damageRows.reduce((sum, row) => sum + safeNumber(row.quantity), 0);
+  const healthyCount = stockSummaryRows.filter((row) => row.stockStatus === "Healthy").length;
+  const criticalLowStockCount = lowStockRows.filter((row) => row.quantity <= 0).length;
+
+  const segments = [
+    {
+      key: "stock-summary",
+      title: "Stock Summary Reports",
+      description: "Current on-hand stock by product and warehouse with minimum stock benchmark visibility.",
+      badge: "Stock position",
+      kpis: [
+        { label: "Active stock rows", value: formatNumber(stockSummaryRows.length), note: "Product and warehouse balances" },
+        { label: "On hand qty", value: formatNumber(totalOnHand), note: "Current available quantity" },
+        { label: "Healthy rows", value: formatNumber(healthyCount), note: "Above minimum stock" },
+        { label: "Top shortage", value: lowStockRows[0]?.productName || "—", note: lowStockRows[0] ? `${formatNumber(lowStockRows[0].shortage)} units short` : "No shortage" },
+      ],
+      alerts: [lowStockRows.length ? `${formatNumber(lowStockRows.length)} stock rows are at or below minimum stock.` : ""],
+      insights: [stockSummaryRows[0]?.warehouseName ? `${stockSummaryRows[0].warehouseName} has the most urgent low-balance stock rows.` : ""],
+      tables: [
+        table(
+          "Current stock summary",
+          [
+            { key: "productName", label: "Product" },
+            { key: "warehouseName", label: "Warehouse" },
+            { key: "quantity", label: "On hand" },
+            { key: "minStockLevel", label: "Min stock" },
+            { key: "shortage", label: "Shortage" },
+            { key: "stockStatus", label: "Status" },
+            { key: "lastMovementAt", label: "Last movement" },
+          ],
+          stockSummaryRows.slice(0, 15).map((row) => ({
+            productName: row.productName || "—",
+            warehouseName: row.warehouseName || "—",
+            quantity: formatNumber(row.quantity),
+            minStockLevel: formatNumber(row.minStockLevel),
+            shortage: formatNumber(row.shortage),
+            stockStatus: row.stockStatus,
+            lastMovementAt: formatDate(row.lastMovementAt),
+          })),
+          stockSummaryRows.length,
+          "Live stock balance after combining all inventory movements."
+        ),
+      ],
+    },
+    {
+      key: "low-stock-alerts",
+      title: "Low Stock Alerts Reports",
+      description: "Products that already reached or dropped below their configured minimum stock level.",
+      badge: "Alert queue",
+      kpis: [
+        { label: "Low stock rows", value: formatNumber(lowStockRows.length), note: "Need replenishment" },
+        { label: "Zero stock", value: formatNumber(criticalLowStockCount), note: "Immediate action" },
+        { label: "Min stock coverage", value: formatPercent(stockSummaryRows.length ? ((stockSummaryRows.length - lowStockRows.length) / stockSummaryRows.length) * 100 : 100), note: "Healthy coverage" },
+        { label: "Worst product", value: lowStockRows[0]?.productName || "—", note: lowStockRows[0] ? `${formatNumber(lowStockRows[0].quantity)} on hand` : "No alert" },
+      ],
+      alerts: [criticalLowStockCount ? `${formatNumber(criticalLowStockCount)} rows already have zero stock.` : ""],
+      insights: [lowStockRows[0]?.warehouseName ? `${lowStockRows[0].warehouseName} needs the first replenishment review.` : ""],
+      tables: [
+        table(
+          "Low stock alerts",
+          [
+            { key: "productName", label: "Product" },
+            { key: "warehouseName", label: "Warehouse" },
+            { key: "quantity", label: "On hand" },
+            { key: "minStockLevel", label: "Min stock" },
+            { key: "shortage", label: "Shortage" },
+            { key: "stockStatus", label: "Priority" },
+          ],
+          lowStockRows.slice(0, 15).map((row) => ({
+            productName: row.productName || "—",
+            warehouseName: row.warehouseName || "—",
+            quantity: formatNumber(row.quantity),
+            minStockLevel: formatNumber(row.minStockLevel),
+            shortage: formatNumber(row.shortage),
+            stockStatus: row.quantity <= 0 ? "Critical" : "Reorder now",
+          })),
+          lowStockRows.length,
+          "Products below minimum stock threshold."
+        ),
+      ],
+    },
+    {
+      key: "near-expiry-products",
+      title: "Near to Expire Product Reports",
+      description: "Positive stock batches expiring within the next 90 days so teams can rotate or return them in time.",
+      badge: "Expiry watch",
+      kpis: [
+        { label: "Expiring batches", value: formatNumber(nearExpiryRows.length), note: "Next 90 days" },
+        { label: "Expiring qty", value: formatNumber(nearExpiryQty), note: "Units at risk" },
+        { label: "Nearest expiry", value: nearExpiryRows[0]?.expiryDate ? formatDate(nearExpiryRows[0].expiryDate) : "—", note: nearExpiryRows[0]?.productName || "No near expiry" },
+        { label: "Warehouses impacted", value: formatNumber(uniq(nearExpiryRows.map((row) => row.warehouseName)).length), note: "Need stock rotation" },
+      ],
+      alerts: [nearExpiryRows.length ? `${formatNumber(nearExpiryRows.length)} batches will expire within 90 days.` : ""],
+      insights: [nearExpiryRows[0]?.warehouseName ? `${nearExpiryRows[0].warehouseName} has the closest batch expiry to review.` : ""],
+      tables: [
+        table(
+          "Near expiry products",
+          [
+            { key: "productName", label: "Product" },
+            { key: "warehouseName", label: "Warehouse" },
+            { key: "quantity", label: "Qty" },
+            { key: "manufactureDate", label: "Manufacture" },
+            { key: "expiryDate", label: "Expiry" },
+          ],
+          nearExpiryRows.slice(0, 15).map((row) => ({
+            productName: row.productName || "—",
+            warehouseName: row.warehouseName || "—",
+            quantity: formatNumber(row.quantity),
+            manufactureDate: formatDate(row.manufactureDate),
+            expiryDate: formatDate(row.expiryDate),
+          })),
+          nearExpiryRows.length,
+          "Batches that should be sold, returned, or rotated before expiry."
+        ),
+      ],
+    },
+    {
+      key: "damage-expired-products",
+      title: "Damage or Expire Products Reports",
+      description: "Tracks damaged stock transactions in the selected period and any already expired stock still remaining on hand.",
+      badge: "Loss control",
+      kpis: [
+        { label: "Damage rows", value: formatNumber(damageRows.length), note: currentLabel },
+        { label: "Damage qty", value: formatNumber(damagedQty), note: "Damaged in period" },
+        { label: "Expired rows", value: formatNumber(expiredRows.length), note: "Still on hand" },
+        { label: "Expired qty", value: formatNumber(expiredQty), note: "Must clear urgently" },
+      ],
+      alerts: [expiredRows.length ? `${formatNumber(expiredRows.length)} expired stock rows are still available in inventory.` : ""],
+      insights: [damageRows[0]?.warehouseName ? `${damageRows[0].warehouseName} recorded the latest damage activity.` : ""],
+      tables: [
+        table(
+          "Damage stock transactions",
+          [
+            { key: "transactionCode", label: "Txn #" },
+            { key: "productName", label: "Product" },
+            { key: "warehouseName", label: "Warehouse" },
+            { key: "quantity", label: "Qty" },
+            { key: "amount", label: "Amount" },
+            { key: "expiryDate", label: "Expiry" },
+            { key: "transactionAt", label: "Date" },
+          ],
+          damageRows.slice(0, 12).map((row) => ({
+            transactionCode: row.transactionCode || "—",
+            productName: row.productName || "—",
+            warehouseName: row.warehouseName || "—",
+            quantity: formatNumber(row.quantity),
+            amount: formatCurrency(row.amount),
+            expiryDate: formatDate(row.expiryDate),
+            transactionAt: formatDate(row.transactionAt),
+          })),
+          damageRows.length,
+          "Damage stock ledger entries recorded in the selected period."
+        ),
+        table(
+          "Expired products still on hand",
+          [
+            { key: "productName", label: "Product" },
+            { key: "warehouseName", label: "Warehouse" },
+            { key: "quantity", label: "Qty" },
+            { key: "expiryDate", label: "Expiry" },
+          ],
+          expiredRows.slice(0, 12).map((row) => ({
+            productName: row.productName || "—",
+            warehouseName: row.warehouseName || "—",
+            quantity: formatNumber(row.quantity),
+            expiryDate: formatDate(row.expiryDate),
+          })),
+          expiredRows.length,
+          "Expired stock that still remains in inventory and needs immediate disposal or return."
+        ),
+      ],
+    },
+    {
+      key: "stock-movements",
+      title: "Stock Movements",
+      description: "Movement mix, warehouse activity, and latest stock transactions for the selected period.",
+      badge: "Movement flow",
+      kpis: [
+        { label: "Moves in period", value: formatNumber(currentMoves), note: currentLabel },
+        { label: "Top warehouse", value: warehouseAgg[0]?._id || "—", note: warehouseAgg[0] ? `${formatNumber(warehouseAgg[0].quantity)} units` : "No warehouse activity" },
+        { label: "Top brand", value: topBrandAgg[0]?._id || "—", note: topBrandAgg[0] ? `${formatNumber(topBrandAgg[0].quantity)} units sold` : "No brand sales" },
+        { label: "Top distributor", value: topDistributorAgg[0]?._id || "—", note: topDistributorAgg[0] ? `${formatNumber(topDistributorAgg[0].quantity)} units issued` : "No sale stock" },
+      ],
+      alerts: [!currentMoves ? `No inventory movements recorded in ${currentLabel.toLowerCase()}.` : ""],
+      insights: [warehouseAgg[0]?._id ? `${warehouseAgg[0]._id} handled the highest stock volume.` : ""],
+      tables: [
+        table(
+          "Movement mix",
+          [{ key: "type", label: "Movement type" }, { key: "count", label: "Rows" }, { key: "quantity", label: "Quantity" }],
+          movementTypeAgg.map((row) => ({ type: titleCase(row._id), count: formatNumber(row.count), quantity: formatNumber(row.quantity) })),
+          movementTypeAgg.length,
+          "Breakdown of inventory events by movement type."
+        ),
+        table(
+          "Warehouse activity",
+          [{ key: "warehouse", label: "Warehouse" }, { key: "count", label: "Rows" }, { key: "quantity", label: "Quantity" }],
+          warehouseAgg.map((row) => ({ warehouse: row._id, count: formatNumber(row.count), quantity: formatNumber(row.quantity) })),
+          warehouseAgg.length,
+          "Warehouses with the largest movement load."
+        ),
+        table(
+          "Recent stock movements",
+          [
+            { key: "productName", label: "Product" },
+            { key: "warehouseName", label: "Warehouse" },
+            { key: "movementType", label: "Type" },
+            { key: "quantity", label: "Quantity" },
+            { key: "createdAt", label: "Created" },
+          ],
+          recentMoves.map((row) => ({
+            productName: row.productName || "—",
+            warehouseName: row.warehouseName || "—",
+            movementType: titleCase(row.movementType),
+            quantity: formatNumber(row.quantity),
+            createdAt: formatDate(row.createdAt),
+          })),
+          currentMoves,
+          "Latest stock movement lines for warehouse review."
+        ),
+      ],
+    },
+  ];
+
+  return moduleCard("inventory", "Warehouse & Inventory", "Stock movements, stock health, low stock alerts, expiry risk, and damage visibility for the selected period.", {
     badge: "Stock intelligence",
     heroTone: "blue",
     kpis: [
       { label: "Warehouses", value: formatNumber(warehouses), note: "Available storage points" },
-      { label: "Moves in period", value: formatNumber(currentMoves), note: currentLabel },
-      { label: "Top Distributor", value: topDistributorAgg[0]?._id || "—", note: topDistributorAgg[0] ? `${formatNumber(topDistributorAgg[0].quantity)} units issued` : "No sale stock" },
-      { label: "Most Return", value: mostReturnAgg[0]?._id || "—", note: mostReturnAgg[0] ? `${formatNumber(mostReturnAgg[0].quantity)} units returned` : "No return stock" },
-      { label: "Top Brand", value: topBrandAgg[0]?._id || "—", note: topBrandAgg[0] ? `${formatNumber(topBrandAgg[0].quantity)} units sold` : "No brand sales" },
+      { label: "On hand qty", value: formatNumber(totalOnHand), note: "Current live balance" },
+      { label: "Low stock alerts", value: formatNumber(lowStockRows.length), note: "Need replenishment" },
+      { label: "Near expiry qty", value: formatNumber(nearExpiryQty), note: "Next 90 days" },
+      { label: "Damage + expired", value: formatNumber(damagedQty + expiredQty), note: "Loss control qty" },
     ],
     comparison: compareBlock(currentMoves, previousMoves, currentLabel, previousLabel),
-    alerts: [!currentMoves ? `No inventory movements recorded in ${currentLabel.toLowerCase()}.` : ""],
+    alerts: [
+      !currentMoves ? `No inventory movements recorded in ${currentLabel.toLowerCase()}.` : "",
+      lowStockRows.length ? `${formatNumber(lowStockRows.length)} stock rows require replenishment attention.` : "",
+      expiredRows.length ? `${formatNumber(expiredRows.length)} expired stock rows are still on hand.` : "",
+    ],
     insights: [
       warehouseAgg[0]?._id ? `${warehouseAgg[0]._id} handled the highest stock volume.` : "",
       topDistributorAgg[0]?._id ? `${topDistributorAgg[0]._id} received the highest product volume from warehouses.` : "",
       mostReturnAgg[0]?._id ? `${mostReturnAgg[0]._id} generated the highest return volume back to warehouses.` : "",
       topBrandAgg[0]?._id ? `${topBrandAgg[0]._id} is the top-selling brand in warehouse dispatch.` : "",
     ],
-    tables: [
-      table(
-        "Movement mix",
-        [{ key: "type", label: "Movement type" }, { key: "count", label: "Rows" }, { key: "quantity", label: "Quantity" }],
-        movementTypeAgg.map((row) => ({ type: titleCase(row._id), count: formatNumber(row.count), quantity: formatNumber(row.quantity) })),
-        movementTypeAgg.length,
-        "Breakdown of inventory events by movement type."
-      ),
-      table(
-        "Warehouse activity",
-        [{ key: "warehouse", label: "Warehouse" }, { key: "count", label: "Rows" }, { key: "quantity", label: "Quantity" }],
-        warehouseAgg.map((row) => ({ warehouse: row._id, count: formatNumber(row.count), quantity: formatNumber(row.quantity) })),
-        warehouseAgg.length,
-        "Warehouses with the largest movement load."
-      ),
-      table(
-        "Recent stock movements",
-        [
-          { key: "productName", label: "Product" },
-          { key: "warehouseName", label: "Warehouse" },
-          { key: "movementType", label: "Type" },
-          { key: "quantity", label: "Quantity" },
-          { key: "createdAt", label: "Created" },
-        ],
-        recentMoves.map((row) => ({
-          productName: row.productName || "—",
-          warehouseName: row.warehouseName || "—",
-          movementType: titleCase(row.movementType),
-          quantity: formatNumber(row.quantity),
-          createdAt: formatDate(row.createdAt),
-        })),
-        currentMoves,
-        "Latest stock movement lines for warehouse review."
-      ),
-    ],
+    segments,
   });
 }
+
 
 async function buildTerritoryModule(models, scope, currentRange, previousRange, currentLabel, previousLabel) {
   const [regions, zones, territories, fields, currentNewFields, previousNewFields, coverageAgg] = await Promise.all([
@@ -942,6 +1342,11 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
   const secondaryMatch = scopedSalesOrderQuery(models, scope, applyDateFilter({ saleType: "secondary" }, "orderDate", currentRange));
   const primaryPreviousMatch = scopedSalesOrderQuery(models, scope, applyDateFilter({ saleType: "primary" }, "orderDate", previousRange));
   const secondaryPreviousMatch = scopedSalesOrderQuery(models, scope, applyDateFilter({ saleType: "secondary" }, "orderDate", previousRange));
+  const primaryTxnCurrentMatch = scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter(), ...sourceRoleFilter(PRIMARY_SOURCE_ROLES) }, "transactionAt", currentRange));
+  const primaryTxnPreviousMatch = scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter(), ...sourceRoleFilter(PRIMARY_SOURCE_ROLES) }, "transactionAt", previousRange));
+  const secondaryTxnCurrentMatch = scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter(), ...sourceRoleFilter(SECONDARY_SOURCE_ROLES) }, "transactionAt", currentRange));
+  const secondaryTxnPreviousMatch = scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter(), ...sourceRoleFilter(SECONDARY_SOURCE_ROLES) }, "transactionAt", previousRange));
+  const returnTxnCurrentMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: "RETURN_STOCK" }, "transactionAt", currentRange));
 
   const scopedSalesOrders = scope.isDistributor
     ? await models.SalesOrderModel.find(scopedSalesOrderQuery(models, scope, {})).select("_id orderNo").limit(5000).lean()
@@ -977,6 +1382,20 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
     returnPreviousCount,
     returnStatusAgg,
     returnRecentClaims,
+    currentOrderTxnCount,
+    primaryTxnCount,
+    primaryTxnPreviousCount,
+    primaryTxnStatusAgg,
+    primaryRecentTxns,
+    primaryTxnCodes,
+    secondaryTxnCount,
+    secondaryTxnPreviousCount,
+    secondaryTxnStatusAgg,
+    secondaryRecentTxns,
+    secondaryTxnCodes,
+    returnTxnCount,
+    returnRecentTxns,
+    returnTxnCodes,
   ] = await Promise.all([
     models.SalesOrderModel.countDocuments(currentMatch),
     models.SalesOrderModel.countDocuments(previousMatch),
@@ -995,8 +1414,88 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
     models.SalesOrderModel.find(secondaryMatch).sort({ orderDate: -1, createdAt: -1 }).limit(8).select("orderNo customerName territoryName status totalAmount orderDate sourceType").lean(),
     models.ReturnClaimModel.countDocuments(currentClaimsMatch),
     models.ReturnClaimModel.countDocuments(previousClaimsMatch),
-    models.ReturnClaimModel.aggregate([{ $match: currentMatch }, { $group: { _id: "$status", count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
+    models.ReturnClaimModel.aggregate([{ $match: currentClaimsMatch }, { $group: { _id: "$status", count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
     models.ReturnClaimModel.find(currentClaimsMatch).sort({ createdAt: -1 }).limit(8).select("orderNo customerName reason status quantity createdAt").lean(),
+    models.WarehouseTransactionModel.countDocuments(scopedOrderQuery(models, scope, applyDateFilter(orderTransactionFilter(), "transactionAt", currentRange))),
+    models.WarehouseTransactionModel.countDocuments(primaryTxnCurrentMatch),
+    models.WarehouseTransactionModel.countDocuments(primaryTxnPreviousMatch),
+    models.WarehouseTransactionModel.aggregate([
+      { $match: primaryTxnCurrentMatch },
+      {
+        $group: {
+          _id: "$requestStatus",
+          count: { $sum: 1 },
+          total: { $sum: "$grandTotal" },
+          quantity: { $sum: sumTransactionItemsExpression() },
+        },
+      },
+      { $sort: { count: -1 } },
+    ]),
+    models.WarehouseTransactionModel.find(primaryTxnCurrentMatch).sort({ transactionAt: -1, createdAt: -1 }).limit(8).select("transactionCode transactionType requestSourceRole fromEntityType toEntityName warehouseName requestStatus grandTotal transactionAt items").lean(),
+    models.WarehouseTransactionModel.find(primaryTxnCurrentMatch).select("transactionCode").limit(5000).lean(),
+    models.WarehouseTransactionModel.countDocuments(secondaryTxnCurrentMatch),
+    models.WarehouseTransactionModel.countDocuments(secondaryTxnPreviousMatch),
+    models.WarehouseTransactionModel.aggregate([
+      { $match: secondaryTxnCurrentMatch },
+      {
+        $group: {
+          _id: "$requestStatus",
+          count: { $sum: 1 },
+          total: { $sum: "$grandTotal" },
+          quantity: { $sum: sumTransactionItemsExpression() },
+        },
+      },
+      { $sort: { count: -1 } },
+    ]),
+    models.WarehouseTransactionModel.find(secondaryTxnCurrentMatch).sort({ transactionAt: -1, createdAt: -1 }).limit(8).select("transactionCode transactionType requestSourceRole fromEntityType toEntityName warehouseName requestStatus grandTotal transactionAt items").lean(),
+    models.WarehouseTransactionModel.find(secondaryTxnCurrentMatch).select("transactionCode").limit(5000).lean(),
+    models.WarehouseTransactionModel.countDocuments(returnTxnCurrentMatch),
+    models.WarehouseTransactionModel.find(returnTxnCurrentMatch).sort({ transactionAt: -1, createdAt: -1 }).limit(8).select("transactionCode fromEntityName fromEntityType warehouseName requestStatus grandTotal transactionAt items").lean(),
+    models.WarehouseTransactionModel.find(returnTxnCurrentMatch).select("transactionCode").limit(5000).lean(),
+  ]);
+
+  const primaryReferenceIds = primaryTxnCodes.map((row) => row.transactionCode).filter(Boolean);
+  const secondaryReferenceIds = secondaryTxnCodes.map((row) => row.transactionCode).filter(Boolean);
+  const returnReferenceIds = returnTxnCodes.map((row) => row.transactionCode).filter(Boolean);
+
+  const [
+    primaryMovementAgg,
+    primaryRecentMoves,
+    secondaryMovementAgg,
+    secondaryRecentMoves,
+    returnMovementAgg,
+    returnRecentMoves,
+  ] = await Promise.all([
+    primaryReferenceIds.length
+      ? models.InventoryMovementModel.aggregate([
+          { $match: { referenceId: { $in: primaryReferenceIds } } },
+          { $group: { _id: "$movementType", count: { $sum: 1 }, quantity: { $sum: "$quantity" } } },
+          { $sort: { quantity: -1 } },
+        ])
+      : [],
+    primaryReferenceIds.length
+      ? models.InventoryMovementModel.find({ referenceId: { $in: primaryReferenceIds } }).sort({ createdAt: -1 }).limit(8).select("referenceId productName warehouseName movementType quantity createdAt").lean()
+      : [],
+    secondaryReferenceIds.length
+      ? models.InventoryMovementModel.aggregate([
+          { $match: { referenceId: { $in: secondaryReferenceIds } } },
+          { $group: { _id: "$movementType", count: { $sum: 1 }, quantity: { $sum: "$quantity" } } },
+          { $sort: { quantity: -1 } },
+        ])
+      : [],
+    secondaryReferenceIds.length
+      ? models.InventoryMovementModel.find({ referenceId: { $in: secondaryReferenceIds } }).sort({ createdAt: -1 }).limit(8).select("referenceId productName warehouseName movementType quantity createdAt").lean()
+      : [],
+    returnReferenceIds.length
+      ? models.InventoryMovementModel.aggregate([
+          { $match: { referenceId: { $in: returnReferenceIds } } },
+          { $group: { _id: "$movementType", count: { $sum: 1 }, quantity: { $sum: "$quantity" } } },
+          { $sort: { quantity: -1 } },
+        ])
+      : [],
+    returnReferenceIds.length
+      ? models.InventoryMovementModel.find({ referenceId: { $in: returnReferenceIds } }).sort({ createdAt: -1 }).limit(8).select("referenceId productName warehouseName movementType quantity createdAt").lean()
+      : [],
   ]);
 
   const currentRevenue = safeNumber(currentSalesAgg?.[0]?.total);
@@ -1004,21 +1503,33 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
   const currentUnits = safeNumber(currentSalesAgg?.[0]?.units);
   const pendingOrders = statusAgg.find((row) => String(row._id || "").toLowerCase() === "pending")?.count || 0;
   const topTerritory = territoryAgg[0]?._id || "—";
+  const primaryMovementCount = primaryMovementAgg.reduce((sum, row) => sum + safeNumber(row.count), 0);
+  const primaryMovementQty = primaryMovementAgg.reduce((sum, row) => sum + safeNumber(row.quantity), 0);
+  const secondaryMovementCount = secondaryMovementAgg.reduce((sum, row) => sum + safeNumber(row.count), 0);
+  const secondaryMovementQty = secondaryMovementAgg.reduce((sum, row) => sum + safeNumber(row.quantity), 0);
+  const returnMovementCount = returnMovementAgg.reduce((sum, row) => sum + safeNumber(row.count), 0);
+  const returnMovementQty = returnMovementAgg.reduce((sum, row) => sum + safeNumber(row.quantity), 0);
 
   const segments = [
     {
       key: "primary-orders",
       title: "Primary Orders",
-      description: "Primary order requests, value flow, and approval pipeline visibility.",
+      description: "Primary order requests, order value, and linked warehouse-side inventory movements.",
       badge: "Primary flow",
       kpis: [
         { label: "Orders", value: formatNumber(primaryCurrentCount), note: currentLabel },
         { label: "Pending", value: formatNumber(primaryStatusAgg.find((row) => String(row._id || "").toLowerCase() === "pending")?.count), note: "Need approval" },
         { label: "Approved value", value: formatCurrency(primaryStatusAgg.find((row) => String(row._id || "").toLowerCase() === "approved")?.total), note: "Approved total" },
-        { label: "Trend", value: compareBlock(primaryCurrentCount, primaryPreviousCount, currentLabel, previousLabel).deltaText, note: `${currentLabel} vs ${previousLabel}` },
+        { label: "Order moves", value: formatNumber(primaryTxnCount), note: "Warehouse transaction rows" },
+        { label: "Inventory moves", value: formatNumber(primaryMovementCount), note: `${formatNumber(primaryMovementQty)} units moved` },
       ],
-      alerts: [primaryStatusAgg.find((row) => String(row._id || "").toLowerCase() === "pending")?.count ? "Primary orders are waiting for approval action." : ""],
-      insights: [primaryCurrentCount ? "Primary order flow can be matched against payment and warehouse readiness." : "No primary order activity found in this period."],
+      alerts: [
+        primaryStatusAgg.find((row) => String(row._id || "").toLowerCase() === "pending")?.count ? "Primary orders are waiting for approval action." : "",
+        primaryTxnCount && !primaryMovementCount ? "Primary order transactions exist, but linked inventory movement rows are still missing." : "",
+      ],
+      insights: [
+        primaryCurrentCount ? "Primary order flow can now be matched against warehouse inventory execution." : "No primary order activity found in this period.",
+      ],
       tables: [
         table(
           "Primary order status performance",
@@ -1050,20 +1561,70 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
           primaryCurrentCount,
           "Latest primary orders captured in the current scope."
         ),
+        table(
+          "Primary warehouse order movements",
+          [
+            { key: "transactionCode", label: "Txn #" },
+            { key: "source", label: "Source" },
+            { key: "customerName", label: "To entity" },
+            { key: "warehouseName", label: "Warehouse" },
+            { key: "status", label: "Status" },
+            { key: "quantity", label: "Qty" },
+            { key: "amount", label: "Amount" },
+            { key: "createdAt", label: "Created" },
+          ],
+          primaryRecentTxns.map((row) => ({
+            transactionCode: row.transactionCode || "—",
+            source: titleCase(row.requestSourceRole || row.fromEntityType || "—"),
+            customerName: row.toEntityName || "—",
+            warehouseName: row.warehouseName || "—",
+            status: titleCase(row.requestStatus),
+            quantity: formatNumber((row.items || []).reduce((sum, item) => sum + safeNumber(item.totalPacks || item.quantity), 0)),
+            amount: formatCurrency(row.grandTotal),
+            createdAt: formatDate(row.transactionAt),
+          })),
+          primaryTxnCount,
+          "Warehouse transaction records linked to primary order movement."
+        ),
+        table(
+          "Primary inventory movement lines",
+          [
+            { key: "referenceId", label: "Txn #" },
+            { key: "productName", label: "Product" },
+            { key: "warehouseName", label: "Warehouse" },
+            { key: "movementType", label: "Movement" },
+            { key: "quantity", label: "Qty" },
+            { key: "createdAt", label: "Created" },
+          ],
+          primaryRecentMoves.map((row) => ({
+            referenceId: row.referenceId || "—",
+            productName: row.productName || "—",
+            warehouseName: row.warehouseName || "—",
+            movementType: titleCase(row.movementType),
+            quantity: formatNumber(row.quantity),
+            createdAt: formatDate(row.createdAt),
+          })),
+          primaryMovementCount,
+          "Inventory movement rows generated from primary order transactions."
+        ),
       ],
     },
     {
       key: "secondary-orders",
       title: "Secondary Orders",
-      description: "Secondary order performance, territory momentum, and fulfillment quality.",
+      description: "Secondary order performance with customer-side orders and linked warehouse inventory movements.",
       badge: "Secondary flow",
       kpis: [
         { label: "Orders", value: formatNumber(secondaryCurrentCount), note: currentLabel },
         { label: "Pending", value: formatNumber(secondaryStatusAgg.find((row) => String(row._id || "").toLowerCase() === "pending")?.count), note: "Pipeline backlog" },
         { label: "Delivered value", value: formatCurrency(secondaryStatusAgg.find((row) => String(row._id || "").toLowerCase() === "delivered")?.total), note: "Delivered total" },
-        { label: "Trend", value: compareBlock(secondaryCurrentCount, secondaryPreviousCount, currentLabel, previousLabel).deltaText, note: `${currentLabel} vs ${previousLabel}` },
+        { label: "Order moves", value: formatNumber(secondaryTxnCount), note: "Warehouse transaction rows" },
+        { label: "Inventory moves", value: formatNumber(secondaryMovementCount), note: `${formatNumber(secondaryMovementQty)} units moved` },
       ],
-      alerts: [secondaryStatusAgg.find((row) => String(row._id || "").toLowerCase() === "pending")?.count > 10 ? "Secondary order backlog is high and needs action." : ""],
+      alerts: [
+        secondaryStatusAgg.find((row) => String(row._id || "").toLowerCase() === "pending")?.count > 10 ? "Secondary order backlog is high and needs action." : "",
+        secondaryTxnCount && !secondaryMovementCount ? "Secondary order transactions exist, but linked inventory movement rows are still missing." : "",
+      ],
       insights: [topTerritory !== "—" ? `${topTerritory} is leading the current secondary order movement.` : "Territory performance will appear when order volume is available."],
       tables: [
         table(
@@ -1096,20 +1657,70 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
           secondaryCurrentCount,
           "Latest secondary orders captured in the current scope."
         ),
+        table(
+          "Secondary warehouse order movements",
+          [
+            { key: "transactionCode", label: "Txn #" },
+            { key: "source", label: "Source" },
+            { key: "customerName", label: "To entity" },
+            { key: "warehouseName", label: "Warehouse" },
+            { key: "status", label: "Status" },
+            { key: "quantity", label: "Qty" },
+            { key: "amount", label: "Amount" },
+            { key: "createdAt", label: "Created" },
+          ],
+          secondaryRecentTxns.map((row) => ({
+            transactionCode: row.transactionCode || "—",
+            source: titleCase(row.requestSourceRole || row.fromEntityType || "—"),
+            customerName: row.toEntityName || "—",
+            warehouseName: row.warehouseName || "—",
+            status: titleCase(row.requestStatus),
+            quantity: formatNumber((row.items || []).reduce((sum, item) => sum + safeNumber(item.totalPacks || item.quantity), 0)),
+            amount: formatCurrency(row.grandTotal),
+            createdAt: formatDate(row.transactionAt),
+          })),
+          secondaryTxnCount,
+          "Warehouse transaction rows linked to customer, order booker, or order-management order flow."
+        ),
+        table(
+          "Secondary inventory movement lines",
+          [
+            { key: "referenceId", label: "Txn #" },
+            { key: "productName", label: "Product" },
+            { key: "warehouseName", label: "Warehouse" },
+            { key: "movementType", label: "Movement" },
+            { key: "quantity", label: "Qty" },
+            { key: "createdAt", label: "Created" },
+          ],
+          secondaryRecentMoves.map((row) => ({
+            referenceId: row.referenceId || "—",
+            productName: row.productName || "—",
+            warehouseName: row.warehouseName || "—",
+            movementType: titleCase(row.movementType),
+            quantity: formatNumber(row.quantity),
+            createdAt: formatDate(row.createdAt),
+          })),
+          secondaryMovementCount,
+          "Inventory movement rows generated from secondary warehouse transactions."
+        ),
       ],
     },
     {
       key: "return-stock-orders",
       title: "Return Stock Orders",
-      description: "Return stock pressure, claim resolution pace, and recent return activity.",
+      description: "Return stock pressure, claim resolution pace, and linked warehouse return movements.",
       badge: "Return flow",
       kpis: [
         { label: "Claims", value: formatNumber(returnCurrentCount), note: currentLabel },
         { label: "Requested", value: formatNumber(returnStatusAgg.find((row) => row._id === "requested")?.count), note: "Need review" },
         { label: "Resolved", value: formatNumber(returnStatusAgg.find((row) => row._id === "resolved")?.count), note: "Closed loop" },
-        { label: "Trend", value: compareBlock(returnCurrentCount, returnPreviousCount, currentLabel, previousLabel).deltaText, note: `${currentLabel} vs ${previousLabel}` },
+        { label: "Return txns", value: formatNumber(returnTxnCount), note: "Warehouse-side requests" },
+        { label: "Inventory moves", value: formatNumber(returnMovementCount), note: `${formatNumber(returnMovementQty)} units moved` },
       ],
-      alerts: [returnStatusAgg.find((row) => row._id === "requested")?.count ? "Return stock claims are waiting for review or approval." : ""],
+      alerts: [
+        returnStatusAgg.find((row) => row._id === "requested")?.count ? "Return stock claims are waiting for review or approval." : "",
+        returnTxnCount && !returnMovementCount ? "Return stock transactions exist, but linked inventory movement rows are still missing." : "",
+      ],
       insights: [returnCurrentCount ? "Return stock analysis can help reduce repeat damage and delivery issues." : "No return stock claims found in this period."],
       tables: [
         table(
@@ -1140,11 +1751,55 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
           returnCurrentCount,
           "Latest return stock claims that need monitoring."
         ),
+        table(
+          "Return stock warehouse transactions",
+          [
+            { key: "transactionCode", label: "Txn #" },
+            { key: "source", label: "Source" },
+            { key: "warehouseName", label: "Warehouse" },
+            { key: "status", label: "Status" },
+            { key: "quantity", label: "Qty" },
+            { key: "amount", label: "Amount" },
+            { key: "createdAt", label: "Created" },
+          ],
+          returnRecentTxns.map((row) => ({
+            transactionCode: row.transactionCode || "—",
+            source: titleCase(row.fromEntityType || row.fromEntityName || "—"),
+            warehouseName: row.warehouseName || "—",
+            status: titleCase(row.requestStatus),
+            quantity: formatNumber((row.items || []).reduce((sum, item) => sum + safeNumber(item.totalPacks || item.quantity), 0)),
+            amount: formatCurrency(row.grandTotal),
+            createdAt: formatDate(row.transactionAt),
+          })),
+          returnTxnCount,
+          "Warehouse return transactions related to return stock flow."
+        ),
+        table(
+          "Return stock inventory movement lines",
+          [
+            { key: "referenceId", label: "Txn #" },
+            { key: "productName", label: "Product" },
+            { key: "warehouseName", label: "Warehouse" },
+            { key: "movementType", label: "Movement" },
+            { key: "quantity", label: "Qty" },
+            { key: "createdAt", label: "Created" },
+          ],
+          returnRecentMoves.map((row) => ({
+            referenceId: row.referenceId || "—",
+            productName: row.productName || "—",
+            warehouseName: row.warehouseName || "—",
+            movementType: titleCase(row.movementType),
+            quantity: formatNumber(row.quantity),
+            createdAt: formatDate(row.createdAt),
+          })),
+          returnMovementCount,
+          "Inventory movement rows generated from return stock transactions."
+        ),
       ],
     },
   ];
 
-  return moduleCard(scope.isDistributor ? "orders" : "sales", "Order Management", "Primary orders, secondary orders, and return stock visibility for stronger business control.", {
+  return moduleCard(scope.isDistributor ? "orders" : "sales", "Order Management", "Primary orders, secondary orders, return stock, and linked inventory movement visibility for stronger business control.", {
     badge: scope.isDistributor ? "Territory orders" : "Sales performance",
     heroTone: "emerald",
     kpis: [
@@ -1152,11 +1807,13 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
       { label: "Sales value", value: formatCurrency(currentRevenue), note: currentLabel },
       { label: "Units ordered", value: formatNumber(currentUnits), note: "Line item volume" },
       { label: "Top territory", value: topTerritory, note: territoryAgg[0] ? formatCurrency(territoryAgg[0].total) : "No sales" },
+      { label: "Order moves", value: formatNumber(currentOrderTxnCount), note: "Warehouse-side transactions" },
     ],
     comparison: compareBlock(currentRevenue, previousRevenue, currentLabel, previousLabel),
     alerts: [
       pendingOrders > 10 ? "There is a high backlog of pending orders that needs action." : "",
       currentRevenue < previousRevenue ? "Sales value is below the previous comparison period." : "",
+      currentOrderTxnCount && !(primaryMovementCount + secondaryMovementCount + returnMovementCount) ? "Order transactions exist, but linked inventory movement rows are not appearing yet." : "",
     ],
     insights: [topTerritory !== "—" ? `${topTerritory} is the top-performing territory by order value.` : ""],
     tables: [
@@ -1203,6 +1860,7 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
     segments,
   });
 }
+
 
 async function buildPaymentsModule(models, scope, currentRange, previousRange, currentLabel, previousLabel) {
   const currentPrimaryMatch = distributorPaymentScope(scope, applyDateFilter({}, "createdAt", currentRange));
