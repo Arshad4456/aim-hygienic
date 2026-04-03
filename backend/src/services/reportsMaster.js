@@ -1755,7 +1755,7 @@ async function buildComplianceModule(models, scope, currentRange, previousRange,
   const [currentClaims, previousClaims, claimAgg, recentClaims, deliveredWithPod] = await Promise.all([
     models.ReturnClaimModel.countDocuments(currentMatch),
     models.ReturnClaimModel.countDocuments(previousMatch),
-    models.ReturnClaimModel.aggregate([{ $match: currentClaimsMatch }, { $group: { _id: "$status", count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
+    models.ReturnClaimModel.aggregate([{ $match: currentMatch }, { $group: { _id: "$status", count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
     models.ReturnClaimModel.find(currentMatch).sort({ createdAt: -1 }).limit(8).select("orderNo customerName reason status quantity createdAt").lean(),
     models.SalesOrderModel.countDocuments(scopedOrderQuery(models, scope, { status: "delivered", podUrl: { $exists: true, $ne: "" } })),
   ]);
