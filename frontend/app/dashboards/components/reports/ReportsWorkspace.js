@@ -82,69 +82,61 @@ export function ReportsMasterView({ basePath, roleLabel }) {
       {loading ? <LoadingBlock /> : null}
 
       {!loading && !error ? (
-        <>
-          <div className="grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">
-            <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <div className="text-lg font-semibold text-slate-900">KPI cards by module</div>
-                  <div className="mt-1 text-sm text-slate-500">
-                    Every card maps to a sidebar business module and opens its focused report view.
+        <div className="grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">
+          <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-lg font-semibold text-slate-900">KPI cards by module</div>
+                <div className="mt-1 text-sm text-slate-500">
+                  Every card maps to a sidebar business module and opens its focused report view.
+                </div>
+              </div>
+              <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                {modules.length} modules
+              </div>
+            </div>
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {(summary.cards || []).map((card) => (
+                <Link
+                  key={card.key}
+                  href={`${basePath}/${card.routeSegment || card.key}`}
+                  className="group relative overflow-hidden rounded-[26px] border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
+                >
+                  <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-indigo-500 via-sky-500 to-emerald-500" />
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-slate-900 break-words">{card.title}</div>
+                      <div className="mt-1 text-xs text-slate-500 break-words">{card.description}</div>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                      {card.alertCount} alerts
+                    </span>
                   </div>
-                </div>
-                <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                  {modules.length} modules
-                </div>
-              </div>
-              <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {(summary.cards || []).map((card) => (
-                  <Link
-                    key={card.key}
-                    href={`${basePath}/${card.routeSegment || card.key}`}
-                    className="group relative overflow-hidden rounded-[26px] border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
-                  >
-                    <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-indigo-500 via-sky-500 to-emerald-500" />
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="text-sm font-semibold text-slate-900 break-words">{card.title}</div>
-                        <div className="mt-1 text-xs text-slate-500 break-words">{card.description}</div>
-                      </div>
-                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                        {card.alertCount} alerts
-                      </span>
-                    </div>
-                    <div className="mt-4 rounded-2xl bg-slate-950/95 p-4 text-white">
-                      <div className="text-[11px] uppercase tracking-[0.2em] text-slate-300">{card.primaryMetric?.label || "Metric"}</div>
-                      <div className="mt-2 break-words text-2xl font-semibold">{card.primaryMetric?.value || "—"}</div>
-                      <div className="mt-2 text-xs text-slate-300">{card.primaryMetric?.note || card.badge}</div>
-                    </div>
-                    <div className="mt-3 flex items-center justify-between text-xs">
-                      <span className="font-medium text-slate-600">{card.badge}</span>
-                      <span className={`font-semibold ${toneClass(card.comparison?.tone)}`}>{card.comparison?.deltaText || "0.0%"}</span>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="text-lg font-semibold text-slate-900">Performance compare</div>
-              <div className="mt-1 text-sm text-slate-500">
-                Current period versus previous period on company-wide order and expense movement.
-              </div>
-              <div className="mt-4 grid gap-3">
-                <CompareCard title="Orders" block={summary.orderComparison} />
-                <CompareCard title="Expenses" block={summary.expenseComparison} currency />
-              </div>
+                  <div className="mt-4 rounded-2xl bg-slate-950/95 p-4 text-white">
+                    <div className="text-[11px] uppercase tracking-[0.2em] text-slate-300">{card.primaryMetric?.label || "Metric"}</div>
+                    <div className="mt-2 break-words text-2xl font-semibold">{card.primaryMetric?.value || "—"}</div>
+                    <div className="mt-2 text-xs text-slate-300">{card.primaryMetric?.note || card.badge}</div>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-xs">
+                    <span className="font-medium text-slate-600">{card.badge}</span>
+                    <span className={`font-semibold ${toneClass(card.comparison?.tone)}`}>{card.comparison?.deltaText || "0.0%"}</span>
+                  </div>
+                </Link>
+              ))}
             </div>
           </div>
 
-          <div className="space-y-6">
-            {modules.map((module) => (
-              <ModuleSection key={module.key} module={module} basePath={basePath} compact={false} />
-            ))}
+          <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="text-lg font-semibold text-slate-900">Performance compare</div>
+            <div className="mt-1 text-sm text-slate-500">
+              Current period versus previous period on company-wide order and expense movement.
+            </div>
+            <div className="mt-4 grid gap-3">
+              <CompareCard title="Orders" block={summary.orderComparison} />
+              <CompareCard title="Expenses" block={summary.expenseComparison} currency />
+            </div>
           </div>
-        </>
+        </div>
       ) : null}
     </div>
   );

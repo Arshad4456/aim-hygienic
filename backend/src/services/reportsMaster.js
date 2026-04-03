@@ -6,6 +6,7 @@ const Warehouse = require("../models/Warehouse");
 const InventoryMovement = require("../models/InventoryMovement");
 const Expense = require("../models/Expense");
 const Account = require("../models/Account");
+const AccountTransaction = require("../models/AccountTransaction");
 const StockTransfer = require("../models/StockTransfer");
 const Vehicle = require("../models/Vehicle");
 const Message = require("../models/Message");
@@ -342,6 +343,7 @@ async function getScopedModels(req, requestedCompanyId = "", requestedCompanyNam
       InventoryMovementModel: InventoryMovement,
       ExpenseModel: Expense,
       AccountModel: Account,
+      AccountTransactionModel: AccountTransaction,
       StockTransferModel: StockTransfer,
       VehicleModel: Vehicle,
       MessageModel: Message,
@@ -375,6 +377,7 @@ async function getScopedModels(req, requestedCompanyId = "", requestedCompanyNam
       InventoryMovementModel: InventoryMovement,
       ExpenseModel: Expense,
       AccountModel: Account,
+      AccountTransactionModel: AccountTransaction,
       StockTransferModel: StockTransfer,
       VehicleModel: Vehicle,
       MessageModel: Message,
@@ -416,6 +419,7 @@ async function getScopedModels(req, requestedCompanyId = "", requestedCompanyNam
     InventoryMovementModel: getModelFromDb(tenantDb, InventoryMovement),
     ExpenseModel: getModelFromDb(tenantDb, Expense),
     AccountModel: getModelFromDb(tenantDb, Account),
+    AccountTransactionModel: getModelFromDb(tenantDb, AccountTransaction),
     StockTransferModel: getModelFromDb(tenantDb, StockTransfer),
     VehicleModel: getModelFromDb(tenantDb, Vehicle),
     MessageModel: getModelFromDb(tenantDb, Message),
@@ -442,6 +446,11 @@ async function getScopedModels(req, requestedCompanyId = "", requestedCompanyNam
 function scopedOrderQuery(models, scope, query = {}) {
   const base = { ...(models?.orderBaseMatch || {}), ...(query || {}) };
   return distributorOrderScope(scope, base);
+}
+
+function scopedSalesOrderQuery(models, scope, query = {}) {
+  const base = { ...(models?.orderBaseMatch || {}), ...(query || {}) };
+  return distributorSalesOrderScope(scope, base);
 }
 
 async function resolveRoleScope(models, rawScope) {
@@ -497,6 +506,21 @@ function distributorOrderScope(scope, base = {}) {
   if (scope.distributorId) or.push({ distributorId: scope.distributorId });
   if (scope.territoryName) or.push({ territoryName: scope.territoryName });
   if (scope.territoryName) or.push({ territory: scope.territoryName });
+  if (scope.teamUserTextIds?.length) {
+    or.push({ customerId: { $in: scope.teamUserTextIds } });
+    or.push({ orderBookerId: { $in: scope.teamUserTextIds } });
+    or.push({ salesmanId: { $in: scope.teamUserTextIds } });
+    or.push({ createdBy: { $in: scope.teamUserTextIds.map(toObjectId).filter(Boolean) } });
+  }
+  if (!or.length) return { ...base, _id: null };
+  return addOrScope(base, or);
+}
+
+function distributorSalesOrderScope(scope, base = {}) {
+  if (!scope.isDistributor) return { ...base };
+  const or = [];
+  if (scope.distributorId) or.push({ distributorId: scope.distributorId });
+  if (scope.territoryName) or.push({ territoryName: scope.territoryName });
   if (scope.teamUserTextIds?.length) {
     or.push({ customerId: { $in: scope.teamUserTextIds } });
     or.push({ orderBookerId: { $in: scope.teamUserTextIds } });
@@ -861,21 +885,23 @@ async function buildTerritoryModule(models, scope, currentRange, previousRange, 
 }
 
 async function buildSalesModule(models, scope, currentRange, previousRange, currentLabel, previousLabel) {
-  const currentMatch = scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter() }, "transactionAt", currentRange));
-  const previousMatch = scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter() }, "transactionAt", previousRange));
-  const primaryMatch = scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter(), ...sourceRoleFilter(PRIMARY_SOURCE_ROLES) }, "transactionAt", currentRange));
-  const secondaryMatch = scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter(), ...sourceRoleFilter(SECONDARY_SOURCE_ROLES) }, "transactionAt", currentRange));
-  const primaryPreviousMatch = scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter(), ...sourceRoleFilter(PRIMARY_SOURCE_ROLES) }, "transactionAt", previousRange));
-  const secondaryPreviousMatch = scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter(), ...sourceRoleFilter(SECONDARY_SOURCE_ROLES) }, "transactionAt", previousRange));
+  const currentMatch = scopedSalesOrderQuery(models, scope, applyDateFilter({}, "orderDate", currentRange));
+  const previousMatch = scopedSalesOrderQuery(models, scope, applyDateFilter({}, "orderDate", previousRange));
+  const primaryMatch = scopedSalesOrderQuery(models, scope, applyDateFilter({ saleType: "primary" }, "orderDate", currentRange));
+  const secondaryMatch = scopedSalesOrderQuery(models, scope, applyDateFilter({ saleType: "secondary" }, "orderDate", currentRange));
+  const primaryPreviousMatch = scopedSalesOrderQuery(models, scope, applyDateFilter({ saleType: "primary" }, "orderDate", previousRange));
+  const secondaryPreviousMatch = scopedSalesOrderQuery(models, scope, applyDateFilter({ saleType: "secondary" }, "orderDate", previousRange));
+
+  const scopedSalesOrders = scope.isDistributor
+    ? await models.SalesOrderModel.find(scopedSalesOrderQuery(models, scope, {})).select("_id orderNo").limit(5000).lean()
+    : [];
   const claimBase = scope.isDistributor
-    ? await getScopedOrderRefs(models, scope, currentRange).then((scopedOrders) => (
-        scopedOrders.orderIds?.length || scopedOrders.orderNos?.length
-          ? addOrScope({}, [
-              scopedOrders.orderIds?.length ? { orderId: { $in: scopedOrders.orderIds } } : null,
-              scopedOrders.orderNos?.length ? { orderNo: { $in: scopedOrders.orderNos } } : null,
-            ])
-          : { _id: null }
-      ))
+    ? (scopedSalesOrders.length
+        ? addOrScope({}, [
+            { orderId: { $in: scopedSalesOrders.map((row) => row._id).filter(Boolean) } },
+            { orderNo: { $in: scopedSalesOrders.map((row) => row.orderNo).filter(Boolean) } },
+          ])
+        : { _id: null })
     : {};
   const currentClaimsMatch = applyDateFilter(claimBase, "createdAt", currentRange);
   const previousClaimsMatch = applyDateFilter(claimBase, "createdAt", previousRange);
@@ -901,220 +927,226 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
     returnStatusAgg,
     returnRecentClaims,
   ] = await Promise.all([
-    models.WarehouseTransactionModel.countDocuments(currentMatch),
-    models.WarehouseTransactionModel.countDocuments(previousMatch),
-    models.WarehouseTransactionModel.aggregate([{ $match: currentMatch }, { $group: { _id: null, total: { $sum: "$grandTotal" }, units: { $sum: { $sum: "$items.totalPacks" } } } }]),
-    models.WarehouseTransactionModel.aggregate([{ $match: previousMatch }, { $group: { _id: null, total: { $sum: "$grandTotal" }, units: { $sum: { $sum: "$items.totalPacks" } } } }]),
-    models.WarehouseTransactionModel.aggregate([{ $match: currentMatch }, { $group: { _id: "$requestStatus", count: { $sum: 1 }, total: { $sum: "$grandTotal" } } }, { $sort: { count: -1 } }]),
-    models.WarehouseTransactionModel.aggregate([{ $match: currentMatch }, { $group: { _id: { $ifNull: ["$territory", "Unassigned"] }, count: { $sum: 1 }, total: { $sum: "$grandTotal" } } }, { $sort: { total: -1 } }, { $limit: 8 }]),
-    models.WarehouseTransactionModel.find(currentMatch).sort({ transactionAt: -1 }).limit(8).select("transactionCode toEntityName territory requestStatus grandTotal requestSourceRole transactionAt").lean(),
-    models.WarehouseTransactionModel.countDocuments(primaryMatch),
-    models.WarehouseTransactionModel.countDocuments(primaryPreviousMatch),
-    models.WarehouseTransactionModel.aggregate([{ $match: primaryMatch }, { $group: { _id: "$requestStatus", count: { $sum: 1 }, total: { $sum: "$grandTotal" } } }, { $sort: { count: -1 } }]),
-    models.WarehouseTransactionModel.find(primaryMatch).sort({ transactionAt: -1 }).limit(8).select("transactionCode toEntityName territory requestStatus grandTotal transactionAt").lean(),
-    models.WarehouseTransactionModel.countDocuments(secondaryMatch),
-    models.WarehouseTransactionModel.countDocuments(secondaryPreviousMatch),
-    models.WarehouseTransactionModel.aggregate([{ $match: secondaryMatch }, { $group: { _id: "$requestStatus", count: { $sum: 1 }, total: { $sum: "$grandTotal" } } }, { $sort: { count: -1 } }]),
-    models.WarehouseTransactionModel.find(secondaryMatch).sort({ transactionAt: -1 }).limit(8).select("transactionCode toEntityName territory requestStatus grandTotal transactionAt").lean(),
+    models.SalesOrderModel.countDocuments(currentMatch),
+    models.SalesOrderModel.countDocuments(previousMatch),
+    models.SalesOrderModel.aggregate([{ $match: currentMatch }, { $group: { _id: null, total: { $sum: "$totalAmount" }, units: { $sum: { $sum: "$items.quantity" } } } }]),
+    models.SalesOrderModel.aggregate([{ $match: previousMatch }, { $group: { _id: null, total: { $sum: "$totalAmount" }, units: { $sum: { $sum: "$items.quantity" } } } }]),
+    models.SalesOrderModel.aggregate([{ $match: currentMatch }, { $group: { _id: "$status", count: { $sum: 1 }, total: { $sum: "$totalAmount" } } }, { $sort: { count: -1 } }]),
+    models.SalesOrderModel.aggregate([{ $match: currentMatch }, { $group: { _id: { $ifNull: ["$territoryName", "Unassigned"] }, count: { $sum: 1 }, total: { $sum: "$totalAmount" } } }, { $sort: { total: -1 } }, { $limit: 8 }]),
+    models.SalesOrderModel.find(currentMatch).sort({ orderDate: -1, createdAt: -1 }).limit(8).select("orderNo customerName territoryName status totalAmount saleType sourceType orderDate").lean(),
+    models.SalesOrderModel.countDocuments(primaryMatch),
+    models.SalesOrderModel.countDocuments(primaryPreviousMatch),
+    models.SalesOrderModel.aggregate([{ $match: primaryMatch }, { $group: { _id: "$status", count: { $sum: 1 }, total: { $sum: "$totalAmount" } } }, { $sort: { count: -1 } }]),
+    models.SalesOrderModel.find(primaryMatch).sort({ orderDate: -1, createdAt: -1 }).limit(8).select("orderNo customerName territoryName status totalAmount orderDate sourceType").lean(),
+    models.SalesOrderModel.countDocuments(secondaryMatch),
+    models.SalesOrderModel.countDocuments(secondaryPreviousMatch),
+    models.SalesOrderModel.aggregate([{ $match: secondaryMatch }, { $group: { _id: "$status", count: { $sum: 1 }, total: { $sum: "$totalAmount" } } }, { $sort: { count: -1 } }]),
+    models.SalesOrderModel.find(secondaryMatch).sort({ orderDate: -1, createdAt: -1 }).limit(8).select("orderNo customerName territoryName status totalAmount orderDate sourceType").lean(),
     models.ReturnClaimModel.countDocuments(currentClaimsMatch),
     models.ReturnClaimModel.countDocuments(previousClaimsMatch),
-    models.ReturnClaimModel.aggregate([{ $match: claimBase }, { $group: { _id: "$status", count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
+    models.ReturnClaimModel.aggregate([{ $match: currentClaimsMatch }, { $group: { _id: "$status", count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
     models.ReturnClaimModel.find(currentClaimsMatch).sort({ createdAt: -1 }).limit(8).select("orderNo customerName reason status quantity createdAt").lean(),
   ]);
 
   const currentRevenue = safeNumber(currentSalesAgg?.[0]?.total);
   const previousRevenue = safeNumber(previousSalesAgg?.[0]?.total);
   const currentUnits = safeNumber(currentSalesAgg?.[0]?.units);
-  const pendingOrders = statusAgg.find((row) => String(row._id || "").toUpperCase() === "PENDING")?.count || 0;
+  const pendingOrders = statusAgg.find((row) => String(row._id || "").toLowerCase() === "pending")?.count || 0;
   const topTerritory = territoryAgg[0]?._id || "—";
 
   const segments = [
     {
-      key: 'primary-orders',
-      title: 'Primary Orders',
-      description: 'Primary order requests, value flow, and approval pipeline visibility.',
-      badge: 'Primary flow',
+      key: "primary-orders",
+      title: "Primary Orders",
+      description: "Primary order requests, value flow, and approval pipeline visibility.",
+      badge: "Primary flow",
       kpis: [
-        { label: 'Orders', value: formatNumber(primaryCurrentCount), note: currentLabel },
-        { label: 'Pending', value: formatNumber(primaryStatusAgg.find((row) => String(row._id || "").toUpperCase() === 'PENDING')?.count), note: 'Need approval' },
-        { label: 'Approved value', value: formatCurrency(primaryStatusAgg.find((row) => String(row._id || "").toUpperCase() === 'APPROVED')?.total), note: 'Approved total' },
-        { label: 'Trend', value: compareBlock(primaryCurrentCount, primaryPreviousCount, currentLabel, previousLabel).deltaText, note: `${currentLabel} vs ${previousLabel}` },
+        { label: "Orders", value: formatNumber(primaryCurrentCount), note: currentLabel },
+        { label: "Pending", value: formatNumber(primaryStatusAgg.find((row) => String(row._id || "").toLowerCase() === "pending")?.count), note: "Need approval" },
+        { label: "Approved value", value: formatCurrency(primaryStatusAgg.find((row) => String(row._id || "").toLowerCase() === "approved")?.total), note: "Approved total" },
+        { label: "Trend", value: compareBlock(primaryCurrentCount, primaryPreviousCount, currentLabel, previousLabel).deltaText, note: `${currentLabel} vs ${previousLabel}` },
       ],
-      alerts: [primaryStatusAgg.find((row) => String(row._id || "").toUpperCase() === 'PENDING')?.count ? 'Primary orders are waiting for approval action.' : ''],
-      insights: [primaryCurrentCount ? 'Primary order flow can be matched against payment and warehouse readiness.' : 'No primary order activity found in this period.'],
+      alerts: [primaryStatusAgg.find((row) => String(row._id || "").toLowerCase() === "pending")?.count ? "Primary orders are waiting for approval action." : ""],
+      insights: [primaryCurrentCount ? "Primary order flow can be matched against payment and warehouse readiness." : "No primary order activity found in this period."],
       tables: [
         table(
-          'Primary order status performance',
-          [{ key: 'status', label: 'Status' }, { key: 'count', label: 'Orders' }, { key: 'total', label: 'Order value' }],
+          "Primary order status performance",
+          [{ key: "status", label: "Status" }, { key: "count", label: "Orders" }, { key: "total", label: "Order value" }],
           primaryStatusAgg.map((row) => ({ status: titleCase(row._id), count: formatNumber(row.count), total: formatCurrency(row.total) })),
           primaryStatusAgg.length,
-          'Primary order pipeline health by status.'
+          "Primary order pipeline health by status."
         ),
         table(
-          'Recent primary orders',
+          "Recent primary orders",
           [
-            { key: 'orderNo', label: 'Order #' },
-            { key: 'customerName', label: 'Customer' },
-            { key: 'territoryName', label: 'Territory' },
-            { key: 'status', label: 'Status' },
-            { key: 'totalAmount', label: 'Amount' },
-            { key: 'createdAt', label: 'Created' },
+            { key: "orderNo", label: "Order #" },
+            { key: "customerName", label: "Customer" },
+            { key: "territoryName", label: "Territory" },
+            { key: "sourceType", label: "Source" },
+            { key: "status", label: "Status" },
+            { key: "totalAmount", label: "Amount" },
+            { key: "createdAt", label: "Created" },
           ],
           primaryRecentOrders.map((row) => ({
-            orderNo: row.transactionCode || '—',
-            customerName: row.toEntityName || '—',
-            territoryName: row.territory || '—',
-            status: titleCase(row.requestStatus),
-            totalAmount: formatCurrency(row.grandTotal),
-            createdAt: formatDate(row.transactionAt),
+            orderNo: row.orderNo || "—",
+            customerName: row.customerName || "—",
+            territoryName: row.territoryName || "—",
+            sourceType: titleCase(row.sourceType || "brand"),
+            status: titleCase(row.status),
+            totalAmount: formatCurrency(row.totalAmount),
+            createdAt: formatDate(row.orderDate || row.createdAt),
           })),
           primaryCurrentCount,
-          'Latest primary orders captured in the current scope.'
+          "Latest primary orders captured in the current scope."
         ),
       ],
     },
     {
-      key: 'secondary-orders',
-      title: 'Secondary Orders',
-      description: 'Secondary order performance, territory momentum, and fulfillment quality.',
-      badge: 'Secondary flow',
+      key: "secondary-orders",
+      title: "Secondary Orders",
+      description: "Secondary order performance, territory momentum, and fulfillment quality.",
+      badge: "Secondary flow",
       kpis: [
-        { label: 'Orders', value: formatNumber(secondaryCurrentCount), note: currentLabel },
-        { label: 'Pending', value: formatNumber(secondaryStatusAgg.find((row) => String(row._id || "").toUpperCase() === 'PENDING')?.count), note: 'Pipeline backlog' },
-        { label: 'Delivered value', value: formatCurrency(secondaryStatusAgg.find((row) => String(row._id || "").toUpperCase() === 'DELIVERED')?.total), note: 'Delivered total' },
-        { label: 'Trend', value: compareBlock(secondaryCurrentCount, secondaryPreviousCount, currentLabel, previousLabel).deltaText, note: `${currentLabel} vs ${previousLabel}` },
+        { label: "Orders", value: formatNumber(secondaryCurrentCount), note: currentLabel },
+        { label: "Pending", value: formatNumber(secondaryStatusAgg.find((row) => String(row._id || "").toLowerCase() === "pending")?.count), note: "Pipeline backlog" },
+        { label: "Delivered value", value: formatCurrency(secondaryStatusAgg.find((row) => String(row._id || "").toLowerCase() === "delivered")?.total), note: "Delivered total" },
+        { label: "Trend", value: compareBlock(secondaryCurrentCount, secondaryPreviousCount, currentLabel, previousLabel).deltaText, note: `${currentLabel} vs ${previousLabel}` },
       ],
-      alerts: [secondaryStatusAgg.find((row) => String(row._id || "").toUpperCase() === 'PENDING')?.count > 10 ? 'Secondary order backlog is high and needs action.' : ''],
-      insights: [topTerritory !== '—' ? `${topTerritory} is leading the current secondary order movement.` : 'Territory performance will appear when order volume is available.'],
+      alerts: [secondaryStatusAgg.find((row) => String(row._id || "").toLowerCase() === "pending")?.count > 10 ? "Secondary order backlog is high and needs action." : ""],
+      insights: [topTerritory !== "—" ? `${topTerritory} is leading the current secondary order movement.` : "Territory performance will appear when order volume is available."],
       tables: [
         table(
-          'Secondary order status performance',
-          [{ key: 'status', label: 'Status' }, { key: 'count', label: 'Orders' }, { key: 'total', label: 'Order value' }],
+          "Secondary order status performance",
+          [{ key: "status", label: "Status" }, { key: "count", label: "Orders" }, { key: "total", label: "Order value" }],
           secondaryStatusAgg.map((row) => ({ status: titleCase(row._id), count: formatNumber(row.count), total: formatCurrency(row.total) })),
           secondaryStatusAgg.length,
-          'Secondary order pipeline health by status.'
+          "Secondary order pipeline health by status."
         ),
         table(
-          'Recent secondary orders',
+          "Recent secondary orders",
           [
-            { key: 'orderNo', label: 'Order #' },
-            { key: 'customerName', label: 'Customer' },
-            { key: 'territoryName', label: 'Territory' },
-            { key: 'status', label: 'Status' },
-            { key: 'totalAmount', label: 'Amount' },
-            { key: 'createdAt', label: 'Created' },
+            { key: "orderNo", label: "Order #" },
+            { key: "customerName", label: "Customer" },
+            { key: "territoryName", label: "Territory" },
+            { key: "sourceType", label: "Source" },
+            { key: "status", label: "Status" },
+            { key: "totalAmount", label: "Amount" },
+            { key: "createdAt", label: "Created" },
           ],
           secondaryRecentOrders.map((row) => ({
-            orderNo: row.transactionCode || '—',
-            customerName: row.toEntityName || '—',
-            territoryName: row.territory || '—',
-            status: titleCase(row.requestStatus),
-            totalAmount: formatCurrency(row.grandTotal),
-            createdAt: formatDate(row.transactionAt),
+            orderNo: row.orderNo || "—",
+            customerName: row.customerName || "—",
+            territoryName: row.territoryName || "—",
+            sourceType: titleCase(row.sourceType || "customer"),
+            status: titleCase(row.status),
+            totalAmount: formatCurrency(row.totalAmount),
+            createdAt: formatDate(row.orderDate || row.createdAt),
           })),
           secondaryCurrentCount,
-          'Latest secondary orders captured in the current scope.'
+          "Latest secondary orders captured in the current scope."
         ),
       ],
     },
     {
-      key: 'return-stock-orders',
-      title: 'Return Stock Orders',
-      description: 'Return stock pressure, claim resolution pace, and recent return activity.',
-      badge: 'Return flow',
+      key: "return-stock-orders",
+      title: "Return Stock Orders",
+      description: "Return stock pressure, claim resolution pace, and recent return activity.",
+      badge: "Return flow",
       kpis: [
-        { label: 'Claims', value: formatNumber(returnCurrentCount), note: currentLabel },
-        { label: 'Requested', value: formatNumber(returnStatusAgg.find((row) => row._id === 'requested')?.count), note: 'Need review' },
-        { label: 'Resolved', value: formatNumber(returnStatusAgg.find((row) => row._id === 'resolved')?.count), note: 'Closed loop' },
-        { label: 'Trend', value: compareBlock(returnCurrentCount, returnPreviousCount, currentLabel, previousLabel).deltaText, note: `${currentLabel} vs ${previousLabel}` },
+        { label: "Claims", value: formatNumber(returnCurrentCount), note: currentLabel },
+        { label: "Requested", value: formatNumber(returnStatusAgg.find((row) => row._id === "requested")?.count), note: "Need review" },
+        { label: "Resolved", value: formatNumber(returnStatusAgg.find((row) => row._id === "resolved")?.count), note: "Closed loop" },
+        { label: "Trend", value: compareBlock(returnCurrentCount, returnPreviousCount, currentLabel, previousLabel).deltaText, note: `${currentLabel} vs ${previousLabel}` },
       ],
-      alerts: [returnStatusAgg.find((row) => row._id === 'requested')?.count ? 'Return stock claims are waiting for review or approval.' : ''],
-      insights: [returnCurrentCount ? 'Return stock analysis can help reduce repeat damage and delivery issues.' : 'No return stock claims found in this period.'],
+      alerts: [returnStatusAgg.find((row) => row._id === "requested")?.count ? "Return stock claims are waiting for review or approval." : ""],
+      insights: [returnCurrentCount ? "Return stock analysis can help reduce repeat damage and delivery issues." : "No return stock claims found in this period."],
       tables: [
         table(
-          'Return stock status mix',
-          [{ key: 'status', label: 'Status' }, { key: 'count', label: 'Claims' }],
+          "Return stock status mix",
+          [{ key: "status", label: "Status" }, { key: "count", label: "Claims" }],
           returnStatusAgg.map((row) => ({ status: titleCase(row._id), count: formatNumber(row.count) })),
           returnStatusAgg.length,
-          'Return stock claim lifecycle visibility.'
+          "Return stock claim lifecycle visibility."
         ),
         table(
-          'Recent return stock claims',
+          "Recent return stock claims",
           [
-            { key: 'orderNo', label: 'Order #' },
-            { key: 'customerName', label: 'Customer' },
-            { key: 'reason', label: 'Reason' },
-            { key: 'status', label: 'Status' },
-            { key: 'quantity', label: 'Qty' },
-            { key: 'createdAt', label: 'Created' },
+            { key: "orderNo", label: "Order #" },
+            { key: "customerName", label: "Customer" },
+            { key: "reason", label: "Reason" },
+            { key: "status", label: "Status" },
+            { key: "quantity", label: "Qty" },
+            { key: "createdAt", label: "Created" },
           ],
           returnRecentClaims.map((row) => ({
-            orderNo: row.orderNo || '—',
-            customerName: row.customerName || '—',
-            reason: row.reason || '—',
+            orderNo: row.orderNo || "—",
+            customerName: row.customerName || "—",
+            reason: row.reason || "—",
             status: titleCase(row.status),
             quantity: formatNumber(row.quantity),
             createdAt: formatDate(row.createdAt),
           })),
           returnCurrentCount,
-          'Latest return stock claims that need monitoring.'
+          "Latest return stock claims that need monitoring."
         ),
       ],
     },
   ];
 
-  return moduleCard(scope.isDistributor ? 'orders' : 'sales', scope.isDistributor ? 'Order Management' : 'Order Management', 'Primary orders, secondary orders, and return stock visibility for stronger business control.', {
-    badge: scope.isDistributor ? 'Territory orders' : 'Sales performance',
-    heroTone: 'emerald',
+  return moduleCard(scope.isDistributor ? "orders" : "sales", "Order Management", "Primary orders, secondary orders, and return stock visibility for stronger business control.", {
+    badge: scope.isDistributor ? "Territory orders" : "Sales performance",
+    heroTone: "emerald",
     kpis: [
-      { label: 'Orders', value: formatNumber(currentOrders), note: currentLabel },
-      { label: 'Sales value', value: formatCurrency(currentRevenue), note: currentLabel },
-      { label: 'Units ordered', value: formatNumber(currentUnits), note: 'Line item volume' },
-      { label: 'Top territory', value: topTerritory, note: territoryAgg[0] ? formatCurrency(territoryAgg[0].total) : 'No sales' },
+      { label: "Orders", value: formatNumber(currentOrders), note: currentLabel },
+      { label: "Sales value", value: formatCurrency(currentRevenue), note: currentLabel },
+      { label: "Units ordered", value: formatNumber(currentUnits), note: "Line item volume" },
+      { label: "Top territory", value: topTerritory, note: territoryAgg[0] ? formatCurrency(territoryAgg[0].total) : "No sales" },
     ],
     comparison: compareBlock(currentRevenue, previousRevenue, currentLabel, previousLabel),
     alerts: [
-      pendingOrders > 10 ? 'There is a high backlog of pending orders that needs action.' : '',
-      currentRevenue < previousRevenue ? 'Sales value is below the previous comparison period.' : '',
+      pendingOrders > 10 ? "There is a high backlog of pending orders that needs action." : "",
+      currentRevenue < previousRevenue ? "Sales value is below the previous comparison period." : "",
     ],
-    insights: [topTerritory !== '—' ? `${topTerritory} is the top-performing territory by order value.` : ''],
+    insights: [topTerritory !== "—" ? `${topTerritory} is the top-performing territory by order value.` : ""],
     tables: [
       table(
-        'Order status performance',
-        [{ key: 'status', label: 'Status' }, { key: 'count', label: 'Orders' }, { key: 'total', label: 'Order value' }],
+        "Order status performance",
+        [{ key: "status", label: "Status" }, { key: "count", label: "Orders" }, { key: "total", label: "Order value" }],
         statusAgg.map((row) => ({ status: titleCase(row._id), count: formatNumber(row.count), total: formatCurrency(row.total) })),
         statusAgg.length,
-        'Pipeline health by order status.'
+        "Pipeline health by order status."
       ),
       table(
-        'Top territories',
-        [{ key: 'territory', label: 'Territory' }, { key: 'count', label: 'Orders' }, { key: 'total', label: 'Order value' }],
+        "Top territories",
+        [{ key: "territory", label: "Territory" }, { key: "count", label: "Orders" }, { key: "total", label: "Order value" }],
         territoryAgg.map((row) => ({ territory: row._id, count: formatNumber(row.count), total: formatCurrency(row.total) })),
         territoryAgg.length,
-        'Highest-value territories in the selected period.'
+        "Highest-value territories in the selected period."
       ),
       table(
-        'Recent orders',
+        "Recent orders",
         [
-          { key: 'orderNo', label: 'Order #' },
-          { key: 'customerName', label: 'Customer' },
-          { key: 'saleType', label: 'Order type' },
-          { key: 'territoryName', label: 'Territory' },
-          { key: 'status', label: 'Status' },
-          { key: 'totalAmount', label: 'Amount' },
-          { key: 'createdAt', label: 'Created' },
+          { key: "orderNo", label: "Order #" },
+          { key: "customerName", label: "Customer" },
+          { key: "saleType", label: "Order type" },
+          { key: "sourceType", label: "Source" },
+          { key: "territoryName", label: "Territory" },
+          { key: "status", label: "Status" },
+          { key: "totalAmount", label: "Amount" },
+          { key: "createdAt", label: "Created" },
         ],
         recentOrders.map((row) => ({
-          orderNo: row.transactionCode || '—',
-          customerName: row.toEntityName || '—',
-          saleType: titleCase(row.requestSourceRole || 'secondary'),
-          territoryName: row.territory || '—',
-          status: titleCase(row.requestStatus),
-          totalAmount: formatCurrency(row.grandTotal),
-          createdAt: formatDate(row.transactionAt),
+          orderNo: row.orderNo || "—",
+          customerName: row.customerName || "—",
+          saleType: titleCase(row.saleType || "secondary"),
+          sourceType: titleCase(row.sourceType || "customer"),
+          territoryName: row.territoryName || "—",
+          status: titleCase(row.status),
+          totalAmount: formatCurrency(row.totalAmount),
+          createdAt: formatDate(row.orderDate || row.createdAt),
         })),
         currentOrders,
-        'Latest order lines that can be reviewed immediately.'
+        "Latest order lines that can be reviewed immediately."
       ),
     ],
     segments,
@@ -1181,32 +1213,98 @@ async function buildPaymentsModule(models, scope, currentRange, previousRange, c
 }
 
 async function buildAccountsModule(models, scope, currentRange, previousRange, currentLabel, previousLabel) {
-  const [activeAccounts, openLoans, currentLoanPaymentsAgg, previousLoanPaymentsAgg, balanceAgg, recentLoans] = await Promise.all([
+  const currentTxnMatch = applyDateFilter({}, "transactionDate", currentRange);
+  const previousTxnMatch = applyDateFilter({}, "transactionDate", previousRange);
+
+  const [
+    activeAccounts,
+    balanceAgg,
+    openLoans,
+    overdueLoans,
+    currentTxnAgg,
+    previousTxnAgg,
+    accountTypeAgg,
+    topBalances,
+    loanTypeAgg,
+    recentLoans,
+    recentLoanPayments,
+  ] = await Promise.all([
     models.AccountModel.countDocuments({ status: "active" }),
-    models.LoanModel.countDocuments({ status: "open" }),
-    models.LoanPaymentModel.aggregate([{ $match: applyDateFilter({}, "createdAt", currentRange) }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
-    models.LoanPaymentModel.aggregate([{ $match: applyDateFilter({}, "createdAt", previousRange) }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
     models.AccountModel.aggregate([{ $group: { _id: null, balance: { $sum: "$currentBalance" }, opening: { $sum: "$openingBalance" } } }]),
-    models.LoanModel.find({}).sort({ createdAt: -1 }).limit(8).select("loanType partyName principalAmount remainingAmount status loanDate").lean(),
+    models.LoanModel.countDocuments({ status: "open" }),
+    models.LoanModel.countDocuments({ status: "open", dueDate: { $lt: new Date() }, remainingAmount: { $gt: 0 } }),
+    models.AccountTransactionModel.aggregate([{ $match: currentTxnMatch }, { $group: { _id: "$type", total: { $sum: "$amount" }, count: { $sum: 1 } } }]),
+    models.AccountTransactionModel.aggregate([{ $match: previousTxnMatch }, { $group: { _id: "$type", total: { $sum: "$amount" }, count: { $sum: 1 } } }]),
+    models.AccountModel.aggregate([{ $group: { _id: { $ifNull: ["$accountType", "other"] }, count: { $sum: 1 }, balance: { $sum: "$currentBalance" } } }, { $sort: { balance: -1 } }]),
+    models.AccountModel.find({}).sort({ currentBalance: -1 }).limit(8).select("accountName bankName accountType currentBalance status accountNumber").lean(),
+    models.LoanModel.aggregate([{ $group: { _id: "$loanType", count: { $sum: 1 }, principal: { $sum: "$principalAmount" }, remaining: { $sum: "$remainingAmount" } } }, { $sort: { remaining: -1 } }]),
+    models.LoanModel.find({}).sort({ createdAt: -1 }).limit(8).select("loanType partyName principalAmount remainingAmount status loanDate dueDate").lean(),
+    models.LoanPaymentModel.find(applyDateFilter({}, "paymentDate", currentRange)).sort({ paymentDate: -1 }).limit(8).select("paymentDirection amount paymentDate method referenceNo").lean(),
   ]);
 
-  const currentPayments = safeNumber(currentLoanPaymentsAgg?.[0]?.total);
-  const previousPayments = safeNumber(previousLoanPaymentsAgg?.[0]?.total);
   const currentBalance = safeNumber(balanceAgg?.[0]?.balance);
+  const currentCashIn = safeNumber(currentTxnAgg.find((row) => row._id === "cash_in")?.total);
+  const currentCashOut = safeNumber(currentTxnAgg.find((row) => row._id === "cash_out")?.total);
+  const previousCashIn = safeNumber(previousTxnAgg.find((row) => row._id === "cash_in")?.total);
+  const previousCashOut = safeNumber(previousTxnAgg.find((row) => row._id === "cash_out")?.total);
+  const currentNetFlow = currentCashIn - currentCashOut;
+  const previousNetFlow = previousCashIn - previousCashOut;
 
-  return moduleCard("accounts", "Account Management", "Accounts, balances, and loan returns with recovery visibility.", {
+  return moduleCard("accounts", "Account Management", "Accounts, balances, cash movement, and loan exposure with recovery visibility.", {
     badge: "Cash discipline",
     heroTone: "cyan",
     kpis: [
       { label: "Active accounts", value: formatNumber(activeAccounts), note: "Usable accounts" },
       { label: "Combined balance", value: formatCurrency(currentBalance), note: "Current balance" },
-      { label: "Open loans", value: formatNumber(openLoans), note: "Outstanding loans" },
-      { label: "Loan returns", value: formatCurrency(currentPayments), note: currentLabel },
+      { label: "Net cash flow", value: formatCurrency(currentNetFlow), note: `${currentLabel} (in ${formatCurrency(currentCashIn)} / out ${formatCurrency(currentCashOut)})` },
+      { label: "Open loans", value: formatNumber(openLoans), note: overdueLoans ? `${formatNumber(overdueLoans)} overdue` : "No overdue loans" },
     ],
-    comparison: compareBlock(currentPayments, previousPayments, currentLabel, previousLabel),
-    alerts: [!activeAccounts ? "No active accounts found for financial operations." : ""],
-    insights: [openLoans ? "Open loans should be reviewed alongside return schedules." : "All loans are currently closed."],
+    comparison: compareBlock(currentNetFlow, previousNetFlow, currentLabel, previousLabel),
+    alerts: [
+      !activeAccounts ? "No active accounts found for financial operations." : "",
+      overdueLoans ? `${formatNumber(overdueLoans)} open loans have crossed the due date and need follow-up.` : "",
+      currentCashOut > currentCashIn && currentCashIn > 0 ? "Cash outflow is higher than inflow in the selected period." : "",
+    ],
+    insights: [
+      accountTypeAgg[0]?._id ? `${titleCase(accountTypeAgg[0]._id)} accounts hold the largest share of current balances.` : "",
+      loanTypeAgg[0]?._id ? `${titleCase(loanTypeAgg[0]._id)} loans are carrying the highest remaining exposure.` : "",
+    ],
     tables: [
+      table(
+        "Account type balances",
+        [{ key: "accountType", label: "Type" }, { key: "count", label: "Accounts" }, { key: "balance", label: "Balance" }],
+        accountTypeAgg.map((row) => ({ accountType: titleCase(row._id), count: formatNumber(row.count), balance: formatCurrency(row.balance) })),
+        accountTypeAgg.length,
+        "Balance concentration by account type."
+      ),
+      table(
+        "Top account balances",
+        [
+          { key: "accountName", label: "Account" },
+          { key: "bankName", label: "Bank / Wallet" },
+          { key: "accountType", label: "Type" },
+          { key: "accountNumber", label: "Account #" },
+          { key: "status", label: "Status" },
+          { key: "currentBalance", label: "Balance" },
+        ],
+        topBalances.map((row) => ({
+          accountName: row.accountName || "—",
+          bankName: row.bankName || "—",
+          accountType: titleCase(row.accountType),
+          accountNumber: row.accountNumber || "—",
+          status: titleCase(row.status),
+          currentBalance: formatCurrency(row.currentBalance),
+        })),
+        topBalances.length,
+        "Accounts with the highest current balance."
+      ),
+      table(
+        "Loan exposure by type",
+        [{ key: "loanType", label: "Type" }, { key: "count", label: "Loans" }, { key: "principal", label: "Principal" }, { key: "remaining", label: "Remaining" }],
+        loanTypeAgg.map((row) => ({ loanType: titleCase(row._id), count: formatNumber(row.count), principal: formatCurrency(row.principal), remaining: formatCurrency(row.remaining) })),
+        loanTypeAgg.length,
+        "Outstanding loan book by received and given categories."
+      ),
       table(
         "Recent loans",
         [
@@ -1216,6 +1314,7 @@ async function buildAccountsModule(models, scope, currentRange, previousRange, c
           { key: "remainingAmount", label: "Remaining" },
           { key: "status", label: "Status" },
           { key: "loanDate", label: "Loan date" },
+          { key: "dueDate", label: "Due date" },
         ],
         recentLoans.map((row) => ({
           loanType: titleCase(row.loanType),
@@ -1224,9 +1323,29 @@ async function buildAccountsModule(models, scope, currentRange, previousRange, c
           remainingAmount: formatCurrency(row.remainingAmount),
           status: titleCase(row.status),
           loanDate: formatDate(row.loanDate),
+          dueDate: formatDate(row.dueDate),
         })),
         recentLoans.length,
         "Latest loan records and their remaining exposure."
+      ),
+      table(
+        "Recent loan returns",
+        [
+          { key: "paymentDirection", label: "Direction" },
+          { key: "amount", label: "Amount" },
+          { key: "method", label: "Method" },
+          { key: "referenceNo", label: "Reference" },
+          { key: "paymentDate", label: "Payment date" },
+        ],
+        recentLoanPayments.map((row) => ({
+          paymentDirection: row.paymentDirection === "in" ? "Received back" : "Paid out",
+          amount: formatCurrency(row.amount),
+          method: titleCase(row.method),
+          referenceNo: row.referenceNo || "—",
+          paymentDate: formatDate(row.paymentDate),
+        })),
+        recentLoanPayments.length,
+        "Latest loan settlement activity posted in the selected period."
       ),
     ],
   });
@@ -1346,20 +1465,35 @@ async function buildLogisticsModule(models, scope, currentRange, previousRange, 
 }
 
 async function buildFinanceModule(models, scope, currentRange, previousRange, currentLabel, previousLabel) {
-  const scopedOrders = await getScopedOrderRefs(models, scope, currentRange);
-  const currentReceiptMatch = distributorReceiptScope(scope, scopedOrders.orderIds, applyDateFilter({}, "createdAt", currentRange));
-  const previousReceiptMatch = distributorReceiptScope(scope, scopedOrders.orderIds, applyDateFilter({}, "createdAt", previousRange));
-  const [currentReceiptsAgg, previousReceiptsAgg, receiptStatusAgg, recentReceipts, linkedInvoices] = await Promise.all([
+  const scopedOrders = scope.isDistributor
+    ? await models.SalesOrderModel.find(scopedSalesOrderQuery(models, scope, {})).select("_id orderNo invoiceNo").limit(5000).lean()
+    : [];
+  const scopedOrderIds = scopedOrders.map((row) => row._id).filter(Boolean);
+  const currentReceiptMatch = distributorReceiptScope(scope, scopedOrderIds, applyDateFilter({}, "createdAt", currentRange));
+  const previousReceiptMatch = distributorReceiptScope(scope, scopedOrderIds, applyDateFilter({}, "createdAt", previousRange));
+
+  const [
+    currentReceiptsAgg,
+    previousReceiptsAgg,
+    receiptStatusAgg,
+    receiptMethodAgg,
+    payerRoleAgg,
+    recentReceipts,
+    linkedInvoices,
+  ] = await Promise.all([
     models.ReceiptModel.aggregate([{ $match: currentReceiptMatch }, { $group: { _id: null, total: { $sum: "$amount" }, count: { $sum: 1 } } }]),
     models.ReceiptModel.aggregate([{ $match: previousReceiptMatch }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
-    models.ReceiptModel.aggregate([{ $match: distributorReceiptScope(scope, scopedOrders.orderIds, {}) }, { $group: { _id: "$status", count: { $sum: 1 }, total: { $sum: "$amount" } } }, { $sort: { count: -1 } }]),
-    models.ReceiptModel.find(currentReceiptMatch).sort({ createdAt: -1 }).limit(8).select("receiptNo payerName paymentMethod amount status paymentDate linkedInvoiceNo").lean(),
-    models.SalesOrderModel.find(scopedOrderQuery(models, scope, { invoiceNo: { $exists: true, $ne: "" } })).sort({ invoiceGeneratedAt: -1 }).limit(8).select("invoiceNo orderNo customerName status totalAmount invoiceGeneratedAt").lean(),
+    models.ReceiptModel.aggregate([{ $match: currentReceiptMatch }, { $group: { _id: "$status", count: { $sum: 1 }, total: { $sum: "$amount" } } }, { $sort: { count: -1 } }]),
+    models.ReceiptModel.aggregate([{ $match: currentReceiptMatch }, { $group: { _id: "$paymentMethod", count: { $sum: 1 }, total: { $sum: "$amount" } } }, { $sort: { total: -1 } }]),
+    models.ReceiptModel.aggregate([{ $match: currentReceiptMatch }, { $group: { _id: "$payerRole", count: { $sum: 1 }, total: { $sum: "$amount" } } }, { $sort: { total: -1 } }]),
+    models.ReceiptModel.find(currentReceiptMatch).sort({ createdAt: -1 }).limit(8).select("receiptNo payerName payerRole paymentMethod amount status paymentDate linkedInvoiceNo referenceNo").lean(),
+    models.SalesOrderModel.find(scopedSalesOrderQuery(models, scope, { invoiceNo: { $exists: true, $ne: "" } })).sort({ invoiceGeneratedAt: -1 }).limit(8).select("invoiceNo orderNo customerName saleType status totalAmount invoiceGeneratedAt").lean(),
   ]);
 
   const currentTotal = safeNumber(currentReceiptsAgg?.[0]?.total);
   const previousTotal = safeNumber(previousReceiptsAgg?.[0]?.total);
   const currentCount = safeNumber(currentReceiptsAgg?.[0]?.count);
+  const pendingCount = safeNumber(receiptStatusAgg.find((row) => row._id === "pending")?.count);
 
   return moduleCard(scope.isDistributor ? "receipts" : "finance", scope.isDistributor ? "Receipts" : "Finance & Accounts", scope.isDistributor ? "Receipt approval and payment inflow scoped to the distributor territory." : "Receipts, invoice-linked collections, and financial transaction visibility.", {
     badge: scope.isDistributor ? "Receipt desk" : "Finance control",
@@ -1367,12 +1501,18 @@ async function buildFinanceModule(models, scope, currentRange, previousRange, cu
     kpis: [
       { label: "Receipt value", value: formatCurrency(currentTotal), note: currentLabel },
       { label: "Receipts count", value: formatNumber(currentCount), note: currentLabel },
-      { label: "Top status", value: titleCase(receiptStatusAgg[0]?._id || "—"), note: receiptStatusAgg[0] ? formatNumber(receiptStatusAgg[0].count) : "No receipts" },
+      { label: "Pending approvals", value: formatNumber(pendingCount), note: pendingCount ? "Needs review" : "All cleared" },
       { label: "Invoices ready", value: formatNumber(linkedInvoices.length), note: "Latest invoiced orders" },
     ],
     comparison: compareBlock(currentTotal, previousTotal, currentLabel, previousLabel),
-    alerts: [receiptStatusAgg.find((row) => row._id === "pending")?.count ? `${formatNumber(receiptStatusAgg.find((row) => row._id === "pending")?.count)} receipts are still pending review.` : ""],
-    insights: [currentTotal ? "Receipt inflow can be compared directly with order and payment performance." : "No receipt inflow detected in the selected period."],
+    alerts: [
+      pendingCount ? `${formatNumber(pendingCount)} receipts are still pending review.` : "",
+      receiptMethodAgg[0]?._id === "cash" && receiptMethodAgg[0]?.total > currentTotal * 0.6 ? "Cash receipts dominate this period and should be monitored closely." : "",
+    ],
+    insights: [
+      payerRoleAgg[0]?._id ? `${titleCase(payerRoleAgg[0]._id)} contributed the largest receipt inflow in ${currentLabel.toLowerCase()}.` : "",
+      receiptMethodAgg[0]?._id ? `${titleCase(receiptMethodAgg[0]._id)} is the leading payment method this period.` : "",
+    ],
     tables: [
       table(
         "Receipt status mix",
@@ -1382,10 +1522,25 @@ async function buildFinanceModule(models, scope, currentRange, previousRange, cu
         "Distribution of receipts by approval state."
       ),
       table(
+        "Receipt method mix",
+        [{ key: "paymentMethod", label: "Method" }, { key: "count", label: "Receipts" }, { key: "total", label: "Amount" }],
+        receiptMethodAgg.map((row) => ({ paymentMethod: titleCase(row._id), count: formatNumber(row.count), total: formatCurrency(row.total) })),
+        receiptMethodAgg.length,
+        "Collection performance by payment method."
+      ),
+      table(
+        "Payer role contribution",
+        [{ key: "payerRole", label: "Payer role" }, { key: "count", label: "Receipts" }, { key: "total", label: "Amount" }],
+        payerRoleAgg.map((row) => ({ payerRole: titleCase(row._id), count: formatNumber(row.count), total: formatCurrency(row.total) })),
+        payerRoleAgg.length,
+        "Which roles are generating the most collections."
+      ),
+      table(
         "Recent receipts",
         [
           { key: "receiptNo", label: "Receipt #" },
           { key: "payerName", label: "Payer" },
+          { key: "payerRole", label: "Role" },
           { key: "paymentMethod", label: "Method" },
           { key: "amount", label: "Amount" },
           { key: "status", label: "Status" },
@@ -1394,6 +1549,7 @@ async function buildFinanceModule(models, scope, currentRange, previousRange, cu
         recentReceipts.map((row) => ({
           receiptNo: row.receiptNo || "—",
           payerName: row.payerName || "—",
+          payerRole: titleCase(row.payerRole),
           paymentMethod: titleCase(row.paymentMethod),
           amount: formatCurrency(row.amount),
           status: titleCase(row.status),
@@ -1408,6 +1564,7 @@ async function buildFinanceModule(models, scope, currentRange, previousRange, cu
           { key: "invoiceNo", label: "Invoice #" },
           { key: "orderNo", label: "Order #" },
           { key: "customerName", label: "Customer" },
+          { key: "saleType", label: "Order type" },
           { key: "status", label: "Status" },
           { key: "totalAmount", label: "Amount" },
           { key: "invoiceGeneratedAt", label: "Generated" },
@@ -1416,6 +1573,7 @@ async function buildFinanceModule(models, scope, currentRange, previousRange, cu
           invoiceNo: row.invoiceNo || "—",
           orderNo: row.orderNo || "—",
           customerName: row.customerName || "—",
+          saleType: titleCase(row.saleType),
           status: titleCase(row.status),
           totalAmount: formatCurrency(row.totalAmount),
           invoiceGeneratedAt: formatDate(row.invoiceGeneratedAt),
@@ -1430,30 +1588,49 @@ async function buildFinanceModule(models, scope, currentRange, previousRange, cu
 async function buildExpenseModule(models, scope, currentRange, previousRange, currentLabel, previousLabel) {
   const currentMatch = distributorExpenseScope(scope, applyDateFilter({}, "createdAt", currentRange));
   const previousMatch = distributorExpenseScope(scope, applyDateFilter({}, "createdAt", previousRange));
-  const [currentAgg, previousAgg, statusAgg, categoryAgg, recentExpenses] = await Promise.all([
+  const [
+    currentAgg,
+    previousAgg,
+    statusAgg,
+    categoryAgg,
+    sectionAgg,
+    paymentMethodAgg,
+    costCenterAgg,
+    recentExpenses,
+  ] = await Promise.all([
     models.ExpenseModel.aggregate([{ $match: currentMatch }, { $group: { _id: null, total: { $sum: "$amount" }, count: { $sum: 1 } } }]),
     models.ExpenseModel.aggregate([{ $match: previousMatch }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
-    models.ExpenseModel.aggregate([{ $match: distributorExpenseScope(scope, {}) }, { $group: { _id: "$status", count: { $sum: 1 }, total: { $sum: "$amount" } } }, { $sort: { count: -1 } }]),
+    models.ExpenseModel.aggregate([{ $match: currentMatch }, { $group: { _id: "$status", count: { $sum: 1 }, total: { $sum: "$amount" } } }, { $sort: { count: -1 } }]),
     models.ExpenseModel.aggregate([{ $match: currentMatch }, { $group: { _id: { $ifNull: ["$category", "Uncategorized"] }, total: { $sum: "$amount" }, count: { $sum: 1 } } }, { $sort: { total: -1 } }, { $limit: 8 }]),
-    models.ExpenseModel.find(currentMatch).sort({ createdAt: -1 }).limit(8).select("title category amount paymentMethod status expenseDate spenderName").lean(),
+    models.ExpenseModel.aggregate([{ $match: currentMatch }, { $group: { _id: { $ifNull: ["$section", "personal"] }, total: { $sum: "$amount" }, count: { $sum: 1 } } }, { $sort: { total: -1 } }]),
+    models.ExpenseModel.aggregate([{ $match: currentMatch }, { $group: { _id: { $ifNull: ["$paymentMethod", "cash"] }, total: { $sum: "$amount" }, count: { $sum: 1 } } }, { $sort: { total: -1 } }]),
+    models.ExpenseModel.aggregate([{ $match: currentMatch }, { $group: { _id: { $ifNull: ["$costCenter", "General"] }, total: { $sum: "$amount" }, count: { $sum: 1 } } }, { $sort: { total: -1 } }, { $limit: 8 }]),
+    models.ExpenseModel.find(currentMatch).sort({ createdAt: -1 }).limit(8).select("title category section costCenter spenderName paymentMethod amount status expenseDate paidTo").lean(),
   ]);
 
   const currentTotal = safeNumber(currentAgg?.[0]?.total);
   const previousTotal = safeNumber(previousAgg?.[0]?.total);
   const currentCount = safeNumber(currentAgg?.[0]?.count);
+  const pendingCount = safeNumber(statusAgg.find((row) => row._id === "pending")?.count);
 
-  return moduleCard("expenses", "Expense Management", "Detailed cost control, category pressure, and spending approval quality.", {
+  return moduleCard("expenses", "Expense Management", "Detailed cost control, category pressure, spending sections, and approval quality.", {
     badge: scope.isDistributor ? "Territory spend" : "Cost governance",
     heroTone: "pink",
     kpis: [
       { label: "Expense value", value: formatCurrency(currentTotal), note: currentLabel },
       { label: "Expense rows", value: formatNumber(currentCount), note: currentLabel },
       { label: "Top category", value: categoryAgg[0]?._id || "—", note: categoryAgg[0] ? formatCurrency(categoryAgg[0].total) : "No expenses" },
-      { label: "Pending approvals", value: formatNumber(statusAgg.find((row) => row._id === "pending")?.count), note: "Requires review" },
+      { label: "Pending approvals", value: formatNumber(pendingCount), note: pendingCount ? "Requires review" : "All cleared" },
     ],
     comparison: compareBlock(currentTotal, previousTotal, currentLabel, previousLabel),
-    alerts: [statusAgg.find((row) => row._id === "pending")?.count ? "Some expenses are still pending approval." : ""],
-    insights: [categoryAgg[0]?._id ? `${categoryAgg[0]._id} is the largest expense category in the selected period.` : "No expense categories found."],
+    alerts: [
+      pendingCount ? "Some expenses are still pending approval." : "",
+      sectionAgg[0]?._id === "daily" && sectionAgg[0]?.total > currentTotal * 0.5 ? "Daily expenses are taking more than half of current period spend." : "",
+    ],
+    insights: [
+      categoryAgg[0]?._id ? `${categoryAgg[0]._id} is the largest expense category in the selected period.` : "No expense categories found.",
+      costCenterAgg[0]?._id ? `${costCenterAgg[0]._id} is the heaviest cost center this period.` : "",
+    ],
     tables: [
       table(
         "Expense status mix",
@@ -1463,6 +1640,20 @@ async function buildExpenseModule(models, scope, currentRange, previousRange, cu
         "Approval state and financial value by expense status."
       ),
       table(
+        "Expense sections",
+        [{ key: "section", label: "Section" }, { key: "count", label: "Rows" }, { key: "total", label: "Amount" }],
+        sectionAgg.map((row) => ({ section: titleCase(row._id), count: formatNumber(row.count), total: formatCurrency(row.total) })),
+        sectionAgg.length,
+        "AIM personal, daily, and distributor expense split."
+      ),
+      table(
+        "Payment method mix",
+        [{ key: "paymentMethod", label: "Method" }, { key: "count", label: "Rows" }, { key: "total", label: "Amount" }],
+        paymentMethodAgg.map((row) => ({ paymentMethod: titleCase(row._id), count: formatNumber(row.count), total: formatCurrency(row.total) })),
+        paymentMethodAgg.length,
+        "How expenses are being paid in the selected period."
+      ),
+      table(
         "Top categories",
         [{ key: "category", label: "Category" }, { key: "count", label: "Rows" }, { key: "total", label: "Amount" }],
         categoryAgg.map((row) => ({ category: row._id, count: formatNumber(row.count), total: formatCurrency(row.total) })),
@@ -1470,10 +1661,19 @@ async function buildExpenseModule(models, scope, currentRange, previousRange, cu
         "Most expensive categories in the current period."
       ),
       table(
+        "Cost center pressure",
+        [{ key: "costCenter", label: "Cost center" }, { key: "count", label: "Rows" }, { key: "total", label: "Amount" }],
+        costCenterAgg.map((row) => ({ costCenter: row._id, count: formatNumber(row.count), total: formatCurrency(row.total) })),
+        costCenterAgg.length,
+        "Cost centers carrying the highest expense load."
+      ),
+      table(
         "Recent expenses",
         [
           { key: "title", label: "Title" },
           { key: "category", label: "Category" },
+          { key: "section", label: "Section" },
+          { key: "costCenter", label: "Cost center" },
           { key: "spenderName", label: "Spender" },
           { key: "paymentMethod", label: "Method" },
           { key: "amount", label: "Amount" },
@@ -1482,7 +1682,9 @@ async function buildExpenseModule(models, scope, currentRange, previousRange, cu
         recentExpenses.map((row) => ({
           title: row.title || "—",
           category: row.category || "—",
-          spenderName: row.spenderName || "—",
+          section: titleCase(row.section),
+          costCenter: row.costCenter || "—",
+          spenderName: row.spenderName || row.paidTo || "—",
           paymentMethod: titleCase(row.paymentMethod),
           amount: formatCurrency(row.amount),
           status: titleCase(row.status),
@@ -1553,7 +1755,7 @@ async function buildComplianceModule(models, scope, currentRange, previousRange,
   const [currentClaims, previousClaims, claimAgg, recentClaims, deliveredWithPod] = await Promise.all([
     models.ReturnClaimModel.countDocuments(currentMatch),
     models.ReturnClaimModel.countDocuments(previousMatch),
-    models.ReturnClaimModel.aggregate([{ $match: claimBase }, { $group: { _id: "$status", count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
+    models.ReturnClaimModel.aggregate([{ $match: currentClaimsMatch }, { $group: { _id: "$status", count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
     models.ReturnClaimModel.find(currentMatch).sort({ createdAt: -1 }).limit(8).select("orderNo customerName reason status quantity createdAt").lean(),
     models.SalesOrderModel.countDocuments(scopedOrderQuery(models, scope, { status: "delivered", podUrl: { $exists: true, $ne: "" } })),
   ]);
@@ -1725,45 +1927,221 @@ async function buildLiveTrackingModule(models, scope, currentRange, previousRang
 }
 
 async function buildVehicleModule(models, scope, currentRange, previousRange, currentLabel, previousLabel) {
-  const [vehicles, currentTripDistance, previousTripDistance, maintenanceRows, refuelRows] = await Promise.all([
-    models.VehicleModel.countDocuments(),
-    models.VehicleTripModel.aggregate([{ $match: applyDateFilter({}, "createdAt", currentRange) }, { $group: { _id: null, total: { $sum: "$distance" } } }]),
-    models.VehicleTripModel.aggregate([{ $match: applyDateFilter({}, "createdAt", previousRange) }, { $group: { _id: null, total: { $sum: "$distance" } } }]),
-    models.VehicleMaintenanceModel.find(applyDateFilter({}, "createdAt", currentRange)).sort({ createdAt: -1 }).limit(8).select("status workshopName totalCost maintenanceDate").lean(),
-    models.VehicleRefuelModel.find(applyDateFilter({}, "createdAt", currentRange)).sort({ createdAt: -1 }).limit(8).select("liters amount stationName refuelDate").lean(),
+  const tripCurrentMatch = applyDateFilter({}, "tripDate", currentRange);
+  const tripPreviousMatch = applyDateFilter({}, "tripDate", previousRange);
+  const refuelCurrentMatch = applyDateFilter({}, "date", currentRange);
+  const maintenanceCurrentMatch = applyDateFilter({}, "date", currentRange);
+
+  const [vehicles, trips, previousTrips, refuels, maintenance] = await Promise.all([
+    models.VehicleModel.find({}).lean(),
+    models.VehicleTripModel.find(tripCurrentMatch).lean(),
+    models.VehicleTripModel.find(tripPreviousMatch).lean(),
+    models.VehicleRefuelModel.find(refuelCurrentMatch).lean(),
+    models.VehicleMaintenanceModel.find(maintenanceCurrentMatch).lean(),
   ]);
 
-  const currentDistance = safeNumber(currentTripDistance?.[0]?.total);
-  const previousDistance = safeNumber(previousTripDistance?.[0]?.total);
+  const vehicleMap = new Map(vehicles.map((v) => [String(v._id), v]));
+  const totalVehicles = vehicles.length;
+  const activeVehicles = vehicles.filter((v) => v.assignedUserId).length;
+  const idleVehicles = totalVehicles - activeVehicles;
+  const dueMaintenanceCount = vehicles.filter((v) => String(v.status || "").toLowerCase() === "under maintenance").length;
 
-  return moduleCard("vehicles", "Vehicle Management", "Vehicle utilization, refuelling, and maintenance activity for fleet operators.", {
+  const currentDistance = trips.reduce((sum, row) => sum + safeNumber(row.distance), 0);
+  const previousDistance = previousTrips.reduce((sum, row) => sum + safeNumber(row.distance), 0);
+  const totalFuel = refuels.reduce((sum, row) => sum + safeNumber(row.liters), 0);
+  const fuelCost = refuels.reduce((sum, row) => sum + safeNumber(row.cost), 0);
+  const maintenanceCost = maintenance.reduce((sum, row) => sum + safeNumber(row.cost || row.totalCost), 0);
+  const companyTrips = trips.filter((row) => row.tripType === "company");
+  const personalTrips = trips.filter((row) => row.tripType === "personal");
+
+  const byType = Object.entries(vehicles.reduce((acc, v) => {
+    const key = v.type || "Other";
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {})).map(([type, count]) => ({ type, count }));
+
+  const byStatus = Object.entries(vehicles.reduce((acc, v) => {
+    const key = v.status || "Unknown";
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {})).map(([status, count]) => ({ status, count }));
+
+  const byRegion = Object.entries(vehicles.reduce((acc, v) => {
+    const key = v.regionName || v.regionId || "Unknown";
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {})).map(([region, count]) => ({ region, count }));
+
+  const maintenanceByType = Object.values(maintenance.reduce((acc, item) => {
+    const key = item.maintenanceType || "other";
+    if (!acc[key]) acc[key] = { maintenanceType: key, count: 0, cost: 0 };
+    acc[key].count += 1;
+    acc[key].cost += safeNumber(item.cost || item.totalCost);
+    return acc;
+  }, {})).sort((a, b) => b.cost - a.cost);
+
+  const tripAggByVehicle = trips.reduce((acc, t) => {
+    const key = String(t.vehicleId);
+    if (!acc[key]) {
+      const vehicle = vehicleMap.get(key) || {};
+      acc[key] = {
+        vehicleId: key,
+        registrationNo: vehicle.registrationNo || "-",
+        assignedUserName: vehicle.assignedUserName || "-",
+        distance: 0,
+        tripCount: 0,
+        companyKm: 0,
+        personalKm: 0,
+      };
+    }
+    acc[key].distance += safeNumber(t.distance);
+    acc[key].tripCount += 1;
+    if (t.tripType === "company") acc[key].companyKm += safeNumber(t.distance);
+    if (t.tripType === "personal") acc[key].personalKm += safeNumber(t.distance);
+    return acc;
+  }, {});
+
+  const refuelAggByVehicle = refuels.reduce((acc, r) => {
+    const key = String(r.vehicleId);
+    if (!acc[key]) acc[key] = { liters: 0, cost: 0, count: 0 };
+    acc[key].liters += safeNumber(r.liters);
+    acc[key].cost += safeNumber(r.cost || r.amount);
+    acc[key].count += 1;
+    return acc;
+  }, {});
+
+  const vehicleInsights = Object.values(tripAggByVehicle).map((row) => {
+    const ref = refuelAggByVehicle[row.vehicleId] || { liters: 0, cost: 0, count: 0 };
+    const efficiency = ref.liters > 0 ? row.distance / ref.liters : 0;
+    const personalRatio = row.distance > 0 ? (row.personalKm / row.distance) * 100 : 0;
+    return { ...row, refuelLiters: ref.liters, refuelCost: ref.cost, refuelCount: ref.count, efficiency, personalRatio };
+  });
+
+  const topFuelVehicles = [...vehicleInsights].sort((a, b) => b.refuelLiters - a.refuelLiters).slice(0, 8);
+  const lowEfficiencyVehicles = [...vehicleInsights].filter((v) => v.refuelLiters > 0).sort((a, b) => a.efficiency - b.efficiency).slice(0, 8);
+  const topPersonalUsageVehicles = [...vehicleInsights].filter((v) => v.personalKm > 0).sort((a, b) => b.personalKm - a.personalKm).slice(0, 8);
+  const personalRatio = currentDistance > 0 ? (personalTrips.reduce((sum, row) => sum + safeNumber(row.distance), 0) / currentDistance) * 100 : 0;
+
+  return moduleCard("vehicles", "Vehicle Management", "Fleet overview, fuel analytics, efficiency, personal usage, and maintenance health for operations.", {
     badge: "Fleet analytics",
     heroTone: "yellow",
     kpis: [
-      { label: "Vehicles", value: formatNumber(vehicles), note: "Registered fleet" },
-      { label: "Distance", value: `${formatNumber(currentDistance)} KM`, note: currentLabel },
-      { label: "Refuels", value: formatNumber(refuelRows.length), note: currentLabel },
-      { label: "Maintenance", value: formatNumber(maintenanceRows.length), note: currentLabel },
+      { label: "Total vehicles", value: formatNumber(totalVehicles), note: `${formatNumber(activeVehicles)} active · ${formatNumber(idleVehicles)} idle` },
+      { label: "Distance", value: `${formatNumber(currentDistance)} KM`, note: `${formatNumber(companyTrips.length)} company trips · ${formatNumber(personalTrips.length)} personal trips` },
+      { label: "Fuel analysis", value: `${safeNumber(totalFuel).toFixed(1)} L`, note: `Cost ${formatCurrency(fuelCost)} · ${(totalFuel > 0 ? currentDistance / totalFuel : 0).toFixed(2)} KM/L` },
+      { label: "Maintenance health", value: formatCurrency(maintenanceCost), note: dueMaintenanceCount ? `${formatNumber(dueMaintenanceCount)} vehicles under maintenance` : "No vehicles under maintenance" },
     ],
     comparison: compareBlock(currentDistance, previousDistance, currentLabel, previousLabel),
-    alerts: [!vehicles ? "No vehicles have been configured yet." : ""],
-    insights: [maintenanceRows.length ? "Maintenance and refuel history can be reviewed side by side for cost control." : "No maintenance activity found in the selected period."],
+    alerts: [
+      !totalVehicles ? "No vehicles have been configured yet." : "",
+      dueMaintenanceCount ? `${formatNumber(dueMaintenanceCount)} vehicles are currently under maintenance.` : "",
+      lowEfficiencyVehicles[0]?.efficiency > 0 && lowEfficiencyVehicles[0].efficiency < 5 ? `${lowEfficiencyVehicles[0].registrationNo} is running below healthy fuel efficiency.` : "",
+      topPersonalUsageVehicles[0]?.personalRatio > 30 ? `${topPersonalUsageVehicles[0].registrationNo} shows high personal KM usage.` : "",
+    ],
+    insights: [
+      topFuelVehicles[0]?.registrationNo ? `${topFuelVehicles[0].registrationNo} consumed the highest fuel in the selected period.` : "",
+      lowEfficiencyVehicles[0]?.registrationNo ? `${lowEfficiencyVehicles[0].registrationNo} has the lowest efficiency and should be reviewed.` : "",
+      `Personal KM ratio is ${personalRatio.toFixed(1)}% for the selected period.`,
+    ],
     tables: [
+      table(
+        "Vehicles by type",
+        [{ key: "type", label: "Type" }, { key: "count", label: "Vehicles" }],
+        byType.map((row) => ({ type: row.type, count: formatNumber(row.count) })),
+        byType.length,
+        "Vehicle mix across available fleet types."
+      ),
+      table(
+        "Vehicles by status",
+        [{ key: "status", label: "Status" }, { key: "count", label: "Vehicles" }],
+        byStatus.map((row) => ({ status: row.status, count: formatNumber(row.count) })),
+        byStatus.length,
+        "Fleet availability and maintenance distribution."
+      ),
+      table(
+        "Vehicles by region",
+        [{ key: "region", label: "Region" }, { key: "count", label: "Vehicles" }],
+        byRegion.map((row) => ({ region: row.region, count: formatNumber(row.count) })),
+        byRegion.length,
+        "Regional deployment of the vehicle fleet."
+      ),
+      table(
+        "Top fuel vehicles",
+        [
+          { key: "registrationNo", label: "Vehicle" },
+          { key: "assignedUserName", label: "Assigned user" },
+          { key: "refuelLiters", label: "Fuel (L)" },
+          { key: "refuelCost", label: "Fuel cost" },
+          { key: "distance", label: "KM" },
+        ],
+        topFuelVehicles.map((row) => ({
+          registrationNo: row.registrationNo || "—",
+          assignedUserName: row.assignedUserName || "—",
+          refuelLiters: safeNumber(row.refuelLiters).toFixed(1),
+          refuelCost: formatCurrency(row.refuelCost),
+          distance: formatNumber(row.distance),
+        })),
+        topFuelVehicles.length,
+        "Same high-value fuel report used in the vehicle module overview."
+      ),
+      table(
+        "Lowest efficiency vehicles",
+        [
+          { key: "registrationNo", label: "Vehicle" },
+          { key: "distance", label: "KM" },
+          { key: "refuelLiters", label: "Fuel (L)" },
+          { key: "efficiency", label: "KM/L" },
+        ],
+        lowEfficiencyVehicles.map((row) => ({
+          registrationNo: row.registrationNo || "—",
+          distance: formatNumber(row.distance),
+          refuelLiters: safeNumber(row.refuelLiters).toFixed(1),
+          efficiency: safeNumber(row.efficiency).toFixed(2),
+        })),
+        lowEfficiencyVehicles.length,
+        "Vehicles with the weakest fuel efficiency in the selected period."
+      ),
+      table(
+        "Top personal usage vehicles",
+        [
+          { key: "registrationNo", label: "Vehicle" },
+          { key: "personalKm", label: "Personal KM" },
+          { key: "distance", label: "Total KM" },
+          { key: "personalRatio", label: "Personal ratio" },
+        ],
+        topPersonalUsageVehicles.map((row) => ({
+          registrationNo: row.registrationNo || "—",
+          personalKm: formatNumber(row.personalKm),
+          distance: formatNumber(row.distance),
+          personalRatio: `${safeNumber(row.personalRatio).toFixed(1)}%`,
+        })),
+        topPersonalUsageVehicles.length,
+        "Vehicles with the highest personal-use share in the selected period."
+      ),
+      table(
+        "Maintenance by type",
+        [{ key: "maintenanceType", label: "Type" }, { key: "count", label: "Jobs" }, { key: "cost", label: "Cost" }],
+        maintenanceByType.map((row) => ({ maintenanceType: titleCase(row.maintenanceType), count: formatNumber(row.count), cost: formatCurrency(row.cost) })),
+        maintenanceByType.length,
+        "Maintenance cost concentration by work type."
+      ),
       table(
         "Recent maintenance",
         [
           { key: "status", label: "Status" },
           { key: "workshopName", label: "Workshop" },
-          { key: "totalCost", label: "Cost" },
+          { key: "maintenanceType", label: "Type" },
+          { key: "cost", label: "Cost" },
           { key: "maintenanceDate", label: "Date" },
         ],
-        maintenanceRows.map((row) => ({
+        maintenance.slice().sort((a, b) => new Date(b.date || b.maintenanceDate || 0) - new Date(a.date || a.maintenanceDate || 0)).slice(0, 8).map((row) => ({
           status: titleCase(row.status),
           workshopName: row.workshopName || "—",
-          totalCost: formatCurrency(row.totalCost),
-          maintenanceDate: formatDate(row.maintenanceDate),
+          maintenanceType: titleCase(row.maintenanceType),
+          cost: formatCurrency(row.cost || row.totalCost),
+          maintenanceDate: formatDate(row.date || row.maintenanceDate),
         })),
-        maintenanceRows.length,
+        maintenance.length,
         "Latest vehicle maintenance entries."
       ),
       table(
@@ -1774,13 +2152,13 @@ async function buildVehicleModule(models, scope, currentRange, previousRange, cu
           { key: "amount", label: "Amount" },
           { key: "refuelDate", label: "Date" },
         ],
-        refuelRows.map((row) => ({
+        refuels.slice().sort((a, b) => new Date(b.date || b.refuelDate || 0) - new Date(a.date || a.refuelDate || 0)).slice(0, 8).map((row) => ({
           stationName: row.stationName || "—",
-          liters: formatNumber(row.liters),
-          amount: formatCurrency(row.amount),
-          refuelDate: formatDate(row.refuelDate),
+          liters: safeNumber(row.liters).toFixed(1),
+          amount: formatCurrency(row.cost || row.amount),
+          refuelDate: formatDate(row.date || row.refuelDate),
         })),
-        refuelRows.length,
+        refuels.length,
         "Latest refuel entries captured for the fleet."
       ),
     ],
@@ -1842,8 +2220,8 @@ async function buildPrimaryOrderRequestModule(models, scope, currentRange, previ
 
 async function buildReportsMeta(models, scope, modules, currentRange, previousRange, currentLabel, previousLabel) {
   const [currentOrders, previousOrders, currentExpensesAgg, previousExpensesAgg] = await Promise.all([
-    models.WarehouseTransactionModel.countDocuments(scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter() }, "transactionAt", currentRange))),
-    models.WarehouseTransactionModel.countDocuments(scopedOrderQuery(models, scope, applyDateFilter({ ...orderTransactionFilter() }, "transactionAt", previousRange))),
+    models.SalesOrderModel.countDocuments(scopedSalesOrderQuery(models, scope, applyDateFilter({}, "orderDate", currentRange))),
+    models.SalesOrderModel.countDocuments(scopedSalesOrderQuery(models, scope, applyDateFilter({}, "orderDate", previousRange))),
     models.ExpenseModel.aggregate([{ $match: distributorExpenseScope(scope, applyDateFilter({}, "createdAt", currentRange)) }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
     models.ExpenseModel.aggregate([{ $match: distributorExpenseScope(scope, applyDateFilter({}, "createdAt", previousRange)) }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
   ]);
@@ -1870,7 +2248,6 @@ async function buildReportsMeta(models, scope, modules, currentRange, previousRa
 
 async function buildAdminModules(models, scope, currentRange, previousRange, currentLabel, previousLabel) {
   return [
-    await buildDashboardModule(models, scope, currentRange, previousRange, currentLabel, previousLabel),
     await buildCompaniesModule(models, scope, currentRange, previousRange, currentLabel, previousLabel),
     await buildProductsModule(models, scope, currentRange, previousRange, currentLabel, previousLabel),
     await buildInventoryModule(models, scope, currentRange, previousRange, currentLabel, previousLabel),
@@ -1884,23 +2261,18 @@ async function buildAdminModules(models, scope, currentRange, previousRange, cur
     await buildExpenseModule(models, scope, currentRange, previousRange, currentLabel, previousLabel),
     await buildHrModule(models, scope, currentRange, previousRange, currentLabel, previousLabel),
     await buildComplianceModule(models, scope, currentRange, previousRange, currentLabel, previousLabel),
-    await buildMessagesModule(models, scope, currentRange, previousRange, currentLabel, previousLabel),
-    await buildLiveTrackingModule(models, scope, currentRange, previousRange, currentLabel, previousLabel),
     await buildVehicleModule(models, scope, currentRange, previousRange, currentLabel, previousLabel),
   ];
 }
 
 async function buildDistributorModules(models, scope, currentRange, previousRange, currentLabel, previousLabel) {
   return [
-    await buildDashboardModule(models, scope, currentRange, previousRange, currentLabel, previousLabel),
     await buildExpenseModule(models, scope, currentRange, previousRange, currentLabel, previousLabel),
     await buildFinanceModule(models, scope, currentRange, previousRange, currentLabel, previousLabel),
     await buildPaymentsModule(models, scope, currentRange, previousRange, currentLabel, previousLabel),
     await buildPrimaryOrderRequestModule(models, scope, currentRange, previousRange, currentLabel, previousLabel),
     await buildSalesModule(models, scope, currentRange, previousRange, currentLabel, previousLabel),
     await buildComplianceModule(models, scope, currentRange, previousRange, currentLabel, previousLabel),
-    await buildMessagesModule(models, scope, currentRange, previousRange, currentLabel, previousLabel),
-    await buildLiveTrackingModule(models, scope, currentRange, previousRange, currentLabel, previousLabel),
   ];
 }
 
