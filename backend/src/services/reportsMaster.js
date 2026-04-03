@@ -777,7 +777,9 @@ async function buildProductsModule(models, scope, currentRange, previousRange, c
 async function buildInventoryModule(models, scope, currentRange, previousRange, currentLabel, previousLabel) {
   const currentMovementMatch = applyDateFilter({}, "createdAt", currentRange);
   const previousMovementMatch = applyDateFilter({}, "createdAt", previousRange);
-  const [warehouses, currentMoves, previousMoves, movementTypeAgg, warehouseAgg, recentMoves] = await Promise.all([
+  const currentSalesTxnMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: "SALE_STOCK" }, "transactionAt", currentRange));
+  const currentReturnTxnMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: "RETURN_STOCK" }, "transactionAt", currentRange));
+  const [warehouses, currentMoves, previousMoves, movementTypeAgg, warehouseAgg, recentMoves, topDistributorAgg, mostReturnAgg] = await Promise.all([
     models.WarehouseModel.countDocuments(),
     models.InventoryMovementModel.countDocuments(currentMovementMatch),
     models.InventoryMovementModel.countDocuments(previousMovementMatch),
@@ -793,6 +795,32 @@ async function buildInventoryModule(models, scope, currentRange, previousRange, 
       { $limit: 8 },
     ]),
     models.InventoryMovementModel.find(currentMovementMatch).sort({ createdAt: -1 }).limit(8).select("productName warehouseName movementType quantity createdAt").lean(),
+    models.WarehouseTransactionModel.aggregate([
+      { $match: currentSalesTxnMatch },
+      { $unwind: { path: "$items", preserveNullAndEmptyArrays: false } },
+      {
+        $group: {
+          _id: { $ifNull: ["$distributorName", { $ifNull: ["$toEntityName", "Unknown"] }] },
+          quantity: { $sum: { $ifNull: ["$items.totalPacks", 0] } },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { quantity: -1 } },
+      { $limit: 1 },
+    ]),
+    models.WarehouseTransactionModel.aggregate([
+      { $match: currentReturnTxnMatch },
+      { $unwind: { path: "$items", preserveNullAndEmptyArrays: false } },
+      {
+        $group: {
+          _id: { $ifNull: ["$distributorName", { $ifNull: ["$fromEntityName", "Unknown"] }] },
+          quantity: { $sum: { $ifNull: ["$items.totalPacks", 0] } },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { quantity: -1 } },
+      { $limit: 1 },
+    ]),
   ]);
 
   return moduleCard("inventory", "Warehouse & Inventory", "Stock movements, warehouse load, and inventory velocity for the selected period.", {
@@ -801,12 +829,16 @@ async function buildInventoryModule(models, scope, currentRange, previousRange, 
     kpis: [
       { label: "Warehouses", value: formatNumber(warehouses), note: "Available storage points" },
       { label: "Moves in period", value: formatNumber(currentMoves), note: currentLabel },
-      { label: "Top movement", value: titleCase(movementTypeAgg[0]?._id || "—"), note: movementTypeAgg[0] ? formatNumber(movementTypeAgg[0].quantity) : "No activity" },
-      { label: "Top warehouse", value: warehouseAgg[0]?._id || "—", note: warehouseAgg[0] ? `${formatNumber(warehouseAgg[0].quantity)} units` : "No warehouses" },
+      { label: "Top Distributor", value: topDistributorAgg[0]?._id || "—", note: topDistributorAgg[0] ? `${formatNumber(topDistributorAgg[0].quantity)} units issued` : "No sale stock" },
+      { label: "Most Return", value: mostReturnAgg[0]?._id || "—", note: mostReturnAgg[0] ? `${formatNumber(mostReturnAgg[0].quantity)} units returned` : "No return stock" },
     ],
     comparison: compareBlock(currentMoves, previousMoves, currentLabel, previousLabel),
     alerts: [!currentMoves ? `No inventory movements recorded in ${currentLabel.toLowerCase()}.` : ""],
-    insights: [warehouseAgg[0]?._id ? `${warehouseAgg[0]._id} handled the highest stock volume.` : ""],
+    insights: [
+      warehouseAgg[0]?._id ? `${warehouseAgg[0]._id} handled the highest stock volume.` : "",
+      topDistributorAgg[0]?._id ? `${topDistributorAgg[0]._id} received the highest product volume from warehouses.` : "",
+      mostReturnAgg[0]?._id ? `${mostReturnAgg[0]._id} generated the highest return volume back to warehouses.` : "",
+    ],
     tables: [
       table(
         "Movement mix",
@@ -2219,15 +2251,23 @@ async function buildPrimaryOrderRequestModule(models, scope, currentRange, previ
 }
 
 async function buildReportsMeta(models, scope, modules, currentRange, previousRange, currentLabel, previousLabel) {
-  const [currentOrders, previousOrders, currentExpensesAgg, previousExpensesAgg] = await Promise.all([
+  const [currentOrders, previousOrders, currentExpensesAgg, previousExpensesAgg, currentGivenLoansAgg, previousGivenLoansAgg, currentReceivedLoansAgg, previousReceivedLoansAgg] = await Promise.all([
     models.SalesOrderModel.countDocuments(scopedSalesOrderQuery(models, scope, applyDateFilter({}, "orderDate", currentRange))),
     models.SalesOrderModel.countDocuments(scopedSalesOrderQuery(models, scope, applyDateFilter({}, "orderDate", previousRange))),
     models.ExpenseModel.aggregate([{ $match: distributorExpenseScope(scope, applyDateFilter({}, "createdAt", currentRange)) }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
     models.ExpenseModel.aggregate([{ $match: distributorExpenseScope(scope, applyDateFilter({}, "createdAt", previousRange)) }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
+    models.LoanModel.aggregate([{ $match: { ...applyDateFilter({}, "loanDate", currentRange), loanType: "given" } }, { $group: { _id: null, total: { $sum: "$principalAmount" } } }]),
+    models.LoanModel.aggregate([{ $match: { ...applyDateFilter({}, "loanDate", previousRange), loanType: "given" } }, { $group: { _id: null, total: { $sum: "$principalAmount" } } }]),
+    models.LoanModel.aggregate([{ $match: { ...applyDateFilter({}, "loanDate", currentRange), loanType: "received" } }, { $group: { _id: null, total: { $sum: "$principalAmount" } } }]),
+    models.LoanModel.aggregate([{ $match: { ...applyDateFilter({}, "loanDate", previousRange), loanType: "received" } }, { $group: { _id: null, total: { $sum: "$principalAmount" } } }]),
   ]);
 
   const currentExpense = safeNumber(currentExpensesAgg?.[0]?.total);
   const previousExpense = safeNumber(previousExpensesAgg?.[0]?.total);
+  const currentGivenLoans = safeNumber(currentGivenLoansAgg?.[0]?.total);
+  const previousGivenLoans = safeNumber(previousGivenLoansAgg?.[0]?.total);
+  const currentReceivedLoans = safeNumber(currentReceivedLoansAgg?.[0]?.total);
+  const previousReceivedLoans = safeNumber(previousReceivedLoansAgg?.[0]?.total);
   const alerts = uniq(modules.flatMap((module) => module.alerts || []).filter(Boolean));
   const insights = uniq(modules.flatMap((module) => module.insights || []).filter(Boolean));
 
@@ -2240,6 +2280,8 @@ async function buildReportsMeta(models, scope, modules, currentRange, previousRa
     ],
     orderComparison: compareBlock(currentOrders, previousOrders, currentLabel, previousLabel),
     expenseComparison: compareBlock(currentExpense, previousExpense, currentLabel, previousLabel),
+    givenLoanComparison: compareBlock(currentGivenLoans, previousGivenLoans, currentLabel, previousLabel),
+    receivedLoanComparison: compareBlock(currentReceivedLoans, previousReceivedLoans, currentLabel, previousLabel),
     alerts: ensureNarrativeRows(alerts.slice(0, 8), `No critical alerts found in ${scope.scopeLabel || "current scope"} for the selected period.`),
     insights: ensureNarrativeRows(insights.slice(0, 8), `Performance is stable across ${scope.scopeLabel || "current scope"}. Use module tables to find improvement opportunities.`),
     cards: modules.map(summarizeCard),
