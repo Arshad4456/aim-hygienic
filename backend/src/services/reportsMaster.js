@@ -777,9 +777,13 @@ async function buildProductsModule(models, scope, currentRange, previousRange, c
 async function buildInventoryModule(models, scope, currentRange, previousRange, currentLabel, previousLabel) {
   const currentMovementMatch = applyDateFilter({}, "createdAt", currentRange);
   const previousMovementMatch = applyDateFilter({}, "createdAt", previousRange);
-  const currentSalesTxnMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: "SALE_STOCK" }, "transactionAt", currentRange));
+  const currentSalesTxnMatch = scopedOrderQuery(
+    models,
+    scope,
+    applyDateFilter({ transactionType: { $in: ORDER_TRANSACTION_TYPES } }, "transactionAt", currentRange)
+  );
   const currentReturnTxnMatch = scopedOrderQuery(models, scope, applyDateFilter({ transactionType: "RETURN_STOCK" }, "transactionAt", currentRange));
-  const [warehouses, currentMoves, previousMoves, movementTypeAgg, warehouseAgg, recentMoves, topDistributorAgg, mostReturnAgg] = await Promise.all([
+  const [warehouses, currentMoves, previousMoves, movementTypeAgg, warehouseAgg, recentMoves, topDistributorAgg, mostReturnAgg, topBrandAgg] = await Promise.all([
     models.WarehouseModel.countDocuments(),
     models.InventoryMovementModel.countDocuments(currentMovementMatch),
     models.InventoryMovementModel.countDocuments(previousMovementMatch),
@@ -821,6 +825,19 @@ async function buildInventoryModule(models, scope, currentRange, previousRange, 
       { $sort: { quantity: -1 } },
       { $limit: 1 },
     ]),
+    models.WarehouseTransactionModel.aggregate([
+      { $match: currentSalesTxnMatch },
+      { $unwind: { path: "$items", preserveNullAndEmptyArrays: false } },
+      {
+        $group: {
+          _id: { $ifNull: ["$brandName", "Unknown"] },
+          quantity: { $sum: { $ifNull: ["$items.totalPacks", 0] } },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { quantity: -1 } },
+      { $limit: 1 },
+    ]),
   ]);
 
   return moduleCard("inventory", "Warehouse & Inventory", "Stock movements, warehouse load, and inventory velocity for the selected period.", {
@@ -831,6 +848,7 @@ async function buildInventoryModule(models, scope, currentRange, previousRange, 
       { label: "Moves in period", value: formatNumber(currentMoves), note: currentLabel },
       { label: "Top Distributor", value: topDistributorAgg[0]?._id || "—", note: topDistributorAgg[0] ? `${formatNumber(topDistributorAgg[0].quantity)} units issued` : "No sale stock" },
       { label: "Most Return", value: mostReturnAgg[0]?._id || "—", note: mostReturnAgg[0] ? `${formatNumber(mostReturnAgg[0].quantity)} units returned` : "No return stock" },
+      { label: "Top Brand", value: topBrandAgg[0]?._id || "—", note: topBrandAgg[0] ? `${formatNumber(topBrandAgg[0].quantity)} units sold` : "No brand sales" },
     ],
     comparison: compareBlock(currentMoves, previousMoves, currentLabel, previousLabel),
     alerts: [!currentMoves ? `No inventory movements recorded in ${currentLabel.toLowerCase()}.` : ""],
@@ -838,6 +856,7 @@ async function buildInventoryModule(models, scope, currentRange, previousRange, 
       warehouseAgg[0]?._id ? `${warehouseAgg[0]._id} handled the highest stock volume.` : "",
       topDistributorAgg[0]?._id ? `${topDistributorAgg[0]._id} received the highest product volume from warehouses.` : "",
       mostReturnAgg[0]?._id ? `${mostReturnAgg[0]._id} generated the highest return volume back to warehouses.` : "",
+      topBrandAgg[0]?._id ? `${topBrandAgg[0]._id} is the top-selling brand in warehouse dispatch.` : "",
     ],
     tables: [
       table(
