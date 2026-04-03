@@ -35,6 +35,13 @@ function safeNumber(value) {
   return Number.isFinite(Number(value)) ? Number(value) : 0;
 }
 
+const ALLOWED_REPORT_PERIODS = new Set(["all", "day", "week", "month", "quarter", "year"]);
+
+function normalizeReportPeriod(value) {
+  const normalized = String(value || "month").trim().toLowerCase();
+  return ALLOWED_REPORT_PERIODS.has(normalized) ? normalized : "month";
+}
+
 function normalizeRole(role) {
   return String(role || "").trim().toLowerCase();
 }
@@ -211,7 +218,7 @@ async function getScopedReportModels(req, requestedCompanyId = "", requestedComp
 router.get("/master", requireAuth, async (req, res) => {
   try {
     const report = await buildMasterReport(req, {
-      period: String(req.query?.period || "month").toLowerCase(),
+      period: normalizeReportPeriod(req.query?.period),
       companyId: req.query?.companyId || "",
       companyName: req.query?.companyName || "",
     });
@@ -225,7 +232,7 @@ router.get("/master", requireAuth, async (req, res) => {
 router.get("/focus/:moduleKey", requireAuth, async (req, res) => {
   try {
     const report = await buildFocusedReport(req, req.params.moduleKey, {
-      period: String(req.query?.period || "month").toLowerCase(),
+      period: normalizeReportPeriod(req.query?.period),
       companyId: req.query?.companyId || "",
       companyName: req.query?.companyName || "",
     });
