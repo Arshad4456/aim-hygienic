@@ -147,10 +147,12 @@ export function ReportsHubScreen({ roleLabel = 'Reports' }) {
 
       <Card style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Compare periods</Text>
-        <Text style={styles.sectionHint}>Current period versus previous period for order and expense movement.</Text>
+        <Text style={styles.sectionHint}>Current period versus previous period for order, expense, and loan movement.</Text>
         <View style={styles.compareWrap}>
           <CompareBlock title='Orders' block={summary.orderComparison} />
           <CompareBlock title='Expenses' block={summary.expenseComparison} currency />
+          <CompareBlock title='Given Loans' block={summary.givenLoanComparison} currency />
+          <CompareBlock title='Received Loans' block={summary.receivedLoanComparison} currency />
         </View>
       </Card>
 
