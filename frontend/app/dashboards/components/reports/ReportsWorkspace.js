@@ -129,10 +129,10 @@ export function ReportsMasterView({ basePath, roleLabel }) {
           <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
             <div className="text-lg font-semibold text-slate-900">Performance compare</div>
             <div className="mt-1 text-sm text-slate-500">
-              Current period versus previous period on company-wide order, expense, and loan movement.
+              Current period versus previous period on selected order, expense, and loan movement.
             </div>
             <div className="mt-4 grid gap-3">
-              <CompareCard title="Orders" block={summary.orderComparison} />
+              <CompareCard title={summary.orderComparisonTitle || "Orders"} block={summary.orderComparison} />
               <CompareCard title="Expenses" block={summary.expenseComparison} currency />
               <CompareCard title="Given Loans" block={summary.givenLoanComparison} currency />
               <CompareCard title="Received Loans" block={summary.receivedLoanComparison} currency />

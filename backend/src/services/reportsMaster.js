@@ -99,6 +99,83 @@ function formatDate(value) {
   return date.toLocaleDateString("en-PK", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+function sumItemsQuantity(items = []) {
+  return (Array.isArray(items) ? items : []).reduce(
+    (sum, item) => sum + safeNumber(item?.quantity ?? item?.totalPacks),
+    0
+  );
+}
+
+const AGING_BUCKETS = [
+  { label: "0-7 days", min: 0, max: 7 },
+  { label: "8-15 days", min: 8, max: 15 },
+  { label: "16-30 days", min: 16, max: 30 },
+  { label: "31+ days", min: 31, max: Infinity },
+];
+
+function getAgingBucket(days) {
+  return AGING_BUCKETS.find((bucket) => days >= bucket.min && days <= bucket.max) || AGING_BUCKETS[AGING_BUCKETS.length - 1];
+}
+
+function buildAgingRows(rows = [], { getDate, getQuantity, getAmount, getStatus } = {}) {
+  const now = Date.now();
+  const buckets = new Map(
+    AGING_BUCKETS.map((bucket) => [
+      bucket.label,
+      {
+        agingBucket: bucket.label,
+        records: 0,
+        quantity: 0,
+        amount: 0,
+        oldestDate: null,
+        oldestAgeDays: null,
+        focusStatus: "",
+        _statusCounts: {},
+      },
+    ])
+  );
+
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const rawDate = getDate ? getDate(row) : row?.createdAt;
+    if (!rawDate) return;
+    const date = rawDate instanceof Date ? rawDate : new Date(rawDate);
+    if (Number.isNaN(date.getTime())) return;
+    const ageDays = Math.max(0, Math.floor((now - date.getTime()) / (24 * 60 * 60 * 1000)));
+    const bucket = getAgingBucket(ageDays);
+    const target = buckets.get(bucket.label);
+    if (!target) return;
+    target.records += 1;
+    target.quantity += safeNumber(getQuantity ? getQuantity(row) : row?.quantity);
+    target.amount += safeNumber(getAmount ? getAmount(row) : row?.amount);
+    const status = asText(getStatus ? getStatus(row) : row?.status);
+    if (status) {
+      target._statusCounts[status] = (target._statusCounts[status] || 0) + 1;
+    }
+    if (!target.oldestDate || date.getTime() < target.oldestDate.getTime()) {
+      target.oldestDate = date;
+      target.oldestAgeDays = ageDays;
+    }
+  });
+
+  return AGING_BUCKETS.map((bucket) => {
+    const row = buckets.get(bucket.label);
+    const [focusStatus] = Object.entries(row._statusCounts || {}).sort((a, b) => {
+      if (b[1] !== a[1]) return b[1] - a[1];
+      return String(a[0]).localeCompare(String(b[0]));
+    })[0] || [];
+
+    return {
+      agingBucket: row.agingBucket,
+      records: row.records,
+      quantity: row.quantity,
+      amount: row.amount,
+      oldestDate: row.oldestDate,
+      oldestAgeDays: row.oldestAgeDays,
+      focusStatus: focusStatus || "",
+    };
+  });
+}
+
 function titleCase(value) {
   return asText(value)
     .replace(/[_-]+/g, " ")
@@ -1361,6 +1438,9 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
     : {};
   const currentClaimsMatch = applyDateFilter(claimBase, "createdAt", currentRange);
   const previousClaimsMatch = applyDateFilter(claimBase, "createdAt", previousRange);
+  const primaryAgingMatch = scopedSalesOrderQuery(models, scope, { saleType: "primary", status: { $in: ["pending", "approved", "dispatched"] } });
+  const secondaryAgingMatch = scopedSalesOrderQuery(models, scope, { saleType: "secondary", status: { $in: ["pending", "approved", "dispatched"] } });
+  const returnAgingMatch = { ...(claimBase || {}), status: { $in: ["requested", "approved"] } };
 
   const [
     currentOrders,
@@ -1396,6 +1476,9 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
     returnTxnCount,
     returnRecentTxns,
     returnTxnCodes,
+    primaryAgingOrders,
+    secondaryAgingOrders,
+    returnAgingClaims,
   ] = await Promise.all([
     models.SalesOrderModel.countDocuments(currentMatch),
     models.SalesOrderModel.countDocuments(previousMatch),
@@ -1452,6 +1535,9 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
     models.WarehouseTransactionModel.countDocuments(returnTxnCurrentMatch),
     models.WarehouseTransactionModel.find(returnTxnCurrentMatch).sort({ transactionAt: -1, createdAt: -1 }).limit(8).select("transactionCode fromEntityName fromEntityType warehouseName requestStatus grandTotal transactionAt items").lean(),
     models.WarehouseTransactionModel.find(returnTxnCurrentMatch).select("transactionCode").limit(5000).lean(),
+    models.SalesOrderModel.find(primaryAgingMatch).select("orderNo status totalAmount orderDate createdAt items").lean(),
+    models.SalesOrderModel.find(secondaryAgingMatch).select("orderNo status totalAmount orderDate createdAt items").lean(),
+    models.ReturnClaimModel.find(returnAgingMatch).select("orderNo status quantity createdAt").lean(),
   ]);
 
   const primaryReferenceIds = primaryTxnCodes.map((row) => row.transactionCode).filter(Boolean);
@@ -1509,6 +1595,23 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
   const secondaryMovementQty = secondaryMovementAgg.reduce((sum, row) => sum + safeNumber(row.quantity), 0);
   const returnMovementCount = returnMovementAgg.reduce((sum, row) => sum + safeNumber(row.count), 0);
   const returnMovementQty = returnMovementAgg.reduce((sum, row) => sum + safeNumber(row.quantity), 0);
+  const primaryAgingRows = buildAgingRows(primaryAgingOrders, {
+    getDate: (row) => row.orderDate || row.createdAt,
+    getQuantity: (row) => sumItemsQuantity(row.items),
+    getAmount: (row) => row.totalAmount,
+    getStatus: (row) => row.status,
+  });
+  const secondaryAgingRows = buildAgingRows(secondaryAgingOrders, {
+    getDate: (row) => row.orderDate || row.createdAt,
+    getQuantity: (row) => sumItemsQuantity(row.items),
+    getAmount: (row) => row.totalAmount,
+    getStatus: (row) => row.status,
+  });
+  const returnAgingRows = buildAgingRows(returnAgingClaims, {
+    getDate: (row) => row.createdAt,
+    getQuantity: (row) => row.quantity,
+    getStatus: (row) => row.status,
+  });
 
   const segments = [
     {
@@ -1517,10 +1620,10 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
       description: "Primary order requests, order value, and linked warehouse-side inventory movements.",
       badge: "Primary flow",
       kpis: [
-        { label: "Orders", value: formatNumber(primaryCurrentCount), note: currentLabel },
+        { label: "Primary orders", value: formatNumber(primaryCurrentCount), note: currentLabel },
         { label: "Pending", value: formatNumber(primaryStatusAgg.find((row) => String(row._id || "").toLowerCase() === "pending")?.count), note: "Need approval" },
         { label: "Approved value", value: formatCurrency(primaryStatusAgg.find((row) => String(row._id || "").toLowerCase() === "approved")?.total), note: "Approved total" },
-        { label: "Order moves", value: formatNumber(primaryTxnCount), note: "Warehouse transaction rows" },
+        { label: "Primary order moves", value: formatNumber(primaryTxnCount), note: "Warehouse transaction rows" },
         { label: "Inventory moves", value: formatNumber(primaryMovementCount), note: `${formatNumber(primaryMovementQty)} units moved` },
       ],
       alerts: [
@@ -1562,6 +1665,29 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
           "Latest primary orders captured in the current scope."
         ),
         table(
+          "Primary order aging report",
+          [
+            { key: "agingBucket", label: "Age bucket" },
+            { key: "records", label: "Orders" },
+            { key: "quantity", label: "Qty" },
+            { key: "amount", label: "Amount" },
+            { key: "oldestDate", label: "Oldest order" },
+            { key: "oldestAge", label: "Oldest age" },
+            { key: "focusStatus", label: "Open status" },
+          ],
+          primaryAgingRows.map((row) => ({
+            agingBucket: row.agingBucket,
+            records: formatNumber(row.records),
+            quantity: formatNumber(row.quantity),
+            amount: formatCurrency(row.amount),
+            oldestDate: formatDate(row.oldestDate),
+            oldestAge: row.oldestAgeDays == null ? "—" : `${formatNumber(row.oldestAgeDays)} days`,
+            focusStatus: titleCase(row.focusStatus || "—"),
+          })),
+          primaryAgingOrders.length,
+          "Open primary orders grouped by aging bucket so delayed execution can be identified quickly."
+        ),
+        table(
           "Primary warehouse order movements",
           [
             { key: "transactionCode", label: "Txn #" },
@@ -1579,7 +1705,7 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
             customerName: row.toEntityName || "—",
             warehouseName: row.warehouseName || "—",
             status: titleCase(row.requestStatus),
-            quantity: formatNumber((row.items || []).reduce((sum, item) => sum + safeNumber(item.totalPacks || item.quantity), 0)),
+            quantity: formatNumber(sumItemsQuantity(row.items)),
             amount: formatCurrency(row.grandTotal),
             createdAt: formatDate(row.transactionAt),
           })),
@@ -1615,10 +1741,10 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
       description: "Secondary order performance with customer-side orders and linked warehouse inventory movements.",
       badge: "Secondary flow",
       kpis: [
-        { label: "Orders", value: formatNumber(secondaryCurrentCount), note: currentLabel },
+        { label: "Secondary orders", value: formatNumber(secondaryCurrentCount), note: currentLabel },
         { label: "Pending", value: formatNumber(secondaryStatusAgg.find((row) => String(row._id || "").toLowerCase() === "pending")?.count), note: "Pipeline backlog" },
         { label: "Delivered value", value: formatCurrency(secondaryStatusAgg.find((row) => String(row._id || "").toLowerCase() === "delivered")?.total), note: "Delivered total" },
-        { label: "Order moves", value: formatNumber(secondaryTxnCount), note: "Warehouse transaction rows" },
+        { label: "Secondary order moves", value: formatNumber(secondaryTxnCount), note: "Warehouse transaction rows" },
         { label: "Inventory moves", value: formatNumber(secondaryMovementCount), note: `${formatNumber(secondaryMovementQty)} units moved` },
       ],
       alerts: [
@@ -1658,6 +1784,29 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
           "Latest secondary orders captured in the current scope."
         ),
         table(
+          "Secondary order aging report",
+          [
+            { key: "agingBucket", label: "Age bucket" },
+            { key: "records", label: "Orders" },
+            { key: "quantity", label: "Qty" },
+            { key: "amount", label: "Amount" },
+            { key: "oldestDate", label: "Oldest order" },
+            { key: "oldestAge", label: "Oldest age" },
+            { key: "focusStatus", label: "Open status" },
+          ],
+          secondaryAgingRows.map((row) => ({
+            agingBucket: row.agingBucket,
+            records: formatNumber(row.records),
+            quantity: formatNumber(row.quantity),
+            amount: formatCurrency(row.amount),
+            oldestDate: formatDate(row.oldestDate),
+            oldestAge: row.oldestAgeDays == null ? "—" : `${formatNumber(row.oldestAgeDays)} days`,
+            focusStatus: titleCase(row.focusStatus || "—"),
+          })),
+          secondaryAgingOrders.length,
+          "Open secondary orders grouped by aging bucket for distributor and territory follow-up."
+        ),
+        table(
           "Secondary warehouse order movements",
           [
             { key: "transactionCode", label: "Txn #" },
@@ -1675,7 +1824,7 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
             customerName: row.toEntityName || "—",
             warehouseName: row.warehouseName || "—",
             status: titleCase(row.requestStatus),
-            quantity: formatNumber((row.items || []).reduce((sum, item) => sum + safeNumber(item.totalPacks || item.quantity), 0)),
+            quantity: formatNumber(sumItemsQuantity(row.items)),
             amount: formatCurrency(row.grandTotal),
             createdAt: formatDate(row.transactionAt),
           })),
@@ -1711,7 +1860,7 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
       description: "Return stock pressure, claim resolution pace, and linked warehouse return movements.",
       badge: "Return flow",
       kpis: [
-        { label: "Claims", value: formatNumber(returnCurrentCount), note: currentLabel },
+        { label: "Return stock", value: formatNumber(returnCurrentCount), note: currentLabel },
         { label: "Requested", value: formatNumber(returnStatusAgg.find((row) => row._id === "requested")?.count), note: "Need review" },
         { label: "Resolved", value: formatNumber(returnStatusAgg.find((row) => row._id === "resolved")?.count), note: "Closed loop" },
         { label: "Return txns", value: formatNumber(returnTxnCount), note: "Warehouse-side requests" },
@@ -1752,6 +1901,27 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
           "Latest return stock claims that need monitoring."
         ),
         table(
+          "Return stock aging report",
+          [
+            { key: "agingBucket", label: "Age bucket" },
+            { key: "records", label: "Claims" },
+            { key: "quantity", label: "Qty" },
+            { key: "oldestDate", label: "Oldest claim" },
+            { key: "oldestAge", label: "Oldest age" },
+            { key: "focusStatus", label: "Open status" },
+          ],
+          returnAgingRows.map((row) => ({
+            agingBucket: row.agingBucket,
+            records: formatNumber(row.records),
+            quantity: formatNumber(row.quantity),
+            oldestDate: formatDate(row.oldestDate),
+            oldestAge: row.oldestAgeDays == null ? "—" : `${formatNumber(row.oldestAgeDays)} days`,
+            focusStatus: titleCase(row.focusStatus || "—"),
+          })),
+          returnAgingClaims.length,
+          "Open return stock claims grouped by aging bucket for faster resolution tracking."
+        ),
+        table(
           "Return stock warehouse transactions",
           [
             { key: "transactionCode", label: "Txn #" },
@@ -1767,7 +1937,7 @@ async function buildSalesModule(models, scope, currentRange, previousRange, curr
             source: titleCase(row.fromEntityType || row.fromEntityName || "—"),
             warehouseName: row.warehouseName || "—",
             status: titleCase(row.requestStatus),
-            quantity: formatNumber((row.items || []).reduce((sum, item) => sum + safeNumber(item.totalPacks || item.quantity), 0)),
+            quantity: formatNumber(sumItemsQuantity(row.items)),
             amount: formatCurrency(row.grandTotal),
             createdAt: formatDate(row.transactionAt),
           })),
@@ -2928,9 +3098,22 @@ async function buildPrimaryOrderRequestModule(models, scope, currentRange, previ
 }
 
 async function buildReportsMeta(models, scope, modules, currentRange, previousRange, currentLabel, previousLabel) {
-  const [currentOrders, previousOrders, currentExpensesAgg, previousExpensesAgg, currentGivenLoansAgg, previousGivenLoansAgg, currentReceivedLoansAgg, previousReceivedLoansAgg] = await Promise.all([
-    models.SalesOrderModel.countDocuments(scopedSalesOrderQuery(models, scope, applyDateFilter({}, "orderDate", currentRange))),
-    models.SalesOrderModel.countDocuments(scopedSalesOrderQuery(models, scope, applyDateFilter({}, "orderDate", previousRange))),
+  const [
+    currentPrimaryOrders,
+    previousPrimaryOrders,
+    currentSecondaryOrders,
+    previousSecondaryOrders,
+    currentExpensesAgg,
+    previousExpensesAgg,
+    currentGivenLoansAgg,
+    previousGivenLoansAgg,
+    currentReceivedLoansAgg,
+    previousReceivedLoansAgg,
+  ] = await Promise.all([
+    models.SalesOrderModel.countDocuments(scopedSalesOrderQuery(models, scope, applyDateFilter({ saleType: "primary" }, "orderDate", currentRange))),
+    models.SalesOrderModel.countDocuments(scopedSalesOrderQuery(models, scope, applyDateFilter({ saleType: "primary" }, "orderDate", previousRange))),
+    models.SalesOrderModel.countDocuments(scopedSalesOrderQuery(models, scope, applyDateFilter({ saleType: "secondary" }, "orderDate", currentRange))),
+    models.SalesOrderModel.countDocuments(scopedSalesOrderQuery(models, scope, applyDateFilter({ saleType: "secondary" }, "orderDate", previousRange))),
     models.ExpenseModel.aggregate([{ $match: distributorExpenseScope(scope, applyDateFilter({}, "createdAt", currentRange)) }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
     models.ExpenseModel.aggregate([{ $match: distributorExpenseScope(scope, applyDateFilter({}, "createdAt", previousRange)) }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
     models.LoanModel.aggregate([{ $match: { ...applyDateFilter({}, "loanDate", currentRange), loanType: "given" } }, { $group: { _id: null, total: { $sum: "$principalAmount" } } }]),
@@ -2947,15 +3130,19 @@ async function buildReportsMeta(models, scope, modules, currentRange, previousRa
   const previousReceivedLoans = safeNumber(previousReceivedLoansAgg?.[0]?.total);
   const alerts = uniq(modules.flatMap((module) => module.alerts || []).filter(Boolean));
   const insights = uniq(modules.flatMap((module) => module.insights || []).filter(Boolean));
+  const orderComparisonTitle = scope.isDistributor ? "Secondary Orders" : "Primary Orders";
+  const currentSummaryOrders = scope.isDistributor ? currentSecondaryOrders : currentPrimaryOrders;
+  const previousSummaryOrders = scope.isDistributor ? previousSecondaryOrders : previousPrimaryOrders;
 
   return {
+    orderComparisonTitle,
     headlineKpis: [
       { label: "Report modules", value: formatNumber(modules.length), note: "Available in current role" },
-      { label: "Orders", value: formatNumber(currentOrders), note: currentLabel },
+      { label: orderComparisonTitle, value: formatNumber(currentSummaryOrders), note: currentLabel },
       { label: "Expenses", value: formatCurrency(currentExpense), note: currentLabel },
       { label: "Scope", value: scope.isDistributor ? (scope.territoryName || "Territory") : (scope.companyName || "All companies"), note: scope.scopeLabel },
     ],
-    orderComparison: compareBlock(currentOrders, previousOrders, currentLabel, previousLabel),
+    orderComparison: compareBlock(currentSummaryOrders, previousSummaryOrders, currentLabel, previousLabel),
     expenseComparison: compareBlock(currentExpense, previousExpense, currentLabel, previousLabel),
     givenLoanComparison: compareBlock(currentGivenLoans, previousGivenLoans, currentLabel, previousLabel),
     receivedLoanComparison: compareBlock(currentReceivedLoans, previousReceivedLoans, currentLabel, previousLabel),
