@@ -438,6 +438,15 @@ export default function WarehouseInventoryModulePage() {
     });
   }, [movements, ledgerWarehouseFilter, ledgerMovementTypeFilter, ledgerSearch]);
 
+  const nearExpiryRows = useMemo(
+    () => nearExpiry.filter((row) => String(row.expiryStatus || "NEAR_EXPIRY").toUpperCase() !== "OVER_EXPIRED"),
+    [nearExpiry],
+  );
+  const overExpiredRows = useMemo(
+    () => nearExpiry.filter((row) => String(row.expiryStatus || "").toUpperCase() === "OVER_EXPIRED"),
+    [nearExpiry],
+  );
+
   const lineRows = useMemo(
     () =>
       form.items.map((line, idx) => {
@@ -1255,16 +1264,17 @@ export default function WarehouseInventoryModulePage() {
 
         {selectedCard === "DAMAGE_STOCK" ? (
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
-            <h3 className="text-lg font-semibold">Near to expire products</h3>
+            <h3 className="text-lg font-semibold">Near to expire / Over expired products</h3>
             <div className="overflow-x-auto mt-2">
               <table className="min-w-full text-sm">
                 <thead>
-                  <tr className="border-b"><th className="p-2 text-left">Product Name</th><th className="p-2 text-left">Quantity</th><th className="p-2 text-left">Warehouse</th><th className="p-2 text-left">Manufactur date</th><th className="p-2 text-left">expiry date</th></tr>
+                  <tr className="border-b"><th className="p-2 text-left">Product Name</th><th className="p-2 text-left">Quantity</th><th className="p-2 text-left">Warehouse</th><th className="p-2 text-left">Manufactur date</th><th className="p-2 text-left">expiry date</th><th className="p-2 text-left">Status</th></tr>
                 </thead>
                 <tbody>
-                  {nearExpiry.map((r, idx) => (
-                    <tr key={idx} className="border-b"><td className="p-2">{r.productName}</td><td className="p-2">{r.quantity}</td><td className="p-2">{r.warehouseName}</td><td className="p-2">{r.manufactureDate ? new Date(r.manufactureDate).toLocaleDateString() : "-"}</td><td className="p-2">{r.expiryDate ? new Date(r.expiryDate).toLocaleDateString() : "-"}</td></tr>
+                  {[...overExpiredRows, ...nearExpiryRows].map((r, idx) => (
+                    <tr key={idx} className="border-b"><td className="p-2">{r.productName}</td><td className="p-2">{r.quantity}</td><td className="p-2">{r.warehouseName}</td><td className="p-2">{r.manufactureDate ? new Date(r.manufactureDate).toLocaleDateString() : "-"}</td><td className="p-2">{r.expiryDate ? new Date(r.expiryDate).toLocaleDateString() : "-"}</td><td className="p-2">{String(r.expiryStatus || "NEAR_EXPIRY").toUpperCase() === "OVER_EXPIRED" ? "Over expired" : "Near expiry"}</td></tr>
                   ))}
+                  {!nearExpiry.length ? <tr><td className="p-2 text-zinc-500" colSpan={6}>No near-expiry or over-expired products found.</td></tr> : null}
                 </tbody>
               </table>
             </div>
@@ -1309,6 +1319,7 @@ export default function WarehouseInventoryModulePage() {
         {selectedCard === "STOCK_SUMMARY" ? (
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
             <h3 className="text-lg font-semibold">Stock Summary</h3>
+            <div className="mt-2 text-xs text-zinc-600">Near expiry: {nearExpiryRows.length} | Over expired: {overExpiredRows.length}</div>
             {!isWarehouseManagerView ? (
               <div className="mt-2 max-w-sm">
                 <Select
@@ -1638,7 +1649,7 @@ function InventoryMovementTable({ rows }) {
 
 function SummaryTable({ rows, products, onUpdateMin, onDetail }) {
   const [edits, setEdits] = useState({});
-  return <div className="overflow-x-auto mt-2"><table className="min-w-full text-sm"><thead><tr className="border-b"><th className="p-2 text-left">Product</th><th className="p-2 text-left">Warehouse</th><th className="p-2 text-left">Quantity</th><th className="p-2 text-left">Minimum Stock Level</th><th className="p-2 text-left">Action</th></tr></thead><tbody>{rows.map((r)=>{const p=products.find((x)=>x.productId===r._id.productId);return <tr key={`${r._id.productId}-${r._id.warehouseId}`} className="border-b"><td className="p-2">{r.productName}</td><td className="p-2">{r.warehouseName}</td><td className="p-2">{r.quantity}</td><td className="p-2"><input className="border rounded px-2 py-1 w-24" value={edits[p?._id] ?? p?.minStockLevel ?? 0} onChange={(e)=>setEdits((s)=>({...s,[p?._id]:e.target.value}))} /></td><td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" onClick={()=>p&&onUpdateMin(p._id,edits[p._id] ?? p.minStockLevel)}>Update</button><button className="rounded border border-blue-300 px-2 py-1 text-blue-700" onClick={()=>onDetail(r)}>Detail</button></div></td></tr>;})}</tbody></table></div>;
+  return <div className="overflow-x-auto mt-2"><table className="min-w-full text-sm"><thead><tr className="border-b"><th className="p-2 text-left">Product</th><th className="p-2 text-left">Warehouse</th><th className="p-2 text-left">Quantity</th><th className="p-2 text-left">Minimum Stock Level</th><th className="p-2 text-left">Action</th></tr></thead><tbody>{rows.map((r)=>{const p=products.find((x)=>x.productId===r._id.productId);return <tr key={`${r._id.productId}-${r._id.warehouseId}`} className="border-b"><td className="p-2">{r.productName}</td><td className="p-2">{r.warehouseName}</td><td className="p-2">{r.quantity}</td><td className="p-2"><input className="border rounded px-2 py-1 w-24" value={edits[p?._id] ?? p?.minStockLevel ?? 0} onChange={(e)=>setEdits((s)=>({...s,[p?._id]:e.target.value}))} /></td><td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" onClick={()=>p&&onUpdateMin(p._id,edits[p._id] ?? p.minStockLevel)}>Update</button><button className="rounded border border-blue-300 px-2 py-1 text-blue-700" onClick={()=>onDetail(r)}>Detail</button></div></td></tr>;})}{!rows.length ? <tr><td className="p-2 text-zinc-500" colSpan={5}>No stock summary records found.</td></tr> : null}</tbody></table></div>;
 }
 
 function SummaryDetailModal({ row, rows, loading, removing, onClose, onRemove }) {

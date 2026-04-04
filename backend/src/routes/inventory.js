@@ -735,7 +735,7 @@ router.get("/near-expiry-products", requireAuth, async (req, res) => {
         $match: {
           ...companyMatch,
           ...(isWarehouseManagerRole(req.user?.role) ? { warehouseId: getScopedWarehouseId(req.user) || "__no_warehouse__" } : {}),
-          batchExpiryDate: { $gte: now, $lte: threeMonthsLater },
+          batchExpiryDate: { $lte: threeMonthsLater, $ne: null },
         },
       },
       {
@@ -759,9 +759,12 @@ router.get("/near-expiry-products", requireAuth, async (req, res) => {
           warehouseName: 1,
           manufactureDate: "$_id.manufactureDate",
           expiryDate: "$_id.expiryDate",
+          expiryStatus: {
+            $cond: [{ $lt: ["$_id.expiryDate", now] }, "OVER_EXPIRED", "NEAR_EXPIRY"],
+          },
         },
       },
-      { $sort: { expiryDate: 1 } },
+      { $sort: { expiryStatus: -1, expiryDate: 1 } },
     ]);
     return res.json({ ok: true, products: rows });
   } catch (e) {
