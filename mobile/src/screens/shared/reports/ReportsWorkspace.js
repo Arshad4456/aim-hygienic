@@ -165,10 +165,15 @@ export function ReportsHubScreen({ roleLabel = 'Reports' }) {
 }
 
 export function ReportModuleScreen({ moduleKey }) {
-  const [period, setPeriod] = useState('month');
+  const defaultPeriod = moduleKey === 'inventory' ? 'all' : 'month';
+  const [period, setPeriod] = useState(defaultPeriod);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    setPeriod(defaultPeriod);
+  }, [defaultPeriod]);
 
   useEffect(() => {
     let mounted = true;
