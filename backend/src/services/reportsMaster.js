@@ -964,7 +964,6 @@ async function buildInventoryModule(models, scope, currentRange, previousRange, 
           lastMovementAt: { $max: "$createdAt" },
         },
       },
-      { $match: { quantity: { $gt: 0 } } },
       { $sort: { quantity: 1, lastMovementAt: -1 } },
     ]),
     models.ProductModel.find({}).select("productId name minStockLevel").lean(),
@@ -987,7 +986,6 @@ async function buildInventoryModule(models, scope, currentRange, previousRange, 
           quantity: { $sum: "$quantity" },
         },
       },
-      { $match: { quantity: { $gt: 0 } } },
       {
         $project: {
           _id: 0,
@@ -1020,7 +1018,6 @@ async function buildInventoryModule(models, scope, currentRange, previousRange, 
           quantity: { $sum: "$quantity" },
         },
       },
-      { $match: { quantity: { $gt: 0 } } },
       {
         $project: {
           _id: 0,
