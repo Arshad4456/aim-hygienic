@@ -101,7 +101,7 @@ export default function SummaryScreen() {
       </Card>
 
       <Card>
-        <ScrollView horizontal showsHorizontalScrollIndicator>
+        <ScrollView horizontal showsHorizontalScrollIndicator style={styles.tableScroll}>
           <View style={styles.tableWrap}>
             <View style={styles.headerRow}>
               {['Product', 'Warehouse', 'Quantity', 'Min Stock', 'Action'].map((h) => <Text key={h} style={[styles.headCell, h === 'Action' ? styles.actionCol : null]}>{h}</Text>)}
@@ -143,6 +143,7 @@ const styles = StyleSheet.create({
   chipActive: { borderColor: '#10b981', backgroundColor: '#ecfdf5' },
   chipText: { color: '#52525b', fontSize: 12 },
   chipTextActive: { color: '#047857', fontWeight: '700' },
+  tableScroll: { width: '100%' },
   tableWrap: { minWidth: 800 },
   headerRow: { flexDirection: 'row', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, backgroundColor: '#f3f4f6', padding: 8 },
   headCell: { width: 190, fontSize: 12, fontWeight: '700', color: '#111827' },

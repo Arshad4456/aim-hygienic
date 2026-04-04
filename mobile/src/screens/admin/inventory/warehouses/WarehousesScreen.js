@@ -34,7 +34,7 @@ export default function WarehousesScreen() {
         {err ? <Text style={styles.error}>{err}</Text> : null}
       </Card>
       <Card>
-        <ScrollView horizontal showsHorizontalScrollIndicator>
+        <ScrollView horizontal showsHorizontalScrollIndicator style={styles.tableScroll}>
           <View style={styles.tableWrap}>
             <View style={styles.headerRow}>
               {['Warehouse ID', 'Name', 'City', 'Region', 'Manager', 'Capacity', 'Status'].map((h) => <Text key={h} style={styles.headCell}>{h}</Text>)}
@@ -64,6 +64,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: '700', color: '#111827' },
   subtitle: { marginTop: 4, color: '#6b7280', fontSize: 13 },
   error: { marginTop: 8, color: '#b91c1c' },
+  tableScroll: { width: '100%' },
   tableWrap: { minWidth: 980 },
   headerRow: { flexDirection: 'row', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, backgroundColor: '#f3f4f6', padding: 8 },
   headCell: { width: 140, fontSize: 12, fontWeight: '700', color: '#111827' },

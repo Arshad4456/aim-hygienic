@@ -13,5 +13,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: 14,
+    overflow: 'hidden',
   },
 });
