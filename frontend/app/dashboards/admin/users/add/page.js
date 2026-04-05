@@ -7,6 +7,7 @@ import { listFieldsCompat } from "../../../../lib/fieldApi";
 import {
   AIM_USER_ROLES,
   COMMON_USER_FIELDS,
+  DISTRIBUTOR_TEAM_ROLES,
   FIELD_LABELS,
   ROLE_EXTRA_FIELDS,
   validatePassword,
@@ -21,7 +22,8 @@ function readFileAsDataUrl(file) {
   });
 }
 
-export default function AddUserPage() {
+export default function AddUserPage({ mode = "admin" }) {
+  const distributorMode = mode === "distributor";
   const [users, setUsers] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
@@ -39,6 +41,7 @@ export default function AddUserPage() {
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
   const [fieldsWarning, setFieldsWarning] = useState("");
+  const [me, setMe] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -54,6 +57,8 @@ export default function AddUserPage() {
       setRegions(regionsRes.regions || []);
       setZones(zonesRes.zones || []);
       setAreas(areasRes.areas || []);
+      const meRes = await apiFetch("/users/me");
+      setMe(meRes?.user || null);
       try {
         const companiesRes = await apiFetch("/companies");
         setCompanies(companiesRes.companies || []);
@@ -203,6 +208,20 @@ export default function AddUserPage() {
           mobile: form.mobileNumber,
           userId: form.userId,
           fullName: form.fullName,
+          ...(distributorMode
+            ? {
+              companyId: me?.companyId || "",
+              companyName: me?.companyName || "",
+              warehouseId: me?.warehouseId || "",
+              warehouseName: me?.warehouseName || "",
+              regionId: me?.regionId || "",
+              regionName: me?.regionName || "",
+              zoneId: me?.zoneId || "",
+              zoneName: me?.zoneName || "",
+              territoryId: me?.territoryId || "",
+              territoryName: me?.territoryName || "",
+            }
+            : {}),
         },
       });
 
@@ -254,7 +273,7 @@ export default function AddUserPage() {
   }
 
   return (
-    <AdminShell title="Add User" user={null}>
+    <AdminShell title={distributorMode ? "Distributor Add User" : "Add User"} user={null}>
       <div className="rounded-2xl border bg-white p-5 shadow-sm">
         <div className="text-xl font-semibold text-zinc-900">Add AIM Hygienic User</div>
         <div className="mt-1 text-sm text-zinc-500">Choose role first. Location dropdowns show names from backend records.</div>
@@ -274,7 +293,7 @@ export default function AddUserPage() {
                 setForm((prev) => ({ ...prev, companyId: "", companyName: "" }));
               }
             }}
-            options={AIM_USER_ROLES.map((r) => ({ value: r, label: r }))}
+            options={(distributorMode ? DISTRIBUTOR_TEAM_ROLES : AIM_USER_ROLES).map((r) => ({ value: r, label: r }))}
             required
           />
           <InputField label="Auto User ID" value={form.userId || ""} readOnly />

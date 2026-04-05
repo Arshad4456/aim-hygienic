@@ -4,7 +4,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import apiClient from '../../../../api/client';
 import Card from '../../../../ui/Card';
 import Loader from '../../../../ui/Loader';
-import { AIM_USER_ROLES, COMMON_USER_FIELDS, FIELD_LABELS, ROLE_EXTRA_FIELDS, validatePassword } from '../roleConfig';
+import { AIM_USER_ROLES, COMMON_USER_FIELDS, DISTRIBUTOR_TEAM_ROLES, FIELD_LABELS, ROLE_EXTRA_FIELDS, validatePassword } from '../roleConfig';
 
 async function fileToBase64FromUri(uri) {
   const response = await fetch(uri);
@@ -46,7 +46,8 @@ function Field({ label, value, onChangeText, keyboardType = 'default', secureTex
   );
 }
 
-export default function AddScreen({ navigation }) {
+export default function AddScreen({ navigation, mode = 'admin' }) {
+  const distributorMode = mode === 'distributor';
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
@@ -61,9 +62,10 @@ export default function AddScreen({ navigation }) {
   const [zones, setZones] = useState([]);
   const [areas, setAreas] = useState([]);
   const [fields, setFields] = useState([]);
+  const [me, setMe] = useState(null);
 
   const [form, setForm] = useState({
-    userId: '',
+    userId: '00',
     role: '',
     fullName: '',
     email: '',
@@ -120,6 +122,8 @@ export default function AddScreen({ navigation }) {
         setZones(z.data?.zones || []);
         setAreas(a.data?.areas || []);
         setFields(f.data?.fields || []);
+        const meRes = await apiClient.get('/users/me');
+        setMe(meRes.data?.user || null);
         try {
           const companiesRes = await apiClient.get('/companies');
           setCompanies(companiesRes.data?.companies || []);
@@ -130,8 +134,7 @@ export default function AddScreen({ navigation }) {
           setCompanies(companyId ? [{ companyId, name: companyName || companyId }] : []);
         }
 
-        const nextId = `USR-${String(userRows.length + 1).padStart(4, '0')}`;
-        setForm((prev) => ({ ...prev, userId: nextId }));
+      
       } catch (e) {
         if (mounted) setErr(e.message || 'Failed to load master data');
       } finally {
@@ -143,6 +146,18 @@ export default function AddScreen({ navigation }) {
       mounted = false;
     };
   }, []);
+
+  const nextUserId = useMemo(() => {
+    const maxUserId = (users || []).reduce((max, user) => {
+      const parsed = Number.parseInt(String(user?.userId || ""), 10);
+      if (Number.isNaN(parsed)) return max;
+      return Math.max(max, parsed);
+    }, 0);
+    return String(maxUserId + 1).padStart(2, "0");
+  }, [users]);
+  useEffect(() => {
+    setForm((prev) => ({ ...prev, userId: nextUserId }));
+  }, [nextUserId]);
 
   const roleNeeds = useMemo(() => ROLE_EXTRA_FIELDS[form.role] || [], [form.role]);
   const requiresCompany = useMemo(() => {
@@ -204,9 +219,26 @@ export default function AddScreen({ navigation }) {
 
     setSaving(true);
     try {
-      await apiClient.post('/users', form);
+      const payload = {
+        ...form,
+        ...(distributorMode
+          ? {
+            companyId: me?.companyId || '',
+            companyName: me?.companyName || '',
+            warehouseId: me?.warehouseId || '',
+            warehouseName: me?.warehouseName || '',
+            regionId: me?.regionId || '',
+            regionName: me?.regionName || '',
+            zoneId: me?.zoneId || '',
+            zoneName: me?.zoneName || '',
+            territoryId: me?.territoryId || '',
+            territoryName: me?.territoryName || '',
+          }
+          : {}),
+      };
+      await apiClient.post('/users', payload);
       setOk('✅ User created successfully.');
-      setTimeout(() => navigation?.navigate?.('admin:users'), 500);
+      setTimeout(() => navigation?.navigate?.(distributorMode ? 'distributor:users' : 'admin:users'), 500);
     } catch (e) {
       setErr(e.message || 'Failed to create user');
     } finally {
@@ -247,7 +279,7 @@ export default function AddScreen({ navigation }) {
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <Card>
-        <Text style={styles.title}>Add User</Text>
+        <Text style={styles.title}>{distributorMode ? 'Distributor Add User' : 'Add User'}</Text>
         <Text style={styles.subtitle}>Create users for warehouses, sales, and suppliers.</Text>
 
         {err ? <Text style={styles.error}>{err}</Text> : null}
@@ -256,7 +288,7 @@ export default function AddScreen({ navigation }) {
 
         <View style={styles.formWrap}>
           <Text style={styles.fieldLabel}>Role</Text>
-          <SelectPills options={AIM_USER_ROLES} value={form.role} onChange={(role) => {
+          <SelectPills options={distributorMode ? DISTRIBUTOR_TEAM_ROLES : AIM_USER_ROLES} value={form.role} onChange={(role) => {
             const normalizedRole = String(role || '').trim().toLowerCase();
             setForm((s) => ({
               ...s,

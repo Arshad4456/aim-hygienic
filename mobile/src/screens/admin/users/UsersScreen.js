@@ -4,7 +4,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import apiClient from '../../../api/client';
 import Card from '../../../ui/Card';
 import Loader from '../../../ui/Loader';
-import { AIM_USER_ROLES, FIELD_LABELS, ROLE_EXTRA_FIELDS, validatePassword } from './roleConfig';
+import { AIM_USER_ROLES, DISTRIBUTOR_TEAM_ROLES, FIELD_LABELS, ROLE_EXTRA_FIELDS, validatePassword } from './roleConfig';
 
 const BASE_EDIT_FIELDS = ['fullName', 'email', 'mobileNumber', 'cnicNo', 'address', 'businessType', 'businessName'];
 const PAGE_SIZE = 50;
@@ -218,7 +218,8 @@ async function fileToBase64FromUri(uri) {
   });
 }
 
-export default function UsersScreen({ navigation }) {
+export default function UsersScreen({ navigation, mode = 'admin' }) {
+  const distributorMode = mode === 'distributor';
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
   const [companies, setCompanies] = useState([]);
@@ -245,6 +246,7 @@ export default function UsersScreen({ navigation }) {
   const [editUser, setEditUser] = useState(null);
   const [editSaving, setEditSaving] = useState(false);
   const [editShowPassword, setEditShowPassword] = useState(false);
+  const visibleRoles = distributorMode ? DISTRIBUTOR_TEAM_ROLES : AIM_USER_ROLES;
 
   const load = useCallback(async () => {
     setErr('');
@@ -490,10 +492,10 @@ export default function UsersScreen({ navigation }) {
       <Card>
         <View style={styles.titleRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.title}>User List</Text>
+            <Text style={styles.title}>{distributorMode ? 'Distributor User List' : 'User List'}</Text>
             <Text style={styles.subtitle}>Maintain roles, regions, zones, and territories.</Text>
           </View>
-          <Pressable style={styles.addBtn} onPress={() => navigation?.navigate?.('admin:users/add')}><Text style={styles.addBtnText}>Add User</Text></Pressable>
+          <Pressable style={styles.addBtn} onPress={() => navigation?.navigate?.(distributorMode ? 'distributor:users/add' : 'admin:users/add')}><Text style={styles.addBtnText}>Add User</Text></Pressable>
         </View>
 
         <View style={styles.summaryRow}>
@@ -510,7 +512,7 @@ export default function UsersScreen({ navigation }) {
         <View style={styles.filters}>
           <TextInput value={search} onChangeText={setSearch} placeholder="Search" placeholderTextColor="#71717a" style={styles.input} />
 
-          <FilterRow label="Role" value={roleFilter} onClear={() => setRoleFilter('')} options={AIM_USER_ROLES} onPick={setRoleFilter} />
+          <FilterRow label="Role" value={roleFilter} onClear={() => setRoleFilter('')} options={visibleRoles} onPick={setRoleFilter} />
           <FilterRow label="Company" value={companyFilter} onClear={() => setCompanyFilter('')} options={companies.map((c) => ({ label: c.name, value: c.companyId }))} onPick={setCompanyFilter} />
           <FilterRow label="Warehouse" value={warehouseFilter} onClear={() => setWarehouseFilter('')} options={warehouses.map((w) => ({ label: w.name, value: w.warehouseId }))} onPick={setWarehouseFilter} />
           <FilterRow label="Region" value={regionFilter} onClear={() => setRegionFilter('')} options={filterRegions.map((r) => ({ label: r.name, value: r.regionId }))} onPick={setRegionFilter} />

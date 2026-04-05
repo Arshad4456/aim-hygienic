@@ -108,6 +108,9 @@ import S102 from '../screens/distributor/settings/change-password/ChangePassword
 import S103 from '../screens/distributor/settings/SettingsScreen';
 import S103a from '../screens/distributor/live-tracking/LiveTrackingScreen';
 import S103b from '../screens/distributor/reports/ReportsScreen';
+import S103c from '../screens/distributor/hr/HrScreen';
+import S103d from '../screens/distributor/users/add/AddScreen';
+import S103e from '../screens/distributor/users/UsersScreen';
 import S104 from '../screens/fieldSM/DashboardScreen';
 import S105 from '../screens/hrAssistant/DashboardScreen';
 import S106 from '../screens/kpo/DashboardScreen';
@@ -232,6 +235,9 @@ export const screenRegistry = {
   'distributor:messages': S93,
   'distributor:orders': S94,
   'distributor:dashboard': S95,
+  'distributor:hr': S103c,
+  'distributor:users/add': S103d,
+  'distributor:users': S103e,
   'distributor:payments': S96,
   'distributor:payments/primary': S97,
   'distributor:payments/secondary': S98,
