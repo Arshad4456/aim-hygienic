@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import AdminShell from "../components/AdminShell";
 import { apiFetch } from "../../../lib/api";
 import { listFieldsCompat } from "../../../lib/fieldApi";
-import { AIM_USER_ROLES, FIELD_LABELS, ROLE_EXTRA_FIELDS, validatePassword } from "./roleConfig";
+import { AIM_USER_ROLES, DISTRIBUTOR_TEAM_ROLES, FIELD_LABELS, ROLE_EXTRA_FIELDS, validatePassword } from "./roleConfig";
 
 const BASE_EDIT_FIELDS = ["fullName", "email", "mobileNumber", "cnicNo", "address", "businessType", "businessName"];
 function readFileAsDataUrl(file) {
@@ -16,7 +16,8 @@ function readFileAsDataUrl(file) {
   });
 }
 
-export default function UserListPage() {
+export default function UserListPage({ mode = "admin" }) {
+  const distributorMode = mode === "distributor";
   const [rows, setRows] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
@@ -498,8 +499,10 @@ export default function UserListPage() {
     URL.revokeObjectURL(url);
   }
 
+  const visibleRoles = distributorMode ? DISTRIBUTOR_TEAM_ROLES : AIM_USER_ROLES;
+
   return (
-    <AdminShell title="User List" user={null}>
+    <AdminShell title={distributorMode ? "Distributor User List" : "User List"} user={null}>
       <div className="rounded-2xl border bg-white p-5 shadow-sm">
         <div className="text-xl font-semibold text-zinc-900">Users</div>
         <div className="mt-1 text-sm text-zinc-500">All users list with role-based details and edit support. Click User ID or Name to sort.</div>
@@ -520,7 +523,7 @@ export default function UserListPage() {
             className="rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200"
           >
             <option value="">All roles</option>
-            {AIM_USER_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+            {visibleRoles.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
           <select
             value={companyFilter}

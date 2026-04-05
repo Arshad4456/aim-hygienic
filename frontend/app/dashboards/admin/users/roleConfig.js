@@ -24,6 +24,8 @@ export const AIM_USER_ROLES = [
   "Brand Manager",
 ];
 
+export const DISTRIBUTOR_TEAM_ROLES = ["Order Booker", "Salesman", "customer"];
+
 export const COMMON_USER_FIELDS = ["fullName", "email", "mobileNumber", "cnicNo", "password", "address"];
 
 export const ROLE_EXTRA_FIELDS = {
