@@ -2041,6 +2041,15 @@
     "endpoints": []
   },
   {
+    "key": "distributor:hr-role-management",
+    "role": "distributor",
+    "modulePath": "hr-role-management",
+    "route": "/dashboards/distributor/hr-role-management",
+    "title": "HR & Role Management",
+    "screenFile": "screens/distributor/hr-role-management/HrRoleManagementScreen.js",
+    "endpoints": []
+  },
+  {
     "key": "distributor:payments",
     "role": "distributor",
     "modulePath": "payments",

@@ -5,6 +5,7 @@ import Card from '../../ui/Card';
 
 const dashboardLinks = [
   { title: 'Dashboard', route: 'distributor:dashboard' },
+  { title: 'HR & Role Management', route: 'distributor:hr-role-management' },
   { title: 'Expense', route: 'distributor:expense' },
   { title: 'Receipts', route: 'distributor:receipts' },
   { title: 'Payments', route: 'distributor:payments' },
