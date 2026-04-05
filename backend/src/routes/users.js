@@ -188,6 +188,53 @@ function isSystemLevelAdmin(role) {
   return normalized === "admin" || normalized === "system admin";
 }
 
+function isDistributor(role) {
+  return normalizeRole(role) === "distributor";
+}
+
+const DISTRIBUTOR_MANAGEABLE_ROLES = new Set(["salesman", "order booker", "orderbooker", "customer"]);
+
+function isDistributorManageableRole(role) {
+  return DISTRIBUTOR_MANAGEABLE_ROLES.has(normalizeRole(role));
+}
+
+function sameText(a, b) {
+  const left = normalize(a);
+  const right = normalize(b);
+  if (!left || !right) return false;
+  return left === right;
+}
+
+function applyDistributorScope(payload, authUser) {
+  payload.companyId = normalize(authUser?.companyId);
+  payload.companyName = normalize(authUser?.companyName);
+  payload.warehouseId = normalize(authUser?.warehouseId);
+  payload.warehouseName = normalize(authUser?.warehouseName);
+  payload.regionId = normalize(authUser?.regionId);
+  payload.regionName = normalize(authUser?.regionName);
+  payload.zoneId = normalize(authUser?.zoneId);
+  payload.zoneName = normalize(authUser?.zoneName);
+  payload.territoryId = normalize(authUser?.territoryId);
+  payload.territoryName = normalize(authUser?.territoryName);
+  payload.distributorId = normalize(authUser?.uid || authUser?._id || authUser?.distributorId || authUser?.userId);
+  payload.distributorName = normalize(authUser?.fullName || authUser?.distributorName);
+}
+
+function assertDistributorTargetAllowed(target, authUser) {
+  if (!isDistributorManageableRole(target?.role)) return false;
+
+  if (normalize(authUser?.companyId) && normalize(target?.companyId) && !sameText(target.companyId, authUser.companyId)) {
+    return false;
+  }
+  if (normalize(authUser?.territoryId) && normalize(target?.territoryId) && !sameText(target.territoryId, authUser.territoryId)) {
+    return false;
+  }
+  if (normalize(authUser?.territoryName) && normalize(target?.territoryName) && !sameText(target.territoryName, authUser.territoryName)) {
+    return false;
+  }
+  return true;
+}
+
 function getValueFromBody(body, key) {
   if (key === "mobile") return normalize(body.mobile || body.mobileNumber);
   return normalize(body[key]);
@@ -257,7 +304,7 @@ router.put("/change-password", requireAuth, async (req, res) => {
   return res.json({ ok: true });
 });
 
-router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
+router.post("/", requireAuth, requireRole("admin", "distributor"), async (req, res) => {
   const body = req.body || {};
   if (!body.fullName || !body.role || !(body.mobile || body.mobileNumber)) {
     return res.status(400).json({ ok: false, message: "Missing required fields" });
@@ -276,9 +323,17 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
 
   const targetRole = normalizeRole(body.role);
   const requiresCompany = targetRole && !isSystemLevelAdmin(targetRole);
+  if (isDistributor(req.user?.role) && !isDistributorManageableRole(targetRole)) {
+    return res.status(403).json({ ok: false, message: "Distributor can only create Salesman, Order Booker, and customer users." });
+  }
 
   const { payload } = buildRoleAwarePayload(body);
-  if (isCompanyAdmin(req.user?.role)) {
+  if (isDistributor(req.user?.role)) {
+    applyDistributorScope(payload, req.user);
+    if (!payload.territoryId && !payload.territoryName) {
+      return res.status(400).json({ ok: false, message: "Distributor territory mapping is required." });
+    }
+  } else if (isCompanyAdmin(req.user?.role)) {
     payload.companyId = normalize(req.user?.companyId);
     payload.companyName = normalize(req.user?.companyName);
     if (!payload.companyId) {
@@ -297,7 +352,23 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
   return res.status(201).json({ ok: true, user: { id: user._id } });
 });
 
-router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
+router.get("/", requireAuth, requireRole("admin", "distributor"), async (req, res) => {
+  if (isDistributor(req.user?.role)) {
+    const query = {
+      role: { $in: ["Salesman", "Order Booker", "customer"] },
+      companyId: normalize(req.user?.companyId),
+    };
+    const territoryId = normalize(req.user?.territoryId);
+    const territoryName = normalize(req.user?.territoryName);
+    if (territoryId || territoryName) {
+      query.$or = [];
+      if (territoryId) query.$or.push({ territoryId });
+      if (territoryName) query.$or.push({ territoryName });
+    }
+    const users = await User.find(query).select("-passwordHash").sort({ createdAt: -1 }).lean();
+    return res.json({ ok: true, users });
+  }
+
   if (isCompanyAdmin(req.user?.role)) {
     const tenantUsers = await listTenantUsersByCompany(req.user?.companyId);
     return res.json({ ok: true, users: tenantUsers });
@@ -333,19 +404,25 @@ router.get("/distributors", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/:id", requireAuth, requireRole("admin"), async (req, res) => {
+router.get("/:id", requireAuth, requireRole("admin", "distributor"), async (req, res) => {
   const user = await User.findById(req.params.id).select("-passwordHash").lean();
   if (!user) return res.status(404).json({ ok: false, message: "User not found" });
+  if (isDistributor(req.user?.role) && !assertDistributorTargetAllowed(user, req.user)) {
+    return res.status(403).json({ ok: false, message: "Forbidden" });
+  }
   if (isCompanyAdmin(req.user?.role) && normalize(user.companyId) !== normalize(req.user?.companyId)) {
     return res.status(403).json({ ok: false, message: "Forbidden" });
   }
   return res.json({ ok: true, user });
 });
 
-router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
+router.put("/:id", requireAuth, requireRole("admin", "distributor"), async (req, res) => {
   const body = req.body || {};
   const existing = await User.findById(req.params.id).lean();
   if (!existing) return res.status(404).json({ ok: false, message: "User not found" });
+  if (isDistributor(req.user?.role) && !assertDistributorTargetAllowed(existing, req.user)) {
+    return res.status(403).json({ ok: false, message: "Forbidden" });
+  }
   if (isCompanyAdmin(req.user?.role) && normalize(existing.companyId) !== normalize(req.user?.companyId)) {
     return res.status(403).json({ ok: false, message: "Forbidden" });
   }
@@ -353,7 +430,12 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
   const { payload, unset } = buildRoleAwarePayload(body, existing.role);
   const effectiveRole = normalizeRole(payload.role || existing.role);
   const requiresCompany = effectiveRole && !isSystemLevelAdmin(effectiveRole);
-  if (isCompanyAdmin(req.user?.role)) {
+  if (isDistributor(req.user?.role)) {
+    if (!isDistributorManageableRole(effectiveRole)) {
+      return res.status(403).json({ ok: false, message: "Distributor can only manage Salesman, Order Booker, and customer users." });
+    }
+    applyDistributorScope(payload, req.user);
+  } else if (isCompanyAdmin(req.user?.role)) {
     payload.companyId = normalize(req.user?.companyId);
     payload.companyName = normalize(req.user?.companyName);
   } else if (requiresCompany && !normalize(payload.companyId)) {
@@ -388,9 +470,12 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
   return res.json({ ok: true, user: updated });
 });
 
-router.delete("/:id", requireAuth, requireRole("admin"), async (req, res) => {
+router.delete("/:id", requireAuth, requireRole("admin", "distributor"), async (req, res) => {
   const existing = await User.findById(req.params.id).lean();
   if (!existing) return res.status(404).json({ ok: false, message: "User not found" });
+  if (isDistributor(req.user?.role) && !assertDistributorTargetAllowed(existing, req.user)) {
+    return res.status(403).json({ ok: false, message: "Forbidden" });
+  }
   if (isCompanyAdmin(req.user?.role) && normalize(existing.companyId) !== normalize(req.user?.companyId)) {
     return res.status(403).json({ ok: false, message: "Forbidden" });
   }

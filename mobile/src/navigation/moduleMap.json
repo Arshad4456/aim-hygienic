@@ -2041,6 +2041,103 @@
     "endpoints": []
   },
   {
+    "key": "distributor:hr",
+    "role": "distributor",
+    "modulePath": "hr",
+    "route": "/dashboards/distributor/hr",
+    "title": "HR & Role Management",
+    "screenFile": "screens/distributor/hr/HrScreen.js",
+    "endpoints": []
+  },
+  {
+    "key": "distributor:users/add",
+    "role": "distributor",
+    "modulePath": "users/add",
+    "route": "/dashboards/distributor/users/add",
+    "title": "Add User",
+    "screenFile": "screens/distributor/users/add/AddScreen.js",
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/users"
+      },
+      {
+        "method": "GET",
+        "path": "/warehouses"
+      },
+      {
+        "method": "GET",
+        "path": "/regions"
+      },
+      {
+        "method": "GET",
+        "path": "/zones"
+      },
+      {
+        "method": "GET",
+        "path": "/areas"
+      },
+      {
+        "method": "GET",
+        "path": "/fields"
+      },
+      {
+        "method": "GET",
+        "path": "/users/me"
+      },
+      {
+        "method": "POST",
+        "path": "/uploads/user-document"
+      },
+      {
+        "method": "POST",
+        "path": "/users"
+      }
+    ]
+  },
+  {
+    "key": "distributor:users",
+    "role": "distributor",
+    "modulePath": "users",
+    "route": "/dashboards/distributor/users",
+    "title": "User List",
+    "screenFile": "screens/distributor/users/UsersScreen.js",
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/users"
+      },
+      {
+        "method": "GET",
+        "path": "/warehouses"
+      },
+      {
+        "method": "GET",
+        "path": "/regions"
+      },
+      {
+        "method": "GET",
+        "path": "/zones"
+      },
+      {
+        "method": "GET",
+        "path": "/areas"
+      },
+      {
+        "method": "GET",
+        "path": "/fields"
+      },
+      {
+        "method": "PUT",
+        "path": "/users/${editUser._id}"
+      },
+      {
+        "method": "DELETE",
+        "path": "/users/${id}"
+      }
+    ]
+  },
+  {
     "key": "distributor:payments",
     "role": "distributor",
     "modulePath": "payments",
