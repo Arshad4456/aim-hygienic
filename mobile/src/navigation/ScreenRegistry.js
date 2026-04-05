@@ -98,6 +98,7 @@ import S92 from '../screens/distributor/expense/ExpenseScreen';
 import S93 from '../screens/distributor/messages/MessagesScreen';
 import S94 from '../screens/distributor/orders/OrdersScreen';
 import S95 from '../screens/distributor/DashboardScreen';
+import S95a from '../screens/distributor/hr-role-management/HrRoleManagementScreen';
 import S96 from '../screens/distributor/payments/PaymentsScreen';
 import S97 from '../screens/distributor/payments/primary/PrimaryScreen';
 import S98 from '../screens/distributor/payments/secondary/SecondaryScreen';
@@ -232,6 +233,7 @@ export const screenRegistry = {
   'distributor:messages': S93,
   'distributor:orders': S94,
   'distributor:dashboard': S95,
+  'distributor:hr-role-management': S95a,
   'distributor:payments': S96,
   'distributor:payments/primary': S97,
   'distributor:payments/secondary': S98,
