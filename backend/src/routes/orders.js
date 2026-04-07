@@ -8,6 +8,7 @@ const router = express.Router();
 const ALLOWED_STATUSES = ["pending", "approved", "rejected", "dispatched", "delivered"];
 const ADMIN_ROLES = new Set(["admin", "system admin", "company admin"]);
 const DELIVERY_APPROVER_ROLES = new Set(["admin", "warehouse manager", "distributor"]);
+const POD_UPLOAD_ROLES = new Set(["salesman", "supplier"]);
 
 function normalizeRole(role) {
   return String(role || "").trim().toLowerCase();
@@ -46,6 +47,28 @@ async function getSalesmanFieldScope(req) {
   const fieldId = getFieldScope(authUser);
   if (!fieldId) return { error: "Salesman field not configured" };
   return { authUser, fieldId };
+}
+
+function getSupplierWarehouseScope(user) {
+  const warehouseIds = Array.from(
+    new Set(
+      [
+        String(user?.supplierWarehouseId1 || "").trim(),
+        String(user?.supplierWarehouseId2 || "").trim(),
+        String(user?.warehouseId || "").trim(),
+      ].filter(Boolean)
+    )
+  );
+  const warehouseNames = Array.from(
+    new Set(
+      [
+        String(user?.supplierWarehouseName1 || "").trim(),
+        String(user?.supplierWarehouseName2 || "").trim(),
+        String(user?.warehouseName || "").trim(),
+      ].filter(Boolean)
+    )
+  );
+  return { warehouseIds, warehouseNames };
 }
 
 function normalizeItems(items = []) {
@@ -291,6 +314,33 @@ router.get("/salesman-deliveries", requireAuth, async (req, res) => {
   }
 });
 
+router.get("/supplier-deliveries", requireAuth, async (req, res) => {
+  try {
+    if (normalizeRole(req.user?.role) !== "supplier") {
+      return res.status(403).json({ ok: false, message: "Only Supplier can access deliveries" });
+    }
+
+    const me = await getAuthenticatedUser(req);
+    if (!me) return res.status(404).json({ ok: false, message: "User not found" });
+    const { warehouseIds, warehouseNames } = getSupplierWarehouseScope(me);
+    if (!warehouseIds.length && !warehouseNames.length) {
+      return res.status(400).json({ ok: false, message: "Supplier warehouse mapping is required" });
+    }
+
+    const limit = Math.min(Number(req.query.limit) || 200, 500);
+    const scoped = withCompanyScope(me, { saleType: "primary", status: { $in: ["approved", "dispatched"] } });
+    const warehouseFilters = [];
+    if (warehouseIds.length) warehouseFilters.push({ toWarehouseId: { $in: warehouseIds } });
+    if (warehouseNames.length) warehouseFilters.push({ toWarehouseName: { $in: warehouseNames } });
+    if (warehouseFilters.length) scoped.$or = warehouseFilters;
+
+    const orders = await SalesOrder.find(scoped).sort({ createdAt: -1 }).limit(limit).lean();
+    return res.json({ ok: true, orders: await attachPodMetaToOrders(orders) });
+  } catch (_error) {
+    return res.status(500).json({ ok: false, message: "Failed to load supplier deliveries" });
+  }
+});
+
 router.get("/summary", requireAuth, async (req, res) => {
   try {
     const match = roleMatchQuery(req.user);
@@ -408,8 +458,9 @@ router.patch("/:id/proof-of-delivery", requireAuth, async (req, res) => {
 
 router.post("/:orderId/pod", requireAuth, async (req, res) => {
   try {
-    if (String(req.user?.role || "") !== "Salesman") {
-      return res.status(403).json({ ok: false, message: "Only Salesman can upload POD" });
+    const requestRole = normalizeRole(req.user?.role);
+    if (!POD_UPLOAD_ROLES.has(requestRole)) {
+      return res.status(403).json({ ok: false, message: "Only Salesman or Supplier can upload POD" });
     }
 
     const objectKey = String(req.body?.objectKey || "").trim();
@@ -418,13 +469,29 @@ router.post("/:orderId/pod", requireAuth, async (req, res) => {
       return res.status(400).json({ ok: false, message: "objectKey and publicUrl are required" });
     }
 
-    const scope = await getSalesmanFieldScope(req);
-    if (scope.error) return res.status(400).json({ ok: false, message: scope.error });
-
     const order = await SalesOrder.findById(req.params.orderId);
     if (!order) return res.status(404).json({ ok: false, message: "Order not found" });
-    if (String(order.fieldId || "").trim() !== scope.fieldId) {
-      return res.status(403).json({ ok: false, message: "Order is outside your field" });
+    if (requestRole === "salesman") {
+      const scope = await getSalesmanFieldScope(req);
+      if (scope.error) return res.status(400).json({ ok: false, message: scope.error });
+      if (String(order.fieldId || "").trim() !== scope.fieldId) {
+        return res.status(403).json({ ok: false, message: "Order is outside your field" });
+      }
+    }
+    if (requestRole === "supplier") {
+      if (String(order.saleType || "").trim().toLowerCase() !== "primary") {
+        return res.status(400).json({ ok: false, message: "Supplier can upload POD only for primary orders" });
+      }
+      const me = await getAuthenticatedUser(req);
+      if (!me) return res.status(404).json({ ok: false, message: "User not found" });
+      const { warehouseIds, warehouseNames } = getSupplierWarehouseScope(me);
+      const orderWarehouseId = String(order.toWarehouseId || "").trim();
+      const orderWarehouseName = String(order.toWarehouseName || "").trim();
+      const inScopeById = orderWarehouseId && warehouseIds.includes(orderWarehouseId);
+      const inScopeByName = orderWarehouseName && warehouseNames.includes(orderWarehouseName);
+      if (!inScopeById && !inScopeByName) {
+        return res.status(403).json({ ok: false, message: "Order is outside your supplier warehouse scope" });
+      }
     }
     if (order.status !== "dispatched") {
       return res.status(400).json({ ok: false, message: "POD upload is allowed only for dispatched orders" });
@@ -500,7 +567,7 @@ router.patch("/:id/status", requireAuth, async (req, res) => {
     const requestRole = normalizeRole(req.user?.role);
     let order;
 
-    if (requestRole === "salesman" && status === "dispatched") {
+    if ((requestRole === "salesman" || requestRole === "supplier") && status === "dispatched") {
       order = await SalesOrder.findById(req.params.id);
     } else {
       order = await SalesOrder.findOne({ _id: req.params.id, ...roleMatchQuery(req.user) });
@@ -520,6 +587,21 @@ router.patch("/:id/status", requireAuth, async (req, res) => {
       if (scope.error) return res.status(400).json({ ok: false, message: scope.error });
       if (String(order.fieldId || "").trim() !== scope.fieldId) {
         return res.status(403).json({ ok: false, message: "Order is outside your field" });
+      }
+    }
+    if (requestRole === "supplier" && status === "dispatched") {
+      if (String(order.saleType || "").trim().toLowerCase() !== "primary") {
+        return res.status(400).json({ ok: false, message: "Supplier can dispatch only primary orders" });
+      }
+      const me = await getAuthenticatedUser(req);
+      if (!me) return res.status(404).json({ ok: false, message: "User not found" });
+      const { warehouseIds, warehouseNames } = getSupplierWarehouseScope(me);
+      const orderWarehouseId = String(order.toWarehouseId || "").trim();
+      const orderWarehouseName = String(order.toWarehouseName || "").trim();
+      const inScopeById = orderWarehouseId && warehouseIds.includes(orderWarehouseId);
+      const inScopeByName = orderWarehouseName && warehouseNames.includes(orderWarehouseName);
+      if (!inScopeById && !inScopeByName) {
+        return res.status(403).json({ ok: false, message: "Order is outside your supplier warehouse scope" });
       }
     }
     if (!canTransition(order, status)) {

@@ -83,7 +83,12 @@ function fileToBase64(file) {
 }
 
 
-export default function SalesmanDeliveriesModule() {
+export default function SalesmanDeliveriesModule({
+  fetchPath = "/orders/salesman-deliveries?limit=500",
+  title = "Salesman Deliveries",
+  subtitle = "Secondary orders in Approved / Dispatched state for your field.",
+  emptyMessage = "No deliveries found for your field.",
+}) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -94,14 +99,14 @@ export default function SalesmanDeliveriesModule() {
     setLoading(true);
     setError("");
     try {
-      const res = await apiFetch("/orders/salesman-deliveries?limit=500");
+      const res = await apiFetch(fetchPath);
       setOrders(res?.orders || []);
     } catch (e) {
       setError(e.message || "Failed to load deliveries");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchPath]);
 
   useEffect(() => {
     loadOrders();
@@ -178,8 +183,8 @@ export default function SalesmanDeliveriesModule() {
     <div className="rounded-2xl border bg-white p-5 shadow-sm mt-6">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-lg font-semibold">Deliveries</h3>
-          <p className="text-xs text-zinc-500">Secondary orders in Approved / Dispatched state for your field.</p>
+          <h3 className="text-lg font-semibold">{title}</h3>
+          <p className="text-xs text-zinc-500">{subtitle}</p>
         </div>
       </div>
 
@@ -248,7 +253,7 @@ export default function SalesmanDeliveriesModule() {
             })}
             {!orders.length ? (
               <tr>
-                <td className="px-3 py-6 text-center text-zinc-500" colSpan={8}>{loading ? "Loading deliveries..." : "No deliveries found for your field."}</td>
+                <td className="px-3 py-6 text-center text-zinc-500" colSpan={8}>{loading ? "Loading deliveries..." : emptyMessage}</td>
               </tr>
             ) : null}
           </tbody>
