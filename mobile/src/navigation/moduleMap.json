@@ -2427,6 +2427,28 @@
     "endpoints": []
   },
   {
+    "key": "supplier:orders",
+    "role": "supplier",
+    "modulePath": "orders",
+    "route": "/dashboards/supplier/primary-orders",
+    "title": "Primary Orders",
+    "screenFile": "screens/supplier/orders/OrdersScreen.js",
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/orders/supplier-deliveries"
+      },
+      {
+        "method": "PATCH",
+        "path": "/orders/:id/status"
+      },
+      {
+        "method": "POST",
+        "path": "/orders/:orderId/pod"
+      }
+    ]
+  },
+  {
     "key": "vendor:dashboard",
     "role": "vendor",
     "modulePath": "",

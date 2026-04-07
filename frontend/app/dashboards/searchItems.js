@@ -120,6 +120,9 @@ export const userDashboardSearchItems = {
     { title: "Account Settings", href: "/dashboards/customer/settings" },
     { title: "Change Password", href: "/dashboards/customer/settings/change-password" },
   ],
-  supplier: [{ title: "Dashboard", href: "/dashboards/supplier" }],
+  supplier: [
+    { title: "Dashboard", href: "/dashboards/supplier" },
+    { title: "Primary Orders", href: "/dashboards/supplier/primary-orders" },
+  ],
   vendor: [{ title: "Dashboard", href: "/dashboards/vendor" }],
 };
