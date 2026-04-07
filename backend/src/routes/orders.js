@@ -2,6 +2,7 @@ const express = require("express");
 const { requireAuth } = require("../utils/auth");
 const SalesOrder = require("../models/SalesOrder");
 const User = require("../models/User");
+const Warehouse = require("../models/Warehouse");
 
 const router = express.Router();
 
@@ -69,6 +70,49 @@ function getSupplierWarehouseScope(user) {
     )
   );
   return { warehouseIds, warehouseNames };
+}
+
+async function resolveSupplierWarehouseScope(user) {
+  const base = getSupplierWarehouseScope(user);
+  const idCandidates = base.warehouseIds;
+  const nameCandidates = base.warehouseNames;
+  if (!idCandidates.length && !nameCandidates.length) return base;
+
+  const docs = await Warehouse.find({
+    $or: [
+      { warehouseId: { $in: idCandidates } },
+      { name: { $in: nameCandidates } },
+    ],
+  })
+    .select("warehouseId name")
+    .lean();
+
+  const resolvedIds = new Set(idCandidates);
+  const resolvedNames = new Set(nameCandidates);
+  docs.forEach((doc) => {
+    resolvedIds.add(String(doc?.warehouseId || "").trim());
+    resolvedIds.add(String(doc?._id || "").trim());
+    resolvedNames.add(String(doc?.name || "").trim());
+  });
+
+  return {
+    warehouseIds: Array.from(resolvedIds).filter(Boolean),
+    warehouseNames: Array.from(resolvedNames).filter(Boolean),
+  };
+}
+
+function matchesSupplierWarehouseScope(order, warehouseIds = [], warehouseNames = []) {
+  const orderWarehouseIds = [
+    String(order?.toWarehouseId || "").trim(),
+    String(order?.warehouseId || "").trim(),
+  ].filter(Boolean);
+  const orderWarehouseNames = [
+    String(order?.toWarehouseName || "").trim(),
+    String(order?.warehouseName || "").trim(),
+  ].filter(Boolean);
+  const inScopeById = orderWarehouseIds.some((id) => warehouseIds.includes(id));
+  const inScopeByName = orderWarehouseNames.some((name) => warehouseNames.includes(name));
+  return inScopeById || inScopeByName;
 }
 
 function normalizeItems(items = []) {
@@ -322,7 +366,7 @@ router.get("/supplier-deliveries", requireAuth, async (req, res) => {
 
     const me = await getAuthenticatedUser(req);
     if (!me) return res.status(404).json({ ok: false, message: "User not found" });
-    const { warehouseIds, warehouseNames } = getSupplierWarehouseScope(me);
+    const { warehouseIds, warehouseNames } = await resolveSupplierWarehouseScope(me);
     if (!warehouseIds.length && !warehouseNames.length) {
       return res.status(400).json({ ok: false, message: "Supplier warehouse mapping is required" });
     }
@@ -330,8 +374,14 @@ router.get("/supplier-deliveries", requireAuth, async (req, res) => {
     const limit = Math.min(Number(req.query.limit) || 200, 500);
     const scoped = withCompanyScope(me, { saleType: "primary", status: { $in: ["approved", "dispatched"] } });
     const warehouseFilters = [];
-    if (warehouseIds.length) warehouseFilters.push({ toWarehouseId: { $in: warehouseIds } });
-    if (warehouseNames.length) warehouseFilters.push({ toWarehouseName: { $in: warehouseNames } });
+    if (warehouseIds.length) {
+      warehouseFilters.push({ toWarehouseId: { $in: warehouseIds } });
+      warehouseFilters.push({ warehouseId: { $in: warehouseIds } });
+    }
+    if (warehouseNames.length) {
+      warehouseFilters.push({ toWarehouseName: { $in: warehouseNames } });
+      warehouseFilters.push({ warehouseName: { $in: warehouseNames } });
+    }
     if (warehouseFilters.length) scoped.$or = warehouseFilters;
 
     const orders = await SalesOrder.find(scoped).sort({ createdAt: -1 }).limit(limit).lean();
@@ -484,12 +534,8 @@ router.post("/:orderId/pod", requireAuth, async (req, res) => {
       }
       const me = await getAuthenticatedUser(req);
       if (!me) return res.status(404).json({ ok: false, message: "User not found" });
-      const { warehouseIds, warehouseNames } = getSupplierWarehouseScope(me);
-      const orderWarehouseId = String(order.toWarehouseId || "").trim();
-      const orderWarehouseName = String(order.toWarehouseName || "").trim();
-      const inScopeById = orderWarehouseId && warehouseIds.includes(orderWarehouseId);
-      const inScopeByName = orderWarehouseName && warehouseNames.includes(orderWarehouseName);
-      if (!inScopeById && !inScopeByName) {
+      const { warehouseIds, warehouseNames } = await resolveSupplierWarehouseScope(me);
+      if (!matchesSupplierWarehouseScope(order, warehouseIds, warehouseNames)) {
         return res.status(403).json({ ok: false, message: "Order is outside your supplier warehouse scope" });
       }
     }
@@ -595,12 +641,8 @@ router.patch("/:id/status", requireAuth, async (req, res) => {
       }
       const me = await getAuthenticatedUser(req);
       if (!me) return res.status(404).json({ ok: false, message: "User not found" });
-      const { warehouseIds, warehouseNames } = getSupplierWarehouseScope(me);
-      const orderWarehouseId = String(order.toWarehouseId || "").trim();
-      const orderWarehouseName = String(order.toWarehouseName || "").trim();
-      const inScopeById = orderWarehouseId && warehouseIds.includes(orderWarehouseId);
-      const inScopeByName = orderWarehouseName && warehouseNames.includes(orderWarehouseName);
-      if (!inScopeById && !inScopeByName) {
+      const { warehouseIds, warehouseNames } = await resolveSupplierWarehouseScope(me);
+      if (!matchesSupplierWarehouseScope(order, warehouseIds, warehouseNames)) {
         return res.status(403).json({ ok: false, message: "Order is outside your supplier warehouse scope" });
       }
     }
