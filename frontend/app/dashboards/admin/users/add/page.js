@@ -13,6 +13,8 @@ import {
   validatePassword,
 } from "../roleConfig";
 
+const SYSTEM_LEVEL_ROLES = new Set(["admin", "system admin", "company admin"]);
+
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -238,6 +240,14 @@ export default function AddUserPage({ mode = "admin" }) {
   }
 
   const roleNeeds = ROLE_EXTRA_FIELDS[role] || [];
+  const roleOptions = useMemo(() => {
+    const actorRole = String(me?.role || "").trim().toLowerCase();
+    if (distributorMode) return DISTRIBUTOR_TEAM_ROLES;
+    if (actorRole === "company admin") {
+      return AIM_USER_ROLES.filter((candidateRole) => !SYSTEM_LEVEL_ROLES.has(String(candidateRole || "").trim().toLowerCase()));
+    }
+    return AIM_USER_ROLES;
+  }, [distributorMode, me?.role]);
   const requiresCompany = useMemo(() => {
     const normalizedRole = String(role || "").trim().toLowerCase();
     return Boolean(normalizedRole && normalizedRole !== "admin" && normalizedRole !== "system admin");
@@ -293,7 +303,7 @@ export default function AddUserPage({ mode = "admin" }) {
                 setForm((prev) => ({ ...prev, companyId: "", companyName: "" }));
               }
             }}
-            options={(distributorMode ? DISTRIBUTOR_TEAM_ROLES : AIM_USER_ROLES).map((r) => ({ value: r, label: r }))}
+            options={roleOptions.map((r) => ({ value: r, label: r }))}
             required
           />
           <InputField label="Auto User ID" value={form.userId || ""} readOnly />

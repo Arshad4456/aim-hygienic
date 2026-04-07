@@ -187,6 +187,7 @@ function isSystemLevelAdmin(role) {
   const normalized = normalizeRole(role);
   return normalized === "admin" || normalized === "system admin";
 }
+const COMPANY_ADMIN_BLOCKED_CREATE_ROLES = new Set(["admin", "system admin", "company admin"]);
 
 function isDistributor(role) {
   return normalizeRole(role) === "distributor";
@@ -325,6 +326,9 @@ router.post("/", requireAuth, requireRole("admin", "distributor"), async (req, r
   const requiresCompany = targetRole && !isSystemLevelAdmin(targetRole);
   if (isDistributor(req.user?.role) && !isDistributorManageableRole(targetRole)) {
     return res.status(403).json({ ok: false, message: "Distributor can only create Salesman, Order Booker, and customer users." });
+  }
+  if (isCompanyAdmin(req.user?.role) && COMPANY_ADMIN_BLOCKED_CREATE_ROLES.has(targetRole)) {
+    return res.status(403).json({ ok: false, message: "Company admin cannot create admin, system admin, or company admin users." });
   }
 
   const { payload } = buildRoleAwarePayload(body);
