@@ -41,10 +41,14 @@ export default function OrdersScreen() {
   }, [loadOrders]);
 
   const dispatchOrder = async (orderId) => {
+    const target = orders.find((item) => item._id === orderId);
     setDispatchingFor(orderId);
     setError('');
     try {
-      await apiClient.patch(`/orders/${orderId}/status`, { status: 'dispatched' });
+      await apiClient.patch(`/orders/${orderId}/status`, {
+        status: 'dispatched',
+        sourceModel: target?.sourceModel || 'sales_order',
+      });
       await loadOrders();
     } catch (e) {
       setError(e.message || 'Failed to dispatch order');
@@ -54,6 +58,7 @@ export default function OrdersScreen() {
   };
 
   const uploadPod = async (orderId) => {
+    const target = orders.find((item) => item._id === orderId);
     const result = await DocumentPicker.getDocumentAsync({
       type: ['image/*'],
       multiple: false,
@@ -76,7 +81,11 @@ export default function OrdersScreen() {
       const publicUrl = proxyRes?.data?.publicUrl;
       if (!publicUrl) throw new Error('Upload failed. Missing public URL.');
 
-      await apiClient.post(`/orders/${orderId}/pod`, { objectKey, publicUrl });
+      await apiClient.post(`/orders/${orderId}/pod`, {
+        objectKey,
+        publicUrl,
+        sourceModel: target?.sourceModel || 'sales_order',
+      });
       await loadOrders();
     } catch (e) {
       setError(e.message || 'Failed to upload POD');

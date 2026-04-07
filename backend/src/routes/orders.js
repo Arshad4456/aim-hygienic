@@ -3,6 +3,7 @@ const { requireAuth } = require("../utils/auth");
 const SalesOrder = require("../models/SalesOrder");
 const User = require("../models/User");
 const Warehouse = require("../models/Warehouse");
+const WarehouseTransaction = require("../models/WarehouseTransaction");
 
 const router = express.Router();
 
@@ -113,6 +114,24 @@ function matchesSupplierWarehouseScope(order, warehouseIds = [], warehouseNames 
   const inScopeById = orderWarehouseIds.some((id) => warehouseIds.includes(id));
   const inScopeByName = orderWarehouseNames.some((name) => warehouseNames.includes(name));
   return inScopeById || inScopeByName;
+}
+
+function mapWarehouseTransactionToSupplierOrder(transaction) {
+  return {
+    _id: String(transaction?._id || ""),
+    sourceModel: "warehouse_transaction",
+    orderNo: transaction?.transactionCode || "",
+    invoiceNo: "",
+    customerName: transaction?.fromEntityName || transaction?.toEntityName || "",
+    address: transaction?.note || "",
+    distributorName: transaction?.distributorName || "",
+    fieldName: transaction?.fieldName || "",
+    status: String(transaction?.requestStatus || "").trim().toLowerCase(),
+    podUrl: transaction?.podUrl || "",
+    toWarehouseId: transaction?.warehouseId || "",
+    toWarehouseName: transaction?.warehouseName || "",
+    createdAt: transaction?.transactionAt || transaction?.createdAt || new Date(),
+  };
 }
 
 function normalizeItems(items = []) {
@@ -384,8 +403,34 @@ router.get("/supplier-deliveries", requireAuth, async (req, res) => {
     }
     if (warehouseFilters.length) scoped.$or = warehouseFilters;
 
-    const orders = await SalesOrder.find(scoped).sort({ createdAt: -1 }).limit(limit).lean();
-    return res.json({ ok: true, orders: await attachPodMetaToOrders(orders) });
+    const [salesOrders, warehouseTransactions] = await Promise.all([
+      SalesOrder.find(scoped).sort({ createdAt: -1 }).limit(limit).lean(),
+      WarehouseTransaction.find({
+        ...withCompanyScope(me, {
+          transactionType: "SALE_STOCK",
+          requestStatus: { $in: ["APPROVED", "DISPATCHED"] },
+        }),
+        ...(warehouseIds.length || warehouseNames.length
+          ? {
+            $or: [
+              ...(warehouseIds.length ? [{ warehouseId: { $in: warehouseIds } }] : []),
+              ...(warehouseNames.length ? [{ warehouseName: { $in: warehouseNames } }] : []),
+            ],
+          }
+          : {}),
+      })
+        .sort({ transactionAt: -1, createdAt: -1 })
+        .limit(limit)
+        .lean(),
+    ]);
+
+    const mappedSalesOrders = (await attachPodMetaToOrders(salesOrders)).map((order) => ({ ...order, sourceModel: "sales_order" }));
+    const mappedWarehouseTransactions = warehouseTransactions.map(mapWarehouseTransactionToSupplierOrder);
+    const orders = [...mappedSalesOrders, ...mappedWarehouseTransactions]
+      .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+      .slice(0, limit);
+
+    return res.json({ ok: true, orders });
   } catch (_error) {
     return res.status(500).json({ ok: false, message: "Failed to load supplier deliveries" });
   }
@@ -515,8 +560,33 @@ router.post("/:orderId/pod", requireAuth, async (req, res) => {
 
     const objectKey = String(req.body?.objectKey || "").trim();
     const publicUrl = String(req.body?.publicUrl || "").trim();
+    const sourceModel = String(req.body?.sourceModel || "sales_order").trim().toLowerCase();
     if (!objectKey || !publicUrl) {
       return res.status(400).json({ ok: false, message: "objectKey and publicUrl are required" });
+    }
+
+    if (requestRole === "supplier" && sourceModel === "warehouse_transaction") {
+      const transaction = await WarehouseTransaction.findById(req.params.orderId);
+      if (!transaction) return res.status(404).json({ ok: false, message: "Order not found" });
+      const me = await getAuthenticatedUser(req);
+      if (!me) return res.status(404).json({ ok: false, message: "User not found" });
+      const { warehouseIds, warehouseNames } = await resolveSupplierWarehouseScope(me);
+      if (!matchesSupplierWarehouseScope(transaction, warehouseIds, warehouseNames)) {
+        return res.status(403).json({ ok: false, message: "Order is outside your supplier warehouse scope" });
+      }
+      if (String(transaction.requestStatus || "").toUpperCase() !== "DISPATCHED") {
+        return res.status(400).json({ ok: false, message: "POD upload is allowed only for dispatched orders" });
+      }
+
+      transaction.podObjectKey = objectKey;
+      transaction.podUrl = publicUrl;
+      transaction.podUploadedAt = new Date();
+      transaction.podUploadedBy = req.user?.uid;
+      transaction.proofOfDeliveryImageUrl = publicUrl;
+      transaction.proofOfDeliveryAt = transaction.podUploadedAt;
+      transaction.proofOfDeliveryBy = req.user?.uid;
+      await transaction.save();
+      return res.json({ ok: true, order: mapWarehouseTransactionToSupplierOrder(transaction.toObject ? transaction.toObject() : transaction) });
     }
 
     const order = await SalesOrder.findById(req.params.orderId);
@@ -605,12 +675,34 @@ router.delete("/:id", requireAuth, async (req, res) => {
 
 router.patch("/:id/status", requireAuth, async (req, res) => {
   try {
-    const { status, dispatchTracking, dispatchVehicleId, dispatchVehicleName, dispatchDriverId, dispatchDriverName, rejectionReason } = req.body || {};
+    const { status, dispatchTracking, dispatchVehicleId, dispatchVehicleName, dispatchDriverId, dispatchDriverName, rejectionReason, sourceModel } = req.body || {};
     if (!ALLOWED_STATUSES.includes(status)) {
       return res.status(400).json({ ok: false, message: "Invalid status" });
     }
 
     const requestRole = normalizeRole(req.user?.role);
+    const normalizedSourceModel = String(sourceModel || "sales_order").trim().toLowerCase();
+
+    if (requestRole === "supplier" && status === "dispatched" && normalizedSourceModel === "warehouse_transaction") {
+      const transaction = await WarehouseTransaction.findById(req.params.id);
+      if (!transaction) return res.status(404).json({ ok: false, message: "Order not found" });
+      const me = await getAuthenticatedUser(req);
+      if (!me) return res.status(404).json({ ok: false, message: "User not found" });
+      const { warehouseIds, warehouseNames } = await resolveSupplierWarehouseScope(me);
+      if (!matchesSupplierWarehouseScope(transaction, warehouseIds, warehouseNames)) {
+        return res.status(403).json({ ok: false, message: "Order is outside your supplier warehouse scope" });
+      }
+      const currentStatus = String(transaction.requestStatus || "").toUpperCase();
+      if (!["APPROVED", "DISPATCHED"].includes(currentStatus)) {
+        return res.status(400).json({ ok: false, message: "Invalid status transition" });
+      }
+      transaction.requestStatus = "DISPATCHED";
+      transaction.requestReviewedAt = new Date();
+      transaction.requestReviewedBy = req.user?.uid;
+      await transaction.save();
+      return res.json({ ok: true, order: mapWarehouseTransactionToSupplierOrder(transaction.toObject ? transaction.toObject() : transaction) });
+    }
+
     let order;
 
     if ((requestRole === "salesman" || requestRole === "supplier") && status === "dispatched") {

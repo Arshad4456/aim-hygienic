@@ -112,11 +112,16 @@ export default function SalesmanDeliveriesModule({
     loadOrders();
   }, [loadOrders]);
 
-  async function dispatchOrder(orderId) {
+  async function dispatchOrder(order) {
+    const orderId = order?._id;
+    if (!orderId) return;
     setDispatchingFor(orderId);
     setError("");
     try {
-      await apiFetch(`/orders/${orderId}/status`, { method: "PATCH", body: { status: "dispatched" } });
+      await apiFetch(`/orders/${orderId}/status`, {
+        method: "PATCH",
+        body: { status: "dispatched", sourceModel: order?.sourceModel || "sales_order" },
+      });
       await loadOrders();
     } catch (e) {
       setError(e.message || "Failed to dispatch order");
@@ -125,7 +130,9 @@ export default function SalesmanDeliveriesModule({
     }
   }
 
-  async function uploadPod(orderId, file) {
+  async function uploadPod(order, file) {
+    const orderId = order?._id;
+    if (!orderId) return;
     if (!file) return;
     setUploadingFor(orderId);
     setError("");
@@ -168,7 +175,7 @@ export default function SalesmanDeliveriesModule({
 
       await apiFetch(`/orders/${orderId}/pod`, {
         method: "POST",
-        body: { objectKey, publicUrl },
+        body: { objectKey, publicUrl, sourceModel: order?.sourceModel || "sales_order" },
       });
 
       await loadOrders();
@@ -231,7 +238,7 @@ export default function SalesmanDeliveriesModule({
                           onChange={(e) => {
                             const file = e.target.files?.[0];
                             e.target.value = "";
-                            uploadPod(order._id, file);
+                            uploadPod(order, file);
                           }}
                         />
                       </label>
@@ -242,7 +249,7 @@ export default function SalesmanDeliveriesModule({
                   <td className="px-3 py-2 border-b">
                     <div className="flex flex-wrap gap-2 items-center">
                       {isApproved ? (
-                        <button className="rounded-full bg-indigo-600 px-3 py-1 text-xs text-white disabled:opacity-50" disabled={dispatchingFor === order._id} onClick={() => dispatchOrder(order._id)}>
+                        <button className="rounded-full bg-indigo-600 px-3 py-1 text-xs text-white disabled:opacity-50" disabled={dispatchingFor === order._id} onClick={() => dispatchOrder(order)}>
                           {dispatchingFor === order._id ? "Dispatching..." : "Dispatch"}
                         </button>
                       ) : null}
