@@ -15,6 +15,28 @@ import {
 
 const SYSTEM_LEVEL_ROLES = new Set(["admin", "system admin", "company admin"]);
 
+function buildCompanyUserPrefix(companyName, companyId) {
+  const source = String(companyName || companyId || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+  return source.slice(0, 3);
+}
+
+function nextCompanyScopedUserId(users, prefix) {
+  if (!prefix) return "";
+  const matcher = new RegExp(`^${prefix}-(\\d+)$`, "i");
+  const maxSerial = (users || []).reduce((max, user) => {
+    const userId = String(user?.userId || "").trim();
+    const matched = userId.match(matcher);
+    if (!matched) return max;
+    const parsed = Number.parseInt(matched[1], 10);
+    if (Number.isNaN(parsed)) return max;
+    return Math.max(max, parsed);
+  }, 0);
+  return `${prefix}-${String(maxSerial + 1).padStart(2, "0")}`;
+}
+
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -81,7 +103,16 @@ export default function AddUserPage({ mode = "admin" }) {
     })().catch((e) => setErr(e.message || "Failed to load data"));
   }, []);
 
-  const nextUserId = useMemo(() => {
+  useEffect(() => {
+    const actorRole = String(me?.role || "").trim().toLowerCase();
+    if (actorRole !== "company admin") return;
+    const companyId = String(me?.companyId || "").trim();
+    const companyName = String(me?.companyName || "").trim();
+    if (!companyId) return;
+    setForm((prev) => ({ ...prev, companyId, companyName }));
+  }, [me?.companyId, me?.companyName, me?.role]);
+
+  const nextGlobalUserId = useMemo(() => {
     const maxUserId = (users || []).reduce((max, user) => {
       const parsed = Number.parseInt(String(user?.userId || ""), 10);
       if (Number.isNaN(parsed)) return max;
@@ -89,9 +120,6 @@ export default function AddUserPage({ mode = "admin" }) {
     }, 0);
     return String(maxUserId + 1).padStart(2, "0");
   }, [users]);
-  useEffect(() => {
-    setForm((prev) => ({ ...prev, userId: nextUserId }));
-  }, [nextUserId]);
 
   const selectedWarehouse = warehouses.find((x) => x._id === form.warehouseDocId);
   const selectedRegion = regions.find((x) => x._id === form.regionDocId);
@@ -252,6 +280,30 @@ export default function AddUserPage({ mode = "admin" }) {
     const normalizedRole = String(role || "").trim().toLowerCase();
     return Boolean(normalizedRole && normalizedRole !== "admin" && normalizedRole !== "system admin");
   }, [role]);
+  const userIdCompanyContext = useMemo(() => {
+    if (!requiresCompany) return { companyName: "", companyId: "" };
+    const actorRole = String(me?.role || "").trim().toLowerCase();
+    if (actorRole === "company admin") {
+      return {
+        companyName: String(me?.companyName || "").trim(),
+        companyId: String(me?.companyId || "").trim(),
+      };
+    }
+    const selectedCompany = companies.find((c) => c.companyId === String(form.companyId || "").trim());
+    return {
+      companyName: String(selectedCompany?.name || "").trim(),
+      companyId: String(selectedCompany?.companyId || "").trim(),
+    };
+  }, [companies, form.companyId, me?.companyId, me?.companyName, me?.role, requiresCompany]);
+  const nextUserId = useMemo(() => {
+    if (!requiresCompany) return nextGlobalUserId;
+    const prefix = buildCompanyUserPrefix(userIdCompanyContext.companyName, userIdCompanyContext.companyId);
+    return nextCompanyScopedUserId(users, prefix);
+  }, [nextGlobalUserId, requiresCompany, userIdCompanyContext.companyId, userIdCompanyContext.companyName, users]);
+  useEffect(() => {
+    setForm((prev) => ({ ...prev, userId: nextUserId || "" }));
+  }, [nextUserId]);
+
   async function onSelectDocument(event) {
     const file = event.target.files?.[0];
     if (!file) return;
