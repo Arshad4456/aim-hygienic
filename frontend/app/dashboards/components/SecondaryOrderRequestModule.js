@@ -210,9 +210,12 @@ export default function SecondaryOrderRequestModule({ roleKey, links, title }) {
       const rate = toNum(item.unitPrice || item.onePackPrice || 0);
       const gross = qty * rate;
       const toValue = toNum(item.toValue || 0);
-      const disc = toNum(item.discValue || 0);
-      const extra = toNum(item.extraValue || 0);
-      const bons = toNum(item.bonsValue || 0);
+      const discountPer = toNum(line.discValue);
+  const discValue = (gross * discountPer)/100;
+  const extraValue = toNum(line.extraValue);
+  // Convert bonsValue input into a percentage of gross
+  const bonsPer = toNum(line.bonsValue); 
+  const bonsValue = (gross * bonsPer) / 100;
       const v4gst = gross - toValue - disc - extra - bons;
       const gst = (v4gst * toNum(item.gstPer || 0)) / 100;
       const net = v4gst + gst;

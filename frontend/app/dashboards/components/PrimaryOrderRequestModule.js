@@ -71,9 +71,12 @@ function computeLine(line, product) {
   const rate = toNum(product?.wholesalePrice || 0);
   const gross = qty * rate;
   const toValue = toNum(line.toValue);
-  const discValue = line.discValue === "" ? toNum(product?.discountPer || 0) : toNum(line.discValue);
+  const discountPer = toNum(line.discValue);
+  const discValue = (discountPer * gross)/100;
   const extraValue = toNum(line.extraValue);
-  const bonsValue = toNum(line.bonsValue);
+    // Convert bonsValue input into a percentage of gross
+  const bonsPer = toNum(line.bonsValue); 
+  const bonsValue = (gross * bonsPer) / 100;
   const v4gst = gross - toValue - discValue - extraValue - bonsValue;
   const gstPer = toNum(line.gstPer);
   const gstAmount = (v4gst * gstPer) / 100;
