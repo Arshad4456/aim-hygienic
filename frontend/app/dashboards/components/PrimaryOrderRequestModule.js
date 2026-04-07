@@ -69,7 +69,7 @@ function getSizeMultiplier(product) {
 function computeLine(line, product) {
   const qty = toNum(line.qty);
   const rate = toNum(product?.wholesalePrice || 0);
-  const gross = getSizeMultiplier(product) * qty * rate;
+  const gross = qty * rate;
   const toValue = toNum(line.toValue);
   const discValue = line.discValue === "" ? toNum(product?.discountPer || 0) : toNum(line.discValue);
   const extraValue = toNum(line.extraValue);

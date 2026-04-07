@@ -6,6 +6,30 @@ import Card from '../../../../ui/Card';
 import Loader from '../../../../ui/Loader';
 import { AIM_USER_ROLES, COMMON_USER_FIELDS, DISTRIBUTOR_TEAM_ROLES, FIELD_LABELS, ROLE_EXTRA_FIELDS, validatePassword } from '../roleConfig';
 
+const SYSTEM_LEVEL_ROLES = new Set(['admin', 'system admin', 'company admin']);
+
+function buildCompanyUserPrefix(companyName, companyId) {
+  const source = String(companyName || companyId || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+  return source.slice(0, 3);
+}
+
+function nextCompanyScopedUserId(users, prefix) {
+  if (!prefix) return '';
+  const matcher = new RegExp(`^${prefix}-(\\d+)$`, 'i');
+  const maxSerial = (users || []).reduce((max, user) => {
+    const userId = String(user?.userId || '').trim();
+    const match = userId.match(matcher);
+    if (!match) return max;
+    const parsed = Number.parseInt(match[1], 10);
+    if (Number.isNaN(parsed)) return max;
+    return Math.max(max, parsed);
+  }, 0);
+  return `${prefix}-${String(maxSerial + 1).padStart(2, '0')}`;
+}
+
 async function fileToBase64FromUri(uri) {
   const response = await fetch(uri);
   const blob = await response.blob();
@@ -147,7 +171,16 @@ export default function AddScreen({ navigation, mode = 'admin' }) {
     };
   }, []);
 
-  const nextUserId = useMemo(() => {
+  useEffect(() => {
+    const actorRole = String(me?.role || '').trim().toLowerCase();
+    if (actorRole !== 'company admin') return;
+    const companyId = String(me?.companyId || '').trim();
+    const companyName = String(me?.companyName || '').trim();
+    if (!companyId) return;
+    setForm((prev) => ({ ...prev, companyId, companyName }));
+  }, [me?.companyId, me?.companyName, me?.role]);
+
+  const nextGlobalUserId = useMemo(() => {
     const maxUserId = (users || []).reduce((max, user) => {
       const parsed = Number.parseInt(String(user?.userId || ""), 10);
       if (Number.isNaN(parsed)) return max;
@@ -155,15 +188,42 @@ export default function AddScreen({ navigation, mode = 'admin' }) {
     }, 0);
     return String(maxUserId + 1).padStart(2, "0");
   }, [users]);
-  useEffect(() => {
-    setForm((prev) => ({ ...prev, userId: nextUserId }));
-  }, [nextUserId]);
 
   const roleNeeds = useMemo(() => ROLE_EXTRA_FIELDS[form.role] || [], [form.role]);
+  const roleOptions = useMemo(() => {
+    const actorRole = String(me?.role || '').trim().toLowerCase();
+    if (distributorMode) return DISTRIBUTOR_TEAM_ROLES;
+    if (actorRole === 'company admin') {
+      return AIM_USER_ROLES.filter((candidateRole) => !SYSTEM_LEVEL_ROLES.has(String(candidateRole || '').trim().toLowerCase()));
+    }
+    return AIM_USER_ROLES;
+  }, [distributorMode, me?.role]);
   const requiresCompany = useMemo(() => {
     const normalizedRole = String(form.role || '').trim().toLowerCase();
     return Boolean(normalizedRole && normalizedRole !== 'admin' && normalizedRole !== 'system admin');
   }, [form.role]);
+  const userIdCompanyContext = useMemo(() => {
+    if (!requiresCompany) return { companyName: '', companyId: '' };
+    const actorRole = String(me?.role || '').trim().toLowerCase();
+    if (actorRole === 'company admin') {
+      return {
+        companyName: String(me?.companyName || '').trim(),
+        companyId: String(me?.companyId || '').trim(),
+      };
+    }
+    return {
+      companyName: String(form.companyName || '').trim(),
+      companyId: String(form.companyId || '').trim(),
+    };
+  }, [form.companyId, form.companyName, me?.companyId, me?.companyName, me?.role, requiresCompany]);
+  const nextUserId = useMemo(() => {
+    if (!requiresCompany) return nextGlobalUserId;
+    const prefix = buildCompanyUserPrefix(userIdCompanyContext.companyName, userIdCompanyContext.companyId);
+    return nextCompanyScopedUserId(users, prefix);
+  }, [nextGlobalUserId, requiresCompany, userIdCompanyContext.companyId, userIdCompanyContext.companyName, users]);
+  useEffect(() => {
+    setForm((prev) => ({ ...prev, userId: nextUserId || '' }));
+  }, [nextUserId]);
 
   const filteredRegions = useMemo(() => {
     if (!form.warehouseId) return regions;
@@ -288,7 +348,7 @@ export default function AddScreen({ navigation, mode = 'admin' }) {
 
         <View style={styles.formWrap}>
           <Text style={styles.fieldLabel}>Role</Text>
-          <SelectPills options={distributorMode ? DISTRIBUTOR_TEAM_ROLES : AIM_USER_ROLES} value={form.role} onChange={(role) => {
+          <SelectPills options={roleOptions} value={form.role} onChange={(role) => {
             const normalizedRole = String(role || '').trim().toLowerCase();
             setForm((s) => ({
               ...s,
