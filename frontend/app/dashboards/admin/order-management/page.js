@@ -7,6 +7,7 @@ import UserDashboardShell from "../../components/userDashboardShell";
 import { userDashboardSearchItems } from "../../searchItems";
 import { apiFetch } from "../../../lib/api";
 import { getAuthItem } from "../../../lib/clientAuth";
+import { fetchModuleAccess, getRuleByKey, isRuleAllowedForRole, normalizeRole } from "../../../lib/moduleAccess";
 
 const emptyItem = {
   productId: "",
@@ -132,6 +133,13 @@ const returnStockModes = [
 
 const defaultBusinessTypes = ["Private Limited", "Sole Proprietorship"];
 
+function getModeRuleKey(modeKey) {
+  if (modeKey === "primary") return "order-management.primary";
+  if (modeKey === "secondary") return "order-management.secondary";
+  if (modeKey === "returnStock") return "order-management.return-stock";
+  return "";
+}
+
 function normalizeRequestSource(value) {
   return String(value || "").toLowerCase().replace(/[^a-z]/g, "");
 }
@@ -204,6 +212,7 @@ export default function OrderManagementModulePage() {
   const [previewRequest, setPreviewRequest] = useState(null);
   const [returnStockMode, setReturnStockMode] = useState("brand");
   const [userWarehouseId, setUserWarehouseId] = useState("");
+  const [moduleRules, setModuleRules] = useState([]);
   const [form, setForm] = useState({
     sourceType: "brand",
     primarySaleMode: "brand",
@@ -226,6 +235,33 @@ export default function OrderManagementModulePage() {
     expense: "0",
     items: [{ ...emptyItem, expiryDate: "" }],
   });
+
+  const currentUser = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      return JSON.parse(getAuthItem("aim_user") || "null");
+    } catch (_error) {
+      return null;
+    }
+  }, []);
+  const currentUserRole = normalizeRole(currentUser?.role);
+
+  useEffect(() => {
+    let active = true;
+    const scopedCompanyId = String(currentUser?.companyId || "").trim();
+    fetchModuleAccess(scopedCompanyId)
+      .then((data) => {
+        if (!active) return;
+        setModuleRules(Array.isArray(data?.rules) ? data.rules : []);
+      })
+      .catch(() => {
+        if (!active) return;
+        setModuleRules([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [currentUser?.companyId]);
 
   useEffect(() => {
     if (!isWarehouseManagerView) return;
@@ -308,6 +344,13 @@ export default function OrderManagementModulePage() {
     () => distributorsForTerritory.find((u) => u._id === form.distributorUserId),
     [distributorsForTerritory, form.distributorUserId],
   );
+  const allowedModeKeys = useMemo(() => {
+    return Object.keys(modeConfig).filter((modeKey) => {
+      const rule = getRuleByKey(moduleRules, getModeRuleKey(modeKey));
+      return isRuleAllowedForRole(rule, currentUserRole);
+    });
+  }, [currentUserRole, moduleRules]);
+
   const lineRows = useMemo(
     () =>
       form.items.map((line, idx) => {
@@ -358,6 +401,7 @@ export default function OrderManagementModulePage() {
     if (activeMode) return;
 
     const availableModes = Object.keys(modeConfig).filter((modeKey) => {
+      if (!allowedModeKeys.includes(modeKey)) return false;
       if (modeKey === "secondary") return (ordersRes.status === "fulfilled" ? (ordersRes.value?.orders || []) : []).some((o) => o.saleType === "secondary");
       if (modeKey === "returnStock") {
         return (txRes.status === "fulfilled" ? (txRes.value?.transactions || []) : []).some((t) => t.transactionType === "RETURN_STOCK")
@@ -365,13 +409,23 @@ export default function OrderManagementModulePage() {
       }
       return true;
     });
-    setActiveMode(availableModes[0] || "primary");
+    setActiveMode(availableModes[0] || allowedModeKeys[0] || "");
   }
 
 
   useEffect(() => {
     loadData().catch((e) => notify("error", e.message || "Failed to load order module"));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [allowedModeKeys.join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!allowedModeKeys.length) {
+      if (activeMode) setActiveMode("");
+      return;
+    }
+    if (!activeMode || !allowedModeKeys.includes(activeMode)) {
+      setActiveMode(allowedModeKeys[0]);
+    }
+  }, [activeMode, allowedModeKeys]);
 
   useEffect(() => {
     if (!activeMode) return;
@@ -884,7 +938,7 @@ export default function OrderManagementModulePage() {
           <div className="text-sm text-zinc-500 mt-1">Choose one workflow card to manage request form and ledger.</div>
 
           <div className="mt-5 grid gap-4 md:grid-cols-2">
-            {Object.entries(modeConfig).map(([key, cfg]) => (
+            {Object.entries(modeConfig).filter(([key]) => allowedModeKeys.includes(key)).map(([key, cfg]) => (
               <button
                 key={key}
                 type="button"
@@ -897,6 +951,12 @@ export default function OrderManagementModulePage() {
             ))}
           </div>
         </section>
+
+        {!allowedModeKeys.length ? (
+          <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800 shadow-sm">
+            Your role does not currently have access to any Order Management section. Ask your admin to update Module Access Control.
+          </section>
+        ) : null}
 
         {activeMode ? (
           <>

@@ -3,7 +3,8 @@ const User = require("../models/User");
 const { requireAuth, requireRole } = require("../utils/auth");
 const { validatePassword } = require("../utils/password");
 const { hashPassword, verifyPassword } = require("../utils/passwordHash");
-const { syncUserToTenant, removeUserFromTenant, listTenantUsersByCompany } = require("../utils/tenantUsers");
+const { createUserInTenant, updateUserInTenant, deleteUserFromTenant, listTenantUsersByCompany, findTenantUserById } = require("../utils/tenantUsers");
+const { listAllTenantTargets, getTenantModel } = require("../utils/tenantModels");
 
 const router = express.Router();
 
@@ -179,6 +180,10 @@ function normalizeRole(role) {
   return String(role || "").trim().toLowerCase();
 }
 
+function escapeRegex(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\$&");
+}
+
 function isCompanyAdmin(role) {
   return normalizeRole(role) === "company admin";
 }
@@ -269,24 +274,125 @@ function buildRoleAwarePayload(body, fallbackRole = "") {
   return { payload, unset };
 }
 
+async function findExistingUserByField(field, value, excludeId = null) {
+  const normalizedValue = normalize(value);
+  if (!normalizedValue) return null;
+  const baseQuery = { [field]: normalizedValue };
+  if (excludeId) baseQuery._id = { $ne: excludeId };
+
+  const primary = await User.findOne(baseQuery).lean();
+  if (primary) return primary;
+
+  const targets = await listAllTenantTargets();
+  for (const target of targets) {
+    const TenantUser = await getTenantModel(User, target.companyId, target.companyName);
+    if (!TenantUser) continue;
+    const tenantUser = await TenantUser.findOne(baseQuery).lean();
+    if (tenantUser) return tenantUser;
+  }
+  return null;
+}
+
+async function findScopedUserById(id, reqUser) {
+  const reqCompanyId = normalize(reqUser?.companyId);
+  if (isSystemLevelAdmin(reqUser?.role)) {
+    const primary = await User.findById(id).select("-passwordHash").lean();
+    if (primary) return { user: primary, isTenant: false, companyId: normalize(primary.companyId), companyName: normalize(primary.companyName) };
+    const tenantMatch = await findTenantUserById(id);
+    if (tenantMatch?.doc) return { user: tenantMatch.doc, isTenant: true, companyId: tenantMatch.companyId, companyName: tenantMatch.companyName };
+    return { user: null, isTenant: false, companyId: "", companyName: "" };
+  }
+
+  if (reqCompanyId) {
+    const tenantMatch = await findTenantUserById(id, reqCompanyId, normalize(reqUser?.companyName));
+    if (tenantMatch?.doc) return { user: tenantMatch.doc, isTenant: true, companyId: reqCompanyId, companyName: normalize(reqUser?.companyName) };
+  }
+
+  const legacy = await User.findById(id).select("-passwordHash").lean();
+  if (legacy) return { user: legacy, isTenant: false, companyId: normalize(legacy.companyId), companyName: normalize(legacy.companyName) };
+  return { user: null, isTenant: false, companyId: "", companyName: "" };
+}
+
+async function loadCurrentUser(req) {
+  const scoped = await findScopedUserById(req.user.uid, req.user);
+  return scoped.user;
+}
+
+async function listUsersForRequest(req) {
+  const requestedRole = normalize(req.query.role);
+  if (isDistributor(req.user?.role)) {
+    let users = await listTenantUsersByCompany(req.user?.companyId);
+    users = users.filter((user) => ["salesman", "order booker", "orderbooker", "customer"].includes(normalizeRole(user.role)));
+    const territoryId = normalize(req.user?.territoryId);
+    const territoryName = normalize(req.user?.territoryName);
+    if (territoryId || territoryName) {
+      users = users.filter((user) => {
+        const matchesTerritoryId = territoryId && normalize(user.territoryId) === territoryId;
+        const matchesTerritoryName = territoryName && normalize(user.territoryName || user.areaName) === territoryName;
+        return matchesTerritoryId || matchesTerritoryName;
+      });
+    }
+    if (requestedRole) users = users.filter((user) => normalizeRole(user.role) === requestedRole);
+    return users.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  }
+
+  if (isCompanyAdmin(req.user?.role)) {
+    let users = await listTenantUsersByCompany(req.user?.companyId);
+    if (requestedRole) users = users.filter((user) => normalizeRole(user.role) === requestedRole);
+    return users;
+  }
+
+  if (req.query.companyId) {
+    let users = await listTenantUsersByCompany(req.query.companyId);
+    if (requestedRole) users = users.filter((user) => normalizeRole(user.role) === requestedRole);
+    return users;
+  }
+
+  const primaryQuery = {};
+  if (requestedRole) primaryQuery.role = new RegExp(`^${escapeRegex(requestedRole)}$`, "i");
+  const primaryUsers = await User.find(primaryQuery).select("-passwordHash").sort({ createdAt: -1 }).lean();
+  const tenantUsers = await listAllTenantUsers(requestedRole);
+  return [...tenantUsers, ...primaryUsers].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+}
+
+async function listAllTenantUsers(roleFilter = "") {
+  const users = [];
+  const targets = await listAllTenantTargets();
+  for (const target of targets) {
+    const TenantUser = await getTenantModel(User, target.companyId, target.companyName);
+    if (!TenantUser) continue;
+    const query = roleFilter ? { role: new RegExp(`^${escapeRegex(roleFilter)}$`, "i") } : {};
+    const rows = await TenantUser.find(query).select("-passwordHash").lean();
+    if (rows?.length) users.push(...rows);
+  }
+  return users;
+}
+
+
 router.get("/me", requireAuth, async (req, res) => {
-  const user = await User.findById(req.user.uid).select("-passwordHash").lean();
+  const user = await loadCurrentUser(req);
   if (!user) return res.status(404).json({ ok: false, message: "User not found" });
   return res.json({ ok: true, user });
 });
 
 router.put("/me", requireAuth, async (req, res) => {
   const body = req.body || {};
-  const updated = await User.findByIdAndUpdate(
-    req.user.uid,
-    {
-      fullName: normalize(body.fullName),
-      email: normalize(body.email),
-      mobile: normalize(body.mobile || body.mobileNumber),
-      address: normalize(body.address),
-    },
-    { new: true, runValidators: true }
-  ).select("-passwordHash");
+  const scoped = await findScopedUserById(req.user.uid, req.user);
+  if (!scoped.user) return res.status(404).json({ ok: false, message: "User not found" });
+
+  const updatePayload = {
+    fullName: normalize(body.fullName),
+    email: normalize(body.email),
+    mobile: normalize(body.mobile || body.mobileNumber),
+    address: normalize(body.address),
+  };
+
+  let updated;
+  if (scoped.isTenant) {
+    updated = await updateUserInTenant(req.user.uid, { $set: updatePayload }, scoped.companyId, scoped.companyName);
+  } else {
+    updated = await User.findByIdAndUpdate(req.user.uid, updatePayload, { new: true, runValidators: true }).select("-passwordHash");
+  }
   return res.json({ ok: true, user: updated });
 });
 
@@ -295,13 +401,18 @@ router.put("/change-password", requireAuth, async (req, res) => {
   const validation = validatePassword(newPassword);
   if (!validation.ok) return res.status(400).json({ ok: false, message: validation.message });
 
-  const user = await User.findById(req.user.uid);
+  const scoped = await findScopedUserById(req.user.uid, req.user);
+  const user = scoped.user;
   if (!user) return res.status(404).json({ ok: false, message: "User not found" });
   const ok = await verifyPassword(String(currentPassword || ""), user.passwordHash);
   if (!ok) return res.status(401).json({ ok: false, message: "Current password is incorrect" });
 
-  user.passwordHash = await hashPassword(newPassword);
-  await user.save();
+  const nextHash = await hashPassword(newPassword);
+  if (scoped.isTenant) {
+    await updateUserInTenant(req.user.uid, { $set: { passwordHash: nextHash } }, scoped.companyId, scoped.companyName);
+  } else {
+    await User.findByIdAndUpdate(req.user.uid, { passwordHash: nextHash });
+  }
   return res.json({ ok: true });
 });
 
@@ -313,12 +424,13 @@ router.post("/", requireAuth, requireRole("admin", "distributor"), async (req, r
   const validation = validatePassword(body.password);
   if (!validation.ok) return res.status(400).json({ ok: false, message: validation.message });
 
-  const existingMobile = await User.findOne({ mobile: normalize(body.mobile || body.mobileNumber) });
+  const normalizedMobile = normalize(body.mobile || body.mobileNumber);
+  const existingMobile = await findExistingUserByField("mobile", normalizedMobile);
   if (existingMobile) return res.status(409).json({ ok: false, message: "Mobile already exists" });
 
   const normalizedUserId = normalize(body.userId);
   if (normalizedUserId) {
-    const existingUserId = await User.findOne({ userId: normalizedUserId });
+    const existingUserId = await findExistingUserByField("userId", normalizedUserId);
     if (existingUserId) return res.status(409).json({ ok: false, message: "User ID already exists" });
   }
 
@@ -343,44 +455,25 @@ router.post("/", requireAuth, requireRole("admin", "distributor"), async (req, r
     if (!payload.companyId) {
       return res.status(400).json({ ok: false, message: "Company admin must belong to a company." });
     }
-  } else if (requiresCompany) {
-    if (!normalize(payload.companyId)) {
-      return res.status(400).json({ ok: false, message: "Company is required for this role." });
-    }
+  } else if (requiresCompany && !normalize(payload.companyId)) {
+    return res.status(400).json({ ok: false, message: "Company is required for this role." });
   }
+
   payload.username = payload.username || payload.mobile;
   payload.passwordHash = await hashPassword(body.password);
 
-  const user = await User.create(payload);
-  await syncUserToTenant(user);
+  let user;
+  if (requiresCompany || isCompanyAdmin(req.user?.role) || isDistributor(req.user?.role)) {
+    user = await createUserInTenant(payload);
+  } else {
+    user = await User.create(payload);
+  }
+
   return res.status(201).json({ ok: true, user: { id: user._id } });
 });
 
 router.get("/", requireAuth, requireRole("admin", "distributor"), async (req, res) => {
-  if (isDistributor(req.user?.role)) {
-    const query = {
-      role: { $in: ["Salesman", "Order Booker", "customer"] },
-      companyId: normalize(req.user?.companyId),
-    };
-    const territoryId = normalize(req.user?.territoryId);
-    const territoryName = normalize(req.user?.territoryName);
-    if (territoryId || territoryName) {
-      query.$or = [];
-      if (territoryId) query.$or.push({ territoryId });
-      if (territoryName) query.$or.push({ territoryName });
-    }
-    const users = await User.find(query).select("-passwordHash").sort({ createdAt: -1 }).lean();
-    return res.json({ ok: true, users });
-  }
-
-  if (isCompanyAdmin(req.user?.role)) {
-    const tenantUsers = await listTenantUsersByCompany(req.user?.companyId);
-    return res.json({ ok: true, users: tenantUsers });
-  }
-  const query = {};
-  if (req.query.companyId) query.companyId = String(req.query.companyId);
-  if (req.query.role) query.role = String(req.query.role);
-  const users = await User.find(query).select("-passwordHash").sort({ createdAt: -1 }).lean();
+  const users = await listUsersForRequest(req);
   return res.json({ ok: true, users });
 });
 
@@ -409,7 +502,8 @@ router.get("/distributors", requireAuth, async (req, res) => {
 });
 
 router.get("/:id", requireAuth, requireRole("admin", "distributor"), async (req, res) => {
-  const user = await User.findById(req.params.id).select("-passwordHash").lean();
+  const scoped = await findScopedUserById(req.params.id, req.user);
+  const user = scoped.user;
   if (!user) return res.status(404).json({ ok: false, message: "User not found" });
   if (isDistributor(req.user?.role) && !assertDistributorTargetAllowed(user, req.user)) {
     return res.status(403).json({ ok: false, message: "Forbidden" });
@@ -422,7 +516,8 @@ router.get("/:id", requireAuth, requireRole("admin", "distributor"), async (req,
 
 router.put("/:id", requireAuth, requireRole("admin", "distributor"), async (req, res) => {
   const body = req.body || {};
-  const existing = await User.findById(req.params.id).lean();
+  const scoped = await findScopedUserById(req.params.id, req.user);
+  const existing = scoped.user;
   if (!existing) return res.status(404).json({ ok: false, message: "User not found" });
   if (isDistributor(req.user?.role) && !assertDistributorTargetAllowed(existing, req.user)) {
     return res.status(403).json({ ok: false, message: "Forbidden" });
@@ -442,13 +537,17 @@ router.put("/:id", requireAuth, requireRole("admin", "distributor"), async (req,
   } else if (isCompanyAdmin(req.user?.role)) {
     payload.companyId = normalize(req.user?.companyId);
     payload.companyName = normalize(req.user?.companyName);
-  } else if (requiresCompany && !normalize(payload.companyId)) {
+  } else if (requiresCompany && !normalize(payload.companyId || existing.companyId)) {
     return res.status(400).json({ ok: false, message: "Company is required for this role." });
   }
 
   if (payload.userId) {
-    const duplicateUserId = await User.findOne({ userId: payload.userId, _id: { $ne: existing._id } }).lean();
+    const duplicateUserId = await findExistingUserByField("userId", payload.userId, existing._id);
     if (duplicateUserId) return res.status(409).json({ ok: false, message: "User ID already exists" });
+  }
+  if (payload.mobile) {
+    const duplicateMobile = await findExistingUserByField("mobile", payload.mobile, existing._id);
+    if (duplicateMobile) return res.status(409).json({ ok: false, message: "Mobile already exists" });
   }
 
   if (body.password) {
@@ -457,25 +556,44 @@ router.put("/:id", requireAuth, requireRole("admin", "distributor"), async (req,
     payload.passwordHash = await hashPassword(body.password);
   }
 
-  const updated = await User.findByIdAndUpdate(
-    req.params.id,
-    {
-      $set: payload,
-      $unset: unset,
-    },
-    { new: true, runValidators: true }
-  ).select("-passwordHash");
+  let updated;
+  const nextCompanyId = normalize(payload.companyId || existing.companyId);
+  const nextCompanyName = normalize(payload.companyName || existing.companyName);
 
-  if (normalize(existing.companyId) && normalize(existing.companyId) !== normalize(updated?.companyId)) {
-    await removeUserFromTenant(existing);
+  if (scoped.isTenant || requiresCompany || isCompanyAdmin(req.user?.role) || isDistributor(req.user?.role)) {
+    if (scoped.isTenant && nextCompanyId && nextCompanyId !== scoped.companyId) {
+      await deleteUserFromTenant(existing._id, scoped.companyId, scoped.companyName);
+      const TenantUser = await getTenantModel(User, nextCompanyId, nextCompanyName);
+      updated = await TenantUser.findOneAndUpdate(
+        { _id: existing._id },
+        { $set: payload, $unset: unset },
+        { new: true, upsert: true, runValidators: true }
+      ).select("-passwordHash");
+    } else if (scoped.isTenant) {
+      updated = await updateUserInTenant(req.params.id, { $set: payload, $unset: unset }, scoped.companyId, scoped.companyName);
+    } else {
+      const TenantUser = await getTenantModel(User, nextCompanyId, nextCompanyName);
+      updated = await TenantUser.findOneAndUpdate(
+        { _id: existing._id },
+        { $set: { ...existing, ...payload }, $unset: unset },
+        { new: true, upsert: true, runValidators: true }
+      ).select("-passwordHash");
+      await User.findByIdAndDelete(existing._id);
+    }
+  } else {
+    updated = await User.findByIdAndUpdate(
+      req.params.id,
+      { $set: payload, $unset: unset },
+      { new: true, runValidators: true }
+    ).select("-passwordHash");
   }
-  await syncUserToTenant(updated);
 
   return res.json({ ok: true, user: updated });
 });
 
 router.delete("/:id", requireAuth, requireRole("admin", "distributor"), async (req, res) => {
-  const existing = await User.findById(req.params.id).lean();
+  const scoped = await findScopedUserById(req.params.id, req.user);
+  const existing = scoped.user;
   if (!existing) return res.status(404).json({ ok: false, message: "User not found" });
   if (isDistributor(req.user?.role) && !assertDistributorTargetAllowed(existing, req.user)) {
     return res.status(403).json({ ok: false, message: "Forbidden" });
@@ -483,9 +601,12 @@ router.delete("/:id", requireAuth, requireRole("admin", "distributor"), async (r
   if (isCompanyAdmin(req.user?.role) && normalize(existing.companyId) !== normalize(req.user?.companyId)) {
     return res.status(403).json({ ok: false, message: "Forbidden" });
   }
-  await removeUserFromTenant(existing);
-  const deleted = await User.findByIdAndDelete(req.params.id);
-  if (!deleted) return res.status(404).json({ ok: false, message: "User not found" });
+
+  if (scoped.isTenant) {
+    await deleteUserFromTenant(existing._id, scoped.companyId, scoped.companyName);
+  } else {
+    await User.findByIdAndDelete(existing._id);
+  }
   return res.json({ ok: true });
 });
 

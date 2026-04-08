@@ -9,6 +9,7 @@ const Company = require("../models/Company");
 const Message = require("../models/Message");
 const { requireAuth, requireRole } = require("../utils/auth");
 const { toTenantDatabaseName } = require("../utils/tenantDatabases");
+const { isModuleSectionAllowed } = require("../utils/moduleAccess");
 
 const router = express.Router();
 
@@ -48,6 +49,31 @@ function applyWarehouseScope(query, req) {
 
 function getUserCompanyId(req) {
   return toTrimmedString(req.user?.companyId);
+}
+
+function moduleKeyForInventoryTransactionType(transactionType) {
+  const normalizedType = toTrimmedString(transactionType).toUpperCase();
+  if (normalizedType === "SALE_STOCK") return "order-management.primary";
+  if (normalizedType === "RETURN_STOCK") return "order-management.return-stock";
+  return "";
+}
+
+async function ensureTransactionSectionAccess(user, transactionType) {
+  const key = moduleKeyForInventoryTransactionType(transactionType);
+  if (!key) return true;
+  return isModuleSectionAllowed({
+    companyId: user?.companyId,
+    role: user?.role,
+    key,
+  });
+}
+
+async function filterTransactionsByModuleAccess(user, transactions = []) {
+  const filtered = [];
+  for (const transaction of transactions) {
+    if (await ensureTransactionSectionAccess(user, transaction?.transactionType)) filtered.push(transaction);
+  }
+  return filtered;
 }
 
 function applyCompanyScope(query, req, requestedCompanyId = "") {
@@ -253,6 +279,10 @@ router.post("/transactions", requireAuth, async (req, res) => {
   try {
     const body = req.body || {};
     const transactionType = toTrimmedString(body.transactionType);
+
+    if (!(await ensureTransactionSectionAccess(req.user, transactionType))) {
+      return res.status(403).json({ ok: false, message: "This order section is locked for your role" });
+    }
     const scopeWarehouseId = isWarehouseManagerRole(req.user?.role)
       ? getScopedWarehouseId(req.user)
       : toTrimmedString(body.warehouseId);
@@ -454,8 +484,9 @@ router.get("/transactions", requireAuth, async (req, res) => {
       query.createdBy = req.user?.uid;
     }
     const transactions = await WarehouseTransactionModel.find(query).sort({ transactionAt: -1 }).lean();
+    const allowedTransactions = await filterTransactionsByModuleAccess(req.user, transactions);
 
-    const withStatus = transactions.map((txn) => {
+    const withStatus = allowedTransactions.map((txn) => {
       if (txn.returnPaymentStatus !== "PENDING" || !txn.paymentDueDate) return txn;
       const overdue = new Date(txn.paymentDueDate) < new Date();
       return { ...txn, returnPaymentStatus: overdue ? "OVERDUE" : txn.returnPaymentStatus };
@@ -471,9 +502,12 @@ router.get("/transactions", requireAuth, async (req, res) => {
 router.put("/transactions/:id", requireAuth, requireRole("admin", "warehouse manager"), async (req, res) => {
   try {
     const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? toTrimmedString(req.body?.companyId || req.query?.companyId) : getUserCompanyId(req);
-    const { WarehouseTransactionModel, InventoryMovementModel, MessageModel } = await getScopedInventoryModels(req, scopedCompanyId, req.body?.companyName || req.query?.companyName);
+    const { WarehouseTransactionModel } = await getScopedInventoryModels(req, scopedCompanyId, req.body?.companyName || req.query?.companyName);
     const transaction = await WarehouseTransactionModel.findById(req.params.id);
     if (!transaction) return res.status(404).json({ ok: false, message: "Transaction not found" });
+    if (!(await ensureTransactionSectionAccess(req.user, transaction.transactionType))) {
+      return res.status(403).json({ ok: false, message: "This order section is locked for your role" });
+    }
     if (!isSystemLevelAdmin(req.user?.role)) {
       const userCompanyId = getUserCompanyId(req);
       if (!userCompanyId || toTrimmedString(transaction.companyId) !== userCompanyId) {
@@ -578,6 +612,9 @@ router.put("/transactions/:id/mark-read", requireAuth, requireRole("admin", "war
       { new: true }
     );
     if (!transaction) return res.status(404).json({ ok: false, message: "Transaction not found" });
+    if (!(await ensureTransactionSectionAccess(req.user, transaction.transactionType))) {
+      return res.status(403).json({ ok: false, message: "This order section is locked for your role" });
+    }
     if (!isSystemLevelAdmin(req.user?.role)) {
       const userCompanyId = getUserCompanyId(req);
       if (!userCompanyId || toTrimmedString(transaction.companyId) !== userCompanyId) {
@@ -600,7 +637,7 @@ router.put("/transactions/:id/mark-read", requireAuth, requireRole("admin", "war
 router.put("/transactions/:id/request-status", requireAuth, requireRole("admin", "warehouse manager"), async (req, res) => {
   try {
     const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? toTrimmedString(req.body?.companyId || req.query?.companyId) : getUserCompanyId(req);
-    const { WarehouseTransactionModel, InventoryMovementModel } = await getScopedInventoryModels(req, scopedCompanyId, req.body?.companyName || req.query?.companyName);
+    const { WarehouseTransactionModel, InventoryMovementModel, MessageModel } = await getScopedInventoryModels(req, scopedCompanyId, req.body?.companyName || req.query?.companyName);
     const status = toTrimmedString(req.body?.status || "").toUpperCase();
     if (!requestLifecycleStatuses.includes(status)) {
       return res.status(400).json({ ok: false, message: "Invalid status" });
@@ -608,6 +645,9 @@ router.put("/transactions/:id/request-status", requireAuth, requireRole("admin",
 
     const transaction = await WarehouseTransactionModel.findById(req.params.id);
     if (!transaction) return res.status(404).json({ ok: false, message: "Transaction not found" });
+    if (!(await ensureTransactionSectionAccess(req.user, transaction.transactionType))) {
+      return res.status(403).json({ ok: false, message: "This order section is locked for your role" });
+    }
     if (!isSystemLevelAdmin(req.user?.role)) {
       const userCompanyId = getUserCompanyId(req);
       if (!userCompanyId || toTrimmedString(transaction.companyId) !== userCompanyId) {
@@ -669,6 +709,9 @@ router.put("/transactions/:id/return-payment", requireAuth, async (req, res) => 
       { new: true }
     );
     if (!transaction) return res.status(404).json({ ok: false, message: "Transaction not found" });
+    if (!(await ensureTransactionSectionAccess(req.user, transaction.transactionType))) {
+      return res.status(403).json({ ok: false, message: "This order section is locked for your role" });
+    }
     if (!isSystemLevelAdmin(req.user?.role)) {
       const userCompanyId = getUserCompanyId(req);
       if (!userCompanyId || toTrimmedString(transaction.companyId) !== userCompanyId) {

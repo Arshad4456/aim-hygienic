@@ -1,7 +1,8 @@
 const express = require("express");
 const Product = require("../models/Product");
 const { requireAuth } = require("../utils/auth");
-const { syncProductToTenant, removeProductFromTenant, listTenantProductsByCompany } = require("../utils/tenantProducts");
+const { createProductInTenant, updateProductInTenant, deleteProductFromTenant, listTenantProductsByCompany, findTenantProductById } = require("../utils/tenantProducts");
+const { listAllTenantTargets, getTenantModel } = require("../utils/tenantModels");
 
 const router = express.Router();
 
@@ -65,17 +66,57 @@ function normalizePayload(body = {}) {
   };
 }
 
+function normalizeCompanyScope(req, body = {}) {
+  if (isSystemLevelAdmin(req.user?.role)) {
+    return {
+      companyId: String(body.companyId || req.query.companyId || "").trim(),
+      companyName: String(body.companyName || req.query.companyName || "").trim(),
+    };
+  }
+  return {
+    companyId: String(req.user?.companyId || "").trim(),
+    companyName: String(req.user?.companyName || "").trim(),
+  };
+}
+
+async function listAllTenantProducts() {
+  const items = [];
+  const targets = await listAllTenantTargets();
+  for (const target of targets) {
+    const TenantProduct = await getTenantModel(Product, target.companyId, target.companyName);
+    if (!TenantProduct) continue;
+    const rows = await TenantProduct.find({}).lean();
+    if (rows?.length) items.push(...rows);
+  }
+  return items;
+}
+
+async function findScopedProductById(id, req, explicitCompany = {}) {
+  const companyId = explicitCompany.companyId || req.user?.companyId || req.query.companyId || "";
+  const companyName = explicitCompany.companyName || req.user?.companyName || req.query.companyName || "";
+  if (String(companyId || "").trim()) {
+    const scoped = await findTenantProductById(id, companyId, companyName);
+    if (scoped?.doc) return { product: scoped.doc, isTenant: true, companyId: scoped.companyId, companyName: scoped.companyName };
+  }
+  if (isSystemLevelAdmin(req.user?.role)) {
+    const anyTenant = await findTenantProductById(id);
+    if (anyTenant?.doc) return { product: anyTenant.doc, isTenant: true, companyId: anyTenant.companyId, companyName: anyTenant.companyName };
+  }
+  const legacy = await Product.findById(id).lean();
+  if (legacy) return { product: legacy, isTenant: false, companyId: legacy.companyId, companyName: legacy.companyName };
+  return { product: null, isTenant: false, companyId: "", companyName: "" };
+}
+
 router.post("/", requireAuth, async (req, res) => {
   try {
     const body = normalizePayload(req.body || {});
-    const role = req.user?.role;
-    if (!isSystemLevelAdmin(role)) {
-      body.companyId = String(req.user?.companyId || "").trim();
-      body.companyName = String(req.user?.companyName || "").trim();
-      if (!body.companyId) return res.status(400).json({ ok: false, message: "Company is required for this role." });
+    const scope = normalizeCompanyScope(req, body);
+    body.companyId = scope.companyId;
+    body.companyName = scope.companyName || body.companyName;
+    if (!body.companyId) {
+      return res.status(400).json({ ok: false, message: "Company is required for this role." });
     }
-    const doc = await Product.create({ ...body, createdBy: req.user?.uid });
-    await syncProductToTenant(doc);
+    const doc = await createProductInTenant({ ...body, createdBy: req.user?.uid });
     return res.status(201).json({ ok: true, product: doc });
   } catch (e) {
     if (e?.code === 11000) {
@@ -91,80 +132,41 @@ router.post("/bulk-upsert", requireAuth, async (req, res) => {
     if (!rows.length) {
       return res.status(400).json({ ok: false, message: "No rows provided" });
     }
-    const role = req.user?.role;
-    const isSystemAdmin = isSystemLevelAdmin(role);
-    const scopedCompanyId = String(req.user?.companyId || "").trim();
-    const scopedCompanyName = String(req.user?.companyName || "").trim();
-    if (!isSystemAdmin && !scopedCompanyId) {
-      return res.status(400).json({ ok: false, message: "Company is required for this role." });
-    }
 
-    const operations = [];
     const skipped = [];
-    const touchedProductIds = [];
-    rows.forEach((row, idx) => {
+    let processed = 0;
+    let inserted = 0;
+    let updated = 0;
+
+    for (const [idx, row] of rows.entries()) {
       const normalized = normalizePayload(row || {});
-      if (isSystemAdmin) {
-        if (!String(normalized.companyId || "").trim()) {
-          skipped.push({
-            row: idx + 1,
-            reason: "Missing Company",
-          });
-          return;
-        }
-      } else {
-        normalized.companyId = scopedCompanyId;
-        normalized.companyName = scopedCompanyName || normalized.companyName;
+      const scope = normalizeCompanyScope(req, normalized);
+      normalized.companyId = scope.companyId;
+      normalized.companyName = scope.companyName || normalized.companyName;
+      if (!normalized.companyId) {
+        skipped.push({ row: idx + 1, reason: "Missing Company" });
+        continue;
       }
       if (!normalized.productId || !normalized.name) {
-        skipped.push({
-          row: idx + 1,
-          reason: "Missing Product ID or Product Name",
-        });
-        return;
+        skipped.push({ row: idx + 1, reason: "Missing Product ID or Product Name" });
+        continue;
       }
-      touchedProductIds.push(normalized.productId);
-      operations.push({
-        updateOne: {
-          filter: { productId: normalized.productId },
-          update: {
-            $set: normalized,
-            $setOnInsert: { createdBy: req.user?.uid },
-          },
-          upsert: true,
-        },
-      });
-    });
 
-    if (!operations.length) {
-      return res.status(400).json({ ok: false, message: "No valid rows found", skipped });
-    }
-
-    const existingDocs = await Product.find({ productId: { $in: touchedProductIds } })
-      .select("productId companyId companyName")
-      .lean();
-    const existingByProductId = new Map(existingDocs.map((doc) => [String(doc.productId || "").trim(), doc]));
-
-    const result = await Product.bulkWrite(operations, { ordered: false });
-    const updatedDocs = await Product.find({ productId: { $in: touchedProductIds } }).lean();
-    for (const doc of updatedDocs) {
-      const productId = String(doc.productId || "").trim();
-      const prev = existingByProductId.get(productId);
-      if (prev && String(prev.companyId || "").trim() && String(prev.companyId || "").trim() !== String(doc.companyId || "").trim()) {
-        await removeProductFromTenant(prev);
+      const TenantProduct = await getTenantModel(Product, normalized.companyId, normalized.companyName);
+      const existing = await TenantProduct.findOne({ productId: normalized.productId }).lean();
+      if (existing) {
+        await TenantProduct.findByIdAndUpdate(existing._id, normalized, { new: true, runValidators: true });
+        updated += 1;
+      } else {
+        await TenantProduct.create({ ...normalized, createdBy: req.user?.uid });
+        inserted += 1;
       }
-      await syncProductToTenant(doc);
+      processed += 1;
     }
 
     return res.json({
       ok: true,
-      summary: {
-        received: rows.length,
-        processed: operations.length,
-        inserted: result.upsertedCount || 0,
-        updated: result.modifiedCount || 0,
-        skipped: skipped.length,
-      },
+      summary: { received: rows.length, processed, inserted, updated, skipped: skipped.length },
       skipped,
     });
   } catch (e) {
@@ -178,12 +180,14 @@ router.get("/", requireAuth, async (req, res) => {
       const products = await listTenantProductsByCompany(req.user?.companyId);
       return res.json({ ok: true, products });
     }
-    const query = {};
-    if (req.query.companyId) query.companyId = String(req.query.companyId);
-    if (req.query.category) query.category = String(req.query.category);
-    if (req.query.subCategory) query.subCategory = String(req.query.subCategory);
-    const items = await Product.find(query).sort({ createdAt: -1 }).lean();
-    return res.json({ ok: true, products: items });
+    if (req.query.companyId) {
+      let products = await listTenantProductsByCompany(req.query.companyId);
+      if (req.query.category) products = products.filter((row) => String(row.category || "") === String(req.query.category));
+      if (req.query.subCategory) products = products.filter((row) => String(row.subCategory || "") === String(req.query.subCategory));
+      return res.json({ ok: true, products });
+    }
+    const items = await listAllTenantProducts();
+    return res.json({ ok: true, products: items.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)) });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to load products" });
   }
@@ -191,20 +195,21 @@ router.get("/", requireAuth, async (req, res) => {
 
 router.get("/barcodes", requireAuth, async (req, res) => {
   try {
-    if (!isSystemLevelAdmin(req.user?.role)) {
-      const scoped = await listTenantProductsByCompany(req.user?.companyId);
-      const items = scoped.map((row) => ({
-        _id: row._id,
-        productId: row.productId,
-        name: row.name,
-        barcode: row.barcode,
-        category: row.category,
-        subCategory: row.subCategory,
-        size: row.size,
-      }));
-      return res.json({ ok: true, products: items });
-    }
-    const items = await Product.find().select("productId name barcode category subCategory size").lean();
+    const source = !isSystemLevelAdmin(req.user?.role)
+      ? await listTenantProductsByCompany(req.user?.companyId)
+      : req.query.companyId
+        ? await listTenantProductsByCompany(req.query.companyId)
+        : await listAllTenantProducts();
+
+    const items = source.map((row) => ({
+      _id: row._id,
+      productId: row.productId,
+      name: row.name,
+      barcode: row.barcode,
+      category: row.category,
+      subCategory: row.subCategory,
+      size: row.size,
+    }));
     return res.json({ ok: true, products: items });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to load barcodes" });
@@ -213,7 +218,8 @@ router.get("/barcodes", requireAuth, async (req, res) => {
 
 router.get("/:id", requireAuth, async (req, res) => {
   try {
-    const item = await Product.findById(req.params.id).lean();
+    const scoped = await findScopedProductById(req.params.id, req);
+    const item = scoped.product;
     if (!item) return res.status(404).json({ ok: false, message: "Not found" });
     if (!isSystemLevelAdmin(req.user?.role) && String(item.companyId || "").trim() !== String(req.user?.companyId || "").trim()) {
       return res.status(403).json({ ok: false, message: "Forbidden" });
@@ -227,26 +233,31 @@ router.get("/:id", requireAuth, async (req, res) => {
 router.put("/:id", requireAuth, async (req, res) => {
   try {
     const body = normalizePayload(req.body || {});
-    const existing = await Product.findById(req.params.id).lean();
+    const scoped = await findScopedProductById(req.params.id, req, normalizeCompanyScope(req, body));
+    const existing = scoped.product;
     if (!existing) return res.status(404).json({ ok: false, message: "Not found" });
     if (!isSystemLevelAdmin(req.user?.role) && String(existing.companyId || "").trim() !== String(req.user?.companyId || "").trim()) {
       return res.status(403).json({ ok: false, message: "Forbidden" });
     }
-    if (!isSystemLevelAdmin(req.user?.role)) {
-      body.companyId = String(req.user?.companyId || "").trim();
-      body.companyName = String(req.user?.companyName || "").trim();
-      if (!body.companyId) return res.status(400).json({ ok: false, message: "Company is required for this role." });
+
+    const nextScope = normalizeCompanyScope(req, body);
+    body.companyId = nextScope.companyId || existing.companyId;
+    body.companyName = nextScope.companyName || body.companyName || existing.companyName;
+    if (!body.companyId) return res.status(400).json({ ok: false, message: "Company is required for this role." });
+
+    let updated;
+    if (scoped.isTenant && body.companyId === scoped.companyId) {
+      updated = await updateProductInTenant(req.params.id, body, scoped.companyId, scoped.companyName);
+    } else {
+      const TenantProduct = await getTenantModel(Product, body.companyId, body.companyName);
+      updated = await TenantProduct.findOneAndUpdate({ _id: existing._id }, { $set: { ...existing, ...body } }, { new: true, upsert: true, runValidators: true });
+      if (scoped.isTenant) {
+        await deleteProductFromTenant(existing._id, scoped.companyId, scoped.companyName);
+      } else {
+        await Product.findByIdAndDelete(existing._id);
+      }
     }
-    const updated = await Product.findByIdAndUpdate(
-      req.params.id,
-      body,
-      { new: true, runValidators: true }
-    );
-    if (!updated) return res.status(404).json({ ok: false, message: "Not found" });
-    if (String(existing.companyId || "").trim() && String(existing.companyId || "").trim() !== String(updated.companyId || "").trim()) {
-      await removeProductFromTenant(existing);
-    }
-    await syncProductToTenant(updated);
+
     return res.json({ ok: true, product: updated });
   } catch (e) {
     if (e?.code === 11000) {
@@ -258,14 +269,17 @@ router.put("/:id", requireAuth, async (req, res) => {
 
 router.delete("/:id", requireAuth, async (req, res) => {
   try {
-    const existing = await Product.findById(req.params.id).lean();
+    const scoped = await findScopedProductById(req.params.id, req);
+    const existing = scoped.product;
     if (!existing) return res.status(404).json({ ok: false, message: "Not found" });
     if (!isSystemLevelAdmin(req.user?.role) && String(existing.companyId || "").trim() !== String(req.user?.companyId || "").trim()) {
       return res.status(403).json({ ok: false, message: "Forbidden" });
     }
-    await removeProductFromTenant(existing);
-    const deleted = await Product.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ ok: false, message: "Not found" });
+    if (scoped.isTenant) {
+      await deleteProductFromTenant(existing._id, scoped.companyId, scoped.companyName);
+    } else {
+      await Product.findByIdAndDelete(existing._id);
+    }
     return res.json({ ok: true });
   } catch (e) {
     return res.status(400).json({ ok: false, message: "Invalid id" });

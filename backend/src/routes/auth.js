@@ -2,6 +2,7 @@ const express = require("express");
 const User = require("../models/User");
 const { signToken } = require("../utils/auth");
 const { verifyPassword } = require("../utils/passwordHash");
+const { listAllTenantTargets, getTenantModel } = require("../utils/tenantModels");
 
 const router = express.Router();
 
@@ -49,6 +50,17 @@ function isUserActive(status) {
   return !normalized || normalized === "active";
 }
 
+async function findUserInTenants(buildQuery) {
+  const targets = await listAllTenantTargets();
+  for (const target of targets) {
+    const TenantUser = await getTenantModel(User, target.companyId, target.companyName);
+    if (!TenantUser) continue;
+    const user = await TenantUser.findOne(buildQuery()).lean();
+    if (user) return user;
+  }
+  return null;
+}
+
 router.post("/login", async (req, res) => {
   try {
     const { mobile, password, username } = req.body || {};
@@ -56,7 +68,7 @@ router.post("/login", async (req, res) => {
     if (!identifier || !password) return res.status(400).json({ ok: false, message: "Missing credentials" });
 
     const identifiers = buildIdentifierCandidates(identifier);
-    let user = await User.findOne({
+    const directQuery = () => ({
       $or: [
         { mobile: { $in: identifiers } },
         { mobileNumber: { $in: identifiers } },
@@ -64,18 +76,27 @@ router.post("/login", async (req, res) => {
         { username: { $in: identifiers.map((value) => value.toLowerCase()) } },
         { phoneNumber: { $in: identifiers } },
       ],
-    }).lean();
+    });
+
+    let user = await User.findOne(directQuery()).lean();
+    if (!user) {
+      user = await findUserInTenants(directQuery);
+    }
 
     if (!user) {
       const loosePhoneRegex = buildLoosePhoneRegex(identifier);
       if (loosePhoneRegex) {
-        user = await User.findOne({
+        const regexQuery = () => ({
           $or: [
             { mobile: { $regex: loosePhoneRegex } },
             { mobileNumber: { $regex: loosePhoneRegex } },
             { phoneNumber: { $regex: loosePhoneRegex } },
           ],
-        }).lean();
+        });
+        user = await User.findOne(regexQuery()).lean();
+        if (!user) {
+          user = await findUserInTenants(regexQuery);
+        }
       }
     }
 

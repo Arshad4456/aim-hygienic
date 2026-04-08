@@ -103,6 +103,7 @@ export default function Sidebar({ user, variant = "desktop", onClose, collapsed 
           { title: "Module Overview", href: "/dashboards/admin/hr" },
           { title: "Add User", href: "/dashboards/admin/users/add" },
           { title: "User List", href: "/dashboards/admin/users" },
+          { title: "Module Access Control", href: "/dashboards/admin/module-access" },
         ],
       },
 

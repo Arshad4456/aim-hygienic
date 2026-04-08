@@ -50,6 +50,7 @@ export const adminDashboardSearchItems = [
   { title: "HR & Role Management Module Overview", href: "/dashboards/admin/hr" },
   { title: "Add User", href: "/dashboards/admin/users/add" },
   { title: "User List", href: "/dashboards/admin/users" },
+          { title: "Module Access Control", href: "/dashboards/admin/module-access" },
   { title: "Quality & Compliance Module Overview", href: "/dashboards/admin/quality" },
   { title: "Raw Material QC", href: "/dashboards/admin/quality/raw-material" },
   { title: "Production QC", href: "/dashboards/admin/quality/production" },

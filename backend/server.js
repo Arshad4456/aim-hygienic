@@ -34,6 +34,7 @@ const loansRoutes = require("./src/routes/loans");
 const receiptsRoutes = require("./src/routes/receipts");
 const vehicleManagementRoutes = require("./src/routes/vehicleManagement");
 const locationRoutes = require("./src/routes/location");
+const moduleAccessRoutes = require("./src/routes/moduleAccess");
 const { createSocketServer } = require("./src/socket");
 const { registerLocationSocket } = require("./src/modules/location/socket");
 
@@ -88,6 +89,7 @@ app.use("/api/loans", loansRoutes);
 app.use("/api/receipts", receiptsRoutes);
 app.use("/api/vehicle-management", vehicleManagementRoutes);
 app.use("/api/location", locationRoutes);
+app.use("/api/module-access", moduleAccessRoutes);
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true, service: "aim-api", time: new Date().toISOString() });

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { clearAuthStorage, getAuthItem } from "../../lib/clientAuth";
+import { fetchModuleAccess, getRuleByKey, isRuleAllowedForRole, mapHrefToRuleKey } from "../../lib/moduleAccess";
 
 const iconStyles = "h-5 w-5 shrink-0";
 
@@ -85,6 +86,7 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
   const [query, setQuery] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [moduleRules, setModuleRules] = useState([]);
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("aim_user_sidebar_collapsed") === "1";
@@ -144,6 +146,26 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
   const settingsHref = roleSlug ? `/dashboards/${roleSlug}/settings` : "/dashboards/admin/settings";
   const changePasswordHref = roleSlug ? `/dashboards/${roleSlug}/settings/change-password` : "/dashboards/admin/settings/change-password";
 
+
+  useEffect(() => {
+    let active = true;
+    const scopedCompanyId = user?.companyId;
+    if (!scopedCompanyId) {
+      setModuleRules([]);
+      return undefined;
+    }
+    fetchModuleAccess(scopedCompanyId)
+      .then((data) => {
+        if (active) setModuleRules(Array.isArray(data?.rules) ? data.rules : []);
+      })
+      .catch(() => {
+        if (active) setModuleRules([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [user?.companyId]);
+
   const userInitials = useMemo(() => {
     const source = user?.fullName || roleKey || "User";
     const parts = source.split(" ").filter(Boolean);
@@ -153,8 +175,14 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
   }, [user, roleKey]);
 
   const moduleLinks = useMemo(
-    () => links.filter((item) => !/account settings|change password/i.test(item.title)),
-    [links],
+    () => links.filter((item) => {
+      if (/account settings|change password/i.test(item.title)) return false;
+      const ruleKey = mapHrefToRuleKey(item.href);
+      if (!ruleKey) return true;
+      const rule = getRuleByKey(moduleRules, ruleKey);
+      return isRuleAllowedForRole(rule, user?.role || roleKey);
+    }),
+    [links, moduleRules, roleKey, user?.role],
   );
 
 
