@@ -4,7 +4,10 @@ import { useAuth } from '../../auth/useAuth';
 import Card from '../../ui/Card';
 import DutyTrackingCard from '../../modules/tracking/DutyTrackingCard';
 
-const dashboardLinks = [{ title: 'Dashboard', route: 'supplier:dashboard' }];
+const dashboardLinks = [
+  { title: 'Dashboard', route: 'supplier:dashboard' },
+  { title: 'Primary Orders', route: 'supplier:orders' },
+];
 
 export default function DashboardScreen({ navigation }) {
   const { user } = useAuth();

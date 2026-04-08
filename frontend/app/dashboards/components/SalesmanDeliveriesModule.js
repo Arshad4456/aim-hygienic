@@ -83,7 +83,12 @@ function fileToBase64(file) {
 }
 
 
-export default function SalesmanDeliveriesModule() {
+export default function SalesmanDeliveriesModule({
+  fetchPath = "/orders/salesman-deliveries?limit=500",
+  title = "Salesman Deliveries",
+  subtitle = "Secondary orders in Approved / Dispatched state for your field.",
+  emptyMessage = "No deliveries found for your field.",
+}) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -94,24 +99,29 @@ export default function SalesmanDeliveriesModule() {
     setLoading(true);
     setError("");
     try {
-      const res = await apiFetch("/orders/salesman-deliveries?limit=500");
+      const res = await apiFetch(fetchPath);
       setOrders(res?.orders || []);
     } catch (e) {
       setError(e.message || "Failed to load deliveries");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchPath]);
 
   useEffect(() => {
     loadOrders();
   }, [loadOrders]);
 
-  async function dispatchOrder(orderId) {
+  async function dispatchOrder(order) {
+    const orderId = order?._id;
+    if (!orderId) return;
     setDispatchingFor(orderId);
     setError("");
     try {
-      await apiFetch(`/orders/${orderId}/status`, { method: "PATCH", body: { status: "dispatched" } });
+      await apiFetch(`/orders/${orderId}/status`, {
+        method: "PATCH",
+        body: { status: "dispatched", sourceModel: order?.sourceModel || "sales_order" },
+      });
       await loadOrders();
     } catch (e) {
       setError(e.message || "Failed to dispatch order");
@@ -120,7 +130,9 @@ export default function SalesmanDeliveriesModule() {
     }
   }
 
-  async function uploadPod(orderId, file) {
+  async function uploadPod(order, file) {
+    const orderId = order?._id;
+    if (!orderId) return;
     if (!file) return;
     setUploadingFor(orderId);
     setError("");
@@ -163,7 +175,7 @@ export default function SalesmanDeliveriesModule() {
 
       await apiFetch(`/orders/${orderId}/pod`, {
         method: "POST",
-        body: { objectKey, publicUrl },
+        body: { objectKey, publicUrl, sourceModel: order?.sourceModel || "sales_order" },
       });
 
       await loadOrders();
@@ -178,8 +190,8 @@ export default function SalesmanDeliveriesModule() {
     <div className="rounded-2xl border bg-white p-5 shadow-sm mt-6">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-lg font-semibold">Deliveries</h3>
-          <p className="text-xs text-zinc-500">Secondary orders in Approved / Dispatched state for your field.</p>
+          <h3 className="text-lg font-semibold">{title}</h3>
+          <p className="text-xs text-zinc-500">{subtitle}</p>
         </div>
       </div>
 
@@ -226,7 +238,7 @@ export default function SalesmanDeliveriesModule() {
                           onChange={(e) => {
                             const file = e.target.files?.[0];
                             e.target.value = "";
-                            uploadPod(order._id, file);
+                            uploadPod(order, file);
                           }}
                         />
                       </label>
@@ -237,7 +249,7 @@ export default function SalesmanDeliveriesModule() {
                   <td className="px-3 py-2 border-b">
                     <div className="flex flex-wrap gap-2 items-center">
                       {isApproved ? (
-                        <button className="rounded-full bg-indigo-600 px-3 py-1 text-xs text-white disabled:opacity-50" disabled={dispatchingFor === order._id} onClick={() => dispatchOrder(order._id)}>
+                        <button className="rounded-full bg-indigo-600 px-3 py-1 text-xs text-white disabled:opacity-50" disabled={dispatchingFor === order._id} onClick={() => dispatchOrder(order)}>
                           {dispatchingFor === order._id ? "Dispatching..." : "Dispatch"}
                         </button>
                       ) : null}
@@ -248,7 +260,7 @@ export default function SalesmanDeliveriesModule() {
             })}
             {!orders.length ? (
               <tr>
-                <td className="px-3 py-6 text-center text-zinc-500" colSpan={8}>{loading ? "Loading deliveries..." : "No deliveries found for your field."}</td>
+                <td className="px-3 py-6 text-center text-zinc-500" colSpan={8}>{loading ? "Loading deliveries..." : emptyMessage}</td>
               </tr>
             ) : null}
           </tbody>

@@ -1,12 +1,12 @@
-import UserDashboardShell from "../components/userDashboardShell";
-import SalesmanDeliveriesModule from "../components/SalesmanDeliveriesModule";
-import { userDashboardSearchItems } from "../searchItems";
+import UserDashboardShell from "../../components/userDashboardShell";
+import SalesmanDeliveriesModule from "../../components/SalesmanDeliveriesModule";
+import { userDashboardSearchItems } from "../../searchItems";
 
 export default function Page() {
   return (
     <UserDashboardShell
-      title="Supplier Dashboard"
-      subtitle="Use quick search to navigate all available items for your dashboard."
+      title="Supplier Primary Orders"
+      subtitle="Review approved/dispatched primary requests and upload POD after dispatch."
       roleKey="Supplier"
       links={userDashboardSearchItems.supplier || []}
     >

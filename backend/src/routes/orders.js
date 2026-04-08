@@ -2,12 +2,15 @@ const express = require("express");
 const { requireAuth } = require("../utils/auth");
 const SalesOrder = require("../models/SalesOrder");
 const User = require("../models/User");
+const Warehouse = require("../models/Warehouse");
+const WarehouseTransaction = require("../models/WarehouseTransaction");
 
 const router = express.Router();
 
 const ALLOWED_STATUSES = ["pending", "approved", "rejected", "dispatched", "delivered"];
 const ADMIN_ROLES = new Set(["admin", "system admin", "company admin"]);
 const DELIVERY_APPROVER_ROLES = new Set(["admin", "warehouse manager", "distributor"]);
+const POD_UPLOAD_ROLES = new Set(["salesman", "supplier"]);
 
 function normalizeRole(role) {
   return String(role || "").trim().toLowerCase();
@@ -46,6 +49,89 @@ async function getSalesmanFieldScope(req) {
   const fieldId = getFieldScope(authUser);
   if (!fieldId) return { error: "Salesman field not configured" };
   return { authUser, fieldId };
+}
+
+function getSupplierWarehouseScope(user) {
+  const warehouseIds = Array.from(
+    new Set(
+      [
+        String(user?.supplierWarehouseId1 || "").trim(),
+        String(user?.supplierWarehouseId2 || "").trim(),
+        String(user?.warehouseId || "").trim(),
+      ].filter(Boolean)
+    )
+  );
+  const warehouseNames = Array.from(
+    new Set(
+      [
+        String(user?.supplierWarehouseName1 || "").trim(),
+        String(user?.supplierWarehouseName2 || "").trim(),
+        String(user?.warehouseName || "").trim(),
+      ].filter(Boolean)
+    )
+  );
+  return { warehouseIds, warehouseNames };
+}
+
+async function resolveSupplierWarehouseScope(user) {
+  const base = getSupplierWarehouseScope(user);
+  const idCandidates = base.warehouseIds;
+  const nameCandidates = base.warehouseNames;
+  if (!idCandidates.length && !nameCandidates.length) return base;
+
+  const docs = await Warehouse.find({
+    $or: [
+      { warehouseId: { $in: idCandidates } },
+      { name: { $in: nameCandidates } },
+    ],
+  })
+    .select("warehouseId name")
+    .lean();
+
+  const resolvedIds = new Set(idCandidates);
+  const resolvedNames = new Set(nameCandidates);
+  docs.forEach((doc) => {
+    resolvedIds.add(String(doc?.warehouseId || "").trim());
+    resolvedIds.add(String(doc?._id || "").trim());
+    resolvedNames.add(String(doc?.name || "").trim());
+  });
+
+  return {
+    warehouseIds: Array.from(resolvedIds).filter(Boolean),
+    warehouseNames: Array.from(resolvedNames).filter(Boolean),
+  };
+}
+
+function matchesSupplierWarehouseScope(order, warehouseIds = [], warehouseNames = []) {
+  const orderWarehouseIds = [
+    String(order?.toWarehouseId || "").trim(),
+    String(order?.warehouseId || "").trim(),
+  ].filter(Boolean);
+  const orderWarehouseNames = [
+    String(order?.toWarehouseName || "").trim(),
+    String(order?.warehouseName || "").trim(),
+  ].filter(Boolean);
+  const inScopeById = orderWarehouseIds.some((id) => warehouseIds.includes(id));
+  const inScopeByName = orderWarehouseNames.some((name) => warehouseNames.includes(name));
+  return inScopeById || inScopeByName;
+}
+
+function mapWarehouseTransactionToSupplierOrder(transaction) {
+  return {
+    _id: String(transaction?._id || ""),
+    sourceModel: "warehouse_transaction",
+    orderNo: transaction?.transactionCode || "",
+    invoiceNo: "",
+    customerName: transaction?.fromEntityName || transaction?.toEntityName || "",
+    address: transaction?.note || "",
+    distributorName: transaction?.distributorName || "",
+    fieldName: transaction?.fieldName || "",
+    status: String(transaction?.requestStatus || "").trim().toLowerCase(),
+    podUrl: transaction?.podUrl || "",
+    toWarehouseId: transaction?.warehouseId || "",
+    toWarehouseName: transaction?.warehouseName || "",
+    createdAt: transaction?.transactionAt || transaction?.createdAt || new Date(),
+  };
 }
 
 function normalizeItems(items = []) {
@@ -291,6 +377,65 @@ router.get("/salesman-deliveries", requireAuth, async (req, res) => {
   }
 });
 
+router.get("/supplier-deliveries", requireAuth, async (req, res) => {
+  try {
+    if (normalizeRole(req.user?.role) !== "supplier") {
+      return res.status(403).json({ ok: false, message: "Only Supplier can access deliveries" });
+    }
+
+    const me = await getAuthenticatedUser(req);
+    if (!me) return res.status(404).json({ ok: false, message: "User not found" });
+    const { warehouseIds, warehouseNames } = await resolveSupplierWarehouseScope(me);
+    if (!warehouseIds.length && !warehouseNames.length) {
+      return res.status(400).json({ ok: false, message: "Supplier warehouse mapping is required" });
+    }
+
+    const limit = Math.min(Number(req.query.limit) || 200, 500);
+    const scoped = withCompanyScope(me, { saleType: "primary", status: { $in: ["approved", "dispatched"] } });
+    const warehouseFilters = [];
+    if (warehouseIds.length) {
+      warehouseFilters.push({ toWarehouseId: { $in: warehouseIds } });
+      warehouseFilters.push({ warehouseId: { $in: warehouseIds } });
+    }
+    if (warehouseNames.length) {
+      warehouseFilters.push({ toWarehouseName: { $in: warehouseNames } });
+      warehouseFilters.push({ warehouseName: { $in: warehouseNames } });
+    }
+    if (warehouseFilters.length) scoped.$or = warehouseFilters;
+
+    const [salesOrders, warehouseTransactions] = await Promise.all([
+      SalesOrder.find(scoped).sort({ createdAt: -1 }).limit(limit).lean(),
+      WarehouseTransaction.find({
+        ...withCompanyScope(me, {
+          transactionType: "SALE_STOCK",
+          requestStatus: { $in: ["APPROVED", "DISPATCHED"] },
+        }),
+        ...(warehouseIds.length || warehouseNames.length
+          ? {
+            $or: [
+              ...(warehouseIds.length ? [{ warehouseId: { $in: warehouseIds } }] : []),
+              ...(warehouseNames.length ? [{ warehouseName: { $in: warehouseNames } }] : []),
+            ],
+          }
+          : {}),
+      })
+        .sort({ transactionAt: -1, createdAt: -1 })
+        .limit(limit)
+        .lean(),
+    ]);
+
+    const mappedSalesOrders = (await attachPodMetaToOrders(salesOrders)).map((order) => ({ ...order, sourceModel: "sales_order" }));
+    const mappedWarehouseTransactions = warehouseTransactions.map(mapWarehouseTransactionToSupplierOrder);
+    const orders = [...mappedSalesOrders, ...mappedWarehouseTransactions]
+      .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+      .slice(0, limit);
+
+    return res.json({ ok: true, orders });
+  } catch (_error) {
+    return res.status(500).json({ ok: false, message: "Failed to load supplier deliveries" });
+  }
+});
+
 router.get("/summary", requireAuth, async (req, res) => {
   try {
     const match = roleMatchQuery(req.user);
@@ -408,23 +553,61 @@ router.patch("/:id/proof-of-delivery", requireAuth, async (req, res) => {
 
 router.post("/:orderId/pod", requireAuth, async (req, res) => {
   try {
-    if (String(req.user?.role || "") !== "Salesman") {
-      return res.status(403).json({ ok: false, message: "Only Salesman can upload POD" });
+    const requestRole = normalizeRole(req.user?.role);
+    if (!POD_UPLOAD_ROLES.has(requestRole)) {
+      return res.status(403).json({ ok: false, message: "Only Salesman or Supplier can upload POD" });
     }
 
     const objectKey = String(req.body?.objectKey || "").trim();
     const publicUrl = String(req.body?.publicUrl || "").trim();
+    const sourceModel = String(req.body?.sourceModel || "sales_order").trim().toLowerCase();
     if (!objectKey || !publicUrl) {
       return res.status(400).json({ ok: false, message: "objectKey and publicUrl are required" });
     }
 
-    const scope = await getSalesmanFieldScope(req);
-    if (scope.error) return res.status(400).json({ ok: false, message: scope.error });
+    if (requestRole === "supplier" && sourceModel === "warehouse_transaction") {
+      const transaction = await WarehouseTransaction.findById(req.params.orderId);
+      if (!transaction) return res.status(404).json({ ok: false, message: "Order not found" });
+      const me = await getAuthenticatedUser(req);
+      if (!me) return res.status(404).json({ ok: false, message: "User not found" });
+      const { warehouseIds, warehouseNames } = await resolveSupplierWarehouseScope(me);
+      if (!matchesSupplierWarehouseScope(transaction, warehouseIds, warehouseNames)) {
+        return res.status(403).json({ ok: false, message: "Order is outside your supplier warehouse scope" });
+      }
+      if (String(transaction.requestStatus || "").toUpperCase() !== "DISPATCHED") {
+        return res.status(400).json({ ok: false, message: "POD upload is allowed only for dispatched orders" });
+      }
+
+      transaction.podObjectKey = objectKey;
+      transaction.podUrl = publicUrl;
+      transaction.podUploadedAt = new Date();
+      transaction.podUploadedBy = req.user?.uid;
+      transaction.proofOfDeliveryImageUrl = publicUrl;
+      transaction.proofOfDeliveryAt = transaction.podUploadedAt;
+      transaction.proofOfDeliveryBy = req.user?.uid;
+      await transaction.save();
+      return res.json({ ok: true, order: mapWarehouseTransactionToSupplierOrder(transaction.toObject ? transaction.toObject() : transaction) });
+    }
 
     const order = await SalesOrder.findById(req.params.orderId);
     if (!order) return res.status(404).json({ ok: false, message: "Order not found" });
-    if (String(order.fieldId || "").trim() !== scope.fieldId) {
-      return res.status(403).json({ ok: false, message: "Order is outside your field" });
+    if (requestRole === "salesman") {
+      const scope = await getSalesmanFieldScope(req);
+      if (scope.error) return res.status(400).json({ ok: false, message: scope.error });
+      if (String(order.fieldId || "").trim() !== scope.fieldId) {
+        return res.status(403).json({ ok: false, message: "Order is outside your field" });
+      }
+    }
+    if (requestRole === "supplier") {
+      if (String(order.saleType || "").trim().toLowerCase() !== "primary") {
+        return res.status(400).json({ ok: false, message: "Supplier can upload POD only for primary orders" });
+      }
+      const me = await getAuthenticatedUser(req);
+      if (!me) return res.status(404).json({ ok: false, message: "User not found" });
+      const { warehouseIds, warehouseNames } = await resolveSupplierWarehouseScope(me);
+      if (!matchesSupplierWarehouseScope(order, warehouseIds, warehouseNames)) {
+        return res.status(403).json({ ok: false, message: "Order is outside your supplier warehouse scope" });
+      }
     }
     if (order.status !== "dispatched") {
       return res.status(400).json({ ok: false, message: "POD upload is allowed only for dispatched orders" });
@@ -492,15 +675,37 @@ router.delete("/:id", requireAuth, async (req, res) => {
 
 router.patch("/:id/status", requireAuth, async (req, res) => {
   try {
-    const { status, dispatchTracking, dispatchVehicleId, dispatchVehicleName, dispatchDriverId, dispatchDriverName, rejectionReason } = req.body || {};
+    const { status, dispatchTracking, dispatchVehicleId, dispatchVehicleName, dispatchDriverId, dispatchDriverName, rejectionReason, sourceModel } = req.body || {};
     if (!ALLOWED_STATUSES.includes(status)) {
       return res.status(400).json({ ok: false, message: "Invalid status" });
     }
 
     const requestRole = normalizeRole(req.user?.role);
+    const normalizedSourceModel = String(sourceModel || "sales_order").trim().toLowerCase();
+
+    if (requestRole === "supplier" && status === "dispatched" && normalizedSourceModel === "warehouse_transaction") {
+      const transaction = await WarehouseTransaction.findById(req.params.id);
+      if (!transaction) return res.status(404).json({ ok: false, message: "Order not found" });
+      const me = await getAuthenticatedUser(req);
+      if (!me) return res.status(404).json({ ok: false, message: "User not found" });
+      const { warehouseIds, warehouseNames } = await resolveSupplierWarehouseScope(me);
+      if (!matchesSupplierWarehouseScope(transaction, warehouseIds, warehouseNames)) {
+        return res.status(403).json({ ok: false, message: "Order is outside your supplier warehouse scope" });
+      }
+      const currentStatus = String(transaction.requestStatus || "").toUpperCase();
+      if (!["APPROVED", "DISPATCHED"].includes(currentStatus)) {
+        return res.status(400).json({ ok: false, message: "Invalid status transition" });
+      }
+      transaction.requestStatus = "DISPATCHED";
+      transaction.requestReviewedAt = new Date();
+      transaction.requestReviewedBy = req.user?.uid;
+      await transaction.save();
+      return res.json({ ok: true, order: mapWarehouseTransactionToSupplierOrder(transaction.toObject ? transaction.toObject() : transaction) });
+    }
+
     let order;
 
-    if (requestRole === "salesman" && status === "dispatched") {
+    if ((requestRole === "salesman" || requestRole === "supplier") && status === "dispatched") {
       order = await SalesOrder.findById(req.params.id);
     } else {
       order = await SalesOrder.findOne({ _id: req.params.id, ...roleMatchQuery(req.user) });
@@ -520,6 +725,17 @@ router.patch("/:id/status", requireAuth, async (req, res) => {
       if (scope.error) return res.status(400).json({ ok: false, message: scope.error });
       if (String(order.fieldId || "").trim() !== scope.fieldId) {
         return res.status(403).json({ ok: false, message: "Order is outside your field" });
+      }
+    }
+    if (requestRole === "supplier" && status === "dispatched") {
+      if (String(order.saleType || "").trim().toLowerCase() !== "primary") {
+        return res.status(400).json({ ok: false, message: "Supplier can dispatch only primary orders" });
+      }
+      const me = await getAuthenticatedUser(req);
+      if (!me) return res.status(404).json({ ok: false, message: "User not found" });
+      const { warehouseIds, warehouseNames } = await resolveSupplierWarehouseScope(me);
+      if (!matchesSupplierWarehouseScope(order, warehouseIds, warehouseNames)) {
+        return res.status(403).json({ ok: false, message: "Order is outside your supplier warehouse scope" });
       }
     }
     if (!canTransition(order, status)) {
