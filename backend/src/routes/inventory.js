@@ -7,7 +7,9 @@ const WarehouseTransaction = require("../models/WarehouseTransaction");
 const Warehouse = require("../models/Warehouse");
 const Company = require("../models/Company");
 const Message = require("../models/Message");
+const User = require("../models/User");
 const { requireAuth, requireRole } = require("../utils/auth");
+const { createModuleAccessGuard } = require("../utils/moduleAccess");
 const { toTenantDatabaseName } = require("../utils/tenantDatabases");
 const { isModuleSectionAllowed } = require("../utils/moduleAccess");
 
@@ -127,6 +129,7 @@ async function getScopedInventoryModels(req, companyId, companyName = "") {
       StockTransferModel: StockTransfer,
       ProductModel: Product,
       MessageModel: Message,
+      UserModel: User,
     };
   }
   const dbName = await resolveTenantDbName(normalizedCompanyId, companyName);
@@ -137,6 +140,7 @@ async function getScopedInventoryModels(req, companyId, companyName = "") {
       StockTransferModel: StockTransfer,
       ProductModel: Product,
       MessageModel: Message,
+      UserModel: User,
     };
   }
   const tenantDb = mongoose.connection.useDb(dbName, { useCache: true });
@@ -146,7 +150,72 @@ async function getScopedInventoryModels(req, companyId, companyName = "") {
     StockTransferModel: getModelFromDb(tenantDb, StockTransfer),
     ProductModel: getModelFromDb(tenantDb, Product),
     MessageModel: getModelFromDb(tenantDb, Message),
+    UserModel: getModelFromDb(tenantDb, User),
   };
+}
+
+function serializePodUploader(user) {
+  if (!user) return null;
+  return {
+    id: String(user._id || ""),
+    name: String(user.fullName || user.name || user.userId || "").trim() || "Unknown",
+  };
+}
+
+function withPodFields(transaction, uploaderById = {}) {
+  if (!transaction) return transaction;
+  const podUploaderId = String(transaction.podUploadedBy || "").trim();
+  const podUploadedBy = podUploaderId ? (uploaderById[podUploaderId] || { id: podUploaderId, name: "Unknown" }) : null;
+  return {
+    ...transaction,
+    podUploadedBy,
+    pod_url: transaction.podUrl || null,
+    pod_uploaded_at: transaction.podUploadedAt || null,
+    pod_uploaded_by: podUploadedBy,
+  };
+}
+
+async function attachPodMetaToTransactions(transactions = [], UserModel = User) {
+  const podUserIds = Array.from(new Set(transactions.map((transaction) => String(transaction?.podUploadedBy || "").trim()).filter(Boolean)));
+  let uploaderById = {};
+  if (podUserIds.length) {
+    const users = await UserModel.find({ _id: { $in: podUserIds } }).select("fullName name userId").lean();
+    uploaderById = users.reduce((acc, user) => {
+      acc[String(user._id)] = serializePodUploader(user);
+      return acc;
+    }, {});
+  }
+  return transactions.map((transaction) => withPodFields(transaction, uploaderById));
+}
+
+async function attachPodMetaToTransaction(transaction, UserModel = User) {
+  if (!transaction) return transaction;
+  const [mapped] = await attachPodMetaToTransactions([transaction], UserModel);
+  return mapped;
+}
+
+function isPrimarySaleRequest(transaction) {
+  if (toTrimmedString(transaction?.transactionType).toUpperCase() !== "SALE_STOCK") return false;
+  const role = toTrimmedString(transaction?.requestSourceRole || transaction?.fromEntityType).toLowerCase();
+  return role.includes("brand") || role.includes("distributor");
+}
+
+function buildSupplierMatchQuery(user) {
+  const ids = Array.from(new Set([
+    toTrimmedString(user?.userId),
+    toTrimmedString(user?.supplierId),
+    toTrimmedString(user?._id),
+    toTrimmedString(user?.uid),
+  ].filter(Boolean)));
+  const names = Array.from(new Set([
+    toTrimmedString(user?.supplierName),
+    toTrimmedString(user?.businessName),
+    toTrimmedString(user?.fullName),
+  ].filter(Boolean)));
+  const or = [];
+  if (ids.length) or.push({ supplierId: { $in: ids } });
+  if (names.length) or.push({ supplierName: { $in: names } });
+  return or.length ? { $or: or } : { _id: null };
 }
 
 function buildTransactionCode() {
@@ -346,7 +415,7 @@ router.post("/transactions", requireAuth, async (req, res) => {
     if (!companyPayload.companyId) {
       return res.status(400).json({ ok: false, message: "Company is required" });
     }
-    const { WarehouseTransactionModel, InventoryMovementModel, ProductModel, MessageModel } = await getScopedInventoryModels(
+    const { WarehouseTransactionModel, InventoryMovementModel, ProductModel, MessageModel, UserModel } = await getScopedInventoryModels(
       req,
       companyPayload.companyId,
       companyPayload.companyName
@@ -400,6 +469,10 @@ router.post("/transactions", requireAuth, async (req, res) => {
         distributorName: toTrimmedString(body.distributorName),
         subDistributorId: toTrimmedString(body.subDistributorId),
         subDistributorName: toTrimmedString(body.subDistributorName),
+        supplierId: toTrimmedString(body.supplierId),
+        supplierName: toTrimmedString(body.supplierName),
+        dispatchFromWarehouseId: toTrimmedString(body.dispatchFromWarehouseId),
+        dispatchFromWarehouseName: toTrimmedString(body.dispatchFromWarehouseName),
         note: toTrimmedString(body.note),
         paymentDueDate,
         returnPaymentStatus: transactionType === "RETURN_STOCK" ? "PENDING" : "NOT_APPLICABLE",
@@ -461,7 +534,7 @@ router.post("/transactions", requireAuth, async (req, res) => {
       }
     }
 
-    return res.status(201).json({ ok: true, transaction, productBalances });
+    return res.status(201).json({ ok: true, transaction: await attachPodMetaToTransaction(transaction.toObject ? transaction.toObject() : transaction, UserModel), productBalances });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to create transaction" });
   }
@@ -471,7 +544,7 @@ router.get("/transactions", requireAuth, async (req, res) => {
   try {
     const requestedCompanyId = toTrimmedString(req.query.companyId);
     const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? requestedCompanyId : getUserCompanyId(req);
-    const { WarehouseTransactionModel } = await getScopedInventoryModels(req, scopedCompanyId, req.query.companyName);
+    const { WarehouseTransactionModel, UserModel } = await getScopedInventoryModels(req, scopedCompanyId, req.query.companyName);
     const query = {};
     if (req.query.transactionType) query.transactionType = toTrimmedString(req.query.transactionType);
     if (req.query.warehouseId) query.warehouseId = toTrimmedString(req.query.warehouseId);
@@ -492,17 +565,128 @@ router.get("/transactions", requireAuth, async (req, res) => {
       return { ...txn, returnPaymentStatus: overdue ? "OVERDUE" : txn.returnPaymentStatus };
     });
 
-    return res.json({ ok: true, transactions: withStatus });
+    return res.json({ ok: true, transactions: await attachPodMetaToTransactions(withStatus, UserModel) });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to load transactions" });
   }
 });
 
 
+router.get("/transactions/supplier/primary", requireAuth, async (req, res) => {
+  try {
+    if (toTrimmedString(req.user?.role).toLowerCase() !== "supplier") {
+      return res.status(403).json({ ok: false, message: "Only Supplier can access primary dispatch queue" });
+    }
+    const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? toTrimmedString(req.query.companyId) : getUserCompanyId(req);
+    const { WarehouseTransactionModel, UserModel } = await getScopedInventoryModels(req, scopedCompanyId, req.query.companyName);
+    const me = await UserModel.findById(req.user?.uid).lean();
+    if (!me) return res.status(404).json({ ok: false, message: "User not found" });
+    const limit = Math.min(Math.max(Number(req.query.limit) || 200, 1), 500);
+    const query = {
+      transactionType: "SALE_STOCK",
+      requestStatus: { $in: ["APPROVED", "DISPATCHED", "DELIVERED"] },
+      ...buildSupplierMatchQuery(me),
+    };
+    applyCompanyScope(query, req, req.query.companyId);
+    const transactions = await WarehouseTransactionModel.find(query).sort({ transactionAt: -1, createdAt: -1 }).limit(limit).lean();
+    const allowedTransactions = await filterTransactionsByModuleAccess(req.user, transactions);
+    return res.json({ ok: true, transactions: await attachPodMetaToTransactions(allowedTransactions, UserModel) });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to load supplier primary orders" });
+  }
+});
+
+router.put("/transactions/:id/assignment", requireAuth, requireRole("admin", "warehouse manager"), async (req, res) => {
+  try {
+    const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? toTrimmedString(req.body?.companyId || req.query?.companyId) : getUserCompanyId(req);
+    const { WarehouseTransactionModel, UserModel } = await getScopedInventoryModels(req, scopedCompanyId, req.body?.companyName || req.query?.companyName);
+    const transaction = await WarehouseTransactionModel.findById(req.params.id);
+    if (!transaction) return res.status(404).json({ ok: false, message: "Transaction not found" });
+    if (!(await ensureTransactionSectionAccess(req.user, transaction.transactionType))) {
+      return res.status(403).json({ ok: false, message: "This order section is locked for your role" });
+    }
+    if (!isPrimarySaleRequest(transaction)) {
+      return res.status(400).json({ ok: false, message: "Supplier assignment is available only for primary sale requests" });
+    }
+    if (["REJECTED", "DELIVERED"].includes(toTrimmedString(transaction.requestStatus).toUpperCase())) {
+      return res.status(400).json({ ok: false, message: "This request can no longer be assigned" });
+    }
+    if (!isSystemLevelAdmin(req.user?.role)) {
+      const userCompanyId = getUserCompanyId(req);
+      if (!userCompanyId || toTrimmedString(transaction.companyId) !== userCompanyId) {
+        return res.status(403).json({ ok: false, message: "Forbidden" });
+      }
+    }
+    if (isWarehouseManagerRole(req.user?.role)) {
+      const scopedWarehouseId = getScopedWarehouseId(req.user);
+      if (!scopedWarehouseId || scopedWarehouseId !== toTrimmedString(transaction.warehouseId)) {
+        return res.status(403).json({ ok: false, message: "Forbidden" });
+      }
+    }
+    transaction.supplierId = toTrimmedString(req.body?.supplierId || transaction.supplierId);
+    transaction.supplierName = toTrimmedString(req.body?.supplierName || transaction.supplierName);
+    transaction.dispatchFromWarehouseId = toTrimmedString(req.body?.dispatchFromWarehouseId || transaction.dispatchFromWarehouseId || transaction.warehouseId);
+    transaction.dispatchFromWarehouseName = toTrimmedString(req.body?.dispatchFromWarehouseName || transaction.dispatchFromWarehouseName || transaction.warehouseName);
+    await transaction.save();
+    return res.json({ ok: true, transaction: await attachPodMetaToTransaction(transaction.toObject ? transaction.toObject() : transaction, UserModel) });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to save supplier assignment" });
+  }
+});
+
+router.post("/transactions/:id/pod", requireAuth, async (req, res) => {
+  try {
+    if (toTrimmedString(req.user?.role).toLowerCase() !== "supplier") {
+      return res.status(403).json({ ok: false, message: "Only Supplier can upload POD for primary orders" });
+    }
+    const objectKey = toTrimmedString(req.body?.objectKey);
+    const publicUrl = toTrimmedString(req.body?.publicUrl);
+    if (!objectKey || !publicUrl) {
+      return res.status(400).json({ ok: false, message: "objectKey and publicUrl are required" });
+    }
+    const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? toTrimmedString(req.body?.companyId || req.query?.companyId) : getUserCompanyId(req);
+    const { WarehouseTransactionModel, UserModel } = await getScopedInventoryModels(req, scopedCompanyId, req.body?.companyName || req.query?.companyName);
+    const me = await UserModel.findById(req.user?.uid).lean();
+    if (!me) return res.status(404).json({ ok: false, message: "User not found" });
+    const transaction = await WarehouseTransactionModel.findById(req.params.id);
+    if (!transaction) return res.status(404).json({ ok: false, message: "Transaction not found" });
+    if (!(await ensureTransactionSectionAccess(req.user, transaction.transactionType))) {
+      return res.status(403).json({ ok: false, message: "This order section is locked for your role" });
+    }
+    if (!isPrimarySaleRequest(transaction)) {
+      return res.status(400).json({ ok: false, message: "POD upload is only available for primary sale requests" });
+    }
+    const ownershipMatch = buildSupplierMatchQuery(me).$or || [];
+    const matches = ownershipMatch.some((condition) => {
+      if (condition.supplierId?.$in) return condition.supplierId.$in.includes(toTrimmedString(transaction.supplierId));
+      if (condition.supplierName?.$in) return condition.supplierName.$in.includes(toTrimmedString(transaction.supplierName));
+      return false;
+    });
+    if (!matches) {
+      return res.status(403).json({ ok: false, message: "This primary order is not assigned to you" });
+    }
+    const currentStatus = toTrimmedString(transaction.requestStatus).toUpperCase();
+    if (!["APPROVED", "DISPATCHED"].includes(currentStatus)) {
+      return res.status(400).json({ ok: false, message: "POD upload is allowed only after approval" });
+    }
+    transaction.podObjectKey = objectKey;
+    transaction.podUrl = publicUrl;
+    transaction.podUploadedAt = new Date();
+    transaction.podUploadedBy = req.user?.uid;
+    transaction.proofOfDeliveryImageUrl = publicUrl;
+    transaction.proofOfDeliveryAt = transaction.podUploadedAt;
+    transaction.proofOfDeliveryBy = req.user?.uid;
+    await transaction.save();
+    return res.json({ ok: true, transaction: await attachPodMetaToTransaction(transaction.toObject ? transaction.toObject() : transaction, UserModel) });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: "Failed to save supplier POD" });
+  }
+});
+
 router.put("/transactions/:id", requireAuth, requireRole("admin", "warehouse manager"), async (req, res) => {
   try {
     const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? toTrimmedString(req.body?.companyId || req.query?.companyId) : getUserCompanyId(req);
-    const { WarehouseTransactionModel } = await getScopedInventoryModels(req, scopedCompanyId, req.body?.companyName || req.query?.companyName);
+    const { WarehouseTransactionModel, UserModel } = await getScopedInventoryModels(req, scopedCompanyId, req.body?.companyName || req.query?.companyName);
     const transaction = await WarehouseTransactionModel.findById(req.params.id);
     if (!transaction) return res.status(404).json({ ok: false, message: "Transaction not found" });
     if (!(await ensureTransactionSectionAccess(req.user, transaction.transactionType))) {
@@ -586,6 +770,10 @@ router.put("/transactions/:id", requireAuth, requireRole("admin", "warehouse man
     transaction.brandName = toTrimmedString(body.brandName || transaction.brandName);
     transaction.distributorName = toTrimmedString(body.distributorName || transaction.distributorName);
     transaction.subDistributorName = toTrimmedString(body.subDistributorName || transaction.subDistributorName);
+    transaction.supplierId = toTrimmedString(body.supplierId || transaction.supplierId);
+    transaction.supplierName = toTrimmedString(body.supplierName || transaction.supplierName);
+    transaction.dispatchFromWarehouseId = toTrimmedString(body.dispatchFromWarehouseId || transaction.dispatchFromWarehouseId);
+    transaction.dispatchFromWarehouseName = toTrimmedString(body.dispatchFromWarehouseName || transaction.dispatchFromWarehouseName);
     transaction.note = toTrimmedString(body.note || transaction.note);
     transaction.extraDiscPer = extraDiscPer;
     transaction.advTaxPer = advTaxPer;
@@ -596,7 +784,7 @@ router.put("/transactions/:id", requireAuth, requireRole("admin", "warehouse man
     transaction.items = normalizedItems;
 
     await transaction.save();
-    return res.json({ ok: true, transaction });
+    return res.json({ ok: true, transaction: await attachPodMetaToTransaction(transaction.toObject ? transaction.toObject() : transaction, UserModel) });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to update transaction" });
   }
@@ -605,7 +793,7 @@ router.put("/transactions/:id", requireAuth, requireRole("admin", "warehouse man
 router.put("/transactions/:id/mark-read", requireAuth, requireRole("admin", "warehouse manager"), async (req, res) => {
   try {
     const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? toTrimmedString(req.body?.companyId || req.query?.companyId) : getUserCompanyId(req);
-    const { WarehouseTransactionModel } = await getScopedInventoryModels(req, scopedCompanyId, req.body?.companyName || req.query?.companyName);
+    const { WarehouseTransactionModel, UserModel } = await getScopedInventoryModels(req, scopedCompanyId, req.body?.companyName || req.query?.companyName);
     const transaction = await WarehouseTransactionModel.findByIdAndUpdate(
       req.params.id,
       { requestReadAt: new Date() },
@@ -628,7 +816,7 @@ router.put("/transactions/:id/mark-read", requireAuth, requireRole("admin", "war
         return res.status(403).json({ ok: false, message: "Forbidden" });
       }
     }
-    return res.json({ ok: true, transaction });
+    return res.json({ ok: true, transaction: await attachPodMetaToTransaction(transaction.toObject ? transaction.toObject() : transaction, UserModel) });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to mark request as read" });
   }
@@ -637,7 +825,7 @@ router.put("/transactions/:id/mark-read", requireAuth, requireRole("admin", "war
 router.put("/transactions/:id/request-status", requireAuth, requireRole("admin", "warehouse manager"), async (req, res) => {
   try {
     const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? toTrimmedString(req.body?.companyId || req.query?.companyId) : getUserCompanyId(req);
-    const { WarehouseTransactionModel, InventoryMovementModel, MessageModel } = await getScopedInventoryModels(req, scopedCompanyId, req.body?.companyName || req.query?.companyName);
+    const { WarehouseTransactionModel, InventoryMovementModel, MessageModel, UserModel } = await getScopedInventoryModels(req, scopedCompanyId, req.body?.companyName || req.query?.companyName);
     const status = toTrimmedString(req.body?.status || "").toUpperCase();
     if (!requestLifecycleStatuses.includes(status)) {
       return res.status(400).json({ ok: false, message: "Invalid status" });
@@ -660,6 +848,18 @@ router.put("/transactions/:id/request-status", requireAuth, requireRole("admin",
       if (!scopedWarehouseId || scopedWarehouseId !== toTrimmedString(transaction.warehouseId)) {
         return res.status(403).json({ ok: false, message: "Forbidden" });
       }
+    }
+
+    if (isPrimarySaleRequest(transaction) && status === "APPROVED") {
+      if (!toTrimmedString(transaction.supplierId) || !toTrimmedString(transaction.supplierName)) {
+        return res.status(400).json({ ok: false, message: "Assign supplier before approving primary order" });
+      }
+      if (!toTrimmedString(transaction.dispatchFromWarehouseId) || !toTrimmedString(transaction.dispatchFromWarehouseName)) {
+        return res.status(400).json({ ok: false, message: "Select dispatch warehouse before approving primary order" });
+      }
+    }
+    if (isPrimarySaleRequest(transaction) && ["DISPATCHED", "DELIVERED"].includes(status) && !toTrimmedString(transaction.podUrl)) {
+      return res.status(400).json({ ok: false, message: "Supplier POD is required before changing this primary order status" });
     }
 
     transaction.requestStatus = status;
@@ -689,7 +889,7 @@ router.put("/transactions/:id/request-status", requireAuth, requireRole("admin",
       }
     }
 
-    return res.json({ ok: true, transaction });
+    return res.json({ ok: true, transaction: await attachPodMetaToTransaction(transaction.toObject ? transaction.toObject() : transaction, UserModel) });
   } catch (e) {
     return res.status(500).json({ ok: false, message: "Failed to update request status" });
   }
@@ -765,7 +965,7 @@ router.delete("/transactions/clear", requireAuth, requireRole("admin"), async (r
   }
 });
 
-router.get("/near-expiry-products", requireAuth, async (req, res) => {
+router.get("/near-expiry-products", requireAuth, createModuleAccessGuard("warehouse-inventory.near-expiry"), async (req, res) => {
   try {
     const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? toTrimmedString(req.query.companyId) : getUserCompanyId(req);
     const { InventoryMovementModel } = await getScopedInventoryModels(req, scopedCompanyId, req.query.companyName);
@@ -812,7 +1012,7 @@ router.get("/near-expiry-products", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/analytics", requireAuth, async (req, res) => {
+router.get("/analytics", requireAuth, createModuleAccessGuard("warehouse-inventory.overview"), async (req, res) => {
   try {
     const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? toTrimmedString(req.query.companyId) : getUserCompanyId(req);
     const { WarehouseTransactionModel } = await getScopedInventoryModels(req, scopedCompanyId, req.query.companyName);
@@ -903,7 +1103,7 @@ router.get("/analytics", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/movements", requireAuth, async (req, res) => {
+router.post("/movements", requireAuth, createModuleAccessGuard("warehouse-inventory.ledger"), async (req, res) => {
   try {
     const body = req.body || {};
     const companyPayload = resolveCompanyPayload(req, body);
@@ -936,7 +1136,7 @@ router.post("/movements", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/movements", requireAuth, async (req, res) => {
+router.get("/movements", requireAuth, createModuleAccessGuard("warehouse-inventory.ledger"), async (req, res) => {
   try {
     const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? toTrimmedString(req.query.companyId) : getUserCompanyId(req);
     const { InventoryMovementModel } = await getScopedInventoryModels(req, scopedCompanyId, req.query.companyName);
@@ -956,7 +1156,7 @@ router.get("/movements", requireAuth, async (req, res) => {
   }
 });
 
-router.put("/movements/:id", requireAuth, async (req, res) => {
+router.put("/movements/:id", requireAuth, createModuleAccessGuard("warehouse-inventory.ledger"), async (req, res) => {
   try {
     const body = req.body || {};
     const companyPayload = resolveCompanyPayload(req, body);
@@ -1008,7 +1208,7 @@ router.delete("/movements/clear", requireAuth, requireRole("admin"), async (req,
   }
 });
 
-router.post("/transfers", requireAuth, async (req, res) => {
+router.post("/transfers", requireAuth, createModuleAccessGuard("warehouse-inventory.transfers"), async (req, res) => {
   try {
     const body = req.body || {};
     const fromWarehouseId = isWarehouseManagerRole(req.user?.role) ? getScopedWarehouseId(req.user) : String(body.fromWarehouseId || "").trim();
@@ -1072,7 +1272,7 @@ router.post("/transfers", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/transfers", requireAuth, async (req, res) => {
+router.get("/transfers", requireAuth, createModuleAccessGuard("warehouse-inventory.transfers"), async (req, res) => {
   try {
     const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? toTrimmedString(req.query.companyId) : getUserCompanyId(req);
     const { StockTransferModel } = await getScopedInventoryModels(req, scopedCompanyId, req.query.companyName);
@@ -1089,7 +1289,7 @@ router.get("/transfers", requireAuth, async (req, res) => {
   }
 });
 
-router.put("/transfers/:id", requireAuth, async (req, res) => {
+router.put("/transfers/:id", requireAuth, createModuleAccessGuard("warehouse-inventory.transfers"), async (req, res) => {
   try {
     const body = req.body || {};
     const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? toTrimmedString(req.body?.companyId || req.query?.companyId) : getUserCompanyId(req);
@@ -1154,7 +1354,7 @@ router.put("/transfers/:id", requireAuth, async (req, res) => {
   }
 });
 
-router.delete("/transfers/:id", requireAuth, async (req, res) => {
+router.delete("/transfers/:id", requireAuth, createModuleAccessGuard("warehouse-inventory.transfers"), async (req, res) => {
   try {
     const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? toTrimmedString(req.query.companyId) : getUserCompanyId(req);
     const { StockTransferModel } = await getScopedInventoryModels(req, scopedCompanyId, req.query.companyName);
@@ -1173,7 +1373,7 @@ router.delete("/transfers/:id", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/summary", requireAuth, async (req, res) => {
+router.get("/summary", requireAuth, createModuleAccessGuard("warehouse-inventory.summary"), async (req, res) => {
   try {
     const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? toTrimmedString(req.query.companyId) : getUserCompanyId(req);
     const { InventoryMovementModel } = await getScopedInventoryModels(req, scopedCompanyId, req.query.companyName);
@@ -1200,7 +1400,7 @@ router.get("/summary", requireAuth, async (req, res) => {
 });
 
 
-router.get("/summary-detail", requireAuth, async (req, res) => {
+router.get("/summary-detail", requireAuth, createModuleAccessGuard("warehouse-inventory.summary"), async (req, res) => {
   try {
     const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? toTrimmedString(req.query.companyId) : getUserCompanyId(req);
     const { InventoryMovementModel } = await getScopedInventoryModels(req, scopedCompanyId, req.query.companyName);
@@ -1252,7 +1452,7 @@ router.get("/summary-detail", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/low-stock", requireAuth, async (req, res) => {
+router.get("/low-stock", requireAuth, createModuleAccessGuard("warehouse-inventory.low-stock"), async (req, res) => {
   try {
     const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? toTrimmedString(req.query.companyId) : getUserCompanyId(req);
     const { InventoryMovementModel, ProductModel } = await getScopedInventoryModels(req, scopedCompanyId, req.query.companyName);

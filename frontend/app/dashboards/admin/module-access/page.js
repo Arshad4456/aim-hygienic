@@ -20,6 +20,20 @@ export default function ModuleAccessPage() {
   }, []);
   const isSystemAdmin = ["admin", "system admin"].includes(normalizeRole(user?.role));
 
+  const groupedRules = useMemo(() => {
+    const groups = new Map();
+    (rules || []).forEach((rule) => {
+      const groupKey = String(rule?.moduleKey || "other");
+      if (!groups.has(groupKey)) groups.set(groupKey, []);
+      groups.get(groupKey).push(rule);
+    });
+    return Array.from(groups.entries()).map(([moduleKey, items]) => ({
+      moduleKey,
+      items: items.sort((a, b) => String(a?.title || "").localeCompare(String(b?.title || ""))),
+    }));
+  }, [rules]);
+
+
   useEffect(() => {
     let active = true;
     async function loadCompanies() {
@@ -95,7 +109,7 @@ export default function ModuleAccessPage() {
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <div className="text-xl font-semibold text-zinc-900">Module and section lock control</div>
-            <div className="mt-1 text-sm text-zinc-500">Control which roles can open sensitive module sections. In this pass, Order Management sections are fully configurable.</div>
+            <div className="mt-1 text-sm text-zinc-500">Control which roles can open or hide each module and section across dashboards. These rules now cover order management, warehouse, products, HR, finance, expense, reports, messages, live tracking, vehicles, procurement, quality, and more.</div>
           </div>
           <div className="flex flex-col gap-3 md:flex-row md:items-end">
             {isSystemAdmin ? (
@@ -136,27 +150,41 @@ export default function ModuleAccessPage() {
         <div className="mt-6 grid gap-4">
           {loading ? <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-6 text-sm text-zinc-500">Loading access rules...</div> : null}
           {!loading && !rules.length ? <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-6 text-sm text-zinc-500">No configurable rules found.</div> : null}
-          {rules.map((rule) => (
-            <div key={rule.key} className="rounded-3xl border border-zinc-200 bg-gradient-to-r from-emerald-50 via-white to-blue-50 p-5">
-              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          {groupedRules.map((group) => (
+            <section key={group.moduleKey} className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-col gap-2 border-b border-zinc-100 pb-4 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <div className="text-lg font-semibold text-zinc-900">{rule.title}</div>
-                  <div className="mt-1 text-sm text-zinc-500">{rule.description}</div>
+                  <div className="text-lg font-semibold text-zinc-900">{String(group.moduleKey || "other").replace(/[-_]/g, " ")}</div>
+                  <div className="mt-1 text-sm text-zinc-500">Manage all sections inside this module group.</div>
                 </div>
-                <div className="rounded-full bg-zinc-900 px-3 py-1 text-xs font-semibold text-white">{rule.moduleKey}</div>
+                <div className="rounded-full bg-zinc-900 px-3 py-1 text-xs font-semibold text-white">{group.items.length} section{group.items.length === 1 ? "" : "s"}</div>
               </div>
-              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                {MODULE_ACCESS_ROLE_OPTIONS.map((roleValue) => {
-                  const checked = (rule.allowedRoles || []).includes(normalizeRole(roleValue));
-                  return (
-                    <label key={roleValue} className={`flex items-center gap-3 rounded-2xl border px-3 py-3 text-sm ${checked ? "border-emerald-300 bg-emerald-50" : "border-zinc-200 bg-white"}`}>
-                      <input type="checkbox" checked={checked} onChange={() => toggleRole(rule.key, roleValue)} />
-                      <span className="capitalize text-zinc-700">{roleValue}</span>
-                    </label>
-                  );
-                })}
+
+              <div className="mt-4 grid gap-4">
+                {group.items.map((rule) => (
+                  <div key={rule.key} className="rounded-3xl border border-zinc-200 bg-gradient-to-r from-emerald-50 via-white to-blue-50 p-5">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <div className="text-lg font-semibold text-zinc-900">{rule.title}</div>
+                        <div className="mt-1 text-sm text-zinc-500">{rule.description}</div>
+                        <div className="mt-2 text-xs text-zinc-400">Rule Key: {rule.key}</div>
+                      </div>
+                    </div>
+                    <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                      {MODULE_ACCESS_ROLE_OPTIONS.map((roleValue) => {
+                        const checked = (rule.allowedRoles || []).includes(normalizeRole(roleValue));
+                        return (
+                          <label key={roleValue} className={`flex items-center gap-3 rounded-2xl border px-3 py-3 text-sm ${checked ? "border-emerald-300 bg-emerald-50" : "border-zinc-200 bg-white"}`}>
+                            <input type="checkbox" checked={checked} onChange={() => toggleRole(rule.key, roleValue)} />
+                            <span className="capitalize text-zinc-700">{roleValue}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
-            </div>
+            </section>
           ))}
         </div>
       </div>

@@ -5,6 +5,7 @@ const { validatePassword } = require("../utils/password");
 const { hashPassword, verifyPassword } = require("../utils/passwordHash");
 const { createUserInTenant, updateUserInTenant, deleteUserFromTenant, listTenantUsersByCompany, findTenantUserById } = require("../utils/tenantUsers");
 const { listAllTenantTargets, getTenantModel } = require("../utils/tenantModels");
+const { createModuleAccessGuard } = require("../utils/moduleAccess");
 
 const router = express.Router();
 
@@ -416,7 +417,7 @@ router.put("/change-password", requireAuth, async (req, res) => {
   return res.json({ ok: true });
 });
 
-router.post("/", requireAuth, requireRole("admin", "distributor"), async (req, res) => {
+router.post("/", requireAuth, requireRole("admin", "distributor"), createModuleAccessGuard("hr.users.add"), async (req, res) => {
   const body = req.body || {};
   if (!body.fullName || !body.role || !(body.mobile || body.mobileNumber)) {
     return res.status(400).json({ ok: false, message: "Missing required fields" });
@@ -472,7 +473,7 @@ router.post("/", requireAuth, requireRole("admin", "distributor"), async (req, r
   return res.status(201).json({ ok: true, user: { id: user._id } });
 });
 
-router.get("/", requireAuth, requireRole("admin", "distributor"), async (req, res) => {
+router.get("/", requireAuth, requireRole("admin", "distributor"), createModuleAccessGuard("hr.users.list"), async (req, res) => {
   const users = await listUsersForRequest(req);
   return res.json({ ok: true, users });
 });
@@ -501,7 +502,7 @@ router.get("/distributors", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/:id", requireAuth, requireRole("admin", "distributor"), async (req, res) => {
+router.get("/:id", requireAuth, requireRole("admin", "distributor"), createModuleAccessGuard("hr.users.list"), async (req, res) => {
   const scoped = await findScopedUserById(req.params.id, req.user);
   const user = scoped.user;
   if (!user) return res.status(404).json({ ok: false, message: "User not found" });
@@ -514,7 +515,7 @@ router.get("/:id", requireAuth, requireRole("admin", "distributor"), async (req,
   return res.json({ ok: true, user });
 });
 
-router.put("/:id", requireAuth, requireRole("admin", "distributor"), async (req, res) => {
+router.put("/:id", requireAuth, requireRole("admin", "distributor"), createModuleAccessGuard("hr.users.list"), async (req, res) => {
   const body = req.body || {};
   const scoped = await findScopedUserById(req.params.id, req.user);
   const existing = scoped.user;
@@ -591,7 +592,7 @@ router.put("/:id", requireAuth, requireRole("admin", "distributor"), async (req,
   return res.json({ ok: true, user: updated });
 });
 
-router.delete("/:id", requireAuth, requireRole("admin", "distributor"), async (req, res) => {
+router.delete("/:id", requireAuth, requireRole("admin", "distributor"), createModuleAccessGuard("hr.users.list"), async (req, res) => {
   const scoped = await findScopedUserById(req.params.id, req.user);
   const existing = scoped.user;
   if (!existing) return res.status(404).json({ ok: false, message: "User not found" });

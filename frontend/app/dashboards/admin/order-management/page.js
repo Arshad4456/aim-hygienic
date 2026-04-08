@@ -1199,7 +1199,7 @@ export default function OrderManagementModulePage() {
           </>
         ) : null}
 
-        <RequestPreviewModal row={previewRequest} products={products} onClose={() => setPreviewRequest(null)} onUpdated={loadData} notify={notify} />
+        <RequestPreviewModal row={previewRequest} products={products} users={users} warehouses={warehouses} onClose={() => setPreviewRequest(null)} onUpdated={loadData} notify={notify} />
       </div>
     </ShellComponent>
   );
@@ -1251,24 +1251,29 @@ function RequestSaleStocksTable({ rows, onOpen, onApprove, onReject, onDispatch,
   return (
     <div className="overflow-x-auto mt-3 rounded border">
       <table className="min-w-full text-sm">
-        <thead><tr className="border-b bg-zinc-50"><th className="p-2 text-left">Code</th><th className="p-2 text-left">From</th><th className="p-2 text-left">Source</th><th className="p-2 text-left">Date and Time</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Read/Unread</th><th className="p-2 text-left">Action</th></tr></thead>
+        <thead><tr className="border-b bg-zinc-50"><th className="p-2 text-left">Code</th><th className="p-2 text-left">From</th><th className="p-2 text-left">Source</th><th className="p-2 text-left">Supplier</th><th className="p-2 text-left">Dispatch From</th><th className="p-2 text-left">Date and Time</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">POD</th><th className="p-2 text-left">Read/Unread</th><th className="p-2 text-left">Action</th></tr></thead>
         <tbody>
           {rows.map((r) => {
             const status = normalizeRequestStatus(r.requestStatus || "PENDING");
             const unread = !r.requestReadAt;
+            const hasAssignment = Boolean(r.supplierId && r.dispatchFromWarehouseId);
+            const hasPod = Boolean(r.podUrl || r.proofOfDeliveryImageUrl);
             return (
               <tr key={r._id} className="border-b">
                 <td className="p-2">{r.transactionCode}</td>
                 <td className="p-2">{r.fromEntityName || "-"}</td>
                 <td className="p-2">{sourceRoleLabel(r)}</td>
+                <td className="p-2">{r.supplierName || "Not assigned"}</td>
+                <td className="p-2">{r.dispatchFromWarehouseName || "Not assigned"}</td>
                 <td className="p-2">{r.transactionAt ? new Date(r.transactionAt).toLocaleString() : "-"}</td>
                 <td className="p-2">{status}</td>
+                <td className="p-2">{hasPod ? <span className="rounded bg-emerald-100 px-2 py-1 text-xs text-emerald-800">Uploaded</span> : <span className="rounded bg-zinc-100 px-2 py-1 text-xs text-zinc-600">Pending</span>}</td>
                 <td className="p-2">{unread ? <span className="rounded bg-amber-100 px-2 py-1 text-xs text-amber-800">Unread</span> : "Read"}</td>
-                <td className="p-2"><div className="flex flex-wrap gap-2"><button className="rounded border px-2 py-1" onClick={() => onOpen(r._id)}>Open</button><button className="rounded border border-emerald-300 px-2 py-1 text-emerald-700" onClick={() => onPreview(r)}>Preview</button><button className="rounded border border-red-300 px-2 py-1 text-red-700" onClick={() => onReject(r._id)}>Reject</button><button className="rounded border border-blue-300 px-2 py-1 text-blue-700" onClick={() => onApprove(r._id)}>Approve</button><button className="rounded border border-indigo-300 px-2 py-1 text-indigo-700" onClick={() => onDispatch(r._id)}>Dispatch</button><button className="rounded border border-emerald-500 px-2 py-1 text-emerald-800" onClick={() => onDelivered(r._id)}>Delivered</button></div></td>
+                <td className="p-2"><div className="flex flex-wrap gap-2"><button className="rounded border px-2 py-1" onClick={() => onOpen(r._id)}>Open</button><button className="rounded border border-emerald-300 px-2 py-1 text-emerald-700" onClick={() => onPreview(r)}>Preview</button><button className="rounded border border-red-300 px-2 py-1 text-red-700" onClick={() => onReject(r._id)}>Reject</button><button className="rounded border border-blue-300 px-2 py-1 text-blue-700 disabled:cursor-not-allowed disabled:opacity-50" disabled={!hasAssignment} title={!hasAssignment ? "Assign supplier and dispatch warehouse first." : ""} onClick={() => onApprove(r._id)}>Approve</button><button className="rounded border border-indigo-300 px-2 py-1 text-indigo-700 disabled:cursor-not-allowed disabled:opacity-50" disabled={!hasPod} title={!hasPod ? "Supplier POD is required before dispatch." : ""} onClick={() => onDispatch(r._id)}>Dispatch</button><button className="rounded border border-emerald-500 px-2 py-1 text-emerald-800 disabled:cursor-not-allowed disabled:opacity-50" disabled={!hasPod} title={!hasPod ? "Supplier POD is required before delivered status." : ""} onClick={() => onDelivered(r._id)}>Delivered</button></div></td>
               </tr>
             );
           })}
-          {!rows.length ? <tr><td colSpan={7} className="p-5 text-center text-zinc-500">No order requests.</td></tr> : null}
+          {!rows.length ? <tr><td colSpan={10} className="p-5 text-center text-zinc-500">No order requests.</td></tr> : null}
         </tbody>
       </table>
     </div>
@@ -1381,7 +1386,7 @@ function SecondaryOrderLedgerTable({ rows, onInvoice, onDelete, canDelete = true
   );
 }
 
-function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
+function RequestPreviewModal({ row, products, users = [], warehouses = [], onClose, onUpdated, notify }) {
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState(null);
 
@@ -1404,6 +1409,10 @@ function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
       brandName: row.brandName || "",
       distributorName: row.distributorName || "",
       subDistributorName: row.subDistributorName || "",
+      supplierId: row.supplierId || "",
+      supplierName: row.supplierName || "",
+      dispatchFromWarehouseId: row.dispatchFromWarehouseId || "",
+      dispatchFromWarehouseName: row.dispatchFromWarehouseName || "",
       extraDiscPer: String(row.extraDiscPer || 0),
       advTaxPer: String(row.advTaxPer || 0),
       whTaxPer: String(row.whTaxPer || 0),
@@ -1426,8 +1435,14 @@ function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
   if (!row || !draft) return null;
 
   const isSecondaryOrderRow = row.saleType === "secondary";
-  const canEditPending = !isSecondaryOrderRow && normalizeRequestStatus(row.requestStatus || row.status || "PENDING") === "PENDING";
   const isReturnStockRow = row.transactionType === "RETURN_STOCK";
+  const isPrimaryRequestRow = row.transactionType === "SALE_STOCK" && !isSecondaryOrderRow && !isReturnStockRow;
+  const currentStatus = normalizeRequestStatus(row.requestStatus || row.status || "PENDING");
+  const canEditPending = !isSecondaryOrderRow && currentStatus === "PENDING";
+  const canAssignPrimary = isPrimaryRequestRow && !["REJECTED", "DELIVERED"].includes(currentStatus);
+  const supportsPod = isSecondaryOrderRow || isPrimaryRequestRow;
+  const supplierOptions = users.filter((user) => user.role === "Supplier").map((user) => ({ value: user._id, label: user.businessName || user.fullName || user.userId || "Supplier" }));
+  const dispatchWarehouseOptions = warehouses.map((warehouse) => ({ value: warehouse._id, label: warehouse.name || warehouse.warehouseId || "Warehouse" }));
 
   function setDraftField(key, value) {
     setDraft((prev) => ({ ...prev, [key]: value }));
@@ -1443,6 +1458,37 @@ function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
 
   function removeItem(index) {
     setDraft((prev) => ({ ...prev, items: prev.items.filter((_, idx) => idx !== index) }));
+  }
+
+
+  async function saveSupplierAssignment() {
+    if (!canAssignPrimary) {
+      notify("info", "Supplier assignment is not available for this request.");
+      return;
+    }
+    if (!draft.supplierId || !draft.dispatchFromWarehouseId) {
+      notify("info", "Select supplier and dispatch warehouse first.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await apiFetch(`/inventory/transactions/${row._id}/assignment`, {
+        method: "PUT",
+        body: {
+          supplierId: draft.supplierId,
+          supplierName: draft.supplierName,
+          dispatchFromWarehouseId: draft.dispatchFromWarehouseId,
+          dispatchFromWarehouseName: draft.dispatchFromWarehouseName,
+        },
+      });
+      notify("success", "Supplier assignment saved successfully.");
+      await onUpdated?.();
+      onClose();
+    } catch (e) {
+      notify("error", e.message || "Failed to save supplier assignment");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function updateRequest() {
@@ -1520,11 +1566,33 @@ function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
             <Input label="Zone" value={draft.zoneName} onChange={(v) => setDraftField("zoneName", v)} />
             <Input label="Territory" value={draft.territory} onChange={(v) => setDraftField("territory", v)} />
             <Input label="Address" value={draft.note} onChange={(v) => setDraftField("note", v)} />
+            {isPrimaryRequestRow ? (
+              <Select
+                label="Supplier"
+                value={draft.supplierId}
+                onChange={(value) => {
+                  const selected = users.find((user) => user._id === value);
+                  setDraft((prev) => ({ ...prev, supplierId: value, supplierName: selected?.businessName || selected?.fullName || selected?.userId || "" }));
+                }}
+                options={supplierOptions}
+              />
+            ) : null}
+            {isPrimaryRequestRow ? (
+              <Select
+                label="Dispatch From Warehouse"
+                value={draft.dispatchFromWarehouseId}
+                onChange={(value) => {
+                  const selected = warehouses.find((warehouse) => warehouse._id === value);
+                  setDraft((prev) => ({ ...prev, dispatchFromWarehouseId: value, dispatchFromWarehouseName: selected?.name || selected?.warehouseId || "" }));
+                }}
+                options={dispatchWarehouseOptions}
+              />
+            ) : null}
             <PreviewField label="Source" value={sourceRoleLabel(row)} />
-            <PreviewField label="Status" value={normalizeRequestStatus(row.requestStatus || row.status || "PENDING")} />
+            <PreviewField label="Status" value={currentStatus} />
           </div>
 
-          {isSecondaryOrderRow ? (
+          {supportsPod ? (
             <div className="rounded-xl border p-3">
               <div className="text-sm font-semibold">Proof of Delivery</div>
               {row.podUrl || row.proofOfDeliveryImageUrl ? (
@@ -1586,7 +1654,12 @@ function RequestPreviewModal({ row, products, onClose, onUpdated, notify }) {
             </div>
           </div>
 
-          <div className="flex justify-end">
+          <div className="flex flex-wrap justify-end gap-3">
+            {canAssignPrimary ? (
+              <button type="button" onClick={saveSupplierAssignment} disabled={saving} className="rounded-xl border border-blue-300 px-4 py-2 text-blue-700">
+                {saving ? "Saving..." : "Save Supplier Assignment"}
+              </button>
+            ) : null}
             <button type="button" onClick={updateRequest} disabled={saving || !canEditPending} className="rounded-xl bg-emerald-600 text-white px-4 py-2">{canEditPending ? (saving ? "Updating..." : "Update") : "Update disabled (not pending)"}</button>
           </div>
         </div>

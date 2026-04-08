@@ -14,6 +14,7 @@ const Message = require("../models/Message");
 const ReturnClaim = require("../models/ReturnClaim");
 const Company = require("../models/Company");
 const { toTenantDatabaseName } = require("../utils/tenantDatabases");
+const { createModuleAccessGuard } = require("../utils/moduleAccess");
 
 const router = express.Router();
 
@@ -134,7 +135,7 @@ function formatYearKey(date) {
   return `${date.getFullYear()}`;
 }
 
-router.get("/overview", requireAuth, async (req, res) => {
+router.get("/overview", requireAuth, createModuleAccessGuard("dashboard.overview"), async (req, res) => {
   try {
     const { companyId: salesOrderScopeCompanyId } = await resolveScopedCompanyForRequest(
       req,
@@ -489,7 +490,7 @@ router.get("/overview", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/sales-manager", requireAuth, async (req, res) => {
+router.get("/sales-manager", requireAuth, createModuleAccessGuard("dashboard.sales-kpi"), async (req, res) => {
   try {
     const { companyId: requestedScopeCompanyId } = await resolveScopedCompanyForRequest(
       req,
@@ -592,7 +593,7 @@ router.get("/sales-manager", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/operations", requireAuth, async (req, res) => {
+router.get("/operations", requireAuth, createModuleAccessGuard("dashboard.operations"), async (req, res) => {
   try {
     const { companyId: salesOrderScopeCompanyId } = await resolveScopedCompanyForRequest(
       req,

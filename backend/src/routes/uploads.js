@@ -5,6 +5,7 @@ const express = require("express");
 const { requireAuth } = require("../utils/auth");
 const User = require("../models/User");
 const SalesOrder = require("../models/SalesOrder");
+const WarehouseTransaction = require("../models/WarehouseTransaction");
 
 const router = express.Router();
 const DEFAULT_PUBLIC_BASE_URL = "https://files.aimhygienics.com";
@@ -73,6 +74,36 @@ function normalizeBase64Payload(value) {
   const idx = raw.indexOf(",");
   if (raw.startsWith("data:") && idx >= 0) return raw.slice(idx + 1);
   return raw;
+}
+
+async function validateSupplierTransactionPodRequest(req, transactionId) {
+  if (String(req.user?.role || "") !== "Supplier") {
+    return { status: 403, body: { ok: false, message: "Only Supplier can request POD upload URLs" } };
+  }
+
+  const me = await User.findById(req.user.uid).lean();
+  if (!me) return { status: 404, body: { ok: false, message: "User not found" } };
+
+  const transaction = await WarehouseTransaction.findById(transactionId).lean();
+  if (!transaction) return { status: 404, body: { ok: false, message: "Primary order not found" } };
+  if (String(transaction.transactionType || "").toUpperCase() !== "SALE_STOCK") {
+    return { status: 400, body: { ok: false, message: "POD upload URL is only available for primary sale requests" } };
+  }
+  const requestStatus = String(transaction.requestStatus || "").toUpperCase();
+  if (!["APPROVED", "DISPATCHED"].includes(requestStatus)) {
+    return { status: 400, body: { ok: false, message: "POD upload is allowed only after approval" } };
+  }
+
+  const allowedSupplierIds = [String(me.userId || "").trim(), String(me.supplierId || "").trim(), String(me._id || "").trim()].filter(Boolean);
+  const allowedSupplierNames = [String(me.supplierName || "").trim(), String(me.businessName || "").trim(), String(me.fullName || "").trim()].filter(Boolean);
+  const assignedSupplierId = String(transaction.supplierId || "").trim();
+  const assignedSupplierName = String(transaction.supplierName || "").trim();
+  const isAllowed = allowedSupplierIds.includes(assignedSupplierId) || allowedSupplierNames.includes(assignedSupplierName);
+  if (!isAllowed) {
+    return { status: 403, body: { ok: false, message: "This primary order is not assigned to you" } };
+  }
+
+  return { transaction };
 }
 
 async function validateSalesmanPodRequest(req, orderId) {
@@ -307,6 +338,88 @@ router.post("/pod-proxy", requireAuth, async (req, res) => {
     return res.status(500).json({ ok: false, message: message ? `Failed to upload POD to storage: ${message}` : "Failed to upload POD to storage" });
   }
 });
+
+
+router.post("/transaction-pod-url", requireAuth, async (req, res) => {
+  try {
+    const { transactionId, contentType } = req.body || {};
+    if (!transactionId || !contentType) {
+      return res.status(400).json({ ok: false, message: "transactionId and contentType are required" });
+    }
+
+    const validation = await validateSupplierTransactionPodRequest(req, transactionId);
+    if (validation.status) {
+      return res.status(validation.status).json(validation.body);
+    }
+    const { transaction } = validation;
+
+    const { bucket, accountId, accessKeyId, secretAccessKey, endpoint, jurisdiction, missing } = readR2Config();
+    if (missing.length) {
+      return res.status(500).json({
+        ok: false,
+        message: `R2 storage is not configured (${missing.join(", ")}). Configure S3-compatible Access Key + Secret (API token is not used for presigned S3 uploads).`,
+      });
+    }
+
+    const objectKey = `supplier-pod/${transaction._id}/${crypto.randomUUID()}.jpg`;
+    const publicUrl = `${resolvePublicBaseUrl()}/${objectKey}`;
+    const uploadUrl = getPresignedPutUrl({ accountId, accessKeyId, secretAccessKey, bucket, key: objectKey, endpoint, jurisdiction });
+    assertR2UploadHost(uploadUrl);
+
+    return res.json({ ok: true, uploadUrl, objectKey, publicUrl });
+  } catch (_error) {
+    return res.status(500).json({ ok: false, message: "Failed to generate supplier POD upload URL" });
+  }
+});
+
+router.post("/transaction-pod-proxy", requireAuth, async (req, res) => {
+  try {
+    const { transactionId, contentType, fileBase64 } = req.body || {};
+    if (!transactionId || !contentType || !fileBase64) {
+      return res.status(400).json({ ok: false, message: "transactionId, contentType and fileBase64 are required" });
+    }
+
+    const validation = await validateSupplierTransactionPodRequest(req, transactionId);
+    if (validation.status) {
+      return res.status(validation.status).json(validation.body);
+    }
+    const { transaction } = validation;
+
+    const { bucket, accountId, accessKeyId, secretAccessKey, endpoint, jurisdiction, missing } = readR2Config();
+    if (missing.length) {
+      return res.status(500).json({
+        ok: false,
+        message: `R2 storage is not configured (${missing.join(", ")}). Configure S3-compatible Access Key + Secret (API token is not used for presigned S3 uploads).`,
+      });
+    }
+
+    const base64Payload = normalizeBase64Payload(fileBase64);
+    const fileBuffer = Buffer.from(base64Payload, "base64");
+    if (!fileBuffer.length) {
+      return res.status(400).json({ ok: false, message: "Invalid base64 file payload" });
+    }
+
+    const objectKey = `supplier-pod/${transaction._id}/${crypto.randomUUID()}.jpg`;
+    const publicUrl = `${resolvePublicBaseUrl()}/${objectKey}`;
+    const uploadUrl = getPresignedPutUrl({ accountId, accessKeyId, secretAccessKey, bucket, key: objectKey, endpoint, jurisdiction });
+    assertR2UploadHost(uploadUrl);
+
+    const cloudRes = await uploadBufferToPresignedUrl(uploadUrl, {
+      contentType: String(contentType).trim() || "image/jpeg",
+      body: fileBuffer,
+    });
+
+    if (!cloudRes.ok) {
+      return res.status(502).json({ ok: false, message: `R2 upload failed (${cloudRes.status})` });
+    }
+
+    return res.json({ ok: true, objectKey, publicUrl });
+  } catch (error) {
+    const message = String(error?.message || "").trim();
+    return res.status(500).json({ ok: false, message: message ? `Failed to upload supplier POD to storage: ${message}` : "Failed to upload supplier POD to storage" });
+  }
+});
+
 
 
 function extensionFromContentType(contentType = "") {

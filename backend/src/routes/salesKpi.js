@@ -4,6 +4,7 @@ const { requireAuth } = require("../utils/auth");
 const InventoryMovement = require("../models/InventoryMovement");
 const Company = require("../models/Company");
 const { toTenantDatabaseName } = require("../utils/tenantDatabases");
+const { createModuleAccessGuard } = require("../utils/moduleAccess");
 
 const router = express.Router();
 
@@ -60,7 +61,7 @@ function buildDateRange(days) {
   return dates;
 }
 
-router.get("/summary", requireAuth, async (req, res) => {
+router.get("/summary", requireAuth, createModuleAccessGuard("dashboard.sales-kpi"), async (req, res) => {
   try {
     const InventoryMovementModel = await getScopedInventoryMovementModel(
       req,
