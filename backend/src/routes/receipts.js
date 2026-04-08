@@ -5,6 +5,7 @@ const Account = require("../models/Account");
 const AccountTransaction = require("../models/AccountTransaction");
 const SalesOrder = require("../models/SalesOrder");
 const User = require("../models/User");
+const WarehouseTransaction = require("../models/WarehouseTransaction");
 const Company = require("../models/Company");
 const { requireAuth, requireRole } = require("../utils/auth");
 const { toTenantDatabaseName } = require("../utils/tenantDatabases");
@@ -31,6 +32,22 @@ function makeReceiptNo() {
 
 function canAccessOwn(role) {
   return ["customer", "distributor", "order booker", "orderbooker", "salesman"].includes(String(role || "").toLowerCase());
+}
+
+function splitCsvValues(value) {
+  return String(value || "")
+    .split(",")
+    .map((entry) => asText(entry))
+    .filter(Boolean);
+}
+
+function buildSupplierAssignmentQuery(user) {
+  const ids = [asText(user?.userId), asText(user?.supplierId), asText(user?._id)].filter(Boolean);
+  const names = [asText(user?.supplierName), asText(user?.businessName), asText(user?.fullName)].filter(Boolean);
+  const or = [];
+  if (ids.length) or.push({ supplierId: { $in: ids } });
+  if (names.length) or.push({ supplierName: { $in: names } });
+  return or.length ? { $or: or } : {};
 }
 
 function normalizeRole(role) {
@@ -69,11 +86,11 @@ async function getScopedReceiptModels(req, requestedCompanyId = "", requestedCom
     ? asText(requestedCompanyName)
     : asText(req.user?.companyName);
   if (!scopedCompanyId) {
-    return { ReceiptModel: Receipt, AccountModel: Account, AccountTransactionModel: AccountTransaction, SalesOrderModel: SalesOrder, UserModel: User };
+    return { ReceiptModel: Receipt, AccountModel: Account, AccountTransactionModel: AccountTransaction, SalesOrderModel: SalesOrder, UserModel: User, WarehouseTransactionModel: WarehouseTransaction };
   }
   const dbName = await resolveTenantDbName(scopedCompanyId, scopedCompanyName);
   if (!dbName) {
-    return { ReceiptModel: Receipt, AccountModel: Account, AccountTransactionModel: AccountTransaction, SalesOrderModel: SalesOrder, UserModel: User };
+    return { ReceiptModel: Receipt, AccountModel: Account, AccountTransactionModel: AccountTransaction, SalesOrderModel: SalesOrder, UserModel: User, WarehouseTransactionModel: WarehouseTransaction };
   }
   const tenantDb = mongoose.connection.useDb(dbName, { useCache: true });
   return {
@@ -82,6 +99,7 @@ async function getScopedReceiptModels(req, requestedCompanyId = "", requestedCom
     AccountTransactionModel: getModelFromDb(tenantDb, AccountTransaction),
     SalesOrderModel: getModelFromDb(tenantDb, SalesOrder),
     UserModel: getModelFromDb(tenantDb, User),
+    WarehouseTransactionModel: getModelFromDb(tenantDb, WarehouseTransaction),
   };
 }
 
@@ -151,12 +169,36 @@ router.post("/", requireAuth, async (req, res) => {
 
 router.get("/", requireAuth, async (req, res) => {
   try {
-    const { ReceiptModel } = await getScopedReceiptModels(req, req.query?.companyId, req.query?.companyName);
+    const { ReceiptModel, UserModel, WarehouseTransactionModel } = await getScopedReceiptModels(req, req.query?.companyId, req.query?.companyName);
     const role = normalizeRole(req.user?.role);
     const query = {};
+    const linkedInvoiceNos = splitCsvValues(req.query.linkedInvoiceNo);
 
-    if (!isAdminRole(role)) {
-      query.payerUserId = req.user.uid;
+    if (role === "supplier") {
+      const me = await UserModel.findById(req.user.uid).lean();
+      if (!me) return res.status(404).json({ ok: false, message: "User not found" });
+
+      const transactionQuery = {
+        transactionType: "SALE_STOCK",
+        ...buildSupplierAssignmentQuery(me),
+      };
+      if (linkedInvoiceNos.length) transactionQuery.transactionCode = { $in: linkedInvoiceNos };
+
+      const assignedTransactions = await WarehouseTransactionModel.find(transactionQuery)
+        .select("transactionCode")
+        .lean();
+      const allowedInvoiceNos = Array.from(new Set(assignedTransactions.map((item) => asText(item?.transactionCode)).filter(Boolean)));
+      if (!allowedInvoiceNos.length) {
+        return res.json({ ok: true, receipts: [] });
+      }
+      query.linkedInvoiceNo = { $in: allowedInvoiceNos };
+    } else {
+      if (!isAdminRole(role)) {
+        query.payerUserId = req.user.uid;
+      }
+      if (linkedInvoiceNos.length) {
+        query.linkedInvoiceNo = linkedInvoiceNos.length === 1 ? linkedInvoiceNos[0] : { $in: linkedInvoiceNos };
+      }
     }
 
     if (req.query.status && req.query.status !== "all") query.status = String(req.query.status);

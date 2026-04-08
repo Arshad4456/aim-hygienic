@@ -58,8 +58,8 @@ const DEFAULT_MODULE_RULES = [
   rule("account-management.payments", "account-management", "Payment Management", "Manage payment records and settlements.", ["admin", "system admin", "company admin", "warehouse manager", "distributor", "account officer"]),
 
   rule("finance.overview", "finance-accounts", "Finance & Accounts Overview", "Open finance and accounts module.", ["admin", "system admin", "company admin", "account officer", "cashier"]),
-  rule("finance.invoices", "finance-accounts", "Invoices", "View order invoices.", ["admin", "system admin", "company admin", "account officer", "distributor"]),
-  rule("finance.receipts", "finance-accounts", "Receipts", "View and process receipts.", ["admin", "system admin", "company admin", "account officer", "cashier", "distributor", "order booker", "customer"]),
+  rule("finance.invoices", "finance-accounts", "Invoices", "View order invoices.", ["admin", "system admin", "company admin", "account officer", "distributor", "supplier"]),
+  rule("finance.receipts", "finance-accounts", "Receipts", "View and process receipts.", ["admin", "system admin", "company admin", "account officer", "cashier", "distributor", "order booker", "customer", "supplier"]),
   rule("finance.aging", "finance-accounts", "Aging Report", "View aging report.", ["admin", "system admin", "company admin", "account officer"]),
 
   rule("expense.overview", "expense-management", "Expense Overview", "Open expense management module.", ["admin", "system admin", "company admin", "account officer", "cashier", "distributor"]),
