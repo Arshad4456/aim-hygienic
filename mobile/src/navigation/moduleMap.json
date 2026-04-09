@@ -2427,6 +2427,32 @@
     "endpoints": []
   },
   {
+    "key": "supplier:primary-orders",
+    "role": "supplier",
+    "modulePath": "primary-orders",
+    "route": "/dashboards/supplier/primary-orders",
+    "title": "Primary Orders",
+    "screenFile": "screens/supplier/primary-orders/PrimaryOrdersScreen.js",
+    "endpoints": [
+      {
+        "method": "GET",
+        "path": "/inventory/transactions/supplier/primary?limit=300"
+      },
+      {
+        "method": "GET",
+        "path": "/receipts?linkedInvoiceNo=${invoiceNos}"
+      },
+      {
+        "method": "POST",
+        "path": "/uploads/transaction-pod-url"
+      },
+      {
+        "method": "POST",
+        "path": "/inventory/transactions/${id}/pod"
+      }
+    ]
+  },
+  {
     "key": "vendor:dashboard",
     "role": "vendor",
     "modulePath": "",

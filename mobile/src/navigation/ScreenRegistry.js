@@ -132,6 +132,7 @@ import S121 from '../screens/warehouseManager/payments/secondary/SecondaryScreen
 import S122 from '../screens/warehouseManager/warehouse-inventory/WarehouseInventoryScreen';
 import S123 from '../screens/zoneSM/DashboardScreen';
 import S124 from '../screens/supplier/DashboardScreen';
+import S124a from '../screens/supplier/primary-orders/PrimaryOrdersScreen';
 import S125 from '../screens/vendor/DashboardScreen';
 
 export const screenRegistry = {
@@ -269,5 +270,6 @@ export const screenRegistry = {
   'warehouseManager:warehouse-inventory': S122,
   'zoneSM:dashboard': S123,
   'supplier:dashboard': S124,
+  'supplier:primary-orders': S124a,
   'vendor:dashboard': S125,
 };

@@ -3,6 +3,8 @@ import { Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, Vie
 import apiClient from '../../../api/client';
 import Card from '../../../ui/Card';
 import Loader from '../../../ui/Loader';
+import { buildDistributorLookupParams, buildDistributorOptions as buildDistributorOptionsShared } from '../../../utils/distributorOptions';
+import { buildSecondaryOrderDocumentHtml, getInvoiceKey, mapReceiptsByInvoice } from '../../../utils/orderDocuments';
 
 const emptyLine = { productId: '', qty: '' };
 
@@ -112,6 +114,7 @@ export default function OrdersScreen() {
   const [err, setErr] = useState('');
   const [toast, setToast] = useState(null);
   const [previewRow, setPreviewRow] = useState(null);
+  const [receiptsByInvoice, setReceiptsByInvoice] = useState({});
   const [form, setForm] = useState({
     customerName: '',
     businessName: '',
@@ -140,12 +143,12 @@ export default function OrdersScreen() {
       return;
     }
 
-    const territoryName = String(me?.territoryName || me?.areaName || '').trim();
+    const distributorLookup = buildDistributorLookupParams(me);
 
     const [productsResult, ordersResult, distributorsResult] = await Promise.allSettled([
       apiClient.get('/products'),
       apiClient.get('/orders/my?limit=200'),
-      apiClient.get(`/users/distributors?territoryName=${encodeURIComponent(territoryName)}&limit=200`),
+      apiClient.get(`/users/distributors?${distributorLookup}`),
     ]);
 
     const productsData = productsResult.status === 'fulfilled' ? productsResult.value?.data?.products || [] : [];
@@ -166,12 +169,25 @@ export default function OrdersScreen() {
       notify('error', message);
     }
 
-    const distributorOptions = buildDistributorOptions(me, distributorUsers);
+    const distributorOptions = buildDistributorOptionsShared(me, distributorUsers);
+    const secondaryOrders = myOrders.filter((o) => String(o.saleType || '').toLowerCase() === 'secondary');
+
+    let nextReceiptsByInvoice = {};
+    const invoiceNos = secondaryOrders.map((o) => getInvoiceKey(o)).filter(Boolean);
+    if (invoiceNos.length) {
+      try {
+        const receiptsRes = await apiClient.get(`/receipts?linkedInvoiceNo=${encodeURIComponent(invoiceNos.join(','))}`);
+        nextReceiptsByInvoice = mapReceiptsByInvoice(receiptsRes?.data?.receipts || []);
+      } catch (receiptError) {
+        notify('error', receiptError?.message || 'Failed to load linked receipts');
+      }
+    }
 
     setUser(me);
     setProducts(productsData);
     setDistributors(distributorOptions);
-    setOrders(myOrders.filter((o) => String(o.saleType || '').toLowerCase() === 'secondary'));
+    setOrders(secondaryOrders);
+    setReceiptsByInvoice(nextReceiptsByInvoice);
     setForm((prev) => ({
       ...prev,
       customerName: prev.customerName || me?.fullName || '',
@@ -219,6 +235,7 @@ export default function OrdersScreen() {
         customerName: form.customerName,
         businessName: form.businessName,
         address: form.address,
+        territoryId: distributor.territoryId || user?.territoryId || '',
         territoryName: distributor.territoryName || user?.territoryName || user?.areaName || '',
         toDistributorId: distributor.userId || distributor._id,
         toWarehouseId: distributor.warehouseId || '',
@@ -253,7 +270,7 @@ export default function OrdersScreen() {
 
   const onInvoice = async (order) => {
     try {
-      const html = buildInvoiceHtml(order);
+      const html = buildSecondaryOrderDocumentHtml(order, receiptsByInvoice[getInvoiceKey(order)] || []);
       const url = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
       await Linking.openURL(url);
     } catch (error) {
@@ -283,7 +300,7 @@ export default function OrdersScreen() {
               onChange={(v) => setField('distributorId', v)}
               options={distributors.map((d) => ({
                 value: d._id,
-                label: d.businessName || d.fullName || d._id,
+                label: `${d.businessName || d.fullName || d._id} • ${d.territoryName || '-'} • ${d.warehouseName || d.warehouseId || '-'}`, 
               }))}
             />
           </View>
@@ -364,6 +381,7 @@ export default function OrdersScreen() {
               <Field label="Customer" value={previewRow?.customerName || previewRow?.fromEntityName || '-'} />
               <Field label="To" value={previewRow?.toWarehouseName || '-'} />
               <Field label="Date/Time" value={previewRow?.createdAt ? new Date(previewRow.createdAt).toLocaleString() : '-'} />
+              <Field label="Linked Receipts" value={String((receiptsByInvoice[getInvoiceKey(previewRow)] || []).length)} />
               <Field label="Address" value={previewRow?.address || '-'} />
               <Field label="Notes" value={previewRow?.notes || '-'} />
 

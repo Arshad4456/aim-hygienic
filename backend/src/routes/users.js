@@ -484,53 +484,52 @@ router.get("/", requireAuth, requireRole("admin", "distributor"), createModuleAc
 
 router.get("/distributors", requireAuth, async (req, res) => {
   try {
-    const territoryName = normalize(req.query.territoryName || req.user?.territoryName || req.user?.areaName);
     const territoryId = normalize(req.query.territoryId || req.user?.territoryId);
-    const requestedCompanyId = normalize(req.query.companyId || req.user?.companyId);
+    const territoryName = normalize(req.query.territoryName || req.user?.territoryName || req.user?.areaName);
+    const companyId = normalize(req.query.companyId || req.user?.companyId);
+    const companyName = normalize(req.query.companyName || req.user?.companyName);
     const limit = Math.min(Number(req.query.limit) || 100, 300);
 
     let users = [];
-    if (requestedCompanyId) {
-      users = await listTenantUsersByCompany(requestedCompanyId);
-    } else if (isSystemLevelAdmin(req.user?.role)) {
-      users = await listAllTenantUsers("Distributor");
-      const primaryUsers = await User.find({ role: /^(Distributor)$/i }).select("-passwordHash").lean();
-      users = [...users, ...primaryUsers];
+    if (companyId) {
+      const tenantUsers = await listTenantUsersByCompany(companyId);
+      users = tenantUsers.filter((item) => normalizeRole(item?.role) === 'distributor');
     } else {
-      users = await User.find({ role: /^(Distributor)$/i }).select("-passwordHash").lean();
+      const query = { role: "Distributor" };
+      users = await User.find(query)
+        .select("userId fullName businessName warehouseId warehouseName territoryId territoryName areaName regionName zoneName address shopAddress")
+        .sort({ fullName: 1 })
+        .limit(limit)
+        .lean();
+    }
+
+    if (territoryId || territoryName) {
+      users = users.filter((item) => {
+        const itemTerritoryId = normalize(item?.territoryId);
+        const itemTerritoryName = normalize(item?.territoryName || item?.areaName);
+        if (territoryId && itemTerritoryId && itemTerritoryId === territoryId) return true;
+        if (territoryName && itemTerritoryName && itemTerritoryName.toLowerCase() === territoryName.toLowerCase()) return true;
+        return false;
+      });
     }
 
     users = users
-      .filter((user) => normalizeRole(user.role) === "distributor")
-      .filter((user) => {
-        if (!territoryId && !territoryName) return true;
-        const matchesTerritoryId = territoryId && normalize(user.territoryId) === territoryId;
-        const matchesTerritoryName = territoryName && normalize(user.territoryName || user.areaName) === territoryName;
-        return Boolean(matchesTerritoryId || matchesTerritoryName);
-      })
-      .sort((a, b) => String(a.fullName || a.businessName || a.userId || "").localeCompare(String(b.fullName || b.businessName || b.userId || "")))
-      .slice(0, limit)
-      .map((user) => ({
-        _id: user._id,
-        userId: user.userId,
-        fullName: user.fullName,
-        businessName: user.businessName,
-        warehouseId: user.warehouseId,
-        warehouseName: user.warehouseName,
-        territoryId: user.territoryId,
-        territoryName: user.territoryName,
-        areaName: user.areaName,
-        address: user.address,
-        shopAddress: user.shopAddress,
-      }));
-
-    const seen = new Set();
-    users = users.filter((user) => {
-      const key = normalize(user.userId) || normalize(user._id);
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+      .map((item) => ({
+        userId: item?.userId || item?._id,
+        _id: item?._id,
+        fullName: item?.fullName || '',
+        businessName: item?.businessName || '',
+        warehouseId: item?.warehouseId || '',
+        warehouseName: item?.warehouseName || '',
+        territoryId: item?.territoryId || '',
+        territoryName: item?.territoryName || item?.areaName || '',
+        areaName: item?.areaName || '',
+        regionName: item?.regionName || '',
+        zoneName: item?.zoneName || '',
+        address: item?.address || item?.shopAddress || '',
+      }))
+      .sort((a, b) => String(a.fullName || a.businessName || '').localeCompare(String(b.fullName || b.businessName || '')))
+      .slice(0, limit);
 
     return res.json({ ok: true, users });
   } catch (e) {

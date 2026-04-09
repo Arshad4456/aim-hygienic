@@ -2,13 +2,11 @@ const crypto = require("crypto");
 const http = require("http");
 const https = require("https");
 const express = require("express");
-const mongoose = require("mongoose");
 const { requireAuth } = require("../utils/auth");
 const User = require("../models/User");
 const SalesOrder = require("../models/SalesOrder");
 const WarehouseTransaction = require("../models/WarehouseTransaction");
-const Company = require("../models/Company");
-const { toTenantDatabaseName } = require("../utils/tenantDatabases");
+const { getTenantModel } = require("../utils/tenantModels");
 
 const router = express.Router();
 const DEFAULT_PUBLIC_BASE_URL = "https://files.aimhygienics.com";
@@ -78,84 +76,61 @@ function normalizeBase64Payload(value) {
   if (raw.startsWith("data:") && idx >= 0) return raw.slice(idx + 1);
   return raw;
 }
-
-
-function normalizeText(value) {
+function normalizeId(value) {
   return String(value || "").trim();
 }
 
-function isSystemLevelAdmin(role) {
-  const normalized = normalizeText(role).toLowerCase();
-  return normalized === "admin" || normalized === "system admin";
-}
-
-async function resolveTenantDbName(companyId, companyName = "") {
-  const normalizedCompanyId = normalizeText(companyId);
-  const normalizedCompanyName = normalizeText(companyName);
-  if (!normalizedCompanyId && !normalizedCompanyName) return "";
-  if (normalizedCompanyName) return toTenantDatabaseName(normalizedCompanyName, normalizedCompanyId || "company");
-  const company = await Company.findOne({ companyId: normalizedCompanyId }).select("name companyId").lean();
-  return toTenantDatabaseName(company?.name || normalizedCompanyId, normalizedCompanyId || "company");
-}
-
-function getModelFromDb(db, baseModel) {
-  const modelName = baseModel.modelName;
-  const collectionName = baseModel.collection?.name;
-  return db.models[modelName] || db.model(modelName, baseModel.schema, collectionName);
-}
-
-function resolveScopedCompany(req, requestedCompanyId = "", requestedCompanyName = "") {
-  if (isSystemLevelAdmin(req.user?.role)) {
-    return {
-      companyId: normalizeText(requestedCompanyId || req.user?.companyId),
-      companyName: normalizeText(requestedCompanyName || req.user?.companyName),
-    };
+async function getScopedUploadModels(req) {
+  const companyId = firstNonEmpty(req.user?.companyId, req.body?.companyId, req.query?.companyId);
+  const companyName = firstNonEmpty(req.user?.companyName, req.body?.companyName, req.query?.companyName);
+  if (!companyId && !companyName) {
+    return { UserModel: User, SalesOrderModel: SalesOrder, WarehouseTransactionModel: WarehouseTransaction };
   }
+
+  const [TenantUser, TenantSalesOrder, TenantWarehouseTransaction] = await Promise.all([
+    getTenantModel(User, companyId, companyName),
+    getTenantModel(SalesOrder, companyId, companyName),
+    getTenantModel(WarehouseTransaction, companyId, companyName),
+  ]);
+
   return {
-    companyId: normalizeText(req.user?.companyId),
-    companyName: normalizeText(req.user?.companyName),
+    UserModel: TenantUser || User,
+    SalesOrderModel: TenantSalesOrder || SalesOrder,
+    WarehouseTransactionModel: TenantWarehouseTransaction || WarehouseTransaction,
   };
 }
 
-async function getScopedUploadModels(req, requestedCompanyId = "", requestedCompanyName = "") {
-  const scope = resolveScopedCompany(req, requestedCompanyId, requestedCompanyName);
-  if (!scope.companyId) {
-    return { UserModel: User, SalesOrderModel: SalesOrder, WarehouseTransactionModel: WarehouseTransaction, scope };
-  }
-  const dbName = await resolveTenantDbName(scope.companyId, scope.companyName);
-  if (!dbName) {
-    return { UserModel: User, SalesOrderModel: SalesOrder, WarehouseTransactionModel: WarehouseTransaction, scope };
-  }
-  const tenantDb = mongoose.connection.useDb(dbName, { useCache: true });
-  return {
-    UserModel: getModelFromDb(tenantDb, User),
-    SalesOrderModel: getModelFromDb(tenantDb, SalesOrder),
-    WarehouseTransactionModel: getModelFromDb(tenantDb, WarehouseTransaction),
-    scope,
-  };
+async function findScopedUserById(req, userId) {
+  const { UserModel } = await getScopedUploadModels(req);
+  let user = await UserModel.findById(userId).lean();
+  if (!user && UserModel !== User) user = await User.findById(userId).lean();
+  return user;
 }
 
-async function findScopedActor(req, UserModel = User) {
-  if (!req.user?.uid) return req.user || null;
-  try {
-    const tenantUser = await UserModel.findById(req.user.uid).lean();
-    if (tenantUser) return tenantUser;
-  } catch (_error) {}
-  try {
-    const primaryUser = await User.findById(req.user.uid).lean();
-    if (primaryUser) return primaryUser;
-  } catch (_error) {}
-  return req.user || null;
+async function findScopedSalesOrderById(req, orderId) {
+  const { SalesOrderModel } = await getScopedUploadModels(req);
+  let order = await SalesOrderModel.findById(orderId).lean();
+  if (!order && SalesOrderModel !== SalesOrder) order = await SalesOrder.findById(orderId).lean();
+  return order;
 }
+
+async function findScopedTransactionById(req, transactionId) {
+  const { WarehouseTransactionModel } = await getScopedUploadModels(req);
+  let transaction = await WarehouseTransactionModel.findById(transactionId).lean();
+  if (!transaction && WarehouseTransactionModel !== WarehouseTransaction) transaction = await WarehouseTransaction.findById(transactionId).lean();
+  return transaction;
+}
+
 
 async function validateSupplierTransactionPodRequest(req, transactionId) {
-  if (String(req.user?.role || "").trim().toLowerCase() !== "supplier") {
+  if (String(req.user?.role || "") !== "Supplier") {
     return { status: 403, body: { ok: false, message: "Only Supplier can request POD upload URLs" } };
   }
 
-  const { UserModel, WarehouseTransactionModel } = await getScopedUploadModels(req, req.body?.companyId || req.query?.companyId, req.body?.companyName || req.query?.companyName);
-  const me = await findScopedActor(req, UserModel);
-  const transaction = await WarehouseTransactionModel.findById(transactionId).lean();
+  const me = await findScopedUserById(req, req.user.uid);
+  if (!me) return { status: 404, body: { ok: false, message: "User not found" } };
+
+  const transaction = await findScopedTransactionById(req, transactionId);
   if (!transaction) return { status: 404, body: { ok: false, message: "Primary order not found" } };
   if (String(transaction.transactionType || "").toUpperCase() !== "SALE_STOCK") {
     return { status: 400, body: { ok: false, message: "POD upload URL is only available for primary sale requests" } };
@@ -165,10 +140,10 @@ async function validateSupplierTransactionPodRequest(req, transactionId) {
     return { status: 400, body: { ok: false, message: "POD upload is allowed only after approval" } };
   }
 
-  const allowedSupplierIds = [normalizeText(me?.userId), normalizeText(me?.supplierId), normalizeText(me?._id), normalizeText(req.user?.uid)].filter(Boolean);
-  const allowedSupplierNames = [normalizeText(me?.supplierName), normalizeText(me?.businessName), normalizeText(me?.fullName)].filter(Boolean);
-  const assignedSupplierId = normalizeText(transaction.supplierId);
-  const assignedSupplierName = normalizeText(transaction.supplierName);
+  const allowedSupplierIds = [normalizeId(me.userId), normalizeId(me.supplierId), normalizeId(me._id)].filter(Boolean);
+  const allowedSupplierNames = [normalizeId(me.supplierName), normalizeId(me.businessName), normalizeId(me.fullName)].filter(Boolean);
+  const assignedSupplierId = normalizeId(transaction.supplierId);
+  const assignedSupplierName = normalizeId(transaction.supplierName);
   const isAllowed = allowedSupplierIds.includes(assignedSupplierId) || allowedSupplierNames.includes(assignedSupplierName);
   if (!isAllowed) {
     return { status: 403, body: { ok: false, message: "This primary order is not assigned to you" } };
@@ -178,30 +153,25 @@ async function validateSupplierTransactionPodRequest(req, transactionId) {
 }
 
 async function validateSalesmanPodRequest(req, orderId) {
-  if (String(req.user?.role || "").trim().toLowerCase() !== "salesman") {
+  if (String(req.user?.role || "") !== "Salesman") {
     return { status: 403, body: { ok: false, message: "Only Salesman can request POD upload URLs" } };
   }
 
-  const { UserModel, SalesOrderModel } = await getScopedUploadModels(req, req.body?.companyId || req.query?.companyId, req.body?.companyName || req.query?.companyName);
-  const me = await findScopedActor(req, UserModel);
-  const fieldId = normalizeText(me?.fieldId || me?.field_id || req.user?.fieldId || req.user?.field_id);
-  const salesmanIds = Array.from(new Set([
-    normalizeText(me?.userId),
-    normalizeText(me?.salesmanId),
-    normalizeText(req.user?.userId),
-    normalizeText(req.user?.salesmanId),
-    normalizeText(req.user?.uid),
-  ].filter(Boolean)));
-  if (!fieldId && !salesmanIds.length) return { status: 400, body: { ok: false, message: "Salesman field not configured" } };
+  const me = await findScopedUserById(req, req.user.uid);
+  if (!me) return { status: 404, body: { ok: false, message: "User not found" } };
 
-  const order = await SalesOrderModel.findById(orderId).lean();
+  const order = await findScopedSalesOrderById(req, orderId);
   if (!order) return { status: 404, body: { ok: false, message: "Order not found" } };
-  const inField = fieldId && normalizeText(order.fieldId) === fieldId;
-  const assignedToSalesman = salesmanIds.length && salesmanIds.includes(normalizeText(order.salesmanId));
-  if (!inField && !assignedToSalesman) {
+
+  const fieldId = normalizeId(me?.fieldId);
+  const salesmanIds = [normalizeId(me?.userId), normalizeId(me?.salesmanId), normalizeId(me?._id)].filter(Boolean);
+  const matchesField = fieldId && normalizeId(order.fieldId) === fieldId;
+  const matchesSalesman = salesmanIds.includes(normalizeId(order.salesmanId)) || salesmanIds.includes(normalizeId(order.assignedSalesmanId));
+  if (!matchesField && !matchesSalesman) {
+    if (!fieldId) return { status: 400, body: { ok: false, message: "Salesman field not configured" } };
     return { status: 403, body: { ok: false, message: "Order is outside your field" } };
   }
-  if (order.status !== "dispatched") {
+  if (String(order.status || '').toLowerCase() !== "dispatched") {
     return { status: 400, body: { ok: false, message: "POD upload is allowed only for dispatched orders" } };
   }
 

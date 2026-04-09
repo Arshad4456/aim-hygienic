@@ -3,6 +3,7 @@ import { Alert, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, 
 import apiClient from '../../../api/client';
 import Card from '../../../ui/Card';
 import Loader from '../../../ui/Loader';
+import { buildSecondaryOrderDocumentHtml, getInvoiceKey, mapReceiptsByInvoice } from '../../../utils/orderDocuments';
 
 function toStatusLabel(status) {
   return String(status || 'pending').toUpperCase();
@@ -72,6 +73,7 @@ export default function OrdersScreen() {
   const [toast, setToast] = useState(null);
   const [err, setErr] = useState('');
   const [previewRow, setPreviewRow] = useState(null);
+  const [receiptsByInvoice, setReceiptsByInvoice] = useState({});
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({ customerName: '', address: '', notes: '' });
 
@@ -85,7 +87,21 @@ export default function OrdersScreen() {
     setErr('');
     try {
       const res = await apiClient.get('/orders/secondary/distributor?limit=500');
-      setOrders(res?.data?.orders || []);
+      const nextOrders = res?.data?.orders || [];
+      setOrders(nextOrders);
+
+      const invoiceNos = nextOrders.map((item) => getInvoiceKey(item)).filter(Boolean);
+      if (invoiceNos.length) {
+        try {
+          const receiptsRes = await apiClient.get(`/receipts?linkedInvoiceNo=${encodeURIComponent(invoiceNos.join(','))}`);
+          setReceiptsByInvoice(mapReceiptsByInvoice(receiptsRes?.data?.receipts || []));
+        } catch (receiptError) {
+          setReceiptsByInvoice({});
+          notify('error', receiptError?.message || 'Failed to load linked receipts');
+        }
+      } else {
+        setReceiptsByInvoice({});
+      }
     } catch (error) {
       const message = error?.message || 'Failed to load secondary orders';
       setErr(message);
@@ -174,7 +190,7 @@ export default function OrdersScreen() {
 
   const onInvoice = async (order) => {
     try {
-      const html = buildInvoiceHtml(order);
+      const html = buildSecondaryOrderDocumentHtml(order, receiptsByInvoice[getInvoiceKey(order)] || []);
       const url = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
       await Linking.openURL(url);
     } catch (error) {
@@ -271,6 +287,7 @@ export default function OrdersScreen() {
               <Field label="Territory" value={previewRow?.territory || previewRow?.territoryName || previewRow?.areaName || '-'} />
               {editing ? <InputField label="Customer Name" value={draft.customerName} onChangeText={(v) => setDraft((s) => ({ ...s, customerName: v }))} /> : <Field label="Customer Name" value={draft.customerName || '-'} />}
               <Field label="Date/Time (read-only)" value={previewRow?.createdAt ? new Date(previewRow.createdAt).toLocaleString() : '-'} />
+              <Field label="Linked Receipts" value={String((receiptsByInvoice[getInvoiceKey(previewRow)] || []).length)} />
               {editing ? <InputField multiline label="Address" value={draft.address} onChangeText={(v) => setDraft((s) => ({ ...s, address: v }))} /> : <Field label="Address" value={draft.address || '-'} />}
               {editing ? <InputField multiline label="Notes" value={draft.notes} onChangeText={(v) => setDraft((s) => ({ ...s, notes: v }))} /> : <Field label="Notes" value={draft.notes || '-'} />}
               {editing ? <ActionBtn label={saving ? 'Saving...' : 'Save'} onPress={onSaveEdit} disabled={saving} /> : null}
