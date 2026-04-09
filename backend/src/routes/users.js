@@ -485,20 +485,52 @@ router.get("/", requireAuth, requireRole("admin", "distributor"), createModuleAc
 router.get("/distributors", requireAuth, async (req, res) => {
   try {
     const territoryName = normalize(req.query.territoryName || req.user?.territoryName || req.user?.areaName);
+    const territoryId = normalize(req.query.territoryId || req.user?.territoryId);
+    const requestedCompanyId = normalize(req.query.companyId || req.user?.companyId);
     const limit = Math.min(Number(req.query.limit) || 100, 300);
-    const query = { role: "Distributor" };
-    if (territoryName) {
-      query.$or = [
-        { territoryName },
-        { areaName: territoryName },
-      ];
+
+    let users = [];
+    if (requestedCompanyId) {
+      users = await listTenantUsersByCompany(requestedCompanyId);
+    } else if (isSystemLevelAdmin(req.user?.role)) {
+      users = await listAllTenantUsers("Distributor");
+      const primaryUsers = await User.find({ role: /^(Distributor)$/i }).select("-passwordHash").lean();
+      users = [...users, ...primaryUsers];
+    } else {
+      users = await User.find({ role: /^(Distributor)$/i }).select("-passwordHash").lean();
     }
 
-    const users = await User.find(query)
-      .select("userId fullName businessName warehouseId warehouseName territoryName areaName address shopAddress")
-      .sort({ fullName: 1 })
-      .limit(limit)
-      .lean();
+    users = users
+      .filter((user) => normalizeRole(user.role) === "distributor")
+      .filter((user) => {
+        if (!territoryId && !territoryName) return true;
+        const matchesTerritoryId = territoryId && normalize(user.territoryId) === territoryId;
+        const matchesTerritoryName = territoryName && normalize(user.territoryName || user.areaName) === territoryName;
+        return Boolean(matchesTerritoryId || matchesTerritoryName);
+      })
+      .sort((a, b) => String(a.fullName || a.businessName || a.userId || "").localeCompare(String(b.fullName || b.businessName || b.userId || "")))
+      .slice(0, limit)
+      .map((user) => ({
+        _id: user._id,
+        userId: user.userId,
+        fullName: user.fullName,
+        businessName: user.businessName,
+        warehouseId: user.warehouseId,
+        warehouseName: user.warehouseName,
+        territoryId: user.territoryId,
+        territoryName: user.territoryName,
+        areaName: user.areaName,
+        address: user.address,
+        shopAddress: user.shopAddress,
+      }));
+
+    const seen = new Set();
+    users = users.filter((user) => {
+      const key = normalize(user.userId) || normalize(user._id);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 
     return res.json({ ok: true, users });
   } catch (e) {

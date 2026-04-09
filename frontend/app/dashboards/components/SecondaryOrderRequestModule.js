@@ -81,10 +81,14 @@ export default function SecondaryOrderRequestModule({ roleKey, links, title }) {
     }
 
     const territoryName = String(me?.territoryName || me?.areaName || "").trim();
+    const territoryId = String(me?.territoryId || "").trim();
+    const distributorQuery = new URLSearchParams({ limit: "200" });
+    if (territoryName) distributorQuery.set("territoryName", territoryName);
+    if (territoryId) distributorQuery.set("territoryId", territoryId);
     const [productsResult, ordersResult, distributorsResult] = await Promise.allSettled([
       apiFetch("/products"),
       apiFetch("/orders/my?limit=200"),
-      apiFetch(`/users/distributors?territoryName=${encodeURIComponent(territoryName)}&limit=200`),
+      apiFetch(`/users/distributors?${distributorQuery.toString()}`),
     ]);
 
     const productsData = productsResult.status === "fulfilled" ? (productsResult.value?.products || []) : [];
