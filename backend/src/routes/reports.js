@@ -28,9 +28,13 @@ const VehicleMaintenance = require("../models/VehicleMaintenance");
 const { getLocationModelsForDb } = require("../modules/location/models");
 const { toTenantDatabaseName } = require("../utils/tenantDatabases");
 const { buildMasterReport, buildFocusedReport } = require("../services/reportsMaster");
-const { createModuleAccessGuard } = require("../utils/moduleAccess");
+const { createModuleAccessGuard, normalizeRole: normalizeModuleAccessRole } = require("../utils/moduleAccess");
 
 const router = express.Router();
+
+function reportsModuleKey(req) {
+  return normalizeModuleAccessRole(req.user?.role) === "distributor" ? "distributor.reports" : "reports";
+}
 
 function safeNumber(value) {
   return Number.isFinite(Number(value)) ? Number(value) : 0;
@@ -216,7 +220,7 @@ async function getScopedReportModels(req, requestedCompanyId = "", requestedComp
 }
 
 
-router.get("/master", requireAuth, createModuleAccessGuard("reports"), async (req, res) => {
+router.get("/master", requireAuth, createModuleAccessGuard((req) => reportsModuleKey(req)), async (req, res) => {
   try {
     const report = await buildMasterReport(req, {
       period: normalizeReportPeriod(req.query?.period),
@@ -230,7 +234,7 @@ router.get("/master", requireAuth, createModuleAccessGuard("reports"), async (re
   }
 });
 
-router.get("/focus/:moduleKey", requireAuth, createModuleAccessGuard("reports"), async (req, res) => {
+router.get("/focus/:moduleKey", requireAuth, createModuleAccessGuard((req) => reportsModuleKey(req)), async (req, res) => {
   try {
     const report = await buildFocusedReport(req, req.params.moduleKey, {
       period: normalizeReportPeriod(req.query?.period),
@@ -244,7 +248,7 @@ router.get("/focus/:moduleKey", requireAuth, createModuleAccessGuard("reports"),
   }
 });
 
-router.get("/overview", requireAuth, createModuleAccessGuard("reports"), async (req, res) => {
+router.get("/overview", requireAuth, createModuleAccessGuard((req) => reportsModuleKey(req)), async (req, res) => {
   try {
     const { InventoryMovementModel, ExpenseModel, UserModel, ProductModel, WarehouseModel, StockTransferModel } = await getScopedReportModels(req, req.query?.companyId, req.query?.companyName);
     const [salesAgg] = await InventoryMovementModel.aggregate([
@@ -303,7 +307,7 @@ router.get("/overview", requireAuth, createModuleAccessGuard("reports"), async (
   }
 });
 
-router.get("/builder", requireAuth, createModuleAccessGuard("reports"), async (req, res) => {
+router.get("/builder", requireAuth, createModuleAccessGuard((req) => reportsModuleKey(req)), async (req, res) => {
   try {
     const { InventoryMovementModel, ExpenseModel, StockTransferModel } = await getScopedReportModels(req, req.query?.companyId, req.query?.companyName);
     const [salesAgg] = await InventoryMovementModel.aggregate([
@@ -406,7 +410,7 @@ router.get("/builder", requireAuth, createModuleAccessGuard("reports"), async (r
   }
 });
 
-router.get("/sales", requireAuth, createModuleAccessGuard("reports"), async (req, res) => {
+router.get("/sales", requireAuth, createModuleAccessGuard((req) => reportsModuleKey(req)), async (req, res) => {
   try {
     const { InventoryMovementModel } = await getScopedReportModels(req, req.query?.companyId, req.query?.companyName);
     const rows = await InventoryMovementModel.aggregate([
@@ -436,7 +440,7 @@ router.get("/sales", requireAuth, createModuleAccessGuard("reports"), async (req
   }
 });
 
-router.get("/inventory", requireAuth, createModuleAccessGuard("reports"), async (req, res) => {
+router.get("/inventory", requireAuth, createModuleAccessGuard((req) => reportsModuleKey(req)), async (req, res) => {
   try {
     const { InventoryMovementModel, ProductModel } = await getScopedReportModels(req, req.query?.companyId, req.query?.companyName);
     const inTypes = ["PURCHASE_IN", "TRANSFER_IN", "RETURN_IN"];
@@ -482,7 +486,7 @@ router.get("/inventory", requireAuth, createModuleAccessGuard("reports"), async 
   }
 });
 
-router.get("/finance", requireAuth, createModuleAccessGuard("reports"), async (req, res) => {
+router.get("/finance", requireAuth, createModuleAccessGuard((req) => reportsModuleKey(req)), async (req, res) => {
   try {
     const { ExpenseModel, AccountModel } = await getScopedFinanceModels(req, req.query?.companyId, req.query?.companyName);
     const [expenseTotals] = await ExpenseModel.aggregate([
@@ -533,7 +537,7 @@ router.get("/finance", requireAuth, createModuleAccessGuard("reports"), async (r
   }
 });
 
-router.get("/hr", requireAuth, createModuleAccessGuard("reports"), async (req, res) => {
+router.get("/hr", requireAuth, createModuleAccessGuard((req) => reportsModuleKey(req)), async (req, res) => {
   try {
     const { UserModel } = await getScopedReportModels(req, req.query?.companyId, req.query?.companyName);
     const roleCounts = await UserModel.aggregate([
@@ -558,7 +562,7 @@ router.get("/hr", requireAuth, createModuleAccessGuard("reports"), async (req, r
   }
 });
 
-router.get("/logistics", requireAuth, createModuleAccessGuard("reports"), async (req, res) => {
+router.get("/logistics", requireAuth, createModuleAccessGuard((req) => reportsModuleKey(req)), async (req, res) => {
   try {
     const { StockTransferModel, VehicleModel } = await getScopedProcurementModels(req, req.query?.companyId, req.query?.companyName);
     const transferCounts = await StockTransferModel.aggregate([
@@ -576,7 +580,7 @@ router.get("/logistics", requireAuth, createModuleAccessGuard("reports"), async 
   }
 });
 
-router.get("/compliance", requireAuth, createModuleAccessGuard("reports"), async (req, res) => {
+router.get("/compliance", requireAuth, createModuleAccessGuard((req) => reportsModuleKey(req)), async (req, res) => {
   try {
     const { InventoryMovementModel, MessageModel, ReturnClaimModel } = await getScopedProcurementModels(req, req.query?.companyId, req.query?.companyName);
     const adjustmentCount = await InventoryMovementModel.countDocuments({ movementType: "ADJUSTMENT" });
@@ -594,7 +598,7 @@ router.get("/compliance", requireAuth, createModuleAccessGuard("reports"), async
   }
 });
 
-router.get("/procurement", requireAuth, createModuleAccessGuard("reports"), async (req, res) => {
+router.get("/procurement", requireAuth, createModuleAccessGuard((req) => reportsModuleKey(req)), async (req, res) => {
   try {
     const { InventoryMovementModel, UserModel } = await getScopedProcurementModels(req, req.query?.companyId, req.query?.companyName);
     const startDate = new Date();

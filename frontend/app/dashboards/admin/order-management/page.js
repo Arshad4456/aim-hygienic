@@ -210,6 +210,7 @@ export default function OrderManagementModulePage() {
   const [saving, setSaving] = useState(false);
   const [toastState, setToastState] = useState(null);
   const [previewRequest, setPreviewRequest] = useState(null);
+  const [previewIntent, setPreviewIntent] = useState("");
   const [returnStockMode, setReturnStockMode] = useState("brand");
   const [userWarehouseId, setUserWarehouseId] = useState("");
   const [moduleRules, setModuleRules] = useState([]);
@@ -888,15 +889,30 @@ export default function OrderManagementModulePage() {
     }
   }
 
-  async function updateSaleRequestStatus(id, status) {
+  async function updateSaleRequestStatus(id, status, options = {}) {
+    const { silent = false } = options || {};
     try {
       const mappedStatus = mapRequestStatusForApi(status);
       await apiFetch(`/inventory/transactions/${id}/request-status`, { method: "PUT", body: { status: mappedStatus } });
-      notify("success", `Request ${String(mapRequestStatusForApi(status) || "").toLowerCase()} successfully.`);
+      if (!silent) notify("success", `Request ${String(mapRequestStatusForApi(status) || "").toLowerCase()} successfully.`);
       await loadData();
+      return true;
     } catch (e) {
-      notify("error", e.message || "Failed to update request status");
+      if (!silent) notify("error", e.message || "Failed to update request status");
+      throw e;
     }
+  }
+
+  function handlePrimaryApprove(row) {
+    const hasAssignment = Boolean(row?.supplierId && row?.dispatchFromWarehouseId);
+    if (!row?._id) return;
+    if (!hasAssignment) {
+      setPreviewRequest(row);
+      setPreviewIntent("approve");
+      notify("info", "Select supplier and dispatch warehouse, then click Save & Approve.");
+      return;
+    }
+    updateSaleRequestStatus(row._id, "APPROVED");
   }
 
   async function markSecondaryRead(id) {
@@ -1148,11 +1164,11 @@ export default function OrderManagementModulePage() {
               <RequestSaleStocksTable
                 rows={saleOrderRequests}
                 onOpen={markRequestRead}
-                onApprove={(id) => updateSaleRequestStatus(id, "APPROVED")}
+                onApprove={handlePrimaryApprove}
                 onReject={(id) => updateSaleRequestStatus(id, "REJECTED")}
                 onDispatch={(id) => updateSaleRequestStatus(id, "DISPATCHED")}
                 onDelivered={(id) => updateSaleRequestStatus(id, "DELIVERED")}
-                onPreview={(row) => setPreviewRequest(row)}
+                onPreview={(row) => { setPreviewIntent(""); setPreviewRequest(row); }}
               />
             </section>
           ) : null}
@@ -1165,7 +1181,7 @@ export default function OrderManagementModulePage() {
                 onOpen={markRequestRead}
                 onApprove={(id) => updateSaleRequestStatus(id, "APPROVED")}
                 onReject={(id) => updateSaleRequestStatus(id, "REJECTED")}
-                onPreview={(row) => setPreviewRequest(row)}
+                onPreview={(row) => { setPreviewIntent(""); setPreviewRequest(row); }}
               />
             </section>
           ) : null}
@@ -1176,7 +1192,7 @@ export default function OrderManagementModulePage() {
               <SecondaryOrderRequestTable
                 rows={secondaryOrderRequests}
                 onOpen={markSecondaryRead}
-                onPreview={(row) => setPreviewRequest(row)}
+                onPreview={(row) => { setPreviewIntent(""); setPreviewRequest(row); }}
                 onReject={(id) => updateSecondaryStatus(id, "rejected")}
                 onApprove={(id) => updateSecondaryStatus(id, "approved")}
                 onDispatched={(id) => updateSecondaryStatus(id, "dispatched")}
@@ -1199,7 +1215,20 @@ export default function OrderManagementModulePage() {
           </>
         ) : null}
 
-        <RequestPreviewModal row={previewRequest} products={products} users={users} warehouses={warehouses} onClose={() => setPreviewRequest(null)} onUpdated={loadData} notify={notify} />
+        <RequestPreviewModal
+          row={previewRequest}
+          initialIntent={previewIntent}
+          products={products}
+          users={users}
+          warehouses={warehouses}
+          onClose={() => {
+            setPreviewRequest(null);
+            setPreviewIntent("");
+          }}
+          onUpdated={loadData}
+          onApproveRequest={(id) => updateSaleRequestStatus(id, "APPROVED", { silent: true })}
+          notify={notify}
+        />
       </div>
     </ShellComponent>
   );
@@ -1269,7 +1298,7 @@ function RequestSaleStocksTable({ rows, onOpen, onApprove, onReject, onDispatch,
                 <td className="p-2">{status}</td>
                 <td className="p-2">{hasPod ? <span className="rounded bg-emerald-100 px-2 py-1 text-xs text-emerald-800">Uploaded</span> : <span className="rounded bg-zinc-100 px-2 py-1 text-xs text-zinc-600">Pending</span>}</td>
                 <td className="p-2">{unread ? <span className="rounded bg-amber-100 px-2 py-1 text-xs text-amber-800">Unread</span> : "Read"}</td>
-                <td className="p-2"><div className="flex flex-wrap gap-2"><button className="rounded border px-2 py-1" onClick={() => onOpen(r._id)}>Open</button><button className="rounded border border-emerald-300 px-2 py-1 text-emerald-700" onClick={() => onPreview(r)}>Preview</button><button className="rounded border border-red-300 px-2 py-1 text-red-700" onClick={() => onReject(r._id)}>Reject</button><button className="rounded border border-blue-300 px-2 py-1 text-blue-700 disabled:cursor-not-allowed disabled:opacity-50" disabled={!hasAssignment} title={!hasAssignment ? "Assign supplier and dispatch warehouse first." : ""} onClick={() => onApprove(r._id)}>Approve</button><button className="rounded border border-indigo-300 px-2 py-1 text-indigo-700 disabled:cursor-not-allowed disabled:opacity-50" disabled={!hasPod} title={!hasPod ? "Supplier POD is required before dispatch." : ""} onClick={() => onDispatch(r._id)}>Dispatch</button><button className="rounded border border-emerald-500 px-2 py-1 text-emerald-800 disabled:cursor-not-allowed disabled:opacity-50" disabled={!hasPod} title={!hasPod ? "Supplier POD is required before delivered status." : ""} onClick={() => onDelivered(r._id)}>Delivered</button></div></td>
+                <td className="p-2"><div className="flex flex-wrap gap-2"><button className="rounded border px-2 py-1" onClick={() => onOpen(r._id)}>Open</button><button className="rounded border border-emerald-300 px-2 py-1 text-emerald-700" onClick={() => onPreview(r)}>Preview</button><button className="rounded border border-red-300 px-2 py-1 text-red-700" onClick={() => onReject(r._id)}>Reject</button><button className="rounded border border-blue-300 px-2 py-1 text-blue-700" title={!hasAssignment ? "Choose supplier and dispatch warehouse before final approval." : "Approve primary request"} onClick={() => onApprove(r)}>{hasAssignment ? "Approve" : "Approve / Assign"}</button><button className="rounded border border-indigo-300 px-2 py-1 text-indigo-700 disabled:cursor-not-allowed disabled:opacity-50" disabled={!hasPod} title={!hasPod ? "Supplier POD is required before dispatch." : ""} onClick={() => onDispatch(r._id)}>Dispatch</button><button className="rounded border border-emerald-500 px-2 py-1 text-emerald-800 disabled:cursor-not-allowed disabled:opacity-50" disabled={!hasPod} title={!hasPod ? "Supplier POD is required before delivered status." : ""} onClick={() => onDelivered(r._id)}>Delivered</button></div></td>
               </tr>
             );
           })}
@@ -1386,7 +1415,7 @@ function SecondaryOrderLedgerTable({ rows, onInvoice, onDelete, canDelete = true
   );
 }
 
-function RequestPreviewModal({ row, products, users = [], warehouses = [], onClose, onUpdated, notify }) {
+function RequestPreviewModal({ row, initialIntent = "", products, users = [], warehouses = [], onClose, onUpdated, onApproveRequest, notify }) {
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState(null);
 
@@ -1440,8 +1469,9 @@ function RequestPreviewModal({ row, products, users = [], warehouses = [], onClo
   const currentStatus = normalizeRequestStatus(row.requestStatus || row.status || "PENDING");
   const canEditPending = !isSecondaryOrderRow && currentStatus === "PENDING";
   const canAssignPrimary = isPrimaryRequestRow && !["REJECTED", "DELIVERED"].includes(currentStatus);
+  const canApprovePrimary = isPrimaryRequestRow && currentStatus === "PENDING";
   const supportsPod = isSecondaryOrderRow || isPrimaryRequestRow;
-  const supplierOptions = users.filter((user) => user.role === "Supplier").map((user) => ({ value: user._id, label: user.businessName || user.fullName || user.userId || "Supplier" }));
+  const supplierOptions = users.filter((user) => String(user.role || "").trim().toLowerCase() === "supplier").map((user) => ({ value: user._id, label: user.businessName || user.fullName || user.userId || "Supplier" }));
   const dispatchWarehouseOptions = warehouses.map((warehouse) => ({ value: warehouse._id, label: warehouse.name || warehouse.warehouseId || "Warehouse" }));
 
   function setDraftField(key, value) {
@@ -1461,9 +1491,42 @@ function RequestPreviewModal({ row, products, users = [], warehouses = [], onClo
   }
 
 
-  async function saveSupplierAssignment() {
+  async function saveSupplierAssignment(options = {}) {
+    const { closeAfterSave = true, silent = false } = options || {};
     if (!canAssignPrimary) {
       notify("info", "Supplier assignment is not available for this request.");
+      return false;
+    }
+    if (!draft.supplierId || !draft.dispatchFromWarehouseId) {
+      notify("info", "Select supplier and dispatch warehouse first.");
+      return false;
+    }
+    setSaving(true);
+    try {
+      await apiFetch(`/inventory/transactions/${row._id}/assignment`, {
+        method: "PUT",
+        body: {
+          supplierId: draft.supplierId,
+          supplierName: draft.supplierName,
+          dispatchFromWarehouseId: draft.dispatchFromWarehouseId,
+          dispatchFromWarehouseName: draft.dispatchFromWarehouseName,
+        },
+      });
+      if (!silent) notify("success", "Supplier assignment saved successfully.");
+      await onUpdated?.();
+      if (closeAfterSave) onClose();
+      return true;
+    } catch (e) {
+      if (!silent) notify("error", e.message || "Failed to save supplier assignment");
+      throw e;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveAndApprovePrimary() {
+    if (!canApprovePrimary) {
+      notify("info", "Approve is only available for pending primary requests.");
       return;
     }
     if (!draft.supplierId || !draft.dispatchFromWarehouseId) {
@@ -1481,11 +1544,12 @@ function RequestPreviewModal({ row, products, users = [], warehouses = [], onClo
           dispatchFromWarehouseName: draft.dispatchFromWarehouseName,
         },
       });
-      notify("success", "Supplier assignment saved successfully.");
+      await onApproveRequest?.(row._id);
+      notify("success", "Primary order approved successfully.");
       await onUpdated?.();
       onClose();
     } catch (e) {
-      notify("error", e.message || "Failed to save supplier assignment");
+      notify("error", e.message || "Failed to approve primary order");
     } finally {
       setSaving(false);
     }
@@ -1592,6 +1656,12 @@ function RequestPreviewModal({ row, products, users = [], warehouses = [], onClo
             <PreviewField label="Status" value={currentStatus} />
           </div>
 
+          {initialIntent === "approve" && isPrimaryRequestRow ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+              Approve flow: choose the supplier from this company and select the dispatch warehouse, then click <strong>Save &amp; Approve</strong>.
+            </div>
+          ) : null}
+
           {supportsPod ? (
             <div className="rounded-xl border p-3">
               <div className="text-sm font-semibold">Proof of Delivery</div>
@@ -1656,8 +1726,13 @@ function RequestPreviewModal({ row, products, users = [], warehouses = [], onClo
 
           <div className="flex flex-wrap justify-end gap-3">
             {canAssignPrimary ? (
-              <button type="button" onClick={saveSupplierAssignment} disabled={saving} className="rounded-xl border border-blue-300 px-4 py-2 text-blue-700">
+              <button type="button" onClick={() => saveSupplierAssignment()} disabled={saving} className="rounded-xl border border-blue-300 px-4 py-2 text-blue-700">
                 {saving ? "Saving..." : "Save Supplier Assignment"}
+              </button>
+            ) : null}
+            {canApprovePrimary ? (
+              <button type="button" onClick={saveAndApprovePrimary} disabled={saving} className="rounded-xl border border-emerald-300 px-4 py-2 text-emerald-700">
+                {saving ? "Saving..." : "Save & Approve"}
               </button>
             ) : null}
             <button type="button" onClick={updateRequest} disabled={saving || !canEditPending} className="rounded-xl bg-emerald-600 text-white px-4 py-2">{canEditPending ? (saving ? "Updating..." : "Update") : "Update disabled (not pending)"}</button>

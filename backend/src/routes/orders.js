@@ -14,8 +14,14 @@ function normalizeRole(role) {
   return String(role || "").trim().toLowerCase();
 }
 
-function moduleKeyForSaleType(saleType) {
-  return String(saleType || "").trim().toLowerCase() === "secondary"
+function moduleKeyForSaleType(saleType, role = "") {
+  const normalizedSaleType = String(saleType || "").trim().toLowerCase();
+  const normalizedRole = normalizeRole(role);
+  if (normalizedRole === "distributor") {
+    if (normalizedSaleType === "secondary") return "distributor.secondary-order";
+    return "distributor.primary-order";
+  }
+  return normalizedSaleType === "secondary"
     ? "order-management.secondary"
     : "order-management.primary";
 }
@@ -24,7 +30,7 @@ async function ensureOrderSectionAccess(user, saleType) {
   return isModuleSectionAllowed({
     companyId: user?.companyId,
     role: user?.role,
-    key: moduleKeyForSaleType(saleType),
+    key: moduleKeyForSaleType(saleType, user?.role),
   });
 }
 

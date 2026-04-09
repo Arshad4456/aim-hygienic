@@ -8,6 +8,7 @@ const User = require("../models/User");
 const WarehouseTransaction = require("../models/WarehouseTransaction");
 const Company = require("../models/Company");
 const { requireAuth, requireRole } = require("../utils/auth");
+const { isModuleSectionAllowed } = require("../utils/moduleAccess");
 const { toTenantDatabaseName } = require("../utils/tenantDatabases");
 
 const router = express.Router();
@@ -57,6 +58,15 @@ function normalizeRole(role) {
 function isSystemLevelAdmin(role) {
   const normalized = normalizeRole(role);
   return normalized === "admin" || normalized === "system admin";
+}
+
+async function ensureDistributorReceiptsAccess(user) {
+  if (normalizeRole(user?.role) !== "distributor") return true;
+  return isModuleSectionAllowed({
+    companyId: user?.companyId,
+    role: user?.role,
+    key: "distributor.receipts",
+  });
 }
 
 function isAdminRole(role) {
@@ -112,6 +122,9 @@ router.post("/", requireAuth, async (req, res) => {
     );
     const body = req.body || {};
     const role = normalizeRole(req.user?.role);
+    if (!(await ensureDistributorReceiptsAccess(req.user))) {
+      return res.status(403).json({ ok: false, message: "Distributor receipts module is locked for this role" });
+    }
     if (!canAccessOwn(role) && !isAdminRole(role)) {
       return res.status(403).json({ ok: false, message: "Only payer roles can create receipts" });
     }
@@ -171,6 +184,9 @@ router.get("/", requireAuth, async (req, res) => {
   try {
     const { ReceiptModel, UserModel, WarehouseTransactionModel } = await getScopedReceiptModels(req, req.query?.companyId, req.query?.companyName);
     const role = normalizeRole(req.user?.role);
+    if (!(await ensureDistributorReceiptsAccess(req.user))) {
+      return res.status(403).json({ ok: false, message: "Distributor receipts module is locked for this role" });
+    }
     const query = {};
     const linkedInvoiceNos = splitCsvValues(req.query.linkedInvoiceNo);
 

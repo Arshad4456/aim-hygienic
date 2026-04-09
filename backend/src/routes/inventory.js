@@ -53,15 +53,23 @@ function getUserCompanyId(req) {
   return toTrimmedString(req.user?.companyId);
 }
 
-function moduleKeyForInventoryTransactionType(transactionType) {
+function moduleKeyForInventoryTransactionType(transactionType, role = "") {
   const normalizedType = toTrimmedString(transactionType).toUpperCase();
-  if (normalizedType === "SALE_STOCK") return "order-management.primary";
-  if (normalizedType === "RETURN_STOCK") return "order-management.return-stock";
+  const normalizedRole = toTrimmedString(role).toLowerCase();
+  if (normalizedType === "SALE_STOCK") {
+    if (normalizedRole === "supplier") return "supplier.primary-orders";
+    if (normalizedRole === "distributor") return "distributor.primary-order";
+    return "order-management.primary";
+  }
+  if (normalizedType === "RETURN_STOCK") {
+    if (normalizedRole === "distributor") return "distributor.return-stock";
+    return "order-management.return-stock";
+  }
   return "";
 }
 
 async function ensureTransactionSectionAccess(user, transactionType) {
-  const key = moduleKeyForInventoryTransactionType(transactionType);
+  const key = moduleKeyForInventoryTransactionType(transactionType, user?.role);
   if (!key) return true;
   return isModuleSectionAllowed({
     companyId: user?.companyId,
@@ -577,6 +585,14 @@ router.get("/transactions/supplier/primary", requireAuth, async (req, res) => {
     if (toTrimmedString(req.user?.role).toLowerCase() !== "supplier") {
       return res.status(403).json({ ok: false, message: "Only Supplier can access primary dispatch queue" });
     }
+    const supplierModuleAllowed = await isModuleSectionAllowed({
+      companyId: req.user?.companyId,
+      role: req.user?.role,
+      key: "supplier.primary-orders",
+    });
+    if (!supplierModuleAllowed) {
+      return res.status(403).json({ ok: false, message: "Supplier primary orders module is locked for this role" });
+    }
     const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? toTrimmedString(req.query.companyId) : getUserCompanyId(req);
     const { WarehouseTransactionModel, UserModel } = await getScopedInventoryModels(req, scopedCompanyId, req.query.companyName);
     const me = await UserModel.findById(req.user?.uid).lean();
@@ -638,6 +654,14 @@ router.post("/transactions/:id/pod", requireAuth, async (req, res) => {
   try {
     if (toTrimmedString(req.user?.role).toLowerCase() !== "supplier") {
       return res.status(403).json({ ok: false, message: "Only Supplier can upload POD for primary orders" });
+    }
+    const supplierModuleAllowed = await isModuleSectionAllowed({
+      companyId: req.user?.companyId,
+      role: req.user?.role,
+      key: "supplier.primary-orders",
+    });
+    if (!supplierModuleAllowed) {
+      return res.status(403).json({ ok: false, message: "Supplier primary orders module is locked for this role" });
     }
     const objectKey = toTrimmedString(req.body?.objectKey);
     const publicUrl = toTrimmedString(req.body?.publicUrl);

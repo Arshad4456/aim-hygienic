@@ -47,6 +47,23 @@ const DEFAULT_MODULE_RULES = [
   rule("order-management.secondary", "order-management", "Secondary Order", "Create and review secondary orders.", ["admin", "system admin", "company admin", "warehouse manager", "distributor", "order booker", "customer", "salesman", "delivery boy"]),
   rule("order-management.return-stock", "order-management", "Return Stock", "Create and process return stock requests.", ["admin", "system admin", "company admin", "warehouse manager", "brand manager", "distributor"]),
 
+  rule("supplier.primary-orders", "supplier-portal", "Supplier Primary Orders", "Open supplier primary orders and POD workflow.", ["supplier"]),
+  rule("supplier.messages", "supplier-portal", "Supplier Messages", "Open supplier messages.", ["supplier"]),
+  rule("supplier.settings", "supplier-portal", "Supplier Settings", "Open supplier account settings.", ["supplier"]),
+
+  rule("distributor.dashboard", "distributor-portal", "Distributor Dashboard", "Open distributor dashboard overview.", ["distributor"]),
+  rule("distributor.hr", "distributor-portal", "Distributor Team", "Open distributor HR, user and team management.", ["distributor"]),
+  rule("distributor.primary-order", "distributor-portal", "Distributor Primary Order", "Open distributor primary order request module.", ["distributor"]),
+  rule("distributor.secondary-order", "distributor-portal", "Distributor Secondary Order", "Open distributor secondary orders module.", ["distributor"]),
+  rule("distributor.return-stock", "distributor-portal", "Distributor Return Stock", "Open distributor return stock module.", ["distributor"]),
+  rule("distributor.payments", "distributor-portal", "Distributor Payments", "Open distributor payments module.", ["distributor"]),
+  rule("distributor.receipts", "distributor-portal", "Distributor Receipts", "Open distributor receipts module.", ["distributor"]),
+  rule("distributor.expense", "distributor-portal", "Distributor Expense", "Open distributor expense module.", ["distributor"]),
+  rule("distributor.reports", "distributor-portal", "Distributor Reports", "Open distributor reports module.", ["distributor"]),
+  rule("distributor.live-tracking", "distributor-portal", "Distributor Live Tracking", "Open distributor live tracking.", ["distributor"]),
+  rule("distributor.messages", "distributor-portal", "Distributor Messages", "Open distributor messages.", ["distributor"]),
+  rule("distributor.settings", "distributor-portal", "Distributor Settings", "Open distributor account settings.", ["distributor"]),
+
   rule("vehicle-management.overview", "vehicle-management", "Vehicle Management Overview", "Open vehicle management dashboard.", ["admin", "system admin", "company admin", "warehouse manager"]),
   rule("vehicle-management.add", "vehicle-management", "Add Vehicle", "Create vehicle records.", ["admin", "system admin", "company admin"]),
   rule("vehicle-management.list", "vehicle-management", "Vehicle List", "View vehicle records.", ["admin", "system admin", "company admin", "warehouse manager"]),
