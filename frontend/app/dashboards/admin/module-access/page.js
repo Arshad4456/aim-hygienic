@@ -18,7 +18,7 @@ export default function ModuleAccessPage() {
     if (typeof window === "undefined") return null;
     return JSON.parse(getAuthItem("aim_user") || "null");
   }, []);
-  const isSystemAdmin = ["admin", "system admin"].includes(normalizeRole(user?.role));
+  const canManageModuleAccess = ["admin", "system admin"].includes(normalizeRole(user?.role));
 
   const groupedRules = useMemo(() => {
     const groups = new Map();
@@ -34,10 +34,20 @@ export default function ModuleAccessPage() {
   }, [rules]);
 
 
+  if (user && !canManageModuleAccess) {
+    return (
+      <AdminShell title="Module Access Control" user={null}>
+        <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-sm text-red-700 shadow-sm">
+          Only admin or system admin can open Module Access Control.
+        </div>
+      </AdminShell>
+    );
+  }
+
   useEffect(() => {
     let active = true;
     async function loadCompanies() {
-      if (!isSystemAdmin) return;
+      if (!canManageModuleAccess) return;
       const data = await apiFetch("/companies");
       if (!active) return;
       setCompanies(data.companies || []);
@@ -50,10 +60,10 @@ export default function ModuleAccessPage() {
     return () => {
       active = false;
     };
-  }, [isSystemAdmin, user?.companyId, user?.companyName]);
+  }, [canManageModuleAccess, user?.companyId, user?.companyName]);
 
   useEffect(() => {
-    const scopedCompanyId = isSystemAdmin ? companyId : user?.companyId;
+    const scopedCompanyId = canManageModuleAccess ? companyId : user?.companyId;
     if (!scopedCompanyId) return;
     setLoading(true);
     fetchModuleAccess(scopedCompanyId)
@@ -63,7 +73,7 @@ export default function ModuleAccessPage() {
       })
       .catch((error) => setMessage(error.message || "Failed to load access configuration"))
       .finally(() => setLoading(false));
-  }, [companyId, companyName, isSystemAdmin, user?.companyId, user?.companyName]);
+  }, [companyId, companyName, canManageModuleAccess, user?.companyId, user?.companyName]);
 
   function toggleRole(ruleKey, roleValue) {
     setRules((current) => current.map((rule) => {
@@ -80,7 +90,7 @@ export default function ModuleAccessPage() {
   }
 
   async function saveChanges() {
-    const scopedCompanyId = isSystemAdmin ? companyId : user?.companyId;
+    const scopedCompanyId = canManageModuleAccess ? companyId : user?.companyId;
     const scopedCompanyName = isSystemAdmin ? companyName : user?.companyName;
     if (!scopedCompanyId) return;
     setSaving(true);
@@ -112,7 +122,7 @@ export default function ModuleAccessPage() {
             <div className="mt-1 text-sm text-zinc-500">Control which roles can open or hide each module and section across dashboards. These rules now cover order management, warehouse, products, HR, finance, expense, reports, messages, live tracking, vehicles, procurement, quality, and more.</div>
           </div>
           <div className="flex flex-col gap-3 md:flex-row md:items-end">
-            {isSystemAdmin ? (
+            {canManageModuleAccess ? (
               <label className="text-sm text-zinc-600">
                 <div className="mb-1 font-medium">Company</div>
                 <select

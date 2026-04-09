@@ -88,6 +88,21 @@ function getModelFromDb(db, baseModel) {
   return db.models[modelName] || db.model(modelName, baseModel.schema, baseModel.collection.name);
 }
 
+async function findScopedUser(req, UserModel = User) {
+  if (!req.user?.uid) return req.user || null;
+  try {
+    const scoped = await UserModel.findById(req.user.uid).lean();
+    if (scoped) return scoped;
+  } catch (_error) {}
+  if (UserModel !== User) {
+    try {
+      const primary = await User.findById(req.user.uid).lean();
+      if (primary) return primary;
+    } catch (_error) {}
+  }
+  return req.user || null;
+}
+
 async function getScopedReceiptModels(req, requestedCompanyId = "", requestedCompanyName = "") {
   const scopedCompanyId = isSystemLevelAdmin(req.user?.role)
     ? asText(requestedCompanyId)
@@ -191,8 +206,7 @@ router.get("/", requireAuth, async (req, res) => {
     const linkedInvoiceNos = splitCsvValues(req.query.linkedInvoiceNo);
 
     if (role === "supplier") {
-      const me = await UserModel.findById(req.user.uid).lean();
-      if (!me) return res.status(404).json({ ok: false, message: "User not found" });
+      const me = await findScopedUser(req, UserModel);
 
       const transactionQuery = {
         transactionType: "SALE_STOCK",

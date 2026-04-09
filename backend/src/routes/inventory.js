@@ -226,6 +226,22 @@ function buildSupplierMatchQuery(user) {
   return or.length ? { $or: or } : { _id: null };
 }
 
+
+async function findScopedActorUser(req, UserModel = User) {
+  if (!req.user?.uid) return req.user || null;
+  try {
+    const scopedUser = await UserModel.findById(req.user.uid).lean();
+    if (scopedUser) return scopedUser;
+  } catch (_error) {}
+  if (UserModel !== User) {
+    try {
+      const primaryUser = await User.findById(req.user.uid).lean();
+      if (primaryUser) return primaryUser;
+    } catch (_error) {}
+  }
+  return req.user || null;
+}
+
 function buildTransactionCode() {
   const now = new Date();
   const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
@@ -595,8 +611,7 @@ router.get("/transactions/supplier/primary", requireAuth, async (req, res) => {
     }
     const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? toTrimmedString(req.query.companyId) : getUserCompanyId(req);
     const { WarehouseTransactionModel, UserModel } = await getScopedInventoryModels(req, scopedCompanyId, req.query.companyName);
-    const me = await UserModel.findById(req.user?.uid).lean();
-    if (!me) return res.status(404).json({ ok: false, message: "User not found" });
+    const me = await findScopedActorUser(req, UserModel);
     const limit = Math.min(Math.max(Number(req.query.limit) || 200, 1), 500);
     const query = {
       transactionType: "SALE_STOCK",
@@ -612,7 +627,7 @@ router.get("/transactions/supplier/primary", requireAuth, async (req, res) => {
   }
 });
 
-router.put("/transactions/:id/assignment", requireAuth, requireRole("admin", "warehouse manager"), async (req, res) => {
+router.put("/transactions/:id/assignment", requireAuth, requireRole("admin", "warehouse manager", "company admin"), async (req, res) => {
   try {
     const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? toTrimmedString(req.body?.companyId || req.query?.companyId) : getUserCompanyId(req);
     const { WarehouseTransactionModel, UserModel } = await getScopedInventoryModels(req, scopedCompanyId, req.body?.companyName || req.query?.companyName);
@@ -670,8 +685,7 @@ router.post("/transactions/:id/pod", requireAuth, async (req, res) => {
     }
     const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? toTrimmedString(req.body?.companyId || req.query?.companyId) : getUserCompanyId(req);
     const { WarehouseTransactionModel, UserModel } = await getScopedInventoryModels(req, scopedCompanyId, req.body?.companyName || req.query?.companyName);
-    const me = await UserModel.findById(req.user?.uid).lean();
-    if (!me) return res.status(404).json({ ok: false, message: "User not found" });
+    const me = await findScopedActorUser(req, UserModel);
     const transaction = await WarehouseTransactionModel.findById(req.params.id);
     if (!transaction) return res.status(404).json({ ok: false, message: "Transaction not found" });
     if (!(await ensureTransactionSectionAccess(req.user, transaction.transactionType))) {
@@ -707,7 +721,7 @@ router.post("/transactions/:id/pod", requireAuth, async (req, res) => {
   }
 });
 
-router.put("/transactions/:id", requireAuth, requireRole("admin", "warehouse manager"), async (req, res) => {
+router.put("/transactions/:id", requireAuth, requireRole("admin", "warehouse manager", "company admin"), async (req, res) => {
   try {
     const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? toTrimmedString(req.body?.companyId || req.query?.companyId) : getUserCompanyId(req);
     const { WarehouseTransactionModel, UserModel } = await getScopedInventoryModels(req, scopedCompanyId, req.body?.companyName || req.query?.companyName);
@@ -814,7 +828,7 @@ router.put("/transactions/:id", requireAuth, requireRole("admin", "warehouse man
   }
 });
 
-router.put("/transactions/:id/mark-read", requireAuth, requireRole("admin", "warehouse manager"), async (req, res) => {
+router.put("/transactions/:id/mark-read", requireAuth, requireRole("admin", "warehouse manager", "company admin"), async (req, res) => {
   try {
     const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? toTrimmedString(req.body?.companyId || req.query?.companyId) : getUserCompanyId(req);
     const { WarehouseTransactionModel, UserModel } = await getScopedInventoryModels(req, scopedCompanyId, req.body?.companyName || req.query?.companyName);
@@ -846,7 +860,7 @@ router.put("/transactions/:id/mark-read", requireAuth, requireRole("admin", "war
   }
 });
 
-router.put("/transactions/:id/request-status", requireAuth, requireRole("admin", "warehouse manager"), async (req, res) => {
+router.put("/transactions/:id/request-status", requireAuth, requireRole("admin", "warehouse manager", "company admin"), async (req, res) => {
   try {
     const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? toTrimmedString(req.body?.companyId || req.query?.companyId) : getUserCompanyId(req);
     const { WarehouseTransactionModel, InventoryMovementModel, MessageModel, UserModel } = await getScopedInventoryModels(req, scopedCompanyId, req.body?.companyName || req.query?.companyName);

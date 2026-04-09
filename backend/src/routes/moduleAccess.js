@@ -1,6 +1,6 @@
 const express = require("express");
 const ModuleAccessConfig = require("../models/ModuleAccessConfig");
-const { requireAuth, requireRole } = require("../utils/auth");
+const { requireAuth } = require("../utils/auth");
 const { DEFAULT_MODULE_RULES, mergeModuleAccessRules, normalizeRole } = require("../utils/moduleAccess");
 
 const router = express.Router();
@@ -8,6 +8,11 @@ const router = express.Router();
 function isSystemLevelAdmin(role) {
   const normalized = normalizeRole(role);
   return normalized === "admin" || normalized === "system admin";
+}
+
+
+function canManageModuleAccess(role) {
+  return isSystemLevelAdmin(role);
 }
 
 function resolveCompanyScope(req) {
@@ -39,7 +44,10 @@ router.get("/", requireAuth, async (req, res) => {
   }
 });
 
-router.put("/", requireAuth, requireRole("admin"), async (req, res) => {
+router.put("/", requireAuth, async (req, res) => {
+  if (!canManageModuleAccess(req.user?.role)) {
+    return res.status(403).json({ ok: false, message: "Only admin or system admin can update module control" });
+  }
   try {
     const scope = resolveCompanyScope(req);
     if (!scope.companyId) return res.status(400).json({ ok: false, message: "Company is required" });

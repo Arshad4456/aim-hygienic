@@ -16,7 +16,7 @@ const DEFAULT_MODULE_RULES = [
   rule("hr.overview", "hr-role-management", "HR & Role Management", "Open HR and role management module.", ["admin", "system admin", "company admin", "distributor"]),
   rule("hr.users.add", "hr-role-management", "Add User", "Create users for the company or distributor team.", ["admin", "system admin", "company admin", "distributor"]),
   rule("hr.users.list", "hr-role-management", "User List", "View and manage company users.", ["admin", "system admin", "company admin", "distributor"]),
-  rule("hr.module-access", "hr-role-management", "Module Access Control", "Manage module and section access rules.", ["admin", "system admin", "company admin"]),
+  rule("hr.module-access", "hr-role-management", "Module Access Control", "Manage module and section access rules.", ["admin", "system admin"]),
 
   rule("products.add", "products-management", "Add Product", "Create new product records.", ["admin", "system admin", "company admin"]),
   rule("products.list", "products-management", "Product List", "View product records.", ["admin", "system admin", "company admin", "warehouse manager", "brand manager", "distributor"]),

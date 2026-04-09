@@ -105,7 +105,7 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
     const canAccessCompanyManagement = role === "admin" || role === "system admin";
     const roleItems = canAccessCompanyManagement
       ? adminDashboardSearchItems
-      : adminDashboardSearchItems.filter((item) => !item.href.startsWith("/dashboards/admin/companies"));
+      : adminDashboardSearchItems.filter((item) => !item.href.startsWith("/dashboards/admin/companies") && item.href !== "/dashboards/admin/module-access");
 
     const value = searchTerm.trim().toLowerCase();
     if (!value) return roleItems;
