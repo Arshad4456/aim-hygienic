@@ -3,6 +3,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import apiClient from '../../../api/client';
 import Card from '../../../ui/Card';
 import Loader from '../../../ui/Loader';
+import ModalSelectField from '../../../ui/ModalSelectField';
 
 const emptyLine = {
   productId: '',
@@ -253,11 +254,12 @@ export default function PrimaryOrderRequestScreen() {
         <Text style={styles.title}>Primary Sale Order Request</Text>
 
         <Input label="From" value={me?.businessName || me?.fullName || '-'} editable={false} />
-        <Selector
+        <ModalSelectField
           label="To Warehouse"
           value={form.toWarehouseId}
           onChange={(v) => setField('toWarehouseId', v)}
           options={warehouses.map((w) => ({ value: w._id, label: w.name }))}
+          placeholder="Select warehouse"
         />
         <Input label="Region" value={selectedRegion?.name || me?.regionName || ''} editable={false} />
         <Input label="Zone" value={selectedZone?.name || me?.zoneName || ''} editable={false} />
@@ -275,10 +277,12 @@ export default function PrimaryOrderRequestScreen() {
               <View key={idx} style={styles.row}>
                 <Text style={styles.cell}>{idx + 1}</Text>
                 <View style={styles.cellWide}>
-                  <SelectorBare
+                  <ModalSelectField
+                    compact
                     value={line.productId}
                     onChange={(v) => setItem(idx, 'productId', v)}
-                    options={products.map((p) => ({ value: p._id, label: p.name }))}
+                    options={products.map((p) => ({ value: p._id, label: `${p.productId ? `${p.productId} • ` : ''}${p.name || p.productName || p._id}` }))}
+                    placeholder="Select product"
                   />
                 </View>
                 <Text style={styles.cell}>{calc.sizeText}</Text>
@@ -373,37 +377,6 @@ function Input({ label, value, onChangeText, editable = true }) {
         placeholderTextColor="#9ca3af"
       />
     </View>
-  );
-}
-
-function Selector({ label, value, onChange, options }) {
-  return (
-    <View style={styles.fieldWrap}>
-      <Text style={styles.label}>{label}</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <View style={styles.selectorWrap}>
-          {options.map((o) => (
-            <Pressable key={o.value} onPress={() => onChange(o.value)} style={[styles.selChip, value === o.value ? styles.selChipActive : null]}>
-              <Text style={[styles.selText, value === o.value ? styles.selTextActive : null]}>{o.label}</Text>
-            </Pressable>
-          ))}
-        </View>
-      </ScrollView>
-    </View>
-  );
-}
-
-function SelectorBare({ value, onChange, options }) {
-  return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-      <View style={styles.selectorWrap}>
-        {options.map((o) => (
-          <Pressable key={o.value} onPress={() => onChange(o.value)} style={[styles.selChip, value === o.value ? styles.selChipActive : null]}>
-            <Text style={[styles.selText, value === o.value ? styles.selTextActive : null]}>{o.label}</Text>
-          </Pressable>
-        ))}
-      </View>
-    </ScrollView>
   );
 }
 

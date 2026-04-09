@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import apiClient from '../../../api/client';
 import Card from '../../../ui/Card';
 import Loader from '../../../ui/Loader';
+import ModalSelectField from '../../../ui/ModalSelectField';
+import OrderDocumentModal from '../../../ui/OrderDocumentModal';
 import { buildDistributorLookupParams, buildDistributorOptions as buildDistributorOptionsShared } from '../../../utils/distributorOptions';
-import { buildSecondaryOrderDocumentHtml, getInvoiceKey, mapReceiptsByInvoice } from '../../../utils/orderDocuments';
+import { getInvoiceKey, mapReceiptsByInvoice } from '../../../utils/orderDocuments';
 
 const emptyLine = { productId: '', qty: '' };
 
@@ -32,40 +34,6 @@ function computeLine(line, product) {
   };
 }
 
-function buildDistributorOptions(user, distributorUsers = []) {
-  const fromDirectory = (distributorUsers || [])
-    .map((item) => ({
-      _id: String(item.userId || item._id || '').trim(),
-      userId: String(item.userId || item._id || '').trim(),
-      businessName: String(item.businessName || '').trim(),
-      fullName: String(item.fullName || '').trim(),
-      warehouseId: String(item.warehouseId || '').trim(),
-      territoryName: String(item.territoryName || item.areaName || '').trim(),
-    }))
-    .filter((item) => item._id);
-
-  const fallback = user
-    ? [
-        {
-          _id: String(user.distributorId || user.distributorName || '').trim(),
-          userId: String(user.distributorId || '').trim(),
-          businessName: String(user.distributorName || '').trim(),
-          fullName: String(user.distributorName || '').trim(),
-          warehouseId: String(user.warehouseId || '').trim(),
-          territoryName: String(user.territoryName || user.areaName || '').trim(),
-        },
-      ]
-    : [];
-
-  const options = [...fromDirectory, ...fallback].filter((item) => item?._id);
-  const seen = new Set();
-  return options.filter((item) => {
-    if (seen.has(item._id)) return false;
-    seen.add(item._id);
-    return true;
-  });
-}
-
 function statusTone(status) {
   const value = String(status || '').toLowerCase();
   if (value === 'rejected') return styles.rowRejected;
@@ -84,6 +52,7 @@ export default function OrdersScreen() {
   const [err, setErr] = useState('');
   const [toast, setToast] = useState(null);
   const [previewRow, setPreviewRow] = useState(null);
+  const [documentRow, setDocumentRow] = useState(null);
   const [receiptsByInvoice, setReceiptsByInvoice] = useState({});
   const [form, setForm] = useState({
     customerName: '',
@@ -191,14 +160,8 @@ export default function OrdersScreen() {
   const addItem = () => setForm((s) => ({ ...s, items: [...s.items, { ...emptyLine }] }));
   const removeItem = (idx) => setForm((s) => ({ ...s, items: s.items.filter((_, i) => i !== idx) }));
 
-  const openInvoiceReceipt = async (order) => {
-    try {
-      const html = buildSecondaryOrderDocumentHtml(order, receiptsByInvoice[getInvoiceKey(order)] || []);
-      const url = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
-      await Linking.openURL(url);
-    } catch (error) {
-      notify('error', error?.message || 'Failed to open invoice / receipt');
-    }
+  const openInvoiceReceipt = (order) => {
+    setDocumentRow({ ...order, linkedReceipts: receiptsByInvoice[getInvoiceKey(order)] || [] });
   };
 
   const submit = async () => {
@@ -259,6 +222,10 @@ export default function OrdersScreen() {
     }
   };
 
+  const onInvoice = (order) => {
+    setDocumentRow({ ...order, linkedReceipts: receiptsByInvoice[getInvoiceKey(order)] || [] });
+  };
+
   if (loading) return <Loader />;
 
   return (
@@ -290,10 +257,12 @@ export default function OrdersScreen() {
               <View key={idx} style={styles.row}>
                 <Text style={styles.cell}>{idx + 1}</Text>
                 <View style={styles.productCellWrap}>
-                  <SelectorBare
+                  <ModalSelectField
+                    compact
                     value={line.productId}
                     onChange={(v) => setItem(idx, 'productId', v)}
-                    options={products.map((p) => ({ value: p._id, label: p.name }))}
+                    options={products.map((p) => ({ value: p._id, label: `${p.productId ? `${p.productId} • ` : ''}${p.name || p.productName || p._id}` }))}
+                    placeholder="Select product"
                   />
                 </View>
                 <View style={styles.cell}><InputBare value={line.qty} onChangeText={(v) => setItem(idx, 'qty', v)} numeric /></View>
@@ -346,6 +315,14 @@ export default function OrdersScreen() {
           </View>
         </ScrollView>
       </Card>
+
+      <OrderDocumentModal
+        visible={Boolean(documentRow)}
+        onClose={() => setDocumentRow(null)}
+        order={documentRow}
+        receipts={documentRow?.linkedReceipts || []}
+        variant="secondary"
+      />
 
       <Modal visible={Boolean(previewRow)} transparent animationType="slide" onRequestClose={() => setPreviewRow(null)}>
         <View style={styles.modalOverlay}>
@@ -400,37 +377,6 @@ function Input({ label, value, readOnly }) {
   );
 }
 
-function Selector({ label, value, onChange, options }) {
-  return (
-    <View style={styles.inputWrap}>
-      <Text style={styles.label}>{label}</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <View style={styles.selectorWrap}>
-          {options.map((o) => (
-            <Pressable key={o.value} style={[styles.chip, value === o.value ? styles.chipActive : null]} onPress={() => onChange(o.value)}>
-              <Text style={[styles.chipText, value === o.value ? styles.chipTextActive : null]}>{o.label}</Text>
-            </Pressable>
-          ))}
-        </View>
-      </ScrollView>
-    </View>
-  );
-}
-
-function SelectorBare({ value, onChange, options }) {
-  return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-      <View style={styles.selectorWrap}>
-        {options.map((o) => (
-          <Pressable key={o.value} style={[styles.chip, value === o.value ? styles.chipActive : null]} onPress={() => onChange(o.value)}>
-            <Text style={[styles.chipText, value === o.value ? styles.chipTextActive : null]}>{o.label}</Text>
-          </Pressable>
-        ))}
-      </View>
-    </ScrollView>
-  );
-}
-
 function InputBare({ value, onChangeText, numeric }) {
   return <TextInput style={styles.inputBare} value={String(value || '')} onChangeText={onChangeText} keyboardType={numeric ? 'numeric' : 'default'} />;
 }
@@ -479,6 +425,7 @@ const styles = StyleSheet.create({
   headText: { fontWeight: '700' },
   cell: { width: 120, paddingHorizontal: 8, paddingVertical: 8, color: '#111827', fontSize: 11 },
   orderCell: { width: 180, paddingHorizontal: 8, paddingVertical: 8, color: '#111827', fontSize: 12 },
+  orderActionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   previewCell: { width: 150, paddingHorizontal: 8, paddingVertical: 8, color: '#111827', fontSize: 11 },
   productCellWrap: { width: 220, paddingHorizontal: 6, paddingVertical: 6 },
   inputBare: { borderWidth: 1, borderColor: '#d1d5db', borderRadius: 7, paddingHorizontal: 6, paddingVertical: 5, minWidth: 75, color: '#111827', fontSize: 11 },

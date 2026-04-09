@@ -3,7 +3,8 @@ import { Alert, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, 
 import apiClient from '../../../api/client';
 import Card from '../../../ui/Card';
 import Loader from '../../../ui/Loader';
-import { buildSecondaryOrderDocumentHtml, getInvoiceKey, mapReceiptsByInvoice } from '../../../utils/orderDocuments';
+import OrderDocumentModal from '../../../ui/OrderDocumentModal';
+import { getInvoiceKey, mapReceiptsByInvoice } from '../../../utils/orderDocuments';
 
 function toStatusLabel(status) {
   return String(status || 'pending').toUpperCase();
@@ -23,49 +24,6 @@ function podUploaderName(row) {
   return row?.podUploadedBy?.name || row?.pod_uploaded_by?.name || row?.podUploadedBy || row?.proofOfDeliveryBy || '-';
 }
 
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function rowTone(status) {
-  const value = String(status || '').toLowerCase();
-  if (value === 'rejected') return styles.rowRejected;
-  if (value === 'approved' || value === 'dispatched') return styles.rowApproved;
-  return null;
-}
-
-function buildInvoiceHtml(order) {
-  const items = order.items || [];
-  const rows = items.length
-    ? items
-        .map(
-          (it, i) =>
-            `<tr><td>${i + 1}</td><td>${escapeHtml(it.productName || '-')}</td><td>${escapeHtml(
-              it.section || order.saleType || 'secondary'
-            )}</td><td>${Number(it.quantity || 0)}</td><td>${Number(it.unitPrice || 0)}</td></tr>`
-        )
-        .join('')
-    : '<tr><td colspan="5">No items</td></tr>';
-
-  return `
-  <html><body style="font-family:Arial;padding:16px;">
-    <h2>Secondary Order Invoice/Receipt</h2>
-    <div><strong>Invoice #:</strong> ${escapeHtml(order.orderNo || '-')}</div>
-    <div><strong>Invoice From:</strong> ${escapeHtml(order.toWarehouseName || '-')}</div>
-    <div><strong>Bill To:</strong> ${escapeHtml(order.customerName || order.fromEntityName || '-')}</div>
-    <div><strong>Date:</strong> ${order.createdAt ? escapeHtml(new Date(order.createdAt).toLocaleString()) : '-'}</div>
-    <table border="1" cellspacing="0" cellpadding="6" style="margin-top:12px;border-collapse:collapse;width:100%">
-      <thead><tr><th>#</th><th>Product</th><th>Section</th><th>Qty</th><th>Rate</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-  </body></html>`;
-}
-
 export default function OrdersScreen() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -73,6 +31,7 @@ export default function OrdersScreen() {
   const [toast, setToast] = useState(null);
   const [err, setErr] = useState('');
   const [previewRow, setPreviewRow] = useState(null);
+  const [documentRow, setDocumentRow] = useState(null);
   const [receiptsByInvoice, setReceiptsByInvoice] = useState({});
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({ customerName: '', address: '', notes: '' });
@@ -188,14 +147,8 @@ export default function OrdersScreen() {
     }
   };
 
-  const onInvoice = async (order) => {
-    try {
-      const html = buildSecondaryOrderDocumentHtml(order, receiptsByInvoice[getInvoiceKey(order)] || []);
-      const url = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
-      await Linking.openURL(url);
-    } catch (error) {
-      notify('error', error?.message || 'Failed to open invoice');
-    }
+  const onInvoice = (order) => {
+    setDocumentRow({ ...order, linkedReceipts: receiptsByInvoice[getInvoiceKey(order)] || [] });
   };
 
   if (loading) return <Loader />;

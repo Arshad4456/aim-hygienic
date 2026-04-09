@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import apiClient from '../../../api/client';
 import Card from '../../../ui/Card';
 import Loader from '../../../ui/Loader';
+import ModalSelectField from '../../../ui/ModalSelectField';
 
 const emptyLine = {
   productId: '',
@@ -175,11 +176,12 @@ export default function ReturnStockScreen() {
         <Text style={styles.title}>Return Stock Request</Text>
 
         <Input label="From" value={user?.businessName || user?.fullName || '-'} editable={false} />
-        <Selector
+        <ModalSelectField
           label="To Warehouse"
           value={form.toWarehouseId}
           onChange={(v) => setField('toWarehouseId', v)}
           options={warehouses.map((w) => ({ value: w._id, label: w.name }))}
+          placeholder="Select warehouse"
         />
         <Input label="Region" value={selectedRegion?.name || ''} editable={false} />
         <Input label="Zone" value={selectedZone?.name || ''} editable={false} />
@@ -193,10 +195,12 @@ export default function ReturnStockScreen() {
             {form.items.map((line, idx) => (
               <View key={idx} style={styles.row}>
                 <View style={styles.cellWide}>
-                  <SelectorBare
+                  <ModalSelectField
+                    compact
                     value={line.productId}
                     onChange={(v) => setItem(idx, 'productId', v)}
-                    options={products.map((p) => ({ value: p._id, label: `${p.productId} - ${p.name}` }))}
+                    options={products.map((p) => ({ value: p._id, label: `${p.productId ? `${p.productId} • ` : ''}${p.name || p.productName || p._id}` }))}
+                    placeholder="Select product"
                   />
                 </View>
                 <View style={styles.cell}><InputBare value={line.qty} onChangeText={(v) => setItem(idx, 'qty', v)} numeric /></View>
@@ -253,37 +257,6 @@ function Input({ label, value, onChangeText, editable = true }) {
       <Text style={styles.label}>{label}</Text>
       <TextInput style={[styles.input, !editable ? styles.inputReadOnly : null]} value={value || ''} editable={editable} onChangeText={onChangeText} />
     </View>
-  );
-}
-
-function Selector({ label, value, onChange, options }) {
-  return (
-    <View style={styles.fieldWrap}>
-      <Text style={styles.label}>{label}</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <View style={styles.selectorWrap}>
-          {options.map((o) => (
-            <Pressable key={o.value} onPress={() => onChange(o.value)} style={[styles.selChip, value === o.value ? styles.selChipActive : null]}>
-              <Text style={[styles.selText, value === o.value ? styles.selTextActive : null]}>{o.label}</Text>
-            </Pressable>
-          ))}
-        </View>
-      </ScrollView>
-    </View>
-  );
-}
-
-function SelectorBare({ value, onChange, options }) {
-  return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-      <View style={styles.selectorWrap}>
-        {options.map((o) => (
-          <Pressable key={o.value} onPress={() => onChange(o.value)} style={[styles.selChip, value === o.value ? styles.selChipActive : null]}>
-            <Text style={[styles.selText, value === o.value ? styles.selTextActive : null]}>{o.label}</Text>
-          </Pressable>
-        ))}
-      </View>
-    </ScrollView>
   );
 }
 

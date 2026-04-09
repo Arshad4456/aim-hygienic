@@ -5,8 +5,8 @@ import apiClient from '../../../api/client';
 import { uploadViaBackendPresigned } from '../../../api/uploads';
 import Card from '../../../ui/Card';
 import Loader from '../../../ui/Loader';
+import OrderDocumentModal from '../../../ui/OrderDocumentModal';
 import {
-  buildPrimarySupplierDocumentHtml,
   formatDateTime,
   getInvoiceKey,
   mapReceiptsByInvoice,
@@ -23,10 +23,6 @@ function totalItems(transaction) {
     : 0;
 }
 
-async function openHtml(html) {
-  const url = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
-  await Linking.openURL(url);
-}
 
 export default function PrimaryOrdersScreen() {
   const [rows, setRows] = useState([]);
@@ -35,6 +31,7 @@ export default function PrimaryOrdersScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [uploadingId, setUploadingId] = useState('');
   const [previewRow, setPreviewRow] = useState(null);
+  const [documentRow, setDocumentRow] = useState(null);
   const [err, setErr] = useState('');
   const [toast, setToast] = useState(null);
 
@@ -90,13 +87,9 @@ export default function PrimaryOrdersScreen() {
     return { assigned, podUploaded, pendingPod, totalQty, linkedReceipts, approvedReceiptAmount };
   }, [rows, receiptsByInvoice]);
 
-  const openDocument = async (row) => {
-    try {
-      const receipts = receiptsByInvoice[getInvoiceKey(row)] || [];
-      await openHtml(buildPrimarySupplierDocumentHtml(row, receipts));
-    } catch (error) {
-      notify('error', error?.message || 'Failed to open invoice / receipt');
-    }
+  const openDocument = (row) => {
+    const receipts = receiptsByInvoice[getInvoiceKey(row)] || [];
+    setDocumentRow({ ...row, linkedReceipts: receipts });
   };
 
   const onUploadPod = async (row) => {
@@ -203,6 +196,14 @@ export default function PrimaryOrdersScreen() {
           );
         })}
       </Card>
+
+      <OrderDocumentModal
+        visible={Boolean(documentRow)}
+        onClose={() => setDocumentRow(null)}
+        order={documentRow}
+        receipts={documentRow?.linkedReceipts || []}
+        variant="primary-supplier"
+      />
 
       <Modal visible={Boolean(previewRow)} animationType="slide" transparent onRequestClose={() => setPreviewRow(null)}>
         <View style={styles.modalOverlay}>

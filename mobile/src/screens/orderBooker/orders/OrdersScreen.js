@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import apiClient from '../../../api/client';
 import Card from '../../../ui/Card';
 import Loader from '../../../ui/Loader';
+import ModalSelectField from '../../../ui/ModalSelectField';
+import OrderDocumentModal from '../../../ui/OrderDocumentModal';
 import { buildDistributorLookupParams, buildDistributorOptions as buildDistributorOptionsShared } from '../../../utils/distributorOptions';
-import { buildSecondaryOrderDocumentHtml, getInvoiceKey, mapReceiptsByInvoice } from '../../../utils/orderDocuments';
+import { getInvoiceKey, mapReceiptsByInvoice } from '../../../utils/orderDocuments';
 
 const emptyLine = { productId: '', qty: '' };
 
@@ -73,37 +75,6 @@ function statusTone(status) {
   return null;
 }
 
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function buildInvoiceHtml(order) {
-  const items = order?.items || [];
-  const rows = items.length
-    ? items
-      .map((it, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(it.productName || '-')}</td><td>${escapeHtml(it.section || order.saleType || 'secondary')}</td><td>${Number(it.quantity || 0)}</td><td>${Number(it.unitPrice || 0)}</td></tr>`)
-      .join('')
-    : '<tr><td colspan="5">No items</td></tr>';
-
-  return `
-  <html><body style="font-family:Arial;padding:16px;">
-    <h2>Secondary Order Invoice/Receipt</h2>
-    <div><strong>Invoice #:</strong> ${escapeHtml(order.orderNo || '-')}</div>
-    <div><strong>Invoice From:</strong> ${escapeHtml(order.toWarehouseName || '-')}</div>
-    <div><strong>Bill To:</strong> ${escapeHtml(order.customerName || order.fromEntityName || '-')}</div>
-    <div><strong>Date:</strong> ${order.createdAt ? escapeHtml(new Date(order.createdAt).toLocaleString()) : '-'}</div>
-    <table border="1" cellspacing="0" cellpadding="6" style="margin-top:12px;border-collapse:collapse;width:100%">
-      <thead><tr><th>#</th><th>Product</th><th>Section</th><th>Qty</th><th>Rate</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-  </body></html>`;
-}
-
 export default function OrdersScreen() {
   const [user, setUser] = useState(null);
   const [products, setProducts] = useState([]);
@@ -114,6 +85,7 @@ export default function OrdersScreen() {
   const [err, setErr] = useState('');
   const [toast, setToast] = useState(null);
   const [previewRow, setPreviewRow] = useState(null);
+  const [documentRow, setDocumentRow] = useState(null);
   const [receiptsByInvoice, setReceiptsByInvoice] = useState({});
   const [form, setForm] = useState({
     customerName: '',
@@ -268,14 +240,8 @@ export default function OrdersScreen() {
     }
   };
 
-  const onInvoice = async (order) => {
-    try {
-      const html = buildSecondaryOrderDocumentHtml(order, receiptsByInvoice[getInvoiceKey(order)] || []);
-      const url = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
-      await Linking.openURL(url);
-    } catch (error) {
-      notify('error', error?.message || 'Failed to open invoice');
-    }
+  const onInvoice = (order) => {
+    setDocumentRow({ ...order, linkedReceipts: receiptsByInvoice[getInvoiceKey(order)] || [] });
   };
 
   if (loading) return <Loader />;
@@ -294,14 +260,15 @@ export default function OrdersScreen() {
           <Input label="Business Name" value={form.businessName} onChangeText={(v) => setField('businessName', v)} />
           <View style={styles.full}><Input label="Address" value={form.address} onChangeText={(v) => setField('address', v)} multiline /></View>
           <View style={styles.full}>
-            <Selector
+            <ModalSelectField
               label="Distributor"
               value={form.distributorId}
               onChange={(v) => setField('distributorId', v)}
               options={distributors.map((d) => ({
                 value: d._id,
-                label: `${d.businessName || d.fullName || d._id} • ${d.territoryName || '-'} • ${d.warehouseName || d.warehouseId || '-'}`, 
+                label: `${d.businessName || d.fullName || d._id} • ${d.territoryName || '-'} • ${d.warehouseName || d.warehouseId || '-'}`,
               }))}
+              placeholder="Select distributor"
             />
           </View>
         </View>
@@ -316,10 +283,12 @@ export default function OrdersScreen() {
                   <Text style={styles.cell}>{idx + 1}</Text>
                   <Text style={styles.cell}>secondary</Text>
                   <View style={styles.cell}>
-                    <SelectorBare
+                    <ModalSelectField
+                      compact
                       value={row.line.productId}
                       onChange={(v) => setItem(idx, 'productId', v)}
-                      options={products.map((p) => ({ value: p._id, label: p.name || p.productName || p._id }))}
+                      options={products.map((p) => ({ value: p._id, label: `${p.productId ? `${p.productId} • ` : ''}${p.name || p.productName || p._id}` }))}
+                      placeholder="Select product"
                     />
                   </View>
                   <View style={styles.cell}><InputBare value={row.line.qty} onChangeText={(v) => setItem(idx, 'qty', v)} numeric /></View>
@@ -366,6 +335,14 @@ export default function OrdersScreen() {
           </View>
         </ScrollView>
       </Card>
+
+      <OrderDocumentModal
+        visible={Boolean(documentRow)}
+        onClose={() => setDocumentRow(null)}
+        order={documentRow}
+        receipts={documentRow?.linkedReceipts || []}
+        variant="secondary"
+      />
 
       <Modal visible={Boolean(previewRow)} transparent animationType="slide" onRequestClose={() => setPreviewRow(null)}>
         <View style={styles.modalOverlay}>
@@ -422,38 +399,6 @@ function Input({ label, value, onChangeText, multiline = false }) {
         multiline={multiline}
       />
     </View>
-  );
-}
-
-function Selector({ label, value, onChange, options }) {
-  return (
-    <View style={styles.inputWrap}>
-      <Text style={styles.label}>{label}</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <View style={styles.selectorWrap}>
-          {options.map((o) => (
-            <Pressable key={o.value} style={[styles.chip, value === o.value ? styles.chipActive : null]} onPress={() => onChange(o.value)}>
-              <Text style={[styles.chipText, value === o.value ? styles.chipTextActive : null]}>{o.label}</Text>
-            </Pressable>
-          ))}
-          {!options.length ? <Text style={styles.empty}>No distributor options.</Text> : null}
-        </View>
-      </ScrollView>
-    </View>
-  );
-}
-
-function SelectorBare({ value, onChange, options }) {
-  return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-      <View style={styles.selectorWrap}>
-        {options.map((o) => (
-          <Pressable key={o.value} style={[styles.chip, value === o.value ? styles.chipActive : null]} onPress={() => onChange(o.value)}>
-            <Text style={[styles.chipText, value === o.value ? styles.chipTextActive : null]}>{o.label}</Text>
-          </Pressable>
-        ))}
-      </View>
-    </ScrollView>
   );
 }
 
