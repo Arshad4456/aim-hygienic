@@ -123,11 +123,11 @@ async function findScopedTransactionById(req, transactionId) {
 
 
 async function validateSupplierTransactionPodRequest(req, transactionId) {
-  if (String(req.user?.role || "") !== "Supplier") {
+  if (String(req.user?.role || '').trim().toLowerCase() !== 'supplier') {
     return { status: 403, body: { ok: false, message: "Only Supplier can request POD upload URLs" } };
   }
 
-  const me = await findScopedUserById(req, req.user.uid);
+  const me = await findScopedUserById(req, req.user?.uid || req.user?._id || req.user?.userId);
   if (!me) return { status: 404, body: { ok: false, message: "User not found" } };
 
   const transaction = await findScopedTransactionById(req, transactionId);
@@ -153,11 +153,11 @@ async function validateSupplierTransactionPodRequest(req, transactionId) {
 }
 
 async function validateSalesmanPodRequest(req, orderId) {
-  if (String(req.user?.role || "") !== "Salesman") {
+  if (String(req.user?.role || '').trim().toLowerCase() !== 'salesman') {
     return { status: 403, body: { ok: false, message: "Only Salesman can request POD upload URLs" } };
   }
 
-  const me = await findScopedUserById(req, req.user.uid);
+  const me = await findScopedUserById(req, req.user?.uid || req.user?._id || req.user?.userId);
   if (!me) return { status: 404, body: { ok: false, message: "User not found" } };
 
   const order = await findScopedSalesOrderById(req, orderId);

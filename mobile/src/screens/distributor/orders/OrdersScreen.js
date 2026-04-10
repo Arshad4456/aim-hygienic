@@ -24,6 +24,13 @@ function podUploaderName(row) {
   return row?.podUploadedBy?.name || row?.pod_uploaded_by?.name || row?.podUploadedBy || row?.proofOfDeliveryBy || '-';
 }
 
+function rowTone(status) {
+  const value = String(status || '').toLowerCase();
+  if (value === 'rejected') return styles.rowRejected;
+  if (value === 'approved' || value === 'dispatched') return styles.rowApproved;
+  return null;
+}
+
 export default function OrdersScreen() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);

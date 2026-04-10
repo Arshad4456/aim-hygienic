@@ -241,11 +241,12 @@ export default function OrdersScreen() {
           <Input label="Customer Name" value={form.customerName} readOnly />
           <Input label="Business Name" value={form.businessName} readOnly />
           <Input label="Address" value={form.address} readOnly />
-          <Selector
+          <ModalSelectField
             label="Distributor"
             value={form.distributorId}
             onChange={(v) => setField('distributorId', v)}
             options={distributors.map((d) => ({ value: d._id, label: `${d.businessName || d.fullName || 'Distributor'} • ${d.territoryName || '-'} • ${d.warehouseName || d.warehouseId || '-'}` }))}
+            placeholder="Select distributor"
           />
         </View>
 

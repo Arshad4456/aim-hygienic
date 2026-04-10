@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import apiClient from '../../../api/client';
-import { uploadViaBackendPresigned } from '../../../api/uploads';
+import { uploadTransactionPodViaProxy } from '../../../api/uploads';
 import Card from '../../../ui/Card';
 import Loader from '../../../ui/Loader';
 import OrderDocumentModal from '../../../ui/OrderDocumentModal';
@@ -105,16 +105,14 @@ export default function PrimaryOrdersScreen() {
 
       setUploadingId(String(row?._id || 'uploading'));
       const contentType = asset.mimeType || 'image/jpeg';
-      const fileResponse = await fetch(asset.uri);
-      const fileBlob = await fileResponse.blob();
-      const presigned = await uploadViaBackendPresigned({
-        presignPayload: { transactionId: row._id, contentType },
-        fileBlob,
+      const uploaded = await uploadTransactionPodViaProxy({
+        transactionId: row._id,
+        fileUri: asset.uri,
         contentType,
       });
       await apiClient.post(`/inventory/transactions/${row._id}/pod`, {
-        objectKey: presigned.objectKey,
-        publicUrl: presigned.publicUrl,
+        objectKey: uploaded.objectKey,
+        publicUrl: uploaded.publicUrl,
       });
 
       notify('success', 'Proof of delivery uploaded successfully.');
