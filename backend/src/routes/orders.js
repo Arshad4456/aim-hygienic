@@ -3,6 +3,7 @@ const { requireAuth } = require("../utils/auth");
 const SalesOrder = require("../models/SalesOrder");
 const User = require("../models/User");
 const { isModuleSectionAllowed } = require("../utils/moduleAccess");
+const { getTenantModel } = require("../utils/tenantModels");
 
 const router = express.Router();
 
@@ -60,9 +61,54 @@ function getScopedWarehouseId(user) {
   return String(user?.warehouse_id || user?.warehouseId || "").trim();
 }
 
+async function getScopedModelsForUser(userLike = {}) {
+  const companyId = String(userLike?.companyId || "").trim();
+  const companyName = String(userLike?.companyName || "").trim();
+  if (!companyId) {
+    return { SalesOrderModel: SalesOrder, UserModel: User };
+  }
+
+  const [tenantSalesOrder, tenantUser] = await Promise.all([
+    getTenantModel(SalesOrder, companyId, companyName),
+    getTenantModel(User, companyId, companyName),
+  ]);
+
+  return {
+    SalesOrderModel: tenantSalesOrder || SalesOrder,
+    UserModel: tenantUser || User,
+  };
+}
+
+async function findScopedUserByAuth(auth = {}) {
+  const { UserModel } = await getScopedModelsForUser(auth);
+  const fallbackUser = auth?.uid ? { ...auth, _id: auth.uid } : (auth || null);
+  const lookupQueries = [];
+
+  if (auth?.uid) lookupQueries.push({ _id: auth.uid });
+  if (auth?.userId) lookupQueries.push({ userId: String(auth.userId).trim() });
+  if (auth?.username) {
+    lookupQueries.push({ username: String(auth.username).trim() });
+    lookupQueries.push({ username: String(auth.username).trim().toLowerCase() });
+  }
+
+  const models = Array.from(new Set([UserModel, User].filter(Boolean)));
+  for (const model of models) {
+    for (const query of lookupQueries) {
+      try {
+        const found = await model.findOne(query).lean();
+        if (found) {
+          return { ...auth, ...found, _id: found._id };
+        }
+      } catch (_error) {}
+    }
+  }
+
+  return fallbackUser;
+}
+
 async function getAuthenticatedUser(req) {
-  if (!req.user?.uid) return null;
-  return User.findById(req.user.uid).lean();
+  if (!req.user?.uid) return req.user || null;
+  return findScopedUserByAuth(req.user);
 }
 
 function getFieldScope(user) {
@@ -152,11 +198,17 @@ async function attachPodMetaToOrders(orders = []) {
 
   let uploaderById = {};
   if (podUserIds.length) {
-    const users = await User.find({ _id: { $in: podUserIds } }).select("fullName name userId").lean();
-    uploaderById = users.reduce((acc, user) => {
-      acc[String(user._id)] = serializePodUploader(user);
-      return acc;
-    }, {});
+    const sampleOrder = orders.find((order) => order?.companyId) || orders[0] || {};
+    const { UserModel } = await getScopedModelsForUser(sampleOrder);
+    const models = Array.from(new Set([UserModel, User].filter(Boolean)));
+    for (const model of models) {
+      try {
+        const users = await model.find({ _id: { $in: podUserIds } }).select("fullName name userId").lean();
+        for (const user of users) {
+          uploaderById[String(user._id)] = serializePodUploader(user);
+        }
+      } catch (_error) {}
+    }
   }
 
   return orders.map((order) => withPodFields(order, uploaderById));
@@ -333,6 +385,7 @@ router.get("/salesman-deliveries", requireAuth, async (req, res) => {
     const context = await getDeliveryActorContext(req);
     if (context.error) return res.status(404).json({ ok: false, message: context.error });
 
+    const { SalesOrderModel } = await getScopedModelsForUser(context.authUser || req.user);
     const limit = Math.min(Number(req.query.limit) || 200, 500);
     const query = withCompanyScope(context.authUser || req.user, {
       saleType: "secondary",
@@ -346,7 +399,7 @@ router.get("/salesman-deliveries", requireAuth, async (req, res) => {
     }
     if (relatedFilters.length) query.$or = relatedFilters;
 
-    const orders = await SalesOrder.find(query)
+    const orders = await SalesOrderModel.find(query)
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
@@ -433,7 +486,8 @@ router.patch("/:id/receipt-agreement", requireAuth, async (req, res) => {
       return res.status(400).json({ ok: false, message: "Invalid agreement action" });
     }
 
-    const order = await SalesOrder.findOne({ _id: req.params.id, ...roleMatchQuery(req.user) });
+    const { SalesOrderModel } = await getScopedModelsForUser(req.user);
+    const order = await SalesOrderModel.findOne({ _id: req.params.id, ...roleMatchQuery(req.user) });
     if (!order) return res.status(404).json({ ok: false, message: "Order not found" });
     if (!(await ensureOrderSectionAccess(req.user, order.saleType))) {
       return res.status(403).json({ ok: false, message: "This order section is locked for your role" });
@@ -495,7 +549,8 @@ router.post("/:orderId/pod", requireAuth, async (req, res) => {
     const context = await getDeliveryActorContext(req);
     if (context.error) return res.status(404).json({ ok: false, message: context.error });
 
-    const order = await SalesOrder.findById(req.params.orderId);
+    const { SalesOrderModel } = await getScopedModelsForUser(context.authUser || req.user);
+    const order = await SalesOrderModel.findById(req.params.orderId);
     if (!order) return res.status(404).json({ ok: false, message: "Order not found" });
     if (!(await ensureOrderSectionAccess(req.user, order.saleType))) {
       return res.status(403).json({ ok: false, message: "This order section is locked for your role" });
@@ -582,12 +637,13 @@ router.patch("/:id/status", requireAuth, async (req, res) => {
     }
 
     const requestRole = normalizeRole(req.user?.role);
+    const { SalesOrderModel } = await getScopedModelsForUser(req.user);
     let order;
 
-    if (requestRole === "salesman" && status === "dispatched") {
-      order = await SalesOrder.findById(req.params.id);
+    if ((requestRole === "salesman" || requestRole === "delivery boy") && status === "dispatched") {
+      order = await SalesOrderModel.findById(req.params.id);
     } else {
-      order = await SalesOrder.findOne({ _id: req.params.id, ...roleMatchQuery(req.user) });
+      order = await SalesOrderModel.findOne({ _id: req.params.id, ...roleMatchQuery(req.user) });
     }
 
     if (!order) {
@@ -678,7 +734,7 @@ router.post("/", requireAuth, async (req, res) => {
     const totalAmount = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
     const role = String(req.user?.role || "").trim();
     const normalizedRole = normalizeRole(role);
-    const authUser = await User.findById(req.user?.uid).lean();
+    const authUser = await getAuthenticatedUser(req);
     const ownUserId = authUser?.userId || req.user?.uid || "";
     const isBrandManager = normalizedRole === "brand manager";
     const isDistributor = normalizedRole === "distributor";

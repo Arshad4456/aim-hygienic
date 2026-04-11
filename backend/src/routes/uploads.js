@@ -6,6 +6,7 @@ const { requireAuth } = require("../utils/auth");
 const User = require("../models/User");
 const SalesOrder = require("../models/SalesOrder");
 const WarehouseTransaction = require("../models/WarehouseTransaction");
+const { getTenantModel } = require("../utils/tenantModels");
 
 const router = express.Router();
 const DEFAULT_PUBLIC_BASE_URL = "https://files.aimhygienics.com";
@@ -16,6 +17,57 @@ function normalizeRole(value) {
 
 function uniqueScopedIds(...values) {
   return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean)));
+}
+
+async function getScopedUploadModels(userLike = {}) {
+  const companyId = String(userLike?.companyId || "").trim();
+  const companyName = String(userLike?.companyName || "").trim();
+  if (!companyId) {
+    return {
+      UserModel: User,
+      SalesOrderModel: SalesOrder,
+      WarehouseTransactionModel: WarehouseTransaction,
+    };
+  }
+
+  const [tenantUser, tenantSalesOrder, tenantWarehouseTransaction] = await Promise.all([
+    getTenantModel(User, companyId, companyName),
+    getTenantModel(SalesOrder, companyId, companyName),
+    getTenantModel(WarehouseTransaction, companyId, companyName),
+  ]);
+
+  return {
+    UserModel: tenantUser || User,
+    SalesOrderModel: tenantSalesOrder || SalesOrder,
+    WarehouseTransactionModel: tenantWarehouseTransaction || WarehouseTransaction,
+  };
+}
+
+async function findScopedUploadUser(auth = {}) {
+  const { UserModel } = await getScopedUploadModels(auth);
+  const fallbackUser = auth?.uid ? { ...auth, _id: auth.uid } : (auth || null);
+  const lookupQueries = [];
+
+  if (auth?.uid) lookupQueries.push({ _id: auth.uid });
+  if (auth?.userId) lookupQueries.push({ userId: String(auth.userId).trim() });
+  if (auth?.username) {
+    lookupQueries.push({ username: String(auth.username).trim() });
+    lookupQueries.push({ username: String(auth.username).trim().toLowerCase() });
+  }
+
+  const models = Array.from(new Set([UserModel, User].filter(Boolean)));
+  for (const model of models) {
+    for (const query of lookupQueries) {
+      try {
+        const found = await model.findOne(query).lean();
+        if (found) {
+          return { ...auth, ...found, _id: found._id };
+        }
+      } catch (_error) {}
+    }
+  }
+
+  return fallbackUser;
 }
 
 function canDeliveryActorAccessOrder(order, actor = {}) {
@@ -100,10 +152,11 @@ async function validateSupplierTransactionPodRequest(req, transactionId) {
     return { status: 403, body: { ok: false, message: "Only Supplier can request POD upload URLs" } };
   }
 
-  const me = await User.findById(req.user.uid).lean();
+  const { WarehouseTransactionModel } = await getScopedUploadModels(req.user);
+  const me = await findScopedUploadUser(req.user);
   if (!me) return { status: 404, body: { ok: false, message: "User not found" } };
 
-  const transaction = await WarehouseTransaction.findById(transactionId).lean();
+  const transaction = await WarehouseTransactionModel.findById(transactionId).lean();
   if (!transaction) return { status: 404, body: { ok: false, message: "Primary order not found" } };
   if (String(transaction.transactionType || "").toUpperCase() !== "SALE_STOCK") {
     return { status: 400, body: { ok: false, message: "POD upload URL is only available for primary sale requests" } };
@@ -131,7 +184,8 @@ async function validateSalesmanPodRequest(req, orderId) {
     return { status: 403, body: { ok: false, message: "Only Salesman or Delivery Boy can request POD upload URLs" } };
   }
 
-  const me = await User.findById(req.user.uid).lean();
+  const { SalesOrderModel } = await getScopedUploadModels(req.user);
+  const me = await findScopedUploadUser(req.user);
   if (!me) {
     return { status: 404, body: { ok: false, message: "User not found" } };
   }
@@ -141,7 +195,7 @@ async function validateSalesmanPodRequest(req, orderId) {
     actorIds: uniqueScopedIds(me?._id, me?.userId, me?.salesmanId, me?.deliveryBoyId, req.user?.uid, req.user?.userId, req.user?.salesmanId, req.user?.deliveryBoyId),
   };
 
-  const order = await SalesOrder.findById(orderId).lean();
+  const order = await SalesOrderModel.findById(orderId).lean();
   if (!order) return { status: 404, body: { ok: false, message: "Order not found" } };
   if (!canDeliveryActorAccessOrder(order, actor)) {
     return { status: 403, body: { ok: false, message: "Order is outside your delivery scope" } };
