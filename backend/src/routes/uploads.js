@@ -6,10 +6,28 @@ const { requireAuth } = require("../utils/auth");
 const User = require("../models/User");
 const SalesOrder = require("../models/SalesOrder");
 const WarehouseTransaction = require("../models/WarehouseTransaction");
-const { getTenantModel } = require("../utils/tenantModels");
 
 const router = express.Router();
 const DEFAULT_PUBLIC_BASE_URL = "https://files.aimhygienics.com";
+
+function normalizeRole(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function uniqueScopedIds(...values) {
+  return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean)));
+}
+
+function canDeliveryActorAccessOrder(order, actor = {}) {
+  const fieldId = String(actor.fieldId || "").trim();
+  const actorIds = Array.isArray(actor.actorIds) ? actor.actorIds : [];
+  const orderFieldId = String(order?.fieldId || "").trim();
+  const orderActorIds = uniqueScopedIds(order?.salesmanId, order?.deliveryBoyId);
+  if (fieldId && orderFieldId && fieldId === orderFieldId) return true;
+  if (actorIds.length && orderActorIds.some((value) => actorIds.includes(value))) return true;
+  if (fieldId && !orderFieldId && !orderActorIds.length) return true;
+  return false;
+}
 
 function resolvePublicBaseUrl() {
   return firstNonEmpty(process.env.CLOUDFLARE_R2_PUBLIC_BASE_URL, process.env.R2_PUBLIC_BASE_URL, DEFAULT_PUBLIC_BASE_URL).replace(/\/$/, "");
@@ -76,61 +94,16 @@ function normalizeBase64Payload(value) {
   if (raw.startsWith("data:") && idx >= 0) return raw.slice(idx + 1);
   return raw;
 }
-function normalizeId(value) {
-  return String(value || "").trim();
-}
-
-async function getScopedUploadModels(req) {
-  const companyId = firstNonEmpty(req.user?.companyId, req.body?.companyId, req.query?.companyId);
-  const companyName = firstNonEmpty(req.user?.companyName, req.body?.companyName, req.query?.companyName);
-  if (!companyId && !companyName) {
-    return { UserModel: User, SalesOrderModel: SalesOrder, WarehouseTransactionModel: WarehouseTransaction };
-  }
-
-  const [TenantUser, TenantSalesOrder, TenantWarehouseTransaction] = await Promise.all([
-    getTenantModel(User, companyId, companyName),
-    getTenantModel(SalesOrder, companyId, companyName),
-    getTenantModel(WarehouseTransaction, companyId, companyName),
-  ]);
-
-  return {
-    UserModel: TenantUser || User,
-    SalesOrderModel: TenantSalesOrder || SalesOrder,
-    WarehouseTransactionModel: TenantWarehouseTransaction || WarehouseTransaction,
-  };
-}
-
-async function findScopedUserById(req, userId) {
-  const { UserModel } = await getScopedUploadModels(req);
-  let user = await UserModel.findById(userId).lean();
-  if (!user && UserModel !== User) user = await User.findById(userId).lean();
-  return user;
-}
-
-async function findScopedSalesOrderById(req, orderId) {
-  const { SalesOrderModel } = await getScopedUploadModels(req);
-  let order = await SalesOrderModel.findById(orderId).lean();
-  if (!order && SalesOrderModel !== SalesOrder) order = await SalesOrder.findById(orderId).lean();
-  return order;
-}
-
-async function findScopedTransactionById(req, transactionId) {
-  const { WarehouseTransactionModel } = await getScopedUploadModels(req);
-  let transaction = await WarehouseTransactionModel.findById(transactionId).lean();
-  if (!transaction && WarehouseTransactionModel !== WarehouseTransaction) transaction = await WarehouseTransaction.findById(transactionId).lean();
-  return transaction;
-}
-
 
 async function validateSupplierTransactionPodRequest(req, transactionId) {
-  if (String(req.user?.role || '').trim().toLowerCase() !== 'supplier') {
+  if (String(req.user?.role || "") !== "Supplier") {
     return { status: 403, body: { ok: false, message: "Only Supplier can request POD upload URLs" } };
   }
 
-  const me = await findScopedUserById(req, req.user?.uid || req.user?._id || req.user?.userId);
+  const me = await User.findById(req.user.uid).lean();
   if (!me) return { status: 404, body: { ok: false, message: "User not found" } };
 
-  const transaction = await findScopedTransactionById(req, transactionId);
+  const transaction = await WarehouseTransaction.findById(transactionId).lean();
   if (!transaction) return { status: 404, body: { ok: false, message: "Primary order not found" } };
   if (String(transaction.transactionType || "").toUpperCase() !== "SALE_STOCK") {
     return { status: 400, body: { ok: false, message: "POD upload URL is only available for primary sale requests" } };
@@ -140,10 +113,10 @@ async function validateSupplierTransactionPodRequest(req, transactionId) {
     return { status: 400, body: { ok: false, message: "POD upload is allowed only after approval" } };
   }
 
-  const allowedSupplierIds = [normalizeId(me.userId), normalizeId(me.supplierId), normalizeId(me._id)].filter(Boolean);
-  const allowedSupplierNames = [normalizeId(me.supplierName), normalizeId(me.businessName), normalizeId(me.fullName)].filter(Boolean);
-  const assignedSupplierId = normalizeId(transaction.supplierId);
-  const assignedSupplierName = normalizeId(transaction.supplierName);
+  const allowedSupplierIds = [String(me.userId || "").trim(), String(me.supplierId || "").trim(), String(me._id || "").trim()].filter(Boolean);
+  const allowedSupplierNames = [String(me.supplierName || "").trim(), String(me.businessName || "").trim(), String(me.fullName || "").trim()].filter(Boolean);
+  const assignedSupplierId = String(transaction.supplierId || "").trim();
+  const assignedSupplierName = String(transaction.supplierName || "").trim();
   const isAllowed = allowedSupplierIds.includes(assignedSupplierId) || allowedSupplierNames.includes(assignedSupplierName);
   if (!isAllowed) {
     return { status: 403, body: { ok: false, message: "This primary order is not assigned to you" } };
@@ -153,25 +126,27 @@ async function validateSupplierTransactionPodRequest(req, transactionId) {
 }
 
 async function validateSalesmanPodRequest(req, orderId) {
-  if (String(req.user?.role || '').trim().toLowerCase() !== 'salesman') {
-    return { status: 403, body: { ok: false, message: "Only Salesman can request POD upload URLs" } };
+  const requestRole = normalizeRole(req.user?.role);
+  if (!["salesman", "delivery boy"].includes(requestRole)) {
+    return { status: 403, body: { ok: false, message: "Only Salesman or Delivery Boy can request POD upload URLs" } };
   }
 
-  const me = await findScopedUserById(req, req.user?.uid || req.user?._id || req.user?.userId);
-  if (!me) return { status: 404, body: { ok: false, message: "User not found" } };
+  const me = await User.findById(req.user.uid).lean();
+  if (!me) {
+    return { status: 404, body: { ok: false, message: "User not found" } };
+  }
 
-  const order = await findScopedSalesOrderById(req, orderId);
+  const actor = {
+    fieldId: String(me?.fieldId || req.user?.fieldId || "").trim(),
+    actorIds: uniqueScopedIds(me?._id, me?.userId, me?.salesmanId, me?.deliveryBoyId, req.user?.uid, req.user?.userId, req.user?.salesmanId, req.user?.deliveryBoyId),
+  };
+
+  const order = await SalesOrder.findById(orderId).lean();
   if (!order) return { status: 404, body: { ok: false, message: "Order not found" } };
-
-  const fieldId = normalizeId(me?.fieldId);
-  const salesmanIds = [normalizeId(me?.userId), normalizeId(me?.salesmanId), normalizeId(me?._id)].filter(Boolean);
-  const matchesField = fieldId && normalizeId(order.fieldId) === fieldId;
-  const matchesSalesman = salesmanIds.includes(normalizeId(order.salesmanId)) || salesmanIds.includes(normalizeId(order.assignedSalesmanId));
-  if (!matchesField && !matchesSalesman) {
-    if (!fieldId) return { status: 400, body: { ok: false, message: "Salesman field not configured" } };
-    return { status: 403, body: { ok: false, message: "Order is outside your field" } };
+  if (!canDeliveryActorAccessOrder(order, actor)) {
+    return { status: 403, body: { ok: false, message: "Order is outside your delivery scope" } };
   }
-  if (String(order.status || '').toLowerCase() !== "dispatched") {
+  if (order.status !== "dispatched") {
     return { status: 400, body: { ok: false, message: "POD upload is allowed only for dispatched orders" } };
   }
 

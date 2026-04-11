@@ -111,12 +111,17 @@ function mergeModuleAccessRules(savedRules = []) {
   return DEFAULT_MODULE_RULES.map((defaultRule) => {
     const saved = savedByKey.get(defaultRule.key);
     if (!saved) return { ...defaultRule };
+
+    const hasSavedAllowedRoles = Array.isArray(saved.allowedRoles);
     return {
       ...defaultRule,
-      allowedRoles: Array.isArray(saved.allowedRoles) && saved.allowedRoles.length
+      title: String(saved.title || defaultRule.title || "").trim() || defaultRule.title,
+      description: String(saved.description || defaultRule.description || "").trim() || defaultRule.description,
+      moduleKey: String(saved.moduleKey || defaultRule.moduleKey || "").trim() || defaultRule.moduleKey,
+      allowedRoles: hasSavedAllowedRoles
         ? saved.allowedRoles.map(normalizeRole).filter(Boolean)
         : [...defaultRule.allowedRoles],
-      locked: Boolean(saved.locked),
+      locked: typeof saved.locked === "boolean" ? saved.locked : Boolean(defaultRule.locked),
     };
   });
 }
