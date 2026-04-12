@@ -1183,7 +1183,7 @@ export default function WarehouseInventoryModulePage() {
 
               <div className="md:col-span-2">
                 <div className="font-semibold text-sm mb-2">Product Detail</div>
-                <div className="overflow-x-auto">
+                <div className="w-full max-w-full overflow-x-auto">
                   <table className="min-w-full text-xs border">
                     <thead>
                       <tr className="border-b bg-zinc-50">
@@ -1259,7 +1259,7 @@ export default function WarehouseInventoryModulePage() {
         {selectedCard === "DAMAGE_STOCK" ? (
           <section className="rounded-2xl border bg-white p-5 shadow-sm">
             <h3 className="text-lg font-semibold">Near to expire products</h3>
-            <div className="overflow-x-auto mt-2">
+            <div className="w-full max-w-full overflow-x-auto mt-2">
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="border-b"><th className="p-2 text-left">Product Name</th><th className="p-2 text-left">Quantity</th><th className="p-2 text-left">Warehouse</th><th className="p-2 text-left">Manufactur date</th><th className="p-2 text-left">expiry date</th></tr>
@@ -1447,7 +1447,7 @@ function LedgerTable({ type, rows, onDelete, onInvoice, canDelete = true }) {
   const sale = type === "SALE_STOCK";
   const returnStock = type === "RETURN_STOCK";
   return (
-    <div className="overflow-x-auto mt-2">
+    <div className="w-full max-w-full overflow-x-auto mt-2">
       <table className="min-w-full text-sm">
         <thead>
           {purchase ? (
@@ -1483,7 +1483,7 @@ function LedgerTable({ type, rows, onDelete, onInvoice, canDelete = true }) {
 
 function RequestOrderStocksTable({ rows, onOpen, onApprove, onReject, onDispatch, onDelivered, onPreview }) {
   return (
-    <div className="overflow-x-auto mt-2">
+    <div className="w-full max-w-full overflow-x-auto mt-2">
       <table className="min-w-full text-sm">
         <thead>
           <tr className="border-b">
@@ -1520,7 +1520,7 @@ function RequestOrderStocksTable({ rows, onOpen, onApprove, onReject, onDispatch
 
 function RequestReturnStocksTable({ rows, onOpen, onApprove, onReject, onPreview }) {
   return (
-    <div className="overflow-x-auto mt-2">
+    <div className="w-full max-w-full overflow-x-auto mt-2">
       <table className="min-w-full text-sm">
         <thead>
           <tr className="border-b">
@@ -1632,16 +1632,16 @@ function PreviewField({ label, value }) {
 }
 
 function TransferTable({ rows, onEditStatus, onDelete, onReceipt, canManage = true }) {
-  return <div className="overflow-x-auto mt-2"><table className="min-w-full text-sm"><thead><tr className="border-b"><th className="p-2 text-left">Product</th><th className="p-2 text-left">From</th><th className="p-2 text-left">To</th><th className="p-2 text-left">Qty</th><th className="p-2 text-left">Date and Time</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Action</th></tr></thead><tbody>{rows.map((r)=><tr key={r._id} className="border-b"><td className="p-2">{r.productName}</td><td className="p-2">{r.fromWarehouseName}</td><td className="p-2">{r.toWarehouseName}</td><td className="p-2">{r.quantity}</td><td className="p-2">{r.createdAt ? new Date(r.createdAt).toLocaleString() : "-"}</td><td className="p-2">{r.status}</td><td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" onClick={()=>onReceipt(r)}>Receipt</button>{canManage ? <button className="rounded border px-2 py-1" onClick={()=>onEditStatus(r)}>Edit</button> : null}{canManage ? <button className="rounded border border-red-300 text-red-700 px-2 py-1" onClick={()=>onDelete(r._id)}>Delete</button> : null}</div></td></tr>)}</tbody></table></div>;
+  return <div className="w-full max-w-full overflow-x-auto mt-2"><table className="min-w-full text-sm"><thead><tr className="border-b"><th className="p-2 text-left">Product</th><th className="p-2 text-left">From</th><th className="p-2 text-left">To</th><th className="p-2 text-left">Qty</th><th className="p-2 text-left">Date and Time</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Action</th></tr></thead><tbody>{rows.map((r)=><tr key={r._id} className="border-b"><td className="p-2">{r.productName}</td><td className="p-2">{r.fromWarehouseName}</td><td className="p-2">{r.toWarehouseName}</td><td className="p-2">{r.quantity}</td><td className="p-2">{r.createdAt ? new Date(r.createdAt).toLocaleString() : "-"}</td><td className="p-2">{r.status}</td><td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" onClick={()=>onReceipt(r)}>Receipt</button>{canManage ? <button className="rounded border px-2 py-1" onClick={()=>onEditStatus(r)}>Edit</button> : null}{canManage ? <button className="rounded border border-red-300 text-red-700 px-2 py-1" onClick={()=>onDelete(r._id)}>Delete</button> : null}</div></td></tr>)}</tbody></table></div>;
 }
 
 function InventoryMovementTable({ rows }) {
-  return <div className="overflow-x-auto mt-3"><table className="min-w-full text-sm"><thead><tr className="border-b"><th className="p-2 text-left">Date</th><th className="p-2 text-left">Product</th><th className="p-2 text-left">Warehouse</th><th className="p-2 text-left">Quantity</th><th className="p-2 text-left">Type</th><th className="p-2 text-left">Reference</th></tr></thead><tbody>{rows.map((r)=><tr key={r._id} className="border-b"><td className="p-2">{new Date(r.createdAt).toLocaleString()}</td><td className="p-2">{r.productName}</td><td className="p-2">{r.warehouseName}</td><td className="p-2">{r.quantity}</td><td className="p-2">{r.movementType}</td><td className="p-2">{r.referenceId || "-"}</td></tr>)}</tbody></table></div>;
+  return <div className="w-full max-w-full overflow-x-auto mt-3"><table className="min-w-full text-sm"><thead><tr className="border-b"><th className="p-2 text-left">Date</th><th className="p-2 text-left">Product</th><th className="p-2 text-left">Warehouse</th><th className="p-2 text-left">Quantity</th><th className="p-2 text-left">Type</th><th className="p-2 text-left">Reference</th></tr></thead><tbody>{rows.map((r)=><tr key={r._id} className="border-b"><td className="p-2">{new Date(r.createdAt).toLocaleString()}</td><td className="p-2">{r.productName}</td><td className="p-2">{r.warehouseName}</td><td className="p-2">{r.quantity}</td><td className="p-2">{r.movementType}</td><td className="p-2">{r.referenceId || "-"}</td></tr>)}</tbody></table></div>;
 }
 
 function SummaryTable({ rows, products, onUpdateMin, onDetail }) {
   const [edits, setEdits] = useState({});
-  return <div className="overflow-x-auto mt-2"><table className="min-w-full text-sm"><thead><tr className="border-b"><th className="p-2 text-left">Product</th><th className="p-2 text-left">Warehouse</th><th className="p-2 text-left">Quantity</th><th className="p-2 text-left">Minimum Stock Level</th><th className="p-2 text-left">Action</th></tr></thead><tbody>{rows.map((r)=>{const p=products.find((x)=>x.productId===r._id.productId);return <tr key={`${r._id.productId}-${r._id.warehouseId}`} className="border-b"><td className="p-2">{r.productName}</td><td className="p-2">{r.warehouseName}</td><td className="p-2">{r.quantity}</td><td className="p-2"><input className="border rounded px-2 py-1 w-24" value={edits[p?._id] ?? p?.minStockLevel ?? 0} onChange={(e)=>setEdits((s)=>({...s,[p?._id]:e.target.value}))} /></td><td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" onClick={()=>p&&onUpdateMin(p._id,edits[p._id] ?? p.minStockLevel)}>Update</button><button className="rounded border border-blue-300 px-2 py-1 text-blue-700" onClick={()=>onDetail(r)}>Detail</button></div></td></tr>;})}</tbody></table></div>;
+  return <div className="w-full max-w-full overflow-x-auto mt-2"><table className="min-w-full text-sm"><thead><tr className="border-b"><th className="p-2 text-left">Product</th><th className="p-2 text-left">Warehouse</th><th className="p-2 text-left">Quantity</th><th className="p-2 text-left">Minimum Stock Level</th><th className="p-2 text-left">Action</th></tr></thead><tbody>{rows.map((r)=>{const p=products.find((x)=>x.productId===r._id.productId);return <tr key={`${r._id.productId}-${r._id.warehouseId}`} className="border-b"><td className="p-2">{r.productName}</td><td className="p-2">{r.warehouseName}</td><td className="p-2">{r.quantity}</td><td className="p-2"><input className="border rounded px-2 py-1 w-24" value={edits[p?._id] ?? p?.minStockLevel ?? 0} onChange={(e)=>setEdits((s)=>({...s,[p?._id]:e.target.value}))} /></td><td className="p-2"><div className="flex gap-2"><button className="rounded border px-2 py-1" onClick={()=>p&&onUpdateMin(p._id,edits[p._id] ?? p.minStockLevel)}>Update</button><button className="rounded border border-blue-300 px-2 py-1 text-blue-700" onClick={()=>onDetail(r)}>Detail</button></div></td></tr>;})}</tbody></table></div>;
 }
 
 function SummaryDetailModal({ row, rows, loading, removing, onClose, onRemove }) {
@@ -1655,7 +1655,7 @@ function SummaryDetailModal({ row, rows, loading, removing, onClose, onRemove })
         </div>
         <div className="max-h-[70vh] overflow-auto p-5">
           {loading ? <div className="text-sm text-zinc-500">Loading...</div> : (
-            <div className="overflow-x-auto">
+            <div className="w-full max-w-full overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead><tr className="border-b"><th className="p-2 text-left">Product</th><th className="p-2 text-left">Quantity</th><th className="p-2 text-left">Manufacture Date</th><th className="p-2 text-left">Expiry Date</th><th className="p-2 text-left">Action</th></tr></thead>
                 <tbody>
@@ -1680,7 +1680,7 @@ function SummaryDetailModal({ row, rows, loading, removing, onClose, onRemove })
 }
 
 function LowStockTable({ rows }) {
-  return <div className="overflow-x-auto mt-2"><table className="min-w-full text-sm"><thead><tr className="border-b"><th className="p-2 text-left">Product</th><th className="p-2 text-left">Warehouse</th><th className="p-2 text-left">Quantity</th><th className="p-2 text-left">Min Level</th></tr></thead><tbody>{rows.map((r,idx)=><tr key={idx} className="border-b"><td className="p-2">{r.name}</td><td className="p-2">{r.warehouseName}</td><td className="p-2">{r.quantity}</td><td className="p-2">{r.minStockLevel}</td></tr>)}</tbody></table></div>;
+  return <div className="w-full max-w-full overflow-x-auto mt-2"><table className="min-w-full text-sm"><thead><tr className="border-b"><th className="p-2 text-left">Product</th><th className="p-2 text-left">Warehouse</th><th className="p-2 text-left">Quantity</th><th className="p-2 text-left">Min Level</th></tr></thead><tbody>{rows.map((r,idx)=><tr key={idx} className="border-b"><td className="p-2">{r.name}</td><td className="p-2">{r.warehouseName}</td><td className="p-2">{r.quantity}</td><td className="p-2">{r.minStockLevel}</td></tr>)}</tbody></table></div>;
 }
 
 function Input({ label, value, onChange, type = "text", readOnly = false }) {
