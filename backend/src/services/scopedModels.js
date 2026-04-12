@@ -53,5 +53,6 @@ module.exports = {
   asText,
   normalizeRole,
   isSystemLevelAdmin,
+  resolveTenantDbName,
   getScopedModels,
 };

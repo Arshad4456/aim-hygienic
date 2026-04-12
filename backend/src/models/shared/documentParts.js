@@ -2,7 +2,7 @@ const { Schema } = require("mongoose");
 
 const PartySnapshotSchema = new Schema(
   {
-    partyType: { type: String, trim: true }, // supplier | distributor | customer | warehouse | transporter
+    partyType: { type: String, trim: true },
     partyId: { type: String, trim: true },
     partyCode: { type: String, trim: true },
     partyName: { type: String, trim: true },
@@ -34,6 +34,9 @@ const LineItemSchema = new Schema(
     taxValue: { type: Number, default: 0 },
     netLineAmount: { type: Number, default: 0 },
     batchNo: { type: String, trim: true },
+    manufactureDate: Date,
+    expiryDate: Date,
+    returnDate: Date,
     notes: { type: String, trim: true },
   },
   { _id: false }

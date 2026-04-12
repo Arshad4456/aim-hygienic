@@ -14,16 +14,8 @@ async function postCustomerReceipt(req, receiptId) {
   if (receipt.ledgerPosting?.postingState === "posted") return receipt;
 
   receipt.status = "posted";
-  receipt.ledgerPosting = {
-    postingState: "posted",
-    postingKey: `customer_receipt:${receipt._id}`,
-    postedAt: new Date(),
-  };
-  receipt.statusHistory.push({
-    status: "posted",
-    changedBy: asText(req.user.uid),
-    note: "Receipt posted",
-  });
+  receipt.ledgerPosting = { postingState: "posted", postingKey: `customer_receipt:${receipt._id}`, postedAt: new Date() };
+  receipt.statusHistory.push({ status: "posted", changedBy: asText(req.user.uid), note: "Receipt posted" });
   await receipt.save();
 
   for (const allocation of receipt.allocations || []) {
@@ -31,7 +23,7 @@ async function postCustomerReceipt(req, receiptId) {
     if (!invoice) continue;
     invoice.allocatedReceiptTotal = Number(invoice.allocatedReceiptTotal || 0) + Number(allocation.allocatedAmount || 0);
     await invoice.save();
-    await recalcInvoiceBalance(CustomerInvoiceModel, invoice._id);
+    await recalcInvoiceBalance(CustomerInvoiceModel, invoice._id, "allocatedReceiptTotal");
   }
 
   return receipt;

@@ -1,9 +1,9 @@
-async function recalcInvoiceBalance(InvoiceModel, invoiceId) {
+async function recalcInvoiceBalance(InvoiceModel, invoiceId, allocationField = "allocatedReceiptTotal") {
   const invoice = await InvoiceModel.findById(invoiceId);
   if (!invoice) return null;
 
   const invoiceTotal = Number(invoice.invoiceTotal || invoice.totals?.grandTotal || 0);
-  const allocatedTotal = Number(invoice.allocatedReceiptTotal || invoice.allocatedPaymentTotal || 0);
+  const allocatedTotal = Number(invoice[allocationField] || 0);
 
   let paymentStatus = "unpaid";
   if (allocatedTotal > 0 && allocatedTotal < invoiceTotal) paymentStatus = "partial";

@@ -14,16 +14,8 @@ async function postSupplierPayment(req, paymentId) {
   if (payment.ledgerPosting?.postingState === "posted") return payment;
 
   payment.status = "posted";
-  payment.ledgerPosting = {
-    postingState: "posted",
-    postingKey: `supplier_payment:${payment._id}`,
-    postedAt: new Date(),
-  };
-  payment.statusHistory.push({
-    status: "posted",
-    changedBy: asText(req.user.uid),
-    note: "Supplier payment posted",
-  });
+  payment.ledgerPosting = { postingState: "posted", postingKey: `supplier_payment:${payment._id}`, postedAt: new Date() };
+  payment.statusHistory.push({ status: "posted", changedBy: asText(req.user.uid), note: "Supplier payment posted" });
   await payment.save();
 
   for (const allocation of payment.allocations || []) {
@@ -31,7 +23,7 @@ async function postSupplierPayment(req, paymentId) {
     if (!invoice) continue;
     invoice.allocatedPaymentTotal = Number(invoice.allocatedPaymentTotal || 0) + Number(allocation.allocatedAmount || 0);
     await invoice.save();
-    await recalcInvoiceBalance(SupplierInvoiceModel, invoice._id);
+    await recalcInvoiceBalance(SupplierInvoiceModel, invoice._id, "allocatedPaymentTotal");
   }
 
   return payment;

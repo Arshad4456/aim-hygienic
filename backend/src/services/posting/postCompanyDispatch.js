@@ -5,11 +5,7 @@ const InventoryLedger = require("../../models/InventoryLedger");
 const { getScopedModels, asText } = require("../scopedModels");
 
 async function postCompanyDispatch(req, dispatchId) {
-  const {
-    CompanyDispatchNoteModel,
-    CompanySalesOrderModel,
-    InventoryLedgerModel,
-  } = await getScopedModels(req, {
+  const { CompanyDispatchNoteModel, CompanySalesOrderModel, InventoryLedgerModel } = await getScopedModels(req, {
     CompanyDispatchNoteModel: CompanyDispatchNote,
     CompanySalesOrderModel: CompanySalesOrder,
     InventoryLedgerModel: InventoryLedger,
@@ -52,29 +48,15 @@ async function postCompanyDispatch(req, dispatchId) {
         postedByUserId: asText(req.user.uid),
       }));
 
-      if (ledgerRows.length) {
-        await InventoryLedgerModel.insertMany(ledgerRows, { session });
-      }
+      if (ledgerRows.length) await InventoryLedgerModel.insertMany(ledgerRows, { session });
 
       dispatch.status = "posted";
-      dispatch.ledgerPosting = {
-        postingState: "posted",
-        postingKey: `company_dispatch:${dispatch._id}`,
-        postedAt: new Date(),
-      };
-      dispatch.statusHistory.push({
-        status: "posted",
-        changedBy: asText(req.user.uid),
-        note: "Inventory out posted",
-      });
+      dispatch.ledgerPosting = { postingState: "posted", postingKey: `company_dispatch:${dispatch._id}`, postedAt: new Date() };
+      dispatch.statusHistory.push({ status: "posted", changedBy: asText(req.user.uid), note: "Inventory out posted" });
       await dispatch.save({ session });
 
       sourceOrder.status = "dispatched";
-      sourceOrder.statusHistory.push({
-        status: "dispatched",
-        changedBy: asText(req.user.uid),
-        note: `Dispatch posted: ${dispatch.documentNo}`,
-      });
+      sourceOrder.statusHistory.push({ status: "dispatched", changedBy: asText(req.user.uid), note: `Dispatch posted: ${dispatch.documentNo}` });
       await sourceOrder.save({ session });
 
       responseDoc = dispatch;

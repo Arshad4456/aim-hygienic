@@ -30,7 +30,7 @@ async function create(req) {
   return CompanySalesOrderModel.create({
     companyId: asText(req.user.companyId),
     companyName: asText(req.user.companyName),
-    documentNo: body.documentNo, // later replace with numbering service
+    documentNo: body.documentNo,
     ownerId: asText(req.user.companyId),
     distributorId: asText(body.distributorId),
     distributor: body.distributor,
@@ -59,8 +59,4 @@ async function approve(req) {
   return order;
 }
 
-module.exports = {
-  list,
-  create,
-  approve,
-};
+module.exports = { list, create, approve };

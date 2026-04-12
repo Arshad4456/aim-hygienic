@@ -2,9 +2,7 @@ const SecondaryOrder = require("../../models/SecondaryOrder");
 const { getScopedModels, asText, normalizeRole } = require("../scopedModels");
 
 async function getModels(req) {
-  return getScopedModels(req, {
-    SecondaryOrderModel: SecondaryOrder,
-  });
+  return getScopedModels(req, { SecondaryOrderModel: SecondaryOrder });
 }
 
 function buildRoleScopedQuery(req) {
@@ -12,7 +10,6 @@ function buildRoleScopedQuery(req) {
   const companyId = asText(req.user?.companyId);
   const distributorId = asText(req.user?.distributorId);
   const uid = asText(req.user?.uid);
-
   const query = { companyId };
 
   if (role === "distributor") {
@@ -31,11 +28,9 @@ function buildRoleScopedQuery(req) {
 async function list(req) {
   const { SecondaryOrderModel } = await getModels(req);
   const query = buildRoleScopedQuery(req);
-
   if (req.query.status && req.query.status !== "all") {
     query.status = asText(req.query.status);
   }
-
   return SecondaryOrderModel.find(query).sort({ createdAt: -1 }).lean();
 }
 
@@ -82,8 +77,4 @@ async function approve(req) {
   return order;
 }
 
-module.exports = {
-  list,
-  create,
-  approve,
-};
+module.exports = { list, create, approve };

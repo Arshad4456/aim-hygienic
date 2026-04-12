@@ -12,7 +12,6 @@ async function postDistributorStockReceipt(req, receiptId) {
   const session = await mongoose.startSession();
   try {
     let receiptDoc = null;
-
     await session.withTransaction(async () => {
       const receipt = await DistributorStockReceiptModel.findById(receiptId).session(session);
       if (!receipt) throw new Error("Distributor stock receipt not found");
@@ -43,26 +42,15 @@ async function postDistributorStockReceipt(req, receiptId) {
         postedByUserId: asText(req.user.uid),
       }));
 
-      if (ledgerRows.length) {
-        await InventoryLedgerModel.insertMany(ledgerRows, { session });
-      }
+      if (ledgerRows.length) await InventoryLedgerModel.insertMany(ledgerRows, { session });
 
       receipt.status = "posted";
-      receipt.ledgerPosting = {
-        postingState: "posted",
-        postingKey: `distributor_stock_receipt:${receipt._id}`,
-        postedAt: new Date(),
-      };
-      receipt.statusHistory.push({
-        status: "posted",
-        changedBy: asText(req.user.uid),
-        note: "Distributor inventory in posted",
-      });
+      receipt.ledgerPosting = { postingState: "posted", postingKey: `distributor_stock_receipt:${receipt._id}`, postedAt: new Date() };
+      receipt.statusHistory.push({ status: "posted", changedBy: asText(req.user.uid), note: "Distributor inventory in posted" });
       await receipt.save({ session });
 
       receiptDoc = receipt;
     });
-
     return receiptDoc;
   } finally {
     await session.endSession();
