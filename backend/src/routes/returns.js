@@ -1,119 +1,107 @@
-const express = require("express");
-const mongoose = require("mongoose");
-const { requireAuth } = require("../utils/auth");
-const ReturnClaim = require("../models/ReturnClaim");
-const SalesOrder = require("../models/SalesOrder");
-const Company = require("../models/Company");
-const { toTenantDatabaseName } = require("../utils/tenantDatabases");
+const express = require('express');
+const { requireAuth } = require('../utils/auth');
+const ReturnDocument = require('../models/ReturnDocument');
+const { getScopedModels, asText, normalizeRole } = require('../services/scopedModels');
+const { postReturnDocument } = require('../services/posting/postReturnDocument');
 
 const router = express.Router();
 
-function normalizeRole(role) {
-  return String(role || "").trim().toLowerCase();
+function scopedReturnQuery(req) {
+  const role = normalizeRole(req.user?.role);
+  const query = { companyId: asText(req.user.companyId) };
+  if (role === 'distributor') {
+    query.$or = [
+      { ownerType: 'distributor', ownerId: asText(req.user.distributorId || req.user.uid) },
+      { distributorId: asText(req.user.distributorId || req.user.uid) },
+    ];
+  }
+  if (role === 'customer') {
+    query['fromParty.partyId'] = asText(req.user.uid);
+  }
+  return query;
 }
 
-function isSystemLevelAdmin(role) {
-  const normalized = normalizeRole(role);
-  return normalized === "admin" || normalized === "system admin";
-}
-
-function asText(value) {
-  return String(value || "").trim();
-}
-
-async function resolveTenantDbName(companyId, companyName = "") {
-  const normalizedCompanyId = asText(companyId);
-  const normalizedCompanyName = asText(companyName);
-  if (!normalizedCompanyId && !normalizedCompanyName) return "";
-  if (normalizedCompanyName) return toTenantDatabaseName(normalizedCompanyName, normalizedCompanyId || "company");
-  const company = await Company.findOne({ companyId: normalizedCompanyId }).select("name").lean();
-  return toTenantDatabaseName(company?.name || normalizedCompanyId, normalizedCompanyId || "company");
-}
-
-function getModelFromDb(db, baseModel) {
-  const modelName = baseModel.modelName;
-  return db.models[modelName] || db.model(modelName, baseModel.schema, baseModel.collection.name);
-}
-
-async function getScopedReturnModels(req, requestedCompanyId = "", requestedCompanyName = "") {
-  const scopedCompanyId = isSystemLevelAdmin(req.user?.role)
-    ? asText(requestedCompanyId)
-    : asText(req.user?.companyId);
-  const scopedCompanyName = isSystemLevelAdmin(req.user?.role)
-    ? asText(requestedCompanyName)
-    : asText(req.user?.companyName);
-  if (!scopedCompanyId) return { ReturnClaimModel: ReturnClaim, SalesOrderModel: SalesOrder };
-  const dbName = await resolveTenantDbName(scopedCompanyId, scopedCompanyName);
-  if (!dbName) return { ReturnClaimModel: ReturnClaim, SalesOrderModel: SalesOrder };
-  const tenantDb = mongoose.connection.useDb(dbName, { useCache: true });
-  return {
-    ReturnClaimModel: getModelFromDb(tenantDb, ReturnClaim),
-    SalesOrderModel: getModelFromDb(tenantDb, SalesOrder),
-  };
-}
-
-router.get("/", requireAuth, async (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   try {
-    const { ReturnClaimModel } = await getScopedReturnModels(req, req.query?.companyId, req.query?.companyName);
-    const limit = Math.min(Number(req.query.limit) || 50, 200);
-    const returns = await ReturnClaimModel.find().sort({ createdAt: -1 }).limit(limit).lean();
+    const { ReturnDocumentModel } = await getScopedModels(req, { ReturnDocumentModel: ReturnDocument });
+    const query = scopedReturnQuery(req);
+    if (req.query.returnType && req.query.returnType !== 'all') query.returnType = asText(req.query.returnType);
+    if (req.query.status && req.query.status !== 'all') query.status = asText(req.query.status);
+    if (req.query.distributorId) query.distributorId = asText(req.query.distributorId);
+
+    const returns = await ReturnDocumentModel.find(query).sort({ createdAt: -1 }).limit(200).lean();
     return res.json({ ok: true, returns });
-  } catch (e) {
-    return res.status(500).json({ ok: false, message: "Failed to load returns" });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error.message || 'Failed to load returns' });
   }
 });
 
-router.post("/", requireAuth, async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   try {
-    const { ReturnClaimModel, SalesOrderModel } = await getScopedReturnModels(
-      req,
-      req.body?.companyId || req.query?.companyId,
-      req.body?.companyName || req.query?.companyName
-    );
-    const { orderNo, customerName, reason, quantity, notes } = req.body || {};
-    if (!orderNo || !customerName || !reason) {
-      return res.status(400).json({ ok: false, message: "Order number, customer, and reason are required" });
-    }
+    const { ReturnDocumentModel } = await getScopedModels(req, { ReturnDocumentModel: ReturnDocument });
+    const body = req.body || {};
+    const role = normalizeRole(req.user?.role);
+    const isDistributorSide = role === 'distributor' || body.ownerType === 'distributor' || body.returnType === 'customer_return';
+    const distributorId = asText(body.distributorId || req.user.distributorId || req.user.uid);
 
-    const order = await SalesOrderModel.findOne({ orderNo: String(orderNo).trim() }).lean();
-    const claim = await ReturnClaimModel.create({
-      orderId: order?._id,
-      orderNo: String(orderNo).trim(),
-      customerName: String(customerName).trim(),
-      reason: String(reason).trim(),
-      quantity: Number(quantity || 0),
-      notes: notes ? String(notes).trim() : undefined,
+    const doc = await ReturnDocumentModel.create({
+      companyId: asText(req.user.companyId),
+      documentNo: body.documentNo,
+      ownerType: isDistributorSide ? 'distributor' : 'company',
+      ownerId: isDistributorSide ? distributorId : asText(req.user.companyId),
+      distributorId: isDistributorSide ? distributorId : asText(body.distributorId),
+      returnType: asText(body.returnType),
+      sourceDocumentType: asText(body.sourceDocumentType),
+      sourceDocumentId: body.sourceDocumentId || null,
+      fromParty: body.fromParty,
+      toParty: body.toParty,
+      warehouseId: asText(body.warehouseId),
+      warehouseName: asText(body.warehouseName),
+      status: 'draft',
+      reasonCode: asText(body.reasonCode),
+      lines: Array.isArray(body.lines) ? body.lines : [],
+      totals: body.totals || {},
+      createdByUserId: asText(req.user.uid),
+      notes: asText(body.notes),
+      statusHistory: [{ status: 'draft', changedBy: asText(req.user.uid), note: 'Created' }],
     });
 
-    return res.status(201).json({ ok: true, claim });
-  } catch (e) {
-    return res.status(500).json({ ok: false, message: "Failed to create return claim" });
+    return res.status(201).json({ ok: true, returnDocument: doc });
+  } catch (error) {
+    return res.status(400).json({ ok: false, message: error.message || 'Failed to create return document' });
   }
 });
 
-router.patch("/:id/status", requireAuth, async (req, res) => {
+router.patch('/:id/status', requireAuth, async (req, res) => {
   try {
-    const { ReturnClaimModel } = await getScopedReturnModels(
-      req,
-      req.body?.companyId || req.query?.companyId,
-      req.body?.companyName || req.query?.companyName
-    );
-    const { status, notes } = req.body || {};
-    const allowed = ["requested", "approved", "rejected", "resolved"];
+    const { ReturnDocumentModel } = await getScopedModels(req, { ReturnDocumentModel: ReturnDocument });
+    const allowed = ['draft', 'approved', 'rejected', 'posted', 'reversed'];
+    const status = asText(req.body?.status);
     if (!allowed.includes(status)) {
-      return res.status(400).json({ ok: false, message: "Invalid status" });
+      return res.status(400).json({ ok: false, message: 'Invalid status' });
     }
 
-    const updates = { status };
-    if (notes) updates.notes = String(notes).trim();
+    const doc = await ReturnDocumentModel.findById(req.params.id);
+    if (!doc) return res.status(404).json({ ok: false, message: 'Return document not found' });
 
-    const claim = await ReturnClaimModel.findByIdAndUpdate(req.params.id, updates, { new: true });
-    if (!claim) {
-      return res.status(404).json({ ok: false, message: "Return claim not found" });
-    }
-    return res.json({ ok: true, claim });
-  } catch (e) {
-    return res.status(500).json({ ok: false, message: "Failed to update return claim" });
+    doc.status = status;
+    doc.statusHistory.push({ status, changedBy: asText(req.user.uid), note: asText(req.body?.notes || 'Status updated') });
+    if (status === 'approved') doc.approvedByUserId = asText(req.user.uid);
+    if (req.body?.notes) doc.notes = asText(req.body.notes);
+    await doc.save();
+
+    return res.json({ ok: true, returnDocument: doc });
+  } catch (error) {
+    return res.status(400).json({ ok: false, message: error.message || 'Failed to update return document' });
+  }
+});
+
+router.post('/:id/post', requireAuth, async (req, res) => {
+  try {
+    const doc = await postReturnDocument(req, req.params.id);
+    return res.json({ ok: true, returnDocument: doc });
+  } catch (error) {
+    return res.status(400).json({ ok: false, message: error.message || 'Failed to post return document' });
   }
 });
 
