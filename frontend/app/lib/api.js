@@ -134,3 +134,57 @@ export async function apiFetch(path, { method = "GET", body, token, credentials 
     "Could not reach the API server. Verify NEXT_PUBLIC_API_BASE/API_BASE configuration and that the backend is running.",
   );
 }
+
+export function withQuery(path, params = {}) {
+  const url = new URL(path, "http://v2.local");
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") return;
+    url.searchParams.set(key, String(value));
+  });
+  return `${url.pathname}${url.search}`;
+}
+
+export function apiGet(path, options = {}) {
+  return apiFetch(path, { ...options, method: "GET" });
+}
+
+export function apiPost(path, body = {}, options = {}) {
+  return apiFetch(path, { ...options, method: "POST", body });
+}
+
+export function apiPatch(path, body = {}, options = {}) {
+  return apiFetch(path, { ...options, method: "PATCH", body });
+}
+
+export function apiDelete(path, body = undefined, options = {}) {
+  return apiFetch(path, { ...options, method: "DELETE", body });
+}
+
+export const v2Api = {
+  orders: {
+    list: (params = {}) => apiGet(withQuery("/orders", params)),
+    create: (payload, params = {}) => apiPost(withQuery("/orders", params), payload),
+    approve: (id, params = {}) => apiPost(withQuery(`/orders/${id}/approve`, params), {}),
+  },
+  inventory: {
+    ledger: (params = {}) => apiGet(withQuery("/inventory/ledger", params)),
+    createCompanyDispatch: (payload) => apiPost("/inventory/company-dispatches", payload),
+    postCompanyDispatch: (id) => apiPost(`/inventory/company-dispatches/${id}/post`, {}),
+    createDistributorReceipt: (payload) => apiPost("/inventory/distributor-stock-receipts", payload),
+    postDistributorReceipt: (id) => apiPost(`/inventory/distributor-stock-receipts/${id}/post`, {}),
+  },
+  receipts: {
+    list: (params = {}) => apiGet(withQuery("/receipts", params)),
+    listInvoices: (params = {}) => apiGet(withQuery("/receipts/invoices", params)),
+    create: (payload, params = {}) => apiPost(withQuery("/receipts", params), payload),
+    post: (id, params = {}) => apiPost(withQuery(`/receipts/${id}/post`, params), {}),
+  },
+  payments: {
+    listSupplierInvoices: (params = {}) => apiGet(withQuery("/payments/supplier-invoices", params)),
+    createSupplierInvoice: (payload) => apiPost("/payments/supplier-invoices", payload),
+    postSupplierInvoice: (id) => apiPost(`/payments/supplier-invoices/${id}/post`, {}),
+    listSupplierPayments: (params = {}) => apiGet(withQuery("/payments/supplier-payments", params)),
+    createSupplierPayment: (payload) => apiPost("/payments/supplier-payments", payload),
+    postSupplierPayment: (id) => apiPost(`/payments/supplier-payments/${id}/post`, {}),
+  },
+};

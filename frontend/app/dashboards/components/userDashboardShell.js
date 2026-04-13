@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { clearAuthStorage, getAuthItem } from "../../lib/clientAuth";
-import { fetchModuleAccess, getRuleByKey, isRuleAllowedForRole, mapHrefToRuleKey } from "../../lib/moduleAccess";
+import { clearAuthStorage, getAuthSnapshot } from "../../lib/clientAuth";
+import { fetchModuleAccess, filterNavigationItems } from "../../lib/moduleAccess";
+import { buildRoleNavigationGroups, deriveRoleSlugFromLinks } from "../../lib/dashboardRegistry";
 
 const iconStyles = "h-5 w-5 shrink-0";
 
@@ -56,25 +57,7 @@ function ModuleIcon({ name }) {
   );
 }
 
-function humanize(segment = "") {
-  return segment
-    .replace(/[-_]/g, " ")
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/\b\w/g, (s) => s.toUpperCase());
-}
 
-
-function deriveRoleSlug(links, roleKey) {
-  const roleLink = links.find((item) => item.href?.startsWith("/dashboards/") && item.href !== "/dashboards");
-  if (roleLink) {
-    const parts = roleLink.href.split("/").filter(Boolean);
-    if (parts[0] === "dashboards" && parts[1] && parts[1] !== "admin") return parts[1];
-  }
-
-  if (roleKey === "Brand Manager") return "brandManager";
-  if (roleKey === "Distributor") return "distributor";
-  return "";
-}
 
 let userSidebarOpenGroupsCache = {};
 
@@ -91,7 +74,8 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
     if (typeof window === "undefined") return false;
     return localStorage.getItem("aim_user_sidebar_collapsed") === "1";
   });
-  const roleSlug = useMemo(() => deriveRoleSlug(links, roleKey), [links, roleKey]);
+  const authSnapshot = useMemo(() => getAuthSnapshot(), []);
+  const roleSlug = useMemo(() => deriveRoleSlugFromLinks(links, roleKey), [links, roleKey]);
   const sidebarCacheKey = roleSlug || roleKey || "default";
   const [openGroups, setOpenGroups] = useState(() => userSidebarOpenGroupsCache[sidebarCacheKey] || {});
   const router = useRouter();
@@ -119,10 +103,7 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
-  const user = useMemo(() => {
-    const raw = getAuthItem("aim_user");
-    return raw ? JSON.parse(raw) : null;
-  }, []);
+  const user = useMemo(() => authSnapshot.user, [authSnapshot.user]);
 
 
   function logout() {
@@ -137,11 +118,6 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
     router.push("/login");
   }
 
-  const filtered = useMemo(() => {
-    const value = query.trim().toLowerCase();
-    if (!value) return links;
-    return links.filter((item) => item.title.toLowerCase().includes(value));
-  }, [query, links]);
 
   const settingsHref = roleSlug ? `/dashboards/${roleSlug}/settings` : "/dashboards/admin/settings";
   const changePasswordHref = roleSlug ? `/dashboards/${roleSlug}/settings/change-password` : "/dashboards/admin/settings/change-password";
@@ -174,16 +150,20 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
     return `${first}${second}`.toUpperCase();
   }, [user, roleKey]);
 
-  const moduleLinks = useMemo(
-    () => links.filter((item) => {
-      if (/account settings|change password/i.test(item.title)) return false;
-      const ruleKey = mapHrefToRuleKey(item.href);
-      if (!ruleKey) return true;
-      const rule = getRuleByKey(moduleRules, ruleKey);
-      return isRuleAllowedForRole(rule, user?.role || roleKey);
-    }),
-    [links, moduleRules, roleKey, user?.role],
-  );
+  const moduleLinks = useMemo(() => {
+    const filtered = filterNavigationItems(
+      (links || []).filter((item) => !/account settings|change password/i.test(item.title)),
+      moduleRules,
+      user?.role || roleKey,
+    );
+    return filtered;
+  }, [links, moduleRules, roleKey, user?.role]);
+
+  const filtered = useMemo(() => {
+    const value = query.trim().toLowerCase();
+    if (!value) return moduleLinks;
+    return moduleLinks.filter((item) => item.title.toLowerCase().includes(value));
+  }, [moduleLinks, query]);
 
 
   useEffect(() => {
@@ -193,32 +173,7 @@ export default function UserDashboardShell({ title, subtitle, roleKey, links = [
     };
   }, [openGroups, sidebarCacheKey]);
 
-  const moduleGroups = useMemo(() => {
-    const grouped = [];
-
-    moduleLinks.forEach((item) => {
-      const tokens = item.href.split("/").filter(Boolean);
-      const roleIndex = tokens.findIndex((token) => token === roleSlug);
-      const next = roleIndex >= 0 ? tokens[roleIndex + 1] : null;
-
-      const groupKey = !next ? "dashboard" : next;
-      const existing = grouped.find((g) => g.key === groupKey);
-
-      if (existing) {
-        existing.items.push(item);
-        return;
-      }
-
-      grouped.push({
-        key: groupKey,
-        title: groupKey === "dashboard" ? "Dashboard" : humanize(groupKey),
-        iconName: groupKey,
-        items: [item],
-      });
-    });
-
-    return grouped;
-  }, [moduleLinks, roleSlug]);
+  const moduleGroups = useMemo(() => buildRoleNavigationGroups(moduleLinks, roleKey), [moduleLinks, roleKey]);
 
 
   return (

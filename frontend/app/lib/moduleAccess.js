@@ -4,9 +4,21 @@ export const MODULE_ACCESS_ROLE_OPTIONS = [
   "admin",
   "system admin",
   "company admin",
+  "purchase manager",
+  "warehouse manager",
+  "finance / accounts",
+  "dispatch / logistics",
+  "supplier",
+  "distributor",
+  "distributor accountant",
+  "distributor store manager",
+  "order booker",
+  "salesman",
+  "driver / delivery",
+  "customer",
+  // legacy compatibility
   "ceo",
   "managing director",
-  "warehouse manager",
   "account officer",
   "hr assistant",
   "cashier",
@@ -15,14 +27,9 @@ export const MODULE_ACCESS_ROLE_OPTIONS = [
   "regional sale manager",
   "zone sale manager",
   "territory sale manager",
-  "distributor",
   "field sale manager",
-  "order booker",
-  "salesman",
   "delivery boy",
-  "supplier",
   "vendor",
-  "customer",
   "brand manager",
 ];
 
@@ -178,4 +185,32 @@ export function mapHrefToRuleKey(href = "") {
     if (pattern.test(value)) return key;
   }
   return "";
+}
+
+
+export function isLinkAllowed(href, rules = [], role = "") {
+  const key = mapHrefToRuleKey(href);
+  if (!key) return true;
+  const rule = getRuleByKey(rules, key);
+  return isRuleAllowedForRole(rule, role);
+}
+
+export function filterNavigationItems(items = [], rules = [], role = "") {
+  return (items || [])
+    .map((item) => {
+      if (Array.isArray(item.children)) {
+        const children = filterNavigationItems(item.children, rules, role);
+        if (!children.length && item.type !== "link") return null;
+        return { ...item, children };
+      }
+      return isLinkAllowed(item.href, rules, role) ? item : null;
+    })
+    .filter(Boolean);
+}
+
+export function summarizeAccess(rules = [], role = "") {
+  const normalizedRole = normalizeRole(role);
+  const total = Array.isArray(rules) ? rules.length : 0;
+  const allowed = (rules || []).filter((rule) => isRuleAllowedForRole(rule, normalizedRole)).length;
+  return { total, allowed, blocked: Math.max(total - allowed, 0) };
 }

@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { clearAuthStorage } from "../../../lib/clientAuth";
+import { clearAuthStorage, getAuthSnapshot } from "../../../lib/clientAuth";
 import { useRouter } from "next/navigation";
 import Sidebar from "./Sidebar";
-import { adminDashboardSearchItems } from "../../searchItems";
+import { getSearchItemsForRole } from "../../../lib/dashboardRegistry";
 import { LANGUAGE_OPTIONS, useLanguage } from "../../../lib/language";
 import { translateNode } from "../../../lib/translateNode";
 
@@ -24,16 +24,11 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
 
   const menuRef = useRef(null);
   const searchRef = useRef(null);
+  const authSnapshot = useMemo(() => getAuthSnapshot(), []);
   const resolvedUser = useMemo(() => {
     if (user && Object.keys(user || {}).length) return user;
-    if (typeof window === "undefined") return null;
-    try {
-      const raw = window.sessionStorage.getItem("aim_user") || window.localStorage.getItem("aim_user");
-      return raw ? JSON.parse(raw) : null;
-    } catch (_error) {
-      return null;
-    }
-  }, [user]);
+    return authSnapshot.user;
+  }, [authSnapshot.user, user]);
 
   useEffect(() => {
     localStorage.setItem("aim_sidebar_collapsed", collapsed ? "1" : "0");
@@ -101,11 +96,9 @@ export default function AdminShell({ children, user, title = "Dashboard" }) {
   }, [resolvedUser]);
 
   const filteredSearchItems = useMemo(() => {
-    const role = (resolvedUser?.role || (typeof window !== "undefined" ? window.sessionStorage.getItem("aim_role") : "") || "").toString().trim().toLowerCase();
+    const role = (resolvedUser?.role || authSnapshot.role || "").toString().trim().toLowerCase();
     const canAccessCompanyManagement = role === "admin" || role === "system admin";
-    const roleItems = canAccessCompanyManagement
-      ? adminDashboardSearchItems
-      : adminDashboardSearchItems.filter((item) => !item.href.startsWith("/dashboards/admin/companies") && item.href !== "/dashboards/admin/module-access");
+    const roleItems = getSearchItemsForRole(role, { canAccessCompanyManagement });
 
     const value = searchTerm.trim().toLowerCase();
     if (!value) return roleItems;
