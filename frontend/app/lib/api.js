@@ -192,6 +192,21 @@ export const v2Api = {
     postSupplierPayment: (id) => apiPost(`/payments/supplier-payments/${id}/post`, {}),
   },
 
+  dashboard: {
+    overview: (params = {}) => apiGet(withQuery("/dashboard/overview", params)),
+    operations: (params = {}) => apiGet(withQuery("/dashboard/operations", params)),
+    salesManager: (params = {}) => apiGet(withQuery("/dashboard/sales-manager", params)),
+    salesKpi: (params = {}) => apiGet(withQuery("/sales-kpi/summary", params)),
+  },
+
+  reports: {
+    overview: (params = {}) => apiGet(withQuery("/reports/overview", params)),
+    inventory: (params = {}) => apiGet(withQuery("/reports/inventory", params)),
+    finance: (params = {}) => apiGet(withQuery("/reports/finance", params)),
+    procurement: (params = {}) => apiGet(withQuery("/reports/procurement", params)),
+    logistics: (params = {}) => apiGet(withQuery("/reports/logistics", params)),
+  },
+
   systemAdmin: {
     listCompanies: () => apiGet("/companies"),
     getCompany: (id) => apiGet(`/companies/${id}`),
