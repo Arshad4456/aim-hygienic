@@ -207,6 +207,26 @@ export const v2Api = {
     logistics: (params = {}) => apiGet(withQuery("/reports/logistics", params)),
   },
 
+  procurement: {
+    overview: (params = {}) => apiGet(withQuery("/reports/procurement", params)),
+    suppliers: (params = {}) => apiGet(withQuery("/users", { role: "Supplier", ...params })),
+    supplierById: async (id, params = {}) => {
+      if (!id) return { ok: true, user: null };
+      try {
+        return await apiGet(withQuery(`/users/${id}`, params));
+      } catch (_error) {
+        const list = await apiGet(withQuery("/users", { role: "Supplier", ...params }));
+        const matched = (list?.users || []).find((item) => String(item?._id || item?.id || "") === String(id));
+        return { ok: true, user: matched || null };
+      }
+    },
+    purchaseOrders: (params = {}) => apiGet(withQuery("/inventory/ledger", params)),
+    goodsReceipts: (params = {}) => apiGet(withQuery("/inventory/ledger", params)),
+    supplierInvoices: (params = {}) => apiGet(withQuery("/payments/supplier-invoices", params)),
+    supplierPayments: (params = {}) => apiGet(withQuery("/payments/supplier-payments", params)),
+    supplierPrimaryOrders: () => apiGet("/inventory/transactions/supplier/primary"),
+  },
+
   systemAdmin: {
     listCompanies: () => apiGet("/companies"),
     getCompany: (id) => apiGet(`/companies/${id}`),
