@@ -152,6 +152,10 @@ export function apiPost(path, body = {}, options = {}) {
   return apiFetch(path, { ...options, method: "POST", body });
 }
 
+export function apiPut(path, body = {}, options = {}) {
+  return apiFetch(path, { ...options, method: "PUT", body });
+}
+
 export function apiPatch(path, body = {}, options = {}) {
   return apiFetch(path, { ...options, method: "PATCH", body });
 }
@@ -186,5 +190,15 @@ export const v2Api = {
     listSupplierPayments: (params = {}) => apiGet(withQuery("/payments/supplier-payments", params)),
     createSupplierPayment: (payload) => apiPost("/payments/supplier-payments", payload),
     postSupplierPayment: (id) => apiPost(`/payments/supplier-payments/${id}/post`, {}),
+  },
+
+  systemAdmin: {
+    listCompanies: () => apiGet("/companies"),
+    getCompany: (id) => apiGet(`/companies/${id}`),
+    createCompany: (payload) => apiPost("/companies", payload),
+    updateCompany: (id, payload) => apiPut(`/companies/${id}`, payload),
+    deleteCompany: (id) => apiDelete(`/companies/${id}`),
+    getModuleAccess: (companyId = "") => apiGet(withQuery("/module-access", { companyId })),
+    saveModuleAccess: (payload) => apiPut("/module-access", payload),
   },
 };

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import AdminShell from "../admin/components/AdminShell";
 import { apiFetch } from "../../lib/api";
 import { getAuthItem } from "../../lib/clientAuth";
+import SystemAdminWorkspace from "./components/SystemAdminWorkspace";
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -15,6 +16,8 @@ export default function AdminDashboardPage() {
   }, []);
   const [overview, setOverview] = useState(null);
   const [err, setErr] = useState("");
+  const normalizedRole = String(user?.role || getAuthItem("aim_role") || "").trim().toLowerCase();
+  const isSystemAdmin = normalizedRole === "admin" || normalizedRole === "system admin";
 
   useEffect(() => {
     const token = getAuthItem("aim_token");
@@ -33,6 +36,7 @@ export default function AdminDashboardPage() {
   }, [router]);
 
   useEffect(() => {
+    if (isSystemAdmin) return undefined;
     async function loadOverview() {
       setErr("");
       try {
@@ -45,7 +49,7 @@ export default function AdminDashboardPage() {
     loadOverview();
     const interval = setInterval(loadOverview, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isSystemAdmin]);
 
   const kpis = useMemo(() => {
     return [
@@ -229,6 +233,14 @@ export default function AdminDashboardPage() {
     ],
     [overview],
   );
+
+  if (isSystemAdmin) {
+    return (
+      <AdminShell user={user} title="System Admin Dashboard">
+        <SystemAdminWorkspace />
+      </AdminShell>
+    );
+  }
 
   return (
     <AdminShell user={user} title="Admin Dashboard">

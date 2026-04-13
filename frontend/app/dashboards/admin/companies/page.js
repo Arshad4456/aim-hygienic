@@ -1,24 +1,42 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import AdminShell from "../components/AdminShell";
-import { apiFetch } from "../../../lib/api";
+import PageHeader from "../../../components/foundation/PageHeader";
+import SectionCard from "../../../components/foundation/SectionCard";
+import DocumentTable from "../../../components/foundation/DocumentTable";
+import EmptyState from "../../../components/foundation/EmptyState";
+import StatusBadge from "../../../components/foundation/StatusBadge";
+import { v2Api } from "../../../lib/api";
+
+function formatDate(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date);
+}
+
+function companyHealth(company = {}) {
+  const score = [company.email, company.phone1, company.mainOfficeAddress].filter(Boolean).length;
+  if (score === 3) return { value: "Complete", tone: "approved" };
+  if (score === 2) return { value: "Needs Review", tone: "pending" };
+  return { value: "Setup Required", tone: "unpaid" };
+}
 
 export default function CompanyListPage() {
   const [rows, setRows] = useState([]);
+  const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
-
-  const [editId, setEditId] = useState(null);
-  const [editOpen, setEditOpen] = useState(false);
   const [deletingId, setDeletingId] = useState("");
 
   async function load() {
     setErr("");
     setLoading(true);
     try {
-      const data = await apiFetch("/companies");
-      setRows(data?.companies || []);
+      const data = await v2Api.systemAdmin.listCompanies();
+      setRows(Array.isArray(data?.companies) ? data.companies : []);
     } catch (e) {
       setErr(e.message || "Failed to load companies");
     } finally {
@@ -26,14 +44,16 @@ export default function CompanyListPage() {
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   async function onDelete(id) {
-    if (!confirm("Delete this company? This cannot be undone.")) return;
+    if (!window.confirm("Delete this company? This cannot be undone.")) return;
     setErr("");
     setDeletingId(id);
     try {
-      await apiFetch(`/companies/${id}`, { method: "DELETE" });
+      await v2Api.systemAdmin.deleteCompany(id);
       await load();
     } catch (e) {
       setErr(e.message || "Failed to delete company");
@@ -42,195 +62,116 @@ export default function CompanyListPage() {
     }
   }
 
+  const filteredRows = useMemo(() => {
+    const value = query.trim().toLowerCase();
+    if (!value) return rows;
+    return rows.filter((row) =>
+      [row.name, row.companyId, row.email, row.phone1, row.slug]
+        .join(" ")
+        .toLowerCase()
+        .includes(value),
+    );
+  }, [query, rows]);
+
+  const metrics = useMemo(() => {
+    const total = rows.length;
+    const ready = rows.filter((row) => companyHealth(row).value === "Complete").length;
+    const needsReview = rows.filter((row) => companyHealth(row).value === "Needs Review").length;
+    const setupRequired = rows.filter((row) => companyHealth(row).value === "Setup Required").length;
+    return [
+      { label: "Total companies", value: total },
+      { label: "Ready profiles", value: ready },
+      { label: "Needs review", value: needsReview },
+      { label: "Setup required", value: setupRequired },
+    ];
+  }, [rows]);
+
+  const columns = [
+    { key: "name", title: "Company" },
+    { key: "companyId", title: "Company ID" },
+    { key: "slug", title: "Tenant Slug" },
+    { key: "phone1", title: "Primary Phone" },
+    { key: "email", title: "Email" },
+    { key: "createdAt", title: "Created", render: (row) => formatDate(row.createdAt) },
+    {
+      key: "health",
+      title: "Profile Health",
+      render: (row) => {
+        const health = companyHealth(row);
+        return <StatusBadge value={health.value} tone={health.tone} />;
+      },
+    },
+    {
+      key: "actions",
+      title: "Actions",
+      render: (row) => (
+        <div className="flex flex-wrap gap-2">
+          <Link href={`/dashboards/admin/companies/${row._id}`} className="rounded-full border border-zinc-200 px-3 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50">
+            Open details
+          </Link>
+          <button
+            type="button"
+            disabled={deletingId === row._id}
+            onClick={() => onDelete(row._id)}
+            className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-60"
+          >
+            {deletingId === row._id ? "Deleting..." : "Delete"}
+          </button>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <AdminShell title="Company List" user={null}>
-      <div className="rounded-2xl bg-white border shadow-sm p-5">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="text-xl font-semibold text-zinc-900">Companies</div>
-            <div className="text-sm text-zinc-500 mt-1">Multi-company mode enabled. System admin can add or remove companies.</div>
-          </div>
-        </div>
-
-        {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
-
-        <div className="mt-5 overflow-auto rounded-xl border">
-          <table className="min-w-[800px] w-full text-sm">
-            <thead className="bg-zinc-50">
-              <tr>
-                <th className="text-left px-3 py-2 border-b">Company ID</th>
-                <th className="text-left px-3 py-2 border-b">Company Name</th>
-                <th className="text-left px-3 py-2 border-b">Phone #1</th>
-                <th className="text-left px-3 py-2 border-b">Email</th>
-                <th className="text-left px-3 py-2 border-b">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={5} className="px-3 py-6 text-center text-zinc-500">Loading...</td></tr>
-              ) : rows.length === 0 ? (
-                <tr><td colSpan={5} className="px-3 py-6 text-center text-zinc-500">No companies found</td></tr>
-              ) : (
-                rows.map((c) => (
-                  <tr key={c._id} className="hover:bg-zinc-50">
-                    <td className="px-3 py-2 border-b">{c.companyId}</td>
-                    <td className="px-3 py-2 border-b">{c.name}</td>
-                    <td className="px-3 py-2 border-b">{c.phone1 || "-"}</td>
-                    <td className="px-3 py-2 border-b">{c.email || "-"}</td>
-                    <td className="px-3 py-2 border-b">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => { setEditId(c._id); setEditOpen(true); }}
-                          className="rounded-lg border px-3 py-1.5 text-xs hover:bg-zinc-50"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => onDelete(c._id)}
-                          disabled={deletingId === c._id}
-                          className="rounded-lg border border-red-300 text-red-700 px-3 py-1.5 text-xs hover:bg-red-50 disabled:opacity-50"
-                        >
-                          {deletingId === c._id ? "Deleting..." : "Delete"}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {editOpen ? (
-        <EditCompanyModal
-          id={editId}
-          onClose={() => setEditOpen(false)}
-          onSaved={() => { setEditOpen(false); load(); }}
+      <div className="space-y-6">
+        <PageHeader
+          eyebrow="System Admin"
+          title="Company register"
+          description="Review every tenant, inspect setup quality, and jump into company detail controls from one platform register."
+          actions={
+            <>
+              <button type="button" onClick={load} className="rounded-2xl border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">
+                Refresh list
+              </button>
+              <Link href="/dashboards/admin/companies/add" className="rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
+                Add new company
+              </Link>
+            </>
+          }
         />
-      ) : null}
-    </AdminShell>
-  );
-}
 
-function EditCompanyModal({ id, onClose, onSaved }) {
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState("");
+        {err ? <div className="rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
 
-  const [form, setForm] = useState({
-    companyId: "",
-    name: "",
-    phone1: "",
-    phone2: "",
-    email: "",
-    mainOfficeAddress: "",
-  });
-
-  function setField(k, v) {
-    setForm((s) => ({ ...s, [k]: v }));
-  }
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const data = await apiFetch(`/companies/${id}`);
-        setForm({
-          companyId: data.company?.companyId || "",
-          name: data.company?.name || "",
-          phone1: data.company?.phone1 || "",
-          phone2: data.company?.phone2 || "",
-          email: data.company?.email || "",
-          mainOfficeAddress: data.company?.mainOfficeAddress || "",
-        });
-      } catch (e) {
-        setErr(e.message || "Failed to load company");
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [id]);
-
-  async function onUpdate() {
-    setErr("");
-    setSaving(true);
-    try {
-      await apiFetch(`/companies/${id}`, {
-        method: "PUT",
-        body: form,
-      });
-      onSaved();
-    } catch (e) {
-      setErr(e.message || "Update failed");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="absolute right-0 top-0 h-full w-full sm:w-[560px] bg-white shadow-xl flex flex-col">
-        <div className="shrink-0 border-b px-4 py-3 flex items-center justify-between">
-          <div className="text-lg font-semibold text-zinc-900">Edit Company</div>
-          <button onClick={onClose} className="rounded-xl border px-3 py-2 text-sm hover:bg-zinc-50">✕</button>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {metrics.map((metric) => (
+            <SectionCard key={metric.label} className="bg-gradient-to-br from-white to-zinc-50">
+              <div className="text-sm font-medium text-zinc-500">{metric.label}</div>
+              <div className="mt-2 text-3xl font-semibold tracking-tight text-zinc-950">{metric.value}</div>
+            </SectionCard>
+          ))}
         </div>
 
-        {/* SCROLLABLE CARD BODY */}
-        <div className="flex-1 overflow-y-auto p-4">
-          {err ? <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
+        <SectionCard title="Filter companies" description="Search by name, company ID, email, phone, or tenant slug.">
+          <input
+            type="text"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search companies..."
+            className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm outline-none ring-0 focus:border-emerald-300"
+          />
+        </SectionCard>
+
+        <SectionCard title="Company list" description="System-admin controlled tenants and their profile readiness.">
           {loading ? (
-            <div className="text-sm text-zinc-500">Loading...</div>
+            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-6 text-sm text-zinc-500">Loading companies...</div>
+          ) : filteredRows.length ? (
+            <DocumentTable columns={columns} rows={filteredRows} emptyTitle="No companies found" emptyDescription="Try a different search or create a new company." />
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <Field label="Company ID" value={form.companyId} onChange={(v) => setField("companyId", v)} />
-              <Field label="Company Name" value={form.name} onChange={(v) => setField("name", v)} />
-              <Field label="Phone #1" value={form.phone1} onChange={(v) => setField("phone1", v)} />
-              <Field label="Phone #2" value={form.phone2} onChange={(v) => setField("phone2", v)} />
-              <Field label="Email" value={form.email} onChange={(v) => setField("email", v)} />
-
-              <div className="md:col-span-2">
-                <Label>Main Office Address</Label>
-                <textarea
-                  className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200"
-                  rows={3}
-                  value={form.mainOfficeAddress}
-                  onChange={(e) => setField("mainOfficeAddress", e.target.value)}
-                />
-              </div>
-            </div>
+            <EmptyState title="No companies found" description="Try a different search or create a new company." action={<Link href="/dashboards/admin/companies/add" className="rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Add new company</Link>} />
           )}
-        </div>
-
-        <div className="shrink-0 border-t p-4 flex items-center gap-3">
-          <button
-            disabled={saving || loading}
-            onClick={onUpdate}
-            className="rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-700 disabled:opacity-60"
-          >
-            {saving ? "Updating..." : "Update"}
-          </button>
-          <button onClick={onClose} className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50">
-            Cancel
-          </button>
-        </div>
+        </SectionCard>
       </div>
-    </div>
-  );
-}
-
-function Label({ children }) {
-  return <div className="text-sm font-medium text-zinc-800">{children}</div>;
-}
-function Field({ label, value, onChange }) {
-  return (
-    <div>
-      <Label>{label}</Label>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200"
-      />
-    </div>
+    </AdminShell>
   );
 }

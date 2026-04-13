@@ -3,119 +3,139 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import AdminShell from "../../components/AdminShell";
-import { apiFetch } from "../../../../lib/api";
+import PageHeader from "../../../../components/foundation/PageHeader";
+import SectionCard from "../../../../components/foundation/SectionCard";
+import { v2Api } from "../../../../lib/api";
+
+const initialForm = {
+  companyId: "",
+  name: "",
+  phone1: "",
+  phone2: "",
+  email: "",
+  mainOfficeAddress: "",
+};
+
+function Field({ label, value, onChange, type = "text", required = false, placeholder = "" }) {
+  return (
+    <label className="block">
+      <div className="text-sm font-medium text-zinc-800">{label}</div>
+      <input
+        type={type}
+        required={required}
+        placeholder={placeholder}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-1 w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm outline-none focus:border-emerald-300"
+      />
+    </label>
+  );
+}
 
 export default function AddCompanyPage() {
   const router = useRouter();
+  const [form, setForm] = useState(initialForm);
   const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState("");
-  const [ok, setOk] = useState("");
+  const [message, setMessage] = useState("");
+  const [tone, setTone] = useState("neutral");
 
-  const [form, setForm] = useState({
-    companyId: "",
-    name: "",
-    phone1: "",
-    phone2: "",
-    email: "",
-    mainOfficeAddress: "",
-  });
-
-  function setField(k, v) {
-    setForm((s) => ({ ...s, [k]: v }));
+  function setField(key, value) {
+    setForm((current) => ({ ...current, [key]: value }));
   }
 
-  async function onSubmit(e) {
-    e.preventDefault();
-    setErr("");
-    setOk("");
+  async function onSubmit(event) {
+    event.preventDefault();
     setLoading(true);
-
+    setMessage("");
     try {
-      await apiFetch("/companies", {
-        method: "POST",
-        body: {
-          companyId: form.companyId,
-          name: form.name,
-          phone1: form.phone1,
-          phone2: form.phone2,
-          email: form.email,
-          mainOfficeAddress: form.mainOfficeAddress,
-        },
-      });
-
-      setOk("✅ Company created successfully.");
-      setTimeout(() => router.push("/dashboards/admin/companies"), 600);
-    } catch (e2) {
-      setErr(e2.message || "Failed to create company");
+      const data = await v2Api.systemAdmin.createCompany(form);
+      setTone("success");
+      setMessage(`Company ${data?.company?.name || form.name} created successfully.`);
+      const createdId = data?.company?._id;
+      setForm(initialForm);
+      if (createdId) {
+        router.push(`/dashboards/admin/companies/${createdId}`);
+      }
+    } catch (error) {
+      setTone("error");
+      setMessage(error.message || "Failed to create company");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <AdminShell title="Add New Company" user={null}>
-      <div className="rounded-2xl bg-white border shadow-sm p-5">
-        <div className="text-xl font-semibold text-zinc-900">Add New Company</div>
-        <div className="text-sm text-zinc-500 mt-1">
-          Enter company details for registration.
-        </div>
+    <AdminShell title="Add Company" user={null}>
+      <div className="space-y-6">
+        <PageHeader
+          eyebrow="System Admin"
+          title="Create a new company"
+          description="This will register the company in the platform, prepare its tenant identity, and make it ready for module access and role rollout."
+        />
 
-        {err ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
-        {ok ? <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{ok}</div> : null}
-
-        <form onSubmit={onSubmit} className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Field label="Company ID" value={form.companyId} onChange={(v) => setField("companyId", v)} required />
-          <Field label="Company Name" value={form.name} onChange={(v) => setField("name", v)} required />
-          <Field label="Phone #1" value={form.phone1} onChange={(v) => setField("phone1", v)} />
-          <Field label="Phone #2" value={form.phone2} onChange={(v) => setField("phone2", v)} />
-          <Field label="Email" value={form.email} onChange={(v) => setField("email", v)} type="email" />
-
-          <div className="md:col-span-2">
-            <Label>Main Office Address</Label>
-            <textarea
-              className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200"
-              rows={3}
-              value={form.mainOfficeAddress}
-              onChange={(e) => setField("mainOfficeAddress", e.target.value)}
-            />
+        {message ? (
+          <div className={`rounded-3xl border px-4 py-3 text-sm ${tone === "error" ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
+            {message}
           </div>
+        ) : null}
 
-          <div className="md:col-span-2 flex items-center gap-3 mt-2">
-            <button
-              disabled={loading}
-              className="rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm font-medium hover:bg-emerald-700 disabled:opacity-60"
-            >
-              {loading ? "Saving..." : "Save Company"}
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push("/dashboards/admin/companies")}
-              className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50"
-            >
-              View Company List
-            </button>
-          </div>
+        <form onSubmit={onSubmit} className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
+          <SectionCard title="Company identity" description="The company ID and company name are the main platform identity fields.">
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="Company ID" value={form.companyId} onChange={(value) => setField("companyId", value)} required placeholder="0001" />
+              <Field label="Company Name" value={form.name} onChange={(value) => setField("name", value)} required placeholder="Aim Hygienic" />
+              <Field label="Primary Phone" value={form.phone1} onChange={(value) => setField("phone1", value)} placeholder="03xx-xxxxxxx" />
+              <Field label="Secondary Phone" value={form.phone2} onChange={(value) => setField("phone2", value)} placeholder="Optional" />
+              <div className="md:col-span-2">
+                <Field label="Email" type="email" value={form.email} onChange={(value) => setField("email", value)} placeholder="company@example.com" />
+              </div>
+              <label className="block md:col-span-2">
+                <div className="text-sm font-medium text-zinc-800">Main Office Address</div>
+                <textarea
+                  rows={4}
+                  value={form.mainOfficeAddress}
+                  onChange={(event) => setField("mainOfficeAddress", event.target.value)}
+                  placeholder="Enter main office location"
+                  className="mt-1 w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm outline-none focus:border-emerald-300"
+                />
+              </label>
+            </div>
+          </SectionCard>
+
+          <SectionCard title="What happens next" description="After creation, you can open company details to manage module access and onboarding quality.">
+            <div className="space-y-4 text-sm text-zinc-600">
+              <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+                <div className="font-semibold text-zinc-900">1. Tenant registration</div>
+                <div className="mt-1">The backend creates the company record and prepares the tenant database identity.</div>
+              </div>
+              <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+                <div className="font-semibold text-zinc-900">2. Company detail review</div>
+                <div className="mt-1">Open the company detail page to inspect setup quality and feature/module posture.</div>
+              </div>
+              <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+                <div className="font-semibold text-zinc-900">3. Module enable / disable</div>
+                <div className="mt-1">Use company-level module access to control what each business role can see after onboarding.</div>
+              </div>
+            </div>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <button
+                type="submit"
+                disabled={loading}
+                className="rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+              >
+                {loading ? "Saving..." : "Save company"}
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/dashboards/admin/companies")}
+                className="rounded-2xl border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+              >
+                Back to company list
+              </button>
+            </div>
+          </SectionCard>
         </form>
       </div>
     </AdminShell>
-  );
-}
-
-function Label({ children }) {
-  return <div className="text-sm font-medium text-zinc-800">{children}</div>;
-}
-
-function Field({ label, value, onChange, type = "text", required = false }) {
-  return (
-    <div>
-      <Label>{label}</Label>
-      <input
-        type={type}
-        required={required}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-200"
-      />
-    </div>
   );
 }
