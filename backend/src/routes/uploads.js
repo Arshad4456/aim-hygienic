@@ -4,9 +4,10 @@ const https = require("https");
 const express = require("express");
 const { requireAuth } = require("../utils/auth");
 const User = require("../models/User");
-const SalesOrder = require("../models/SalesOrder");
-const WarehouseTransaction = require("../models/WarehouseTransaction");
-const { getTenantModel } = require("../utils/tenantModels");
+const SecondaryOrder = require("../models/SecondaryOrder");
+const CompanySalesOrder = require("../models/CompanySalesOrder");
+const CompanyDispatchNote = require("../models/CompanyDispatchNote");
+const { getScopedModels, asText } = require("../services/scopedModels");
 
 const router = express.Router();
 const DEFAULT_PUBLIC_BASE_URL = "https://files.aimhygienics.com";
@@ -19,33 +20,19 @@ function uniqueScopedIds(...values) {
   return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean)));
 }
 
-async function getScopedUploadModels(userLike = {}) {
-  const companyId = String(userLike?.companyId || "").trim();
-  const companyName = String(userLike?.companyName || "").trim();
-  if (!companyId) {
-    return {
-      UserModel: User,
-      SalesOrderModel: SalesOrder,
-      WarehouseTransactionModel: WarehouseTransaction,
-    };
-  }
-
-  const [tenantUser, tenantSalesOrder, tenantWarehouseTransaction] = await Promise.all([
-    getTenantModel(User, companyId, companyName),
-    getTenantModel(SalesOrder, companyId, companyName),
-    getTenantModel(WarehouseTransaction, companyId, companyName),
-  ]);
-
-  return {
-    UserModel: tenantUser || User,
-    SalesOrderModel: tenantSalesOrder || SalesOrder,
-    WarehouseTransactionModel: tenantWarehouseTransaction || WarehouseTransaction,
-  };
+async function getScopedUploadModels(req) {
+  return getScopedModels(req, {
+    UserModel: User,
+    SecondaryOrderModel: SecondaryOrder,
+    CompanySalesOrderModel: CompanySalesOrder,
+    CompanyDispatchNoteModel: CompanyDispatchNote,
+  });
 }
 
-async function findScopedUploadUser(auth = {}) {
-  const { UserModel } = await getScopedUploadModels(auth);
-  const fallbackUser = auth?.uid ? { ...auth, _id: auth.uid } : (auth || null);
+async function findScopedUploadUser(req) {
+  const { UserModel } = await getScopedUploadModels(req);
+  const auth = req.user || {};
+  const fallbackUser = auth?.uid ? { ...auth, _id: auth.uid } : auth || null;
   const lookupQueries = [];
 
   if (auth?.uid) lookupQueries.push({ _id: auth.uid });
@@ -60,9 +47,7 @@ async function findScopedUploadUser(auth = {}) {
     for (const query of lookupQueries) {
       try {
         const found = await model.findOne(query).lean();
-        if (found) {
-          return { ...auth, ...found, _id: found._id };
-        }
+        if (found) return { ...auth, ...found, _id: found._id };
       } catch (_error) {}
     }
   }
@@ -74,11 +59,98 @@ function canDeliveryActorAccessOrder(order, actor = {}) {
   const fieldId = String(actor.fieldId || "").trim();
   const actorIds = Array.isArray(actor.actorIds) ? actor.actorIds : [];
   const orderFieldId = String(order?.fieldId || "").trim();
-  const orderActorIds = uniqueScopedIds(order?.salesmanId, order?.deliveryBoyId);
+  const orderActorIds = uniqueScopedIds(order?.salesmanUserId, order?.deliveryBoyId);
   if (fieldId && orderFieldId && fieldId === orderFieldId) return true;
   if (actorIds.length && orderActorIds.some((value) => actorIds.includes(value))) return true;
   if (fieldId && !orderFieldId && !orderActorIds.length) return true;
   return false;
+}
+
+function extractSupplierAccess(document = {}) {
+  const supplierIds = uniqueScopedIds(
+    document?.supplierId,
+    document?.assignedSupplierId,
+    document?.supplier?.partyId,
+    document?.supplier?.id
+  );
+  const supplierNames = uniqueScopedIds(
+    document?.supplierName,
+    document?.assignedSupplierName,
+    document?.supplier?.partyName,
+    document?.supplier?.name
+  );
+  return { supplierIds, supplierNames };
+}
+
+async function validateSupplierTransactionPodRequest(req, transactionId) {
+  if (String(req.user?.role || "") !== "Supplier") {
+    return { status: 403, body: { ok: false, message: "Only Supplier can request POD upload URLs" } };
+  }
+
+  const { CompanySalesOrderModel, CompanyDispatchNoteModel } = await getScopedUploadModels(req);
+  const me = await findScopedUploadUser(req);
+  if (!me) return { status: 404, body: { ok: false, message: "User not found" } };
+
+  const [dispatchDoc, orderDoc] = await Promise.all([
+    CompanyDispatchNoteModel.findById(transactionId).lean().catch(() => null),
+    CompanySalesOrderModel.findById(transactionId).lean().catch(() => null),
+  ]);
+  const transaction = dispatchDoc || orderDoc;
+  if (!transaction) {
+    return { status: 404, body: { ok: false, message: "Primary order not found" } };
+  }
+
+  const normalizedStatus = normalizeRole(transaction?.status);
+  const allowedStatuses = dispatchDoc
+    ? ["draft", "posted", "delivered"]
+    : ["approved", "reserved", "ready_to_dispatch", "dispatched", "received", "invoiced", "closed"];
+  if (!allowedStatuses.includes(normalizedStatus)) {
+    return { status: 400, body: { ok: false, message: "POD upload is allowed only after approval" } };
+  }
+
+  const allowedSupplierIds = uniqueScopedIds(me.userId, me.supplierId, me._id);
+  const allowedSupplierNames = uniqueScopedIds(me.supplierName, me.businessName, me.fullName);
+  const { supplierIds, supplierNames } = extractSupplierAccess(transaction);
+
+  if (supplierIds.length || supplierNames.length) {
+    const isAllowed =
+      supplierIds.some((value) => allowedSupplierIds.includes(value)) ||
+      supplierNames.some((value) => allowedSupplierNames.includes(value));
+    if (!isAllowed) {
+      return { status: 403, body: { ok: false, message: "This primary order is not assigned to you" } };
+    }
+  }
+
+  return { transaction };
+}
+
+async function validateSalesmanPodRequest(req, orderId) {
+  const requestRole = normalizeRole(req.user?.role);
+  if (!["salesman", "delivery boy"].includes(requestRole)) {
+    return { status: 403, body: { ok: false, message: "Only Salesman or Delivery Boy can request POD upload URLs" } };
+  }
+
+  const { SecondaryOrderModel } = await getScopedUploadModels(req);
+  const me = await findScopedUploadUser(req);
+  if (!me) {
+    return { status: 404, body: { ok: false, message: "User not found" } };
+  }
+
+  const actor = {
+    fieldId: String(me?.fieldId || req.user?.fieldId || "").trim(),
+    actorIds: uniqueScopedIds(me?._id, me?.userId, me?.salesmanId, me?.deliveryBoyId, req.user?.uid, req.user?.userId, req.user?.salesmanId, req.user?.deliveryBoyId),
+  };
+
+  const order = await SecondaryOrderModel.findById(orderId).lean();
+  if (!order) return { status: 404, body: { ok: false, message: "Order not found" } };
+  if (!canDeliveryActorAccessOrder(order, actor)) {
+    return { status: 403, body: { ok: false, message: "Order is outside your delivery scope" } };
+  }
+  if (!["dispatched", "delivered"].includes(normalizeRole(order.status))) {
+    return { status: 400, body: { ok: false, message: "POD upload is allowed only for dispatched orders" } };
+  }
+
+  return { order };
 }
 
 function resolvePublicBaseUrl() {

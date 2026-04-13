@@ -1,11 +1,11 @@
 const express = require("express");
-const mongoose = require("mongoose");
-const { requireAuth } = require("../utils/auth");
 const User = require("../models/User");
 const Vehicle = require("../models/Vehicle");
-const SalesOrder = require("../models/SalesOrder");
-const Company = require("../models/Company");
-const { toTenantDatabaseName } = require("../utils/tenantDatabases");
+const SecondaryOrder = require("../models/SecondaryOrder");
+const CompanyDispatchNote = require("../models/CompanyDispatchNote");
+const CompanySalesOrder = require("../models/CompanySalesOrder");
+const { requireAuth } = require("../utils/auth");
+const { getScopedModels, asText, normalizeRole } = require("../services/scopedModels");
 
 const router = express.Router();
 
@@ -14,56 +14,39 @@ function normalizeCoordinate(value) {
   return Number.isFinite(n) ? n : null;
 }
 
-function normalizeRole(role) {
-  return String(role || "").trim().toLowerCase();
+async function getScopedTrackingModels(req) {
+  return getScopedModels(req, {
+    UserModel: User,
+    VehicleModel: Vehicle,
+    SecondaryOrderModel: SecondaryOrder,
+    CompanyDispatchNoteModel: CompanyDispatchNote,
+    CompanySalesOrderModel: CompanySalesOrder,
+  });
 }
 
-function isSystemLevelAdmin(role) {
-  const normalized = normalizeRole(role);
-  return normalized === "admin" || normalized === "system admin";
+function roleScopedBaseQuery(req) {
+  const role = normalizeRole(req.user?.role);
+  const companyId = asText(req.user?.companyId);
+  const distributorId = asText(req.user?.distributorId || req.user?.uid);
+  const query = { companyId };
+
+  if (role === "distributor") {
+    query.$or = [{ distributorId }, { ownerId: distributorId }];
+  }
+
+  return query;
 }
 
-function asText(value) {
-  return String(value || "").trim();
-}
-
-async function resolveTenantDbName(companyId, companyName = "") {
-  const normalizedCompanyId = asText(companyId);
-  const normalizedCompanyName = asText(companyName);
-  if (!normalizedCompanyId && !normalizedCompanyName) return "";
-  if (normalizedCompanyName) return toTenantDatabaseName(normalizedCompanyName, normalizedCompanyId || "company");
-  const company = await Company.findOne({ companyId: normalizedCompanyId }).select("name").lean();
-  return toTenantDatabaseName(company?.name || normalizedCompanyId, normalizedCompanyId || "company");
-}
-
-function getModelFromDb(db, baseModel) {
-  const modelName = baseModel.modelName;
-  return db.models[modelName] || db.model(modelName, baseModel.schema, baseModel.collection.name);
-}
-
-async function getScopedTrackingModels(req, requestedCompanyId = "", requestedCompanyName = "") {
-  const scopedCompanyId = isSystemLevelAdmin(req.user?.role)
-    ? asText(requestedCompanyId)
-    : asText(req.user?.companyId);
-  const scopedCompanyName = isSystemLevelAdmin(req.user?.role)
-    ? asText(requestedCompanyName)
-    : asText(req.user?.companyName);
-
-  if (!scopedCompanyId) return { UserModel: User, VehicleModel: Vehicle, SalesOrderModel: SalesOrder };
-  const dbName = await resolveTenantDbName(scopedCompanyId, scopedCompanyName);
-  if (!dbName) return { UserModel: User, VehicleModel: Vehicle, SalesOrderModel: SalesOrder };
-
-  const tenantDb = mongoose.connection.useDb(dbName, { useCache: true });
-  return {
-    UserModel: getModelFromDb(tenantDb, User),
-    VehicleModel: getModelFromDb(tenantDb, Vehicle),
-    SalesOrderModel: getModelFromDb(tenantDb, SalesOrder),
-  };
+function buildVehicleMap(rows = []) {
+  return rows.reduce((acc, row) => {
+    acc[String(row._id)] = row;
+    return acc;
+  }, {});
 }
 
 router.get("/users", requireAuth, async (req, res) => {
   try {
-    const { UserModel } = await getScopedTrackingModels(req, req.query?.companyId, req.query?.companyName);
+    const { UserModel } = await getScopedTrackingModels(req);
     const users = await UserModel.find({
       gpsLatitude: { $ne: "" },
       gpsLongitude: { $ne: "" },
@@ -79,14 +62,14 @@ router.get("/users", requireAuth, async (req, res) => {
         gpsLongitude: normalizeCoordinate(user.gpsLongitude),
       })),
     });
-  } catch (e) {
+  } catch (_error) {
     return res.status(500).json({ ok: false, message: "Failed to load live tracking" });
   }
 });
 
 router.put("/users/me", requireAuth, async (req, res) => {
   try {
-    const { UserModel } = await getScopedTrackingModels(req, req.body?.companyId || req.query?.companyId, req.body?.companyName || req.query?.companyName);
+    const { UserModel } = await getScopedTrackingModels(req);
     const body = req.body || {};
     const gpsLatitude = normalizeCoordinate(body.gpsLatitude);
     const gpsLongitude = normalizeCoordinate(body.gpsLongitude);
@@ -105,14 +88,19 @@ router.put("/users/me", requireAuth, async (req, res) => {
     ).select("fullName role mobile gpsLatitude gpsLongitude updatedAt");
 
     return res.json({ ok: true, user: updated });
-  } catch (e) {
+  } catch (_error) {
     return res.status(500).json({ ok: false, message: "Failed to update location" });
   }
 });
 
 router.get("/summary", requireAuth, async (req, res) => {
   try {
-    const { UserModel, VehicleModel, SalesOrderModel } = await getScopedTrackingModels(req, req.query?.companyId, req.query?.companyName);
+    const {
+      UserModel,
+      VehicleModel,
+      SecondaryOrderModel,
+      CompanyDispatchNoteModel,
+    } = await getScopedTrackingModels(req);
     const totalUsers = await UserModel.countDocuments();
     const trackedUsers = await UserModel.countDocuments({
       gpsLatitude: { $ne: "" },
@@ -124,7 +112,20 @@ router.get("/summary", requireAuth, async (req, res) => {
       gpsLatitude: { $ne: "" },
       gpsLongitude: { $ne: "" },
     });
-    const activeDispatches = await SalesOrderModel.countDocuments({ status: "dispatched" });
+
+    const baseQuery = roleScopedBaseQuery(req);
+    const [secondaryDispatches, companyDispatches] = await Promise.all([
+      SecondaryOrderModel.countDocuments({
+        companyId: baseQuery.companyId,
+        ...(baseQuery.$or ? { $or: baseQuery.$or } : {}),
+        status: { $in: ["dispatched", "delivered"] },
+      }),
+      CompanyDispatchNoteModel.countDocuments({
+        companyId: baseQuery.companyId,
+        ...(baseQuery.$or ? { $or: baseQuery.$or } : {}),
+        status: { $in: ["posted", "delivered"] },
+      }),
+    ]);
 
     return res.json({
       ok: true,
@@ -134,17 +135,17 @@ router.get("/summary", requireAuth, async (req, res) => {
         activeUsers,
         totalVehicles,
         trackedVehicles,
-        activeDispatches,
+        activeDispatches: secondaryDispatches + companyDispatches,
       },
     });
-  } catch (e) {
+  } catch (_error) {
     return res.status(500).json({ ok: false, message: "Failed to load tracking summary" });
   }
 });
 
 router.get("/vehicles", requireAuth, async (req, res) => {
   try {
-    const { VehicleModel } = await getScopedTrackingModels(req, req.query?.companyId, req.query?.companyName);
+    const { VehicleModel } = await getScopedTrackingModels(req);
     const vehicles = await VehicleModel.find({
       gpsLatitude: { $ne: "" },
       gpsLongitude: { $ne: "" },
@@ -160,14 +161,14 @@ router.get("/vehicles", requireAuth, async (req, res) => {
         gpsLongitude: normalizeCoordinate(vehicle.gpsLongitude),
       })),
     });
-  } catch (e) {
+  } catch (_error) {
     return res.status(500).json({ ok: false, message: "Failed to load vehicle tracking" });
   }
 });
 
 router.put("/vehicles/:id", requireAuth, async (req, res) => {
   try {
-    const { VehicleModel } = await getScopedTrackingModels(req, req.body?.companyId || req.query?.companyId, req.body?.companyName || req.query?.companyName);
+    const { VehicleModel } = await getScopedTrackingModels(req);
     const gpsLatitude = normalizeCoordinate(req.body?.gpsLatitude);
     const gpsLongitude = normalizeCoordinate(req.body?.gpsLongitude);
     if (gpsLatitude === null || gpsLongitude === null) {
@@ -189,41 +190,95 @@ router.put("/vehicles/:id", requireAuth, async (req, res) => {
     }
 
     return res.json({ ok: true, vehicle: updated });
-  } catch (e) {
+  } catch (_error) {
     return res.status(500).json({ ok: false, message: "Failed to update vehicle location" });
   }
 });
 
 router.get("/dispatches", requireAuth, async (req, res) => {
   try {
-    const { SalesOrderModel, VehicleModel } = await getScopedTrackingModels(req, req.query?.companyId, req.query?.companyName);
-    const orders = await SalesOrderModel.find({ status: "dispatched" })
-      .sort({ dispatchedAt: -1 })
-      .limit(50)
-      .lean();
+    const {
+      SecondaryOrderModel,
+      CompanyDispatchNoteModel,
+      CompanySalesOrderModel,
+      VehicleModel,
+      UserModel,
+    } = await getScopedTrackingModels(req);
+    const baseQuery = roleScopedBaseQuery(req);
 
-    const vehicleIds = orders.map((order) => order.dispatchVehicleId).filter(Boolean);
-    const vehicles = vehicleIds.length
-      ? await VehicleModel.find({ _id: { $in: vehicleIds } })
-          .select("vehicleId name gpsLatitude gpsLongitude lastReportedAt")
-          .lean()
-      : [];
+    const [secondaryOrders, companyDispatchNotes] = await Promise.all([
+      SecondaryOrderModel.find({
+        companyId: baseQuery.companyId,
+        ...(baseQuery.$or ? { $or: baseQuery.$or } : {}),
+        status: { $in: ["dispatched", "delivered"] },
+      })
+        .sort({ updatedAt: -1, createdAt: -1 })
+        .limit(50)
+        .lean(),
+      CompanyDispatchNoteModel.find({
+        companyId: baseQuery.companyId,
+        ...(baseQuery.$or ? { $or: baseQuery.$or } : {}),
+        status: { $in: ["posted", "delivered"] },
+      })
+        .sort({ dispatchedAt: -1, createdAt: -1 })
+        .limit(50)
+        .lean(),
+    ]);
 
-    const vehicleMap = vehicles.reduce((acc, vehicle) => {
-      acc[String(vehicle._id)] = vehicle;
+    const companySalesOrderIds = companyDispatchNotes.map((row) => row.companySalesOrderId).filter(Boolean);
+    const vehicleIds = [
+      ...companyDispatchNotes.map((row) => row.vehicleId).filter(Boolean),
+    ];
+    const driverIds = companyDispatchNotes.map((row) => row.driverUserId).filter(Boolean);
+
+    const [companyOrders, vehicles, drivers] = await Promise.all([
+      companySalesOrderIds.length
+        ? CompanySalesOrderModel.find({ _id: { $in: companySalesOrderIds } }).select("documentNo distributor").lean()
+        : [],
+      vehicleIds.length
+        ? VehicleModel.find({ _id: { $in: vehicleIds } })
+            .select("vehicleId name gpsLatitude gpsLongitude lastReportedAt")
+            .lean()
+        : [],
+      driverIds.length
+        ? UserModel.find({ _id: { $in: driverIds } }).select("fullName username").lean()
+        : [],
+    ]);
+
+    const companyOrderMap = companyOrders.reduce((acc, row) => {
+      acc[String(row._id)] = row;
+      return acc;
+    }, {});
+    const vehicleMap = buildVehicleMap(vehicles);
+    const driverMap = drivers.reduce((acc, row) => {
+      acc[String(row._id)] = row;
       return acc;
     }, {});
 
-    const dispatches = orders.map((order) => {
-      const vehicle = order.dispatchVehicleId ? vehicleMap[order.dispatchVehicleId] : null;
+    const mappedSecondary = secondaryOrders.map((order) => ({
+      _id: order._id,
+      orderNo: order.documentNo,
+      customerName: order?.customer?.partyName || order?.customer?.partyCode || "Customer",
+      dispatchedAt: order.podUploadedAt || order.updatedAt || order.createdAt,
+      dispatchTracking: order.dispatchStatus || order.status,
+      dispatchDriverName: order.salesmanUserId ? `Salesman ${order.salesmanUserId}` : "",
+      dispatchVehicleName: "",
+      vehicle: null,
+      type: "secondary_order",
+    }));
+
+    const mappedCompany = companyDispatchNotes.map((dispatch) => {
+      const order = companyOrderMap[String(dispatch.companySalesOrderId)] || null;
+      const vehicle = dispatch.vehicleId ? vehicleMap[String(dispatch.vehicleId)] : null;
+      const driver = dispatch.driverUserId ? driverMap[String(dispatch.driverUserId)] : null;
       return {
-        _id: order._id,
-        orderNo: order.orderNo,
-        customerName: order.customerName,
-        dispatchedAt: order.dispatchedAt,
-        dispatchTracking: order.dispatchTracking,
-        dispatchDriverName: order.dispatchDriverName,
-        dispatchVehicleName: order.dispatchVehicleName,
+        _id: dispatch._id,
+        orderNo: order?.documentNo || dispatch.documentNo,
+        customerName: order?.distributor?.partyName || dispatch.distributorId || "Distributor",
+        dispatchedAt: dispatch.dispatchedAt || dispatch.updatedAt || dispatch.createdAt,
+        dispatchTracking: dispatch.status,
+        dispatchDriverName: driver?.fullName || driver?.username || "",
+        dispatchVehicleName: vehicle?.name || vehicle?.vehicleId || "",
         vehicle: vehicle
           ? {
               id: vehicle._id,
@@ -233,11 +288,16 @@ router.get("/dispatches", requireAuth, async (req, res) => {
               lastReportedAt: vehicle.lastReportedAt,
             }
           : null,
+        type: "company_dispatch",
       };
     });
 
+    const dispatches = [...mappedCompany, ...mappedSecondary]
+      .sort((a, b) => new Date(b.dispatchedAt || 0) - new Date(a.dispatchedAt || 0))
+      .slice(0, 50);
+
     return res.json({ ok: true, dispatches });
-  } catch (e) {
+  } catch (_error) {
     return res.status(500).json({ ok: false, message: "Failed to load dispatch tracking" });
   }
 });
