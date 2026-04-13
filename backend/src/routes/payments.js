@@ -16,6 +16,9 @@ router.get("/supplier-invoices", requireAuth, async (req, res) => {
     if (req.query.paymentStatus && req.query.paymentStatus !== "all") {
       query.paymentStatus = asText(req.query.paymentStatus);
     }
+    if (req.query.supplierId) {
+      query["supplier.partyId"] = asText(req.query.supplierId);
+    }
 
     const invoices = await SupplierInvoiceModel.find(query).sort({ createdAt: -1 }).lean();
     return res.json({ ok: true, invoices });
@@ -65,10 +68,16 @@ router.post("/supplier-invoices/:id/post", requireAuth, async (req, res) => {
 router.get("/supplier-payments", requireAuth, async (req, res) => {
   try {
     const { SupplierPaymentModel } = await getScopedModels(req, { SupplierPaymentModel: SupplierPayment });
-    const payments = await SupplierPaymentModel.find({ companyId: asText(req.user.companyId) })
-      .sort({ createdAt: -1 })
-      .lean();
+    const query = { companyId: asText(req.user.companyId) };
 
+    if (req.query.supplierId) {
+      query["supplier.partyId"] = asText(req.query.supplierId);
+    }
+    if (req.query.status && req.query.status !== "all") {
+      query.status = asText(req.query.status);
+    }
+
+    const payments = await SupplierPaymentModel.find(query).sort({ createdAt: -1 }).lean();
     return res.json({ ok: true, payments });
   } catch (error) {
     return res.status(500).json({ ok: false, message: error.message || "Failed to load supplier payments" });
