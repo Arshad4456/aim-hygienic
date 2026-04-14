@@ -207,7 +207,23 @@ export const v2Api = {
     logistics: (params = {}) => apiGet(withQuery("/reports/logistics", params)),
   },
 
-
+  finance: {
+    overview: (params = {}) => apiGet(withQuery("/reports/finance", params)),
+    listDistributors: (params = {}) => apiGet(withQuery("/users", { role: "Distributor", ...params })),
+    listCompanyInvoices: (params = {}) => apiGet(withQuery("/receipts/invoices", { family: "company_distributor", ...params })),
+    createCompanyInvoice: (payload, params = {}) => apiPost(withQuery("/receipts/invoices", { family: "company_distributor", ...params }), payload),
+    postCompanyInvoice: (id, params = {}) => apiPost(withQuery(`/receipts/invoices/${id}/post`, { family: "company_distributor", ...params }), {}),
+    listCompanyReceipts: (params = {}) => apiGet(withQuery("/receipts", { family: "company_distributor", ...params })),
+    createCompanyReceipt: (payload, params = {}) => apiPost(withQuery("/receipts", { family: "company_distributor", ...params }), payload),
+    postCompanyReceipt: (id, params = {}) => apiPost(withQuery(`/receipts/${id}/post`, { family: "company_distributor", ...params }), {}),
+    listCompanyOpenOrders: (params = {}) => apiGet(withQuery("/receipts/orders/open", { family: "company_distributor", ...params })),
+    listSupplierInvoices: (params = {}) => apiGet(withQuery("/payments/supplier-invoices", params)),
+    createSupplierInvoice: (payload) => apiPost("/payments/supplier-invoices", payload),
+    postSupplierInvoice: (id) => apiPost(`/payments/supplier-invoices/${id}/post`, {}),
+    listSupplierPayments: (params = {}) => apiGet(withQuery("/payments/supplier-payments", params)),
+    createSupplierPayment: (payload) => apiPost("/payments/supplier-payments", payload),
+    postSupplierPayment: (id) => apiPost(`/payments/supplier-payments/${id}/post`, {}),
+  },
 
   warehouseManager: {
     overview: (params = {}) => apiGet(withQuery("/dashboard/operations", params)),
