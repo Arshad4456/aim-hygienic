@@ -273,6 +273,19 @@ export const v2Api = {
     supplierPrimaryOrders: () => apiGet("/inventory/transactions/supplier/primary"),
   },
 
+
+  distributor: {
+    overview: (params = {}) => apiGet(withQuery("/dashboard/overview", params)),
+    salesKpi: (params = {}) => apiGet(withQuery("/sales-kpi/summary", params)),
+    inventoryReport: (params = {}) => apiGet(withQuery("/reports/inventory", params)),
+    financeReport: (params = {}) => apiGet(withQuery("/reports/finance", params)),
+    listSecondaryOrders: (params = {}) => apiGet(withQuery("/orders", { family: "secondary", ...params })),
+    listCustomerReceipts: (params = {}) => apiGet(withQuery("/receipts", { family: "distributor_customer", ...params })),
+    listCustomerInvoices: (params = {}) => apiGet(withQuery("/receipts/invoices", { family: "distributor_customer", ...params })),
+    listCompanyInvoices: (params = {}) => apiGet(withQuery("/receipts/invoices", { family: "company_distributor", ...params })),
+    listExpenses: (params = {}) => apiGet(withQuery("/expenses", params)),
+  },
+
   systemAdmin: {
     listCompanies: () => apiGet("/companies"),
     getCompany: (id) => apiGet(`/companies/${id}`),
