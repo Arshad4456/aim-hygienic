@@ -237,6 +237,22 @@ export const v2Api = {
     nearExpiry: (params = {}) => apiGet(withQuery("/inventory/near-expiry-products", params)),
     listWarehouses: (params = {}) => apiGet(withQuery("/warehouses", params)),
   },
+  logistics: {
+    overview: (params = {}) => apiGet(withQuery("/reports/logistics", params)),
+    operations: (params = {}) => apiGet(withQuery("/dashboard/operations", params)),
+    listCompanyDispatches: (params = {}) => apiGet(withQuery("/inventory/company-dispatches", params)),
+    createCompanyDispatch: (payload) => apiPost("/inventory/company-dispatches", payload),
+    postCompanyDispatch: (id) => apiPost(`/inventory/company-dispatches/${id}/post`, {}),
+    listCompanySupplyOrders: (params = {}) => apiGet(withQuery("/orders", { family: "company_supply", ...params })),
+    listVehicles: (params = {}) => apiGet(withQuery("/vehicles", params)),
+    listUsers: (params = {}) => apiGet(withQuery("/users", params)),
+    listWarehouses: (params = {}) => apiGet(withQuery("/warehouses", params)),
+    listRegions: (params = {}) => apiGet(withQuery("/regions", params)),
+    listZones: (params = {}) => apiGet(withQuery("/zones", params)),
+    listAreas: (params = {}) => apiGet(withQuery("/areas", params)),
+    listLiveUsers: () => apiGet("/location/live-users"),
+  },
+
   procurement: {
     overview: (params = {}) => apiGet(withQuery("/reports/procurement", params)),
     suppliers: (params = {}) => apiGet(withQuery("/users", { role: "Supplier", ...params })),

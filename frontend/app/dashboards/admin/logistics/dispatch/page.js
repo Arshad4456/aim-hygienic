@@ -3,10 +3,10 @@
 import AdminShell from "../../components/AdminShell";
 import CompanyLogisticsWorkspace from "../../components/CompanyLogisticsWorkspace";
 
-export default function LogisticsRoutesPage() {
+export default function LogisticsDispatchPage() {
   return (
-    <AdminShell title="Route Planning" user={null}>
-      <CompanyLogisticsWorkspace initialSection="routes" />
+    <AdminShell title="Dispatch & Delivery" user={null}>
+      <CompanyLogisticsWorkspace initialSection="dispatch" />
     </AdminShell>
   );
 }
