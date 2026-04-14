@@ -120,6 +120,9 @@ const HREF_RULES = [
   [/\/deliveryBoy\/orders$/, "order-management.secondary"],
   [/\/brandManager\/return-stock$/, "order-management.return-stock"],
   [/\/distributor\/return-stock$/, "distributor.return-stock"],
+  [/\/distributor\/accounts$/, "distributor.payments"],
+  [/\/distributor\/customer-invoices$/, "distributor.payments"],
+  [/\/distributor\/aging$/, "distributor.payments"],
   [/\/order-management\/returns$/, "order-management.return-stock"],
 
   [/\/vehicle-management$/, "vehicle-management.overview"],

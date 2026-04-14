@@ -1,5 +1,5 @@
 import DistributorAccountantWorkspace from "../components/DistributorAccountantWorkspace";
 
 export default function Page() {
-  return <DistributorAccountantWorkspace initialSection="customer-receipts" />;
+  return <DistributorAccountantWorkspace initialSection="customer-invoices" />;
 }

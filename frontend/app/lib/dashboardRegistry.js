@@ -231,6 +231,15 @@ export const USER_ROLE_LINKS = {
     { title: "Return Stock", href: "/dashboards/distributor/return-stock" },
     { title: "Reports", href: "/dashboards/distributor/reports" },
   ],
+  distributorAccountant: [
+    { title: "Accounts Dashboard", href: "/dashboards/distributor/accounts" },
+    { title: "Customer Invoices", href: "/dashboards/distributor/customer-invoices" },
+    { title: "Customer Receipts", href: "/dashboards/distributor/receipts" },
+    { title: "Aging & Outstanding", href: "/dashboards/distributor/aging" },
+    { title: "Payable to Company", href: "/dashboards/distributor/payments" },
+    { title: "Distributor Expense", href: "/dashboards/distributor/expense" },
+    { title: "Reports", href: "/dashboards/distributor/reports" },
+  ],
   orderBooker: [
     { title: "Dashboard", href: "/dashboards/orderBooker" },
     { title: "Secondary Sale Requests", href: "/dashboards/orderBooker/orders" },
