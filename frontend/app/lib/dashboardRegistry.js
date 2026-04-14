@@ -190,11 +190,14 @@ export const ADMIN_NAVIGATION_GROUPS = [
 export const USER_ROLE_LINKS = {
   warehouseManager: [
     { title: "Dashboard", href: "/dashboards/warehouseManager" },
+    { title: "Company Stock Summary", href: "/dashboards/warehouseManager/stock-summary" },
+    { title: "Inward / Outward", href: "/dashboards/warehouseManager/inward-outward" },
+    { title: "Goods Receipt Verification", href: "/dashboards/warehouseManager/goods-receipts" },
+    { title: "Company Dispatch Preparation", href: "/dashboards/warehouseManager/dispatch-preparation" },
+    { title: "Stock Adjustment", href: "/dashboards/warehouseManager/stock-adjustment" },
+    { title: "Damage & Expiry", href: "/dashboards/warehouseManager/damage-expiry" },
     { title: "Warehouse & Inventory", href: "/dashboards/warehouseManager/warehouse-inventory" },
     { title: "Order Management", href: "/dashboards/warehouseManager/order-management" },
-    { title: "Payment Management", href: "/dashboards/warehouseManager/payments" },
-    { title: "Primary Payment", href: "/dashboards/warehouseManager/payments/primary" },
-    { title: "Secondary Payment", href: "/dashboards/warehouseManager/payments/secondary" },
   ],
   distributor: [
     { title: "Dashboard", href: "/dashboards/distributor" },

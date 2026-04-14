@@ -1,5 +1,5 @@
 import WarehouseManagerWorkspace from "../components/WarehouseManagerWorkspace";
 
-export default function WarehouseInventoryPage() {
+export default function WarehouseStockSummaryPage() {
   return <WarehouseManagerWorkspace initialSection="stock-summary" />;
 }

@@ -93,6 +93,12 @@ const HREF_RULES = [
   [/\/fields$/, "territory-assets.fields.list"],
 
   [/\/admin\/order-management$/, "order-management.overview"],
+  [/\/warehouseManager\/stock-summary$/, "warehouse-inventory.summary"],
+  [/\/warehouseManager\/inward-outward$/, "warehouse-inventory.ledger"],
+  [/\/warehouseManager\/goods-receipts$/, "procurement.grn"],
+  [/\/warehouseManager\/dispatch-preparation$/, "logistics.dispatch"],
+  [/\/warehouseManager\/stock-adjustment$/, "warehouse-inventory.ledger"],
+  [/\/warehouseManager\/damage-expiry$/, "warehouse-inventory.near-expiry"],
   [/\/warehouseManager\/order-management$/, "order-management.overview"],
   [/\/order-management\/sales-orders$/, "order-management.overview"],
   [/\/order-management\/approvals$/, "order-management.overview"],

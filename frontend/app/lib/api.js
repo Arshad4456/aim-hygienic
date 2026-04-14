@@ -207,6 +207,20 @@ export const v2Api = {
     logistics: (params = {}) => apiGet(withQuery("/reports/logistics", params)),
   },
 
+
+
+  warehouseManager: {
+    overview: (params = {}) => apiGet(withQuery("/dashboard/operations", params)),
+    inventoryReport: (params = {}) => apiGet(withQuery("/reports/inventory", params)),
+    ledger: (params = {}) => apiGet(withQuery("/inventory/ledger", params)),
+    listCompanySupplyOrders: (params = {}) => apiGet(withQuery("/orders", { family: "company_supply", ...params })),
+    listCompanyDispatches: (params = {}) => apiGet(withQuery("/inventory/company-dispatches", params)),
+    createCompanyDispatch: (payload) => apiPost("/inventory/company-dispatches", payload),
+    postCompanyDispatch: (id) => apiPost(`/inventory/company-dispatches/${id}/post`, {}),
+    lowStock: (params = {}) => apiGet(withQuery("/inventory/low-stock", params)),
+    nearExpiry: (params = {}) => apiGet(withQuery("/inventory/near-expiry-products", params)),
+    listWarehouses: (params = {}) => apiGet(withQuery("/warehouses", params)),
+  },
   procurement: {
     overview: (params = {}) => apiGet(withQuery("/reports/procurement", params)),
     suppliers: (params = {}) => apiGet(withQuery("/users", { role: "Supplier", ...params })),
