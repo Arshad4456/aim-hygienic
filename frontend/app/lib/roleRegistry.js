@@ -62,9 +62,9 @@ export const ROLE_REGISTRY = {
   },
   "distributor store manager": {
     label: "Distributor Store Manager",
-    dashboardPath: "/dashboards/distributor/orders",
+    dashboardPath: "/dashboards/distributor/inventory",
     scope: "distributor",
-    aliases: [],
+    aliases: ["distributor storekeeper", "store manager"],
   },
   salesman: {
     label: "Salesman",
