@@ -261,7 +261,11 @@ export const USER_ROLE_LINKS = {
   ],
   deliveryBoy: [
     { title: "Dashboard", href: "/dashboards/deliveryBoy" },
-    { title: "Proof of Delivery", href: "/dashboards/deliveryBoy/orders" },
+    { title: "Day Plan", href: "/dashboards/deliveryBoy/day-plan" },
+    { title: "Assigned Dispatches", href: "/dashboards/deliveryBoy/dispatches" },
+    { title: "Live Tracking", href: "/dashboards/deliveryBoy/tracking" },
+    { title: "Exceptions", href: "/dashboards/deliveryBoy/exceptions" },
+    { title: "POD Desk (Legacy)", href: "/dashboards/deliveryBoy/orders" },
   ],
   customer: [
     { title: "Dashboard", href: "/dashboards/customer" },
