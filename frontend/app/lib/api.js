@@ -317,6 +317,14 @@ export const v2Api = {
     listLiveUsers: () => apiGet("/location/live-users"),
   },
 
+
+  customer: {
+    listOrders: (params = {}) => apiGet(withQuery("/orders", { family: "secondary", ...params })),
+    listInvoices: (params = {}) => apiGet(withQuery("/receipts/invoices", { family: "distributor_customer", ...params })),
+    listReceipts: (params = {}) => apiGet(withQuery("/receipts", { family: "distributor_customer", ...params })),
+    listReturns: (params = {}) => apiGet(withQuery("/returns", params)),
+  },
+
   systemAdmin: {
     listCompanies: () => apiGet("/companies"),
     getCompany: (id) => apiGet(`/companies/${id}`),

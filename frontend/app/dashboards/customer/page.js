@@ -1,13 +1,5 @@
-import UserDashboardShell from "../components/userDashboardShell";
-import { userDashboardSearchItems } from "../searchItems";
+import CustomerWorkspace from "./components/CustomerWorkspace";
 
 export default function Page() {
-  return (
-    <UserDashboardShell
-      title="Customer Dashboard"
-      subtitle="Use quick search to navigate all available items for your dashboard."
-      roleKey="Customer"
-      links={userDashboardSearchItems.customer || []}
-    />
-  );
+  return <CustomerWorkspace initialSection="overview" />;
 }
