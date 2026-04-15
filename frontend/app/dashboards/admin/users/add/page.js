@@ -5,11 +5,10 @@ import AdminShell from "../../components/AdminShell";
 import { apiFetch } from "../../../../lib/api";
 import { listFieldsCompat } from "../../../../lib/fieldApi";
 import {
-  AIM_USER_ROLES,
   COMMON_USER_FIELDS,
-  DISTRIBUTOR_TEAM_ROLES,
   FIELD_LABELS,
   ROLE_EXTRA_FIELDS,
+  getAvailableRolesForActor,
   validatePassword,
 } from "../roleConfig";
 
@@ -268,14 +267,10 @@ export default function AddUserPage({ mode = "admin" }) {
   }
 
   const roleNeeds = ROLE_EXTRA_FIELDS[role] || [];
-  const roleOptions = useMemo(() => {
-    const actorRole = String(me?.role || "").trim().toLowerCase();
-    if (distributorMode) return DISTRIBUTOR_TEAM_ROLES;
-    if (actorRole === "company admin") {
-      return AIM_USER_ROLES.filter((candidateRole) => !SYSTEM_LEVEL_ROLES.has(String(candidateRole || "").trim().toLowerCase()));
-    }
-    return AIM_USER_ROLES;
-  }, [distributorMode, me?.role]);
+  const roleOptions = useMemo(() => getAvailableRolesForActor({
+    actorRole: me?.role || "",
+    distributorMode,
+  }), [distributorMode, me?.role]);
   const requiresCompany = useMemo(() => {
     const normalizedRole = String(role || "").trim().toLowerCase();
     return Boolean(normalizedRole && normalizedRole !== "admin" && normalizedRole !== "system admin");

@@ -1,57 +1,67 @@
-export const AIM_USER_ROLES = [
-  "admin",
-  "system admin",
-  "company admin",
-  "CEO",
-  "Managing Director",
+export const SYSTEM_ADMIN_USER_ROLES = [
+  "System Admin",
+  "Company Admin",
+  "Purchase Manager",
+  "Brand Manager",
   "Warehouse Manager",
-  "Account Officer",
-  "HR Assistant",
-  "Cashier",
-  "KPO",
-  "National Sale Manager",
-  "Regional Sale Manager",
-  "Zone Sale Manager",
-  "Territory Sale Manager",
+  "Finance / Accounts",
+  "Dispatch / Logistics",
+  "Supplier",
   "Distributor",
-  "Field Sale Manager",
+  "Distributor Accountant",
+  "Distributor Store Manager",
   "Order Booker",
   "Salesman",
-  "Delivery Boy",
-  "Supplier",
-  "Vendor",
-  "customer",
-  "Brand Manager",
+  "Driver / Delivery",
+  "Customer",
 ];
 
-export const DISTRIBUTOR_TEAM_ROLES = ["Order Booker", "Salesman", "customer"];
+export const COMPANY_USER_ROLES = [
+  "Purchase Manager",
+  "Brand Manager",
+  "Warehouse Manager",
+  "Finance / Accounts",
+  "Dispatch / Logistics",
+  "Supplier",
+  "Distributor",
+];
+
+export const DISTRIBUTOR_TEAM_ROLES = [
+  "Distributor Accountant",
+  "Distributor Store Manager",
+  "Order Booker",
+  "Salesman",
+  "Driver / Delivery",
+  "Customer",
+];
+
+export const AIM_USER_ROLES = SYSTEM_ADMIN_USER_ROLES;
+
+export function getAvailableRolesForActor({ actorRole = "", distributorMode = false } = {}) {
+  const normalizedActorRole = String(actorRole || "").trim().toLowerCase();
+  if (distributorMode || normalizedActorRole === "distributor") return DISTRIBUTOR_TEAM_ROLES;
+  if (normalizedActorRole === "company admin") return COMPANY_USER_ROLES;
+  return SYSTEM_ADMIN_USER_ROLES;
+}
 
 export const COMMON_USER_FIELDS = ["fullName", "email", "mobileNumber", "cnicNo", "password", "address"];
 
 export const ROLE_EXTRA_FIELDS = {
-  admin: [],
-  "system admin": [],
-  "company admin": [],
-  CEO: [],
-  "Managing Director": [],
+  "System Admin": [],
+  "Company Admin": [],
+  "Purchase Manager": ["warehouse"],
+  "Brand Manager": ["warehouse", "region", "zone", "territory", "field"],
   "Warehouse Manager": ["warehouse"],
-  "Account Officer": ["warehouse"],
-  "HR Assistant": ["warehouse"],
-  Cashier: ["warehouse"],
-  KPO: ["warehouse"],
-  "National Sale Manager": [],
-  "Regional Sale Manager": ["warehouse", "region"],
-  "Zone Sale Manager": ["warehouse", "region", "zone"],
-  "Territory Sale Manager": ["warehouse", "region", "zone", "territory"],
+  "Finance / Accounts": ["warehouse"],
+  "Dispatch / Logistics": ["warehouse"],
+  Supplier: ["warehouse"],
   Distributor: ["warehouse", "region", "zone", "territory"],
-  "Field Sale Manager": ["warehouse", "region", "zone", "territory", "field"],
+  "Distributor Accountant": ["warehouse", "region", "zone", "territory"],
+  "Distributor Store Manager": ["warehouse", "region", "zone", "territory"],
   "Order Booker": ["warehouse", "region", "zone", "territory", "field"],
   Salesman: ["warehouse", "region", "zone", "territory", "field"],
-  "Delivery Boy": ["warehouse", "region", "zone", "territory", "field"],
-  Supplier: ["warehouse"],
-  Vendor: ["warehouse", "businessName"],
-  customer: ["businessType", "businessName", "warehouse", "region", "zone", "territory", "field"],
-  "Brand Manager": ["businessType", "businessName", "warehouse", "region", "zone", "territory", "field"],
+  "Driver / Delivery": ["warehouse", "region", "zone", "territory", "field"],
+  Customer: ["businessType", "businessName", "warehouse", "region", "zone", "territory", "field"],
 };
 
 export function validatePassword(value) {

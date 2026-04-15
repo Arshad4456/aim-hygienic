@@ -219,11 +219,8 @@ export default function CompanyAdminWorkspace() {
 
   const quickLinks = [
     { title: "Operations command center", href: "/dashboards/admin/operations" },
-    { title: "Procurement & suppliers", href: "/dashboards/admin/procurement" },
     { title: "Warehouse & inventory", href: "/dashboards/admin/warehouse-inventory" },
-    { title: "Dispatch & logistics", href: "/dashboards/admin/logistics" },
     { title: "Finance & accounts", href: "/dashboards/admin/finance" },
-    { title: "Live tracking", href: "/dashboards/admin/live-tracking" },
     { title: "Reports workspace", href: "/dashboards/admin/reports" },
   ];
 

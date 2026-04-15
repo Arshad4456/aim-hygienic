@@ -39,7 +39,7 @@ export default function ReceiptCenter({ title, subtitle, roleKey, links = [] }) 
         );
         setCollectors(
             usersRes.status === "fulfilled"
-                ? (usersRes.value.users || []).filter((x) => ["salesman", "cashier", "order booker", "orderbooker"].includes(String(x.role || "").toLowerCase()))
+                ? (usersRes.value.users || []).filter((x) => ["salesman", "order booker", "orderbooker"].includes(String(x.role || "").toLowerCase()))
                 : [],
         );
         const orderInvoices = ordersRes.status === "fulfilled"

@@ -22,7 +22,13 @@ export const ROLE_REGISTRY = {
     label: "Purchase Manager",
     dashboardPath: "/dashboards/admin/procurement",
     scope: "company",
-    aliases: ["brand manager"],
+    aliases: [],
+  },
+  "brand manager": {
+    label: "Brand Manager",
+    dashboardPath: "/dashboards/brandManager",
+    scope: "company",
+    aliases: [],
   },
   "warehouse manager": {
     label: "Warehouse Manager",
@@ -34,7 +40,7 @@ export const ROLE_REGISTRY = {
     label: "Finance / Accounts",
     dashboardPath: "/dashboards/admin/finance",
     scope: "company",
-    aliases: ["account officer"],
+    aliases: [],
   },
   "dispatch / logistics": {
     label: "Dispatch / Logistics",

@@ -1,10 +1,10 @@
 import { apiFetch } from "./api";
 
 export const MODULE_ACCESS_ROLE_OPTIONS = [
-  "admin",
   "system admin",
   "company admin",
   "purchase manager",
+  "brand manager",
   "warehouse manager",
   "finance / accounts",
   "dispatch / logistics",
@@ -16,21 +16,6 @@ export const MODULE_ACCESS_ROLE_OPTIONS = [
   "salesman",
   "driver / delivery",
   "customer",
-  // legacy compatibility
-  "ceo",
-  "managing director",
-  "account officer",
-  "hr assistant",
-  "cashier",
-  "kpo",
-  "national sale manager",
-  "regional sale manager",
-  "zone sale manager",
-  "territory sale manager",
-  "field sale manager",
-  "delivery boy",
-  "vendor",
-  "brand manager",
 ];
 
 export function normalizeRole(value) {
@@ -112,7 +97,6 @@ const HREF_RULES = [
   [/\/distributor\/damage-expiry$/, "distributor.inventory"],
   [/\/distributor\/primary-order-request$/, "distributor.primary-order"],
   [/\/supplier\/primary-orders$/, "supplier.primary-orders"],
-  [/\/brandManager\/orders$/, "order-management.primary"],
   [/\/distributor\/orders$/, "distributor.secondary-order"],
   [/\/orderBooker\/day-plan$/, "order-management.secondary"],
   [/\/orderBooker\/customers$/, "order-management.secondary"],

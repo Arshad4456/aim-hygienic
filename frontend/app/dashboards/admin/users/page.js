@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import AdminShell from "../components/AdminShell";
 import { apiFetch } from "../../../lib/api";
 import { listFieldsCompat } from "../../../lib/fieldApi";
-import { AIM_USER_ROLES, DISTRIBUTOR_TEAM_ROLES, FIELD_LABELS, ROLE_EXTRA_FIELDS, validatePassword } from "./roleConfig";
+import { FIELD_LABELS, ROLE_EXTRA_FIELDS, getAvailableRolesForActor, validatePassword } from "./roleConfig";
 
 const BASE_EDIT_FIELDS = ["fullName", "email", "mobileNumber", "cnicNo", "address", "businessType", "businessName"];
 function readFileAsDataUrl(file) {
@@ -25,6 +25,7 @@ export default function UserListPage({ mode = "admin" }) {
   const [zones, setZones] = useState([]);
   const [areas, setAreas] = useState([]);
   const [fields, setFields] = useState([]);
+  const [me, setMe] = useState(null);
 
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
@@ -61,13 +62,14 @@ export default function UserListPage({ mode = "admin" }) {
       setRegions(regionsRes.regions || []);
       setZones(zonesRes.zones || []);
       setAreas(areasRes.areas || []);
+      const meRes = await apiFetch("/users/me");
+      setMe(meRes?.user || null);
       try {
         const companiesRes = await apiFetch("/companies");
         setCompanies(companiesRes.companies || []);
       } catch (_companyErr) {
-        const me = await apiFetch("/users/me");
-        const companyId = String(me?.user?.companyId || "").trim();
-        const companyName = String(me?.user?.companyName || "").trim();
+        const companyId = String(meRes?.user?.companyId || "").trim();
+        const companyName = String(meRes?.user?.companyName || "").trim();
         setCompanies(companyId ? [{ companyId, name: companyName || companyId }] : []);
       }
       try {
@@ -499,7 +501,10 @@ export default function UserListPage({ mode = "admin" }) {
     URL.revokeObjectURL(url);
   }
 
-  const visibleRoles = distributorMode ? DISTRIBUTOR_TEAM_ROLES : AIM_USER_ROLES;
+  const visibleRoles = useMemo(() => getAvailableRolesForActor({
+    actorRole: me?.role || "",
+    distributorMode,
+  }), [distributorMode, me?.role]);
 
   return (
     <AdminShell title={distributorMode ? "Distributor User List" : "User List"} user={null}>

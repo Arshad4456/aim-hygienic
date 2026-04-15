@@ -288,24 +288,11 @@ export const USER_ROLE_LINKS = {
   brandManager: [
     { title: "Dashboard", href: "/dashboards/brandManager" },
     { title: "Primary Order Request", href: "/dashboards/brandManager/primary-order-request" },
-    { title: "Primary Sale Orders", href: "/dashboards/brandManager/orders" },
     { title: "Return Stock", href: "/dashboards/brandManager/return-stock" },
     { title: "Messages", href: "/dashboards/brandManager/messages" },
     { title: "Account Settings", href: "/dashboards/brandManager/settings" },
     { title: "Change Password", href: "/dashboards/brandManager/settings/change-password" },
   ],
-  accountOfficer: [{ title: "Dashboard", href: "/dashboards/accountOfficer" }],
-  cashier: [{ title: "Dashboard", href: "/dashboards/cashier" }],
-  ceo: [{ title: "Dashboard", href: "/dashboards/ceo" }],
-  manageDirector: [{ title: "Dashboard", href: "/dashboards/manageDirector" }],
-  hrAssistant: [{ title: "Dashboard", href: "/dashboards/hrAssistant" }],
-  kpo: [{ title: "Dashboard", href: "/dashboards/kpo" }],
-  nationalSM: [{ title: "Dashboard", href: "/dashboards/nationalSM" }],
-  regionalSM: [{ title: "Dashboard", href: "/dashboards/regionalSM" }],
-  zoneSM: [{ title: "Dashboard", href: "/dashboards/zoneSM" }],
-  territorySM: [{ title: "Dashboard", href: "/dashboards/territorySM" }],
-  fieldSM: [{ title: "Dashboard", href: "/dashboards/fieldSM" }],
-  vendor: [{ title: "Dashboard", href: "/dashboards/vendor" }],
 };
 
 export function sanitizeRoleLinks(links = []) {

@@ -1,3 +1,5 @@
+import { resolveRoleDefinition } from "./roleRegistry";
+
 export const TOKEN_KEY = "aim_token_v1";
 export const USER_KEY = "aim_user_v1";
 
@@ -19,20 +21,5 @@ export function clearAuth() {
 }
 
 export function roleToDashboard(role) {
-  switch (role) {
-    case "admin":
-      return "/dashboards/admin";
-    case "manager":
-      return "/dashboards/manager";
-    case "tse":
-      return "/dashboards/tse";
-    case "salesman":
-      return "/dashboards/salesman";
-    case "Supplier":
-      return "/dashboards/supplier";
-    case "Vendor":
-      return "/dashboards/vendor";
-    default:
-      return "/dashboards/admin";
-  }
+  return resolveRoleDefinition(role).dashboardPath || "/dashboards/admin";
 }

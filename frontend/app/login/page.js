@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "../lib/api";
 import { getAuthItem, setAuthSession } from "../lib/clientAuth";
+import { resolveRoleDefinition } from "../lib/roleRegistry";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -23,32 +24,7 @@ export default function LoginPage() {
   }, [router]);
 
   const roleRedirect = (role) => {
-    const map = {
-      admin: "/dashboards/admin",
-      "system admin": "/dashboards/admin",
-      "company admin": "/dashboards/admin",
-      CEO: "/dashboards/ceo",
-      "Managing Director": "/dashboards/manageDirector",
-      "Warehouse Manager": "/dashboards/warehouseManager",
-      "Account Officer": "/dashboards/accountOfficer",
-      "HR Assistant": "/dashboards/hrAssistant",
-      Cashier: "/dashboards/cashier",
-      KPO: "/dashboards/kpo",
-      "Brand Manager": "/dashboards/brandManager",
-      "National Sale Manager": "/dashboards/nationalSM",
-      "Regional Sale Manager": "/dashboards/regionalSM",
-      "Zone Sale Manager": "/dashboards/zoneSM",
-      "Territory Sale Manager": "/dashboards/territorySM",
-      Distributor: "/dashboards/distributor",
-      "Field Sale Manager": "/dashboards/fieldSM",
-      "Order Booker": "/dashboards/orderBooker",
-      Salesman: "/dashboards/salesman",
-      "Delivery Boy": "/dashboards/deliveryBoy",
-      customer: "/dashboards/customer",
-      Supplier: "/dashboards/supplier",
-      Vendor: "/dashboards/vendor",
-    };
-    return map[role] || "/dashboards/admin";
+    return resolveRoleDefinition(role).dashboardPath || "/dashboards/admin";
   };
 
   async function onSubmit(e) {
