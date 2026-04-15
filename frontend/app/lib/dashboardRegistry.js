@@ -59,7 +59,7 @@ export const ADMIN_NAVIGATION_GROUPS = [
       { title: "Stock Transfers", href: "/dashboards/admin/inventory/transfers" },
       { title: "Stock Summary", href: "/dashboards/admin/inventory/summary" },
       { title: "Low Stock Alerts", href: "/dashboards/admin/inventory/low-stock" },
-      { title: "Near Expiry", href: "/dashboards/admin/inventory/near-expiry" },
+      { title: "Near Expiry Products", href: "/dashboards/admin/inventory/near-expiry" },
     ],
   },
   {
@@ -247,8 +247,8 @@ export const USER_ROLE_LINKS = {
     { title: "Order Status", href: "/dashboards/orderBooker/order-status" },
     { title: "Collections", href: "/dashboards/orderBooker/collections" },
     { title: "Visit Status", href: "/dashboards/orderBooker/visits" },
-    { title: "Create Orders (Legacy)", href: "/dashboards/orderBooker/orders" },
-    { title: "Receipts (Legacy)", href: "/dashboards/orderBooker/receipts" },
+    { title: "Create Orders", href: "/dashboards/orderBooker/orders" },
+    { title: "Receipts", href: "/dashboards/orderBooker/receipts" },
   ],
   salesman: [
     { title: "Dashboard", href: "/dashboards/salesman" },
@@ -257,7 +257,7 @@ export const USER_ROLE_LINKS = {
     { title: "Assigned Deliveries", href: "/dashboards/salesman/deliveries" },
     { title: "Collections", href: "/dashboards/salesman/collections" },
     { title: "Visit Status", href: "/dashboards/salesman/visits" },
-    { title: "Deliveries (Legacy)", href: "/dashboards/salesman/orders" },
+    { title: "Delivery Desk", href: "/dashboards/salesman/orders" },
   ],
   deliveryBoy: [
     { title: "Dashboard", href: "/dashboards/deliveryBoy" },
@@ -265,7 +265,7 @@ export const USER_ROLE_LINKS = {
     { title: "Assigned Dispatches", href: "/dashboards/deliveryBoy/dispatches" },
     { title: "Live Tracking", href: "/dashboards/deliveryBoy/tracking" },
     { title: "Exceptions", href: "/dashboards/deliveryBoy/exceptions" },
-    { title: "POD Desk (Legacy)", href: "/dashboards/deliveryBoy/orders" },
+    { title: "POD Desk", href: "/dashboards/deliveryBoy/orders" },
   ],
   customer: [
     { title: "Dashboard", href: "/dashboards/customer" },
@@ -273,8 +273,8 @@ export const USER_ROLE_LINKS = {
     { title: "Outstanding Snapshot", href: "/dashboards/customer/outstanding" },
     { title: "Payment History", href: "/dashboards/customer/payment-history" },
     { title: "Return Requests", href: "/dashboards/customer/returns" },
-    { title: "Order Requests (Legacy)", href: "/dashboards/customer/orders" },
-    { title: "Receipts (Legacy)", href: "/dashboards/customer/receipts" },
+    { title: "Order Requests", href: "/dashboards/customer/orders" },
+    { title: "Receipts", href: "/dashboards/customer/receipts" },
     { title: "Account Settings", href: "/dashboards/customer/settings" },
     { title: "Change Password", href: "/dashboards/customer/settings/change-password" },
   ],
@@ -308,6 +308,22 @@ export const USER_ROLE_LINKS = {
   vendor: [{ title: "Dashboard", href: "/dashboards/vendor" }],
 };
 
+export function sanitizeRoleLinks(links = []) {
+  const seen = new Set();
+  return (links || [])
+    .map((item) => ({
+      ...item,
+      title: String(item?.title || "").replace(/\s*\(Legacy\)$/i, ""),
+    }))
+    .filter((item) => {
+      const href = String(item?.href || "");
+      if (!href || seen.has(href)) return false;
+      if (/\/settings\/change-password$/i.test(href)) return false;
+      seen.add(href);
+      return true;
+    });
+}
+
 export function getAdminNavigation({ canAccessCompanyManagement = false } = {}) {
   return ADMIN_NAVIGATION_GROUPS
     .map((group) => ({
@@ -327,7 +343,7 @@ export function getSearchItemsForRole(roleKey, options = {}) {
   if (resolved.scope === "system" || resolved.scope === "company" && resolved.dashboardPath.startsWith("/dashboards/admin")) {
     return flattenNavigation(getAdminNavigation({ canAccessCompanyManagement: options.canAccessCompanyManagement }));
   }
-  return USER_ROLE_LINKS[options.slug || roleKey] || USER_ROLE_LINKS[resolved.key] || [];
+  return sanitizeRoleLinks(USER_ROLE_LINKS[options.slug || roleKey] || USER_ROLE_LINKS[resolved.key] || []);
 }
 
 export function flattenNavigation(items = []) {
@@ -362,7 +378,7 @@ export function buildRoleNavigationGroups(links = [], roleKey = "") {
   const roleSlug = deriveRoleSlugFromLinks(links, roleKey);
   const grouped = [];
 
-  (links || []).forEach((item) => {
+  sanitizeRoleLinks(links).forEach((item) => {
     const tokens = String(item.href || "").split("/").filter(Boolean);
     const roleIndex = tokens.findIndex((token) => token === roleSlug);
     const next = roleIndex >= 0 ? tokens[roleIndex + 1] : null;
