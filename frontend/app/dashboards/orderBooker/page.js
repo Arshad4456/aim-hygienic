@@ -1,13 +1,5 @@
-import UserDashboardShell from "../components/userDashboardShell";
-import { userDashboardSearchItems } from "../searchItems";
+import OrderBookerWorkspace from "./components/OrderBookerWorkspace";
 
 export default function Page() {
-  return (
-    <UserDashboardShell
-      title="Order Booker Dashboard"
-      subtitle="Use quick search to navigate all available items for your dashboard."
-      roleKey="Order Booker"
-      links={userDashboardSearchItems.orderBooker || []}
-    />
-  );
+  return <OrderBookerWorkspace initialSection="overview" />;
 }

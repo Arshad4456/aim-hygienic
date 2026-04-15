@@ -300,6 +300,15 @@ export const v2Api = {
     listLiveUsers: () => apiGet("/location/live-users"),
   },
 
+  orderBooker: {
+    me: () => apiGet("/users/me"),
+    listOrders: (params = {}) => apiGet(withQuery("/orders", { family: "secondary", status: "all", ...params })),
+    listCustomers: (params = {}) => apiGet(withQuery("/users", { role: "Customer", ...params })),
+    listCustomerInvoices: (params = {}) => apiGet(withQuery("/receipts/invoices", { family: "distributor_customer", paymentStatus: "all", ...params })),
+    listCustomerReceipts: (params = {}) => apiGet(withQuery("/receipts", { family: "distributor_customer", status: "all", ...params })),
+    listLiveUsers: () => apiGet("/location/live-users"),
+  },
+
   systemAdmin: {
     listCompanies: () => apiGet("/companies"),
     getCompany: (id) => apiGet(`/companies/${id}`),

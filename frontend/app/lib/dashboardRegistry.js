@@ -242,8 +242,13 @@ export const USER_ROLE_LINKS = {
   ],
   orderBooker: [
     { title: "Dashboard", href: "/dashboards/orderBooker" },
-    { title: "Secondary Sale Requests", href: "/dashboards/orderBooker/orders" },
-    { title: "Receipts", href: "/dashboards/orderBooker/receipts" },
+    { title: "Day Plan", href: "/dashboards/orderBooker/day-plan" },
+    { title: "Assigned Customers", href: "/dashboards/orderBooker/customers" },
+    { title: "Order Status", href: "/dashboards/orderBooker/order-status" },
+    { title: "Collections", href: "/dashboards/orderBooker/collections" },
+    { title: "Visit Status", href: "/dashboards/orderBooker/visits" },
+    { title: "Create Orders (Legacy)", href: "/dashboards/orderBooker/orders" },
+    { title: "Receipts (Legacy)", href: "/dashboards/orderBooker/receipts" },
   ],
   salesman: [
     { title: "Dashboard", href: "/dashboards/salesman" },
