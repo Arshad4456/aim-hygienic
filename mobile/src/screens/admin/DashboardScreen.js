@@ -144,8 +144,12 @@ export default function DashboardScreen({ navigation }) {
   const actions = [
     { label: 'Users', route: 'admin:users' },
     { label: 'Products', route: 'admin:products' },
-    { label: 'Orders', route: 'admin:order-management' },
+    { label: 'Procurement', route: 'admin:procurement' },
+    { label: 'Warehouse', route: 'admin:warehouse-inventory' },
+    { label: 'Logistics', route: 'admin:logistics' },
+    { label: 'Live Tracking', route: 'admin:live-tracking' },
     { label: 'Finance', route: 'admin:finance' },
+    { label: 'Reports', route: 'admin:reports' },
   ];
 
   if (loading) return <Loader />;
@@ -154,7 +158,7 @@ export default function DashboardScreen({ navigation }) {
     <ScrollView contentContainerStyle={styles.content}>
       <Card>
         <Text style={styles.title}>Dashboard Overview</Text>
-        <Text style={styles.subtitle}>Same admin overview data source as website.</Text>
+        <Text style={styles.subtitle}>Company admin mobile dashboard with live company KPIs, linked company modules, and faster execution access.</Text>
         {error ? <Text style={styles.error}>{error}</Text> : null}
       </Card>
 
