@@ -1,13 +1,5 @@
-import UserDashboardShell from "../components/userDashboardShell";
-import { userDashboardSearchItems } from "../searchItems";
+import SalesmanWorkspace from "./components/SalesmanWorkspace";
 
 export default function Page() {
-  return (
-    <UserDashboardShell
-      title="Salesman Dashboard"
-      subtitle="Use quick search to navigate all available items for your dashboard."
-      roleKey="Salesman"
-      links={userDashboardSearchItems.salesman || []}
-    />
-  );
+  return <SalesmanWorkspace initialSection="overview" />;
 }

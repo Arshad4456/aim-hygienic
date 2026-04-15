@@ -247,7 +247,12 @@ export const USER_ROLE_LINKS = {
   ],
   salesman: [
     { title: "Dashboard", href: "/dashboards/salesman" },
-    { title: "Deliveries", href: "/dashboards/salesman/orders" },
+    { title: "Day Plan", href: "/dashboards/salesman/day-plan" },
+    { title: "Assigned Customers", href: "/dashboards/salesman/customers" },
+    { title: "Assigned Deliveries", href: "/dashboards/salesman/deliveries" },
+    { title: "Collections", href: "/dashboards/salesman/collections" },
+    { title: "Visit Status", href: "/dashboards/salesman/visits" },
+    { title: "Deliveries (Legacy)", href: "/dashboards/salesman/orders" },
   ],
   deliveryBoy: [
     { title: "Dashboard", href: "/dashboards/deliveryBoy" },
