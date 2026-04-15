@@ -8,9 +8,9 @@ import Loader from '../../ui/Loader';
 const dashboardLinks = [
   { title: 'Dashboard', route: 'brandManager:dashboard' },
   { title: 'Primary Order Request', route: 'brandManager:primary-order-request' },
-  { title: 'Primary Sale Orders', route: 'brandManager:orders' },
   { title: 'Return Stock', route: 'brandManager:return-stock' },
   { title: 'Messages', route: 'brandManager:messages' },
+  { title: 'Company Live Tracking', route: 'admin:live-tracking' },
   { title: 'Account Settings', route: 'brandManager:settings' },
   { title: 'Change Password', route: 'brandManager:settings/change-password' },
 ];
@@ -80,9 +80,9 @@ export default function DashboardScreen({ navigation }) {
 
   const quickActions = [
     { label: 'Primary Order Request', route: 'brandManager:primary-order-request' },
-    { label: 'Primary Sale Orders', route: 'brandManager:orders' },
     { label: 'Return Stock', route: 'brandManager:return-stock' },
     { label: 'Messages', route: 'brandManager:messages' },
+    { label: 'Live Tracking', route: 'admin:live-tracking' },
   ];
 
   if (loading) return <Loader />;

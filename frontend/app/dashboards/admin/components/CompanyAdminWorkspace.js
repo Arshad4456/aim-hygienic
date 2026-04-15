@@ -218,10 +218,13 @@ export default function CompanyAdminWorkspace() {
   ];
 
   const quickLinks = [
-    { title: "Operations command center", href: "/dashboards/admin/operations" },
-    { title: "Warehouse & inventory", href: "/dashboards/admin/warehouse-inventory" },
-    { title: "Finance & accounts", href: "/dashboards/admin/finance" },
-    { title: "Reports workspace", href: "/dashboards/admin/reports" },
+    { title: "Operations command center", href: "/dashboards/admin/operations", note: "Watch fulfillment, backlog, and execution health." },
+    { title: "Procurement & supplier flow", href: "/dashboards/admin/procurement", note: "Link Purchase Manager, Supplier, and goods-receipt readiness." },
+    { title: "Warehouse & inventory", href: "/dashboards/admin/warehouse-inventory", note: "Monitor company stock, adjustments, and expiry risk." },
+    { title: "Logistics & dispatch", href: "/dashboards/admin/logistics", note: "Prepare dispatch, assign driver/vehicle, and track delivery flow." },
+    { title: "Finance & accounts", href: "/dashboards/admin/finance", note: "Control receivables, payables, invoices, and receipts." },
+    { title: "Live tracking", href: "/dashboards/admin/live-tracking", note: "See field users, logistics movement, and last sync status." },
+    { title: "Reports workspace", href: "/dashboards/admin/reports", note: "Cross-check operations, finance, and stock performance." },
   ];
 
   return (
@@ -366,11 +369,12 @@ export default function CompanyAdminWorkspace() {
             </div>
           </SectionCard>
 
-          <SectionCard title="Quick navigation" description="Move directly into the operational modules behind this summary workspace.">
-            <div className="grid gap-3">
+          <SectionCard title="Linked company modules" description="Jump directly into the company-side modules that should stay linked during review, upgrading, and testing.">
+            <div className="grid gap-3 sm:grid-cols-2">
               {quickLinks.map((item) => (
-                <Link key={item.href} href={item.href} className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50">
-                  {item.title}
+                <Link key={item.href} href={item.href} className="rounded-3xl border border-zinc-200 bg-gradient-to-br from-white to-zinc-50 px-4 py-4 text-sm shadow-sm transition hover:border-emerald-200 hover:from-emerald-50 hover:to-white">
+                  <div className="font-semibold text-zinc-900">{item.title}</div>
+                  <div className="mt-1 text-xs leading-5 text-zinc-600">{item.note}</div>
                 </Link>
               ))}
             </div>
