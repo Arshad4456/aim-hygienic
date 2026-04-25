@@ -1,4 +1,23 @@
-# Phase 5 Deployment Commands
+# Phase 6 Deployment Commands
+
+Local test:
+
+```bash
+cd frontend
+npm install
+npm run build
+```
+
+Commit:
+
+```bash
+cd ..
+git add .
+git commit -m "Phase 6: primary sales company to distributor foundation"
+git push origin main
+```
+
+Server:
 
 ```bash
 cd /apps/aim-hygienic

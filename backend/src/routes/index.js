@@ -21,6 +21,7 @@ function registerRoutes(app) {
   app.use("/api/live-tracking", require("./liveTracking"));
   app.use("/api/dashboard", require("./dashboard"));
   app.use("/api/sales-kpi", require("./salesKpi"));
+  app.use("/api/sales", require("../modules/sales/sales.routes"));
   app.use("/api/orders", require("./orders"));
   app.use("/api/returns", require("./returns"));
   app.use("/api/payments", require("./payments"));
