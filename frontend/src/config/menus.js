@@ -1,9 +1,4 @@
-import { ERP_MODULES } from "./modules";
-export function buildMenuFromPermissions(permissions = {}) {
-  return ERP_MODULES.filter((module) => {
-    const allowed = permissions[module.key] || permissions[module.key?.replace(/_/g, "-")] || [];
-    return Array.isArray(allowed) ? allowed.includes("view") : Boolean(allowed);
-  });
-}
-export const RAWYAN_DEFAULT_MENU = ERP_MODULES;
-export default RAWYAN_DEFAULT_MENU;
+import { RAWYAN_MODULE_CATALOG } from "./moduleCatalog";
+import { hasPermission } from "../lib/permissions";
+export const RAWYAN_DEFAULT_MENU = RAWYAN_MODULE_CATALOG.filter((m) => ["dashboard", "roles", "users", "inventory", "warehouse", "secondary-orders", "live-tracking", "reports", "settings"].includes(m.key));
+export function buildMenuFromPermissions(permissions = {}, modules = RAWYAN_MODULE_CATALOG) { if (permissions?.["*"]) return modules; return modules.filter((item) => hasPermission(permissions, item.key, "view")); }

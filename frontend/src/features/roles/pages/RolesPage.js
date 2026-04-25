@@ -1,0 +1,9 @@
+"use client";
+import { useEffect, useState } from "react";
+import roleService from "../../../services/roleService";
+export default function RolesPage() {
+  const [roles, setRoles] = useState([]);
+  const [error, setError] = useState("");
+  useEffect(() => { roleService.list().then((p) => setRoles(p.roles || [])).catch((e) => setError(e.message)); }, []);
+  return <div className="space-y-4"><div className="flex flex-col justify-between gap-3 rounded-3xl bg-white p-6 shadow-sm sm:flex-row sm:items-center"><div><p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-600">Access Control</p><h2 className="text-2xl font-black text-slate-950">Roles & Permissions</h2><p className="text-sm text-slate-500">Create ERP roles and assign module-level actions.</p></div><button className="rounded-xl bg-gradient-to-r from-emerald-500 to-blue-600 px-4 py-2 text-sm font-bold text-white shadow">Create Role</button></div>{error ? <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</p> : null}<div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="p-4">Role</th><th className="p-4">Portal</th><th className="p-4">Mobile</th><th className="p-4">Status</th></tr></thead><tbody>{roles.map((role) => <tr key={role._id} className="border-t border-slate-100"><td className="p-4 font-bold text-slate-900">{role.name}</td><td className="p-4 text-slate-500">{role.portalType}</td><td className="p-4 text-slate-500">{role.mobileAccess ? "Yes" : "No"}</td><td className="p-4"><span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">{role.status}</span></td></tr>)}</tbody></table></div></div>;
+}

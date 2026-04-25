@@ -1,55 +1,39 @@
 const express = require("express");
 const User = require("../models/User");
-const { signToken } = require("../utils/auth");
+const { signToken, requireAuth, inferPortalType } = require("../utils/auth");
 const { verifyPassword } = require("../utils/passwordHash");
 const { listAllTenantTargets, getTenantModel } = require("../utils/tenantModels");
+const { getUserPermissionProfile, listVisibleModules } = require("../core/permissions/permission.service");
+const { ensureDefaultModules } = require("../core/portal-modules/portalModule.service");
 
 const router = express.Router();
 
 function buildIdentifierCandidates(rawIdentifier) {
   const value = String(rawIdentifier || "").trim();
   if (!value) return [];
-
   const candidates = new Set([value, value.toLowerCase()]);
   const digits = value.replace(/\D/g, "");
-
   if (digits) {
     candidates.add(digits);
-
     if (digits.startsWith("92") && digits.length > 2) {
       const localWithoutCountry = digits.slice(2);
       candidates.add(localWithoutCountry);
-      if (!localWithoutCountry.startsWith("0")) {
-        candidates.add(`0${localWithoutCountry}`);
-      }
+      if (!localWithoutCountry.startsWith("0")) candidates.add(`0${localWithoutCountry}`);
     }
-
-    if (digits.startsWith("0") && digits.length > 1) {
-      candidates.add(digits.slice(1));
-    }
+    if (digits.startsWith("0") && digits.length > 1) candidates.add(digits.slice(1));
   }
-
   return Array.from(candidates).filter(Boolean);
 }
-
 function buildLoosePhoneRegex(rawIdentifier) {
   const digits = String(rawIdentifier || "").replace(/\D/g, "");
   if (!digits) return null;
-
   let local = digits;
   if (local.startsWith("92") && local.length > 2) local = local.slice(2);
   if (local.startsWith("0") && local.length > 1) local = local.slice(1);
-
   if (!local) return null;
-  const tail = local.slice(-10);
-  return new RegExp(`${tail}$`);
+  return new RegExp(`${local.slice(-10)}$`);
 }
-
-function isUserActive(status) {
-  const normalized = String(status || "active").toLowerCase().trim();
-  return !normalized || normalized === "active";
-}
-
+function isUserActive(status) { const normalized = String(status || "active").toLowerCase().trim(); return !normalized || normalized === "active"; }
 async function findUserInTenants(buildQuery) {
   const targets = await listAllTenantTargets();
   for (const target of targets) {
@@ -60,86 +44,56 @@ async function findUserInTenants(buildQuery) {
   }
   return null;
 }
+function publicUser(user, profile = {}) {
+  return {
+    id: user._id, userId: user.userId || "", username: user.username, fullName: user.fullName, role: user.role, roleId: profile.roleId || user.roleId || null, roleKey: profile.roleKey || user.roleKey || String(user.role || "").toLowerCase(), portalType: profile.portalType || user.portalType || inferPortalType(user.role), landingPath: profile.landingPath || user.landingPath || "/portals", companyId: user.companyId || "", companyName: user.companyName || "", erpTemplateKey: user.erpTemplateKey || user.businessType || "distribution_erp",
+    distributorId: String(user?.role || "").trim().toLowerCase() === "distributor" ? user.distributorId || user.userId || user._id || "" : user.distributorId || "", distributorName: user.distributorName || "", regionId: user.regionId || "", regionName: user.regionName || "", zoneId: user.zoneId || "", zoneName: user.zoneName || "", territoryId: user.territoryId || "", territoryName: user.territoryName || "", fieldId: user.fieldId || "", fieldName: user.fieldName || "", mobile: user.mobile || user.mobileNumber, email: user.email, warehouseId: user.warehouseId || "",
+    permissions: profile.permissions || {}, enabledModules: profile.enabledModules || [], mobileAccess: profile.mobileAccess || false, mobileModules: profile.mobileModules || [],
+  };
+}
+async function enrichUser(user) {
+  await ensureDefaultModules().catch(() => null);
+  const profile = await getUserPermissionProfile(user);
+  const visibleModules = await listVisibleModules({ ...user, ...profile }).catch(() => []);
+  return { profile, visibleModules };
+}
 
 router.post("/login", async (req, res) => {
   try {
     const { mobile, password, username } = req.body || {};
     const identifier = mobile || username;
     if (!identifier || !password) return res.status(400).json({ ok: false, message: "Missing credentials" });
-
     const identifiers = buildIdentifierCandidates(identifier);
-    const directQuery = () => ({
-      $or: [
-        { mobile: { $in: identifiers } },
-        { mobileNumber: { $in: identifiers } },
-        { username: { $in: identifiers } },
-        { username: { $in: identifiers.map((value) => value.toLowerCase()) } },
-        { phoneNumber: { $in: identifiers } },
-      ],
-    });
-
+    const directQuery = () => ({ $or: [{ mobile: { $in: identifiers } }, { mobileNumber: { $in: identifiers } }, { username: { $in: identifiers } }, { username: { $in: identifiers.map((v) => v.toLowerCase()) } }, { phoneNumber: { $in: identifiers } }] });
     let user = await User.findOne(directQuery()).lean();
+    if (!user) user = await findUserInTenants(directQuery);
     if (!user) {
-      user = await findUserInTenants(directQuery);
-    }
-
-    if (!user) {
-      const loosePhoneRegex = buildLoosePhoneRegex(identifier);
-      if (loosePhoneRegex) {
-        const regexQuery = () => ({
-          $or: [
-            { mobile: { $regex: loosePhoneRegex } },
-            { mobileNumber: { $regex: loosePhoneRegex } },
-            { phoneNumber: { $regex: loosePhoneRegex } },
-          ],
-        });
+      const loose = buildLoosePhoneRegex(identifier);
+      if (loose) {
+        const regexQuery = () => ({ $or: [{ mobile: { $regex: loose } }, { mobileNumber: { $regex: loose } }, { phoneNumber: { $regex: loose } }] });
         user = await User.findOne(regexQuery()).lean();
-        if (!user) {
-          user = await findUserInTenants(regexQuery);
-        }
+        if (!user) user = await findUserInTenants(regexQuery);
       }
     }
-
     if (!user) return res.status(401).json({ ok: false, message: "Invalid username/password" });
     if (!isUserActive(user.status)) return res.status(403).json({ ok: false, message: "User is deactive" });
-
-    const storedPassword = user.passwordHash || user.password;
-    const ok = await verifyPassword(password, storedPassword);
-    if (!ok) return res.status(401).json({ ok: false, message: "Invalid username/password" });
-
-    const token = signToken(user);
-
-    return res.json({
-      ok: true,
-      token,
-      user: {
-        id: user._id,
-        userId: user.userId || "",
-        username: user.username,
-        fullName: user.fullName,
-        role: user.role,
-        companyId: user.companyId || "",
-        companyName: user.companyName || "",
-        distributorId:
-          String(user?.role || "").trim().toLowerCase() === "distributor"
-            ? user.distributorId || user.userId || user._id || ""
-            : user.distributorId || "",
-        distributorName: user.distributorName || "",
-        regionId: user.regionId || "",
-        regionName: user.regionName || "",
-        zoneId: user.zoneId || "",
-        zoneName: user.zoneName || "",
-        territoryId: user.territoryId || "",
-        territoryName: user.territoryName || "",
-        fieldId: user.fieldId || "",
-        fieldName: user.fieldName || "",
-        mobile: user.mobile || user.mobileNumber,
-        email: user.email,
-        warehouseId: user.warehouseId || "",
-      },
-    });
+    if (!(await verifyPassword(password, user.passwordHash || user.password))) return res.status(401).json({ ok: false, message: "Invalid username/password" });
+    const { profile, visibleModules } = await enrichUser(user);
+    const token = signToken({ ...user, ...profile });
+    return res.json({ ok: true, token, user: publicUser(user, profile), visibleModules });
   } catch (error) {
     return res.status(500).json({ ok: false, message: "Login failed" });
+  }
+});
+
+router.get("/me", requireAuth, async (req, res) => {
+  try {
+    let user = req.user?.uid ? await User.findById(req.user.uid).lean() : null;
+    if (!user) user = req.user;
+    const { profile, visibleModules } = await enrichUser(user);
+    return res.json({ ok: true, user: publicUser(user, profile), visibleModules });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: "Unable to load profile" });
   }
 });
 

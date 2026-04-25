@@ -26,7 +26,9 @@ function registerRoutes(app) {
   app.use("/api/location", require("./location"));
   app.use("/api/module-access", require("./moduleAccess"));
   app.use("/api/erp-templates", require("../core/erp-templates/erpTemplate.routes"));
-  app.get("/api/health", (req, res) => { res.json({ ok: true, service: "rawyan-erp-api", name: "Rawyan ERP", time: new Date().toISOString() }); });
+  app.use("/api/roles", require("../core/roles/role.routes"));
+  app.use("/api/portal-modules", require("../core/portal-modules/portalModule.routes"));
+  app.get("/api/health", (req, res) => res.json({ ok: true, service: "rawyan-erp-api", name: "Rawyan ERP", time: new Date().toISOString() }));
   app.use("/api/auth", require("./auth"));
   app.use("/api/admin/users", require("./adminUsers"));
 }

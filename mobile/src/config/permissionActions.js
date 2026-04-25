@@ -1,0 +1,2 @@
+export const PERMISSION_ACTIONS = ["view", "create", "edit", "delete", "approve", "reject", "export", "print", "assign", "track"];
+export function hasMobilePermission(permissions = {}, moduleKey, action = "view") { const wildcard = permissions["*"]; if (wildcard?.actions?.includes("*") || wildcard?.actions?.includes(action)) return true; const entry = permissions[moduleKey]; return Boolean(entry?.actions?.includes("*") || entry?.actions?.includes(action)); }

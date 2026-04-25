@@ -1,1 +1,5 @@
-export { hasPermission, PERMISSION_ACTIONS, DEFAULT_PERMISSION_MATRIX } from "../config/permissions";
+export function normalizeKey(value = "") { return String(value || "").trim().toLowerCase(); }
+export function normalizePermissionEntry(entry) { if (!entry) return { actions: [], scope: "company" }; if (Array.isArray(entry)) return { actions: entry, scope: "company" }; return { actions: Array.isArray(entry.actions) ? entry.actions : [], scope: entry.scope || "company" }; }
+export function normalizePermissions(permissions = {}) { return Object.entries(permissions || {}).reduce((acc, [key, entry]) => { acc[normalizeKey(key)] = normalizePermissionEntry(entry); return acc; }, {}); }
+export function hasPermission(permissions = {}, moduleKey, action = "view") { const map = normalizePermissions(permissions); const wildcard = map["*"]; if (wildcard?.actions?.includes("*") || wildcard?.actions?.includes(action)) return true; const entry = map[normalizeKey(moduleKey)]; if (!entry) return false; return entry.actions.includes("*") || entry.actions.map(normalizeKey).includes(normalizeKey(action)); }
+export function getPermissionScope(permissions = {}, moduleKey) { return normalizePermissions(permissions)[normalizeKey(moduleKey)]?.scope || "none"; }
