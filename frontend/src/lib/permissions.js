@@ -1,5 +1,11 @@
-export function normalizeKey(value = "") { return String(value || "").trim().toLowerCase(); }
-export function normalizePermissionEntry(entry) { if (!entry) return { actions: [], scope: "company" }; if (Array.isArray(entry)) return { actions: entry, scope: "company" }; return { actions: Array.isArray(entry.actions) ? entry.actions : [], scope: entry.scope || "company" }; }
-export function normalizePermissions(permissions = {}) { return Object.entries(permissions || {}).reduce((acc, [key, entry]) => { acc[normalizeKey(key)] = normalizePermissionEntry(entry); return acc; }, {}); }
-export function hasPermission(permissions = {}, moduleKey, action = "view") { const map = normalizePermissions(permissions); const wildcard = map["*"]; if (wildcard?.actions?.includes("*") || wildcard?.actions?.includes(action)) return true; const entry = map[normalizeKey(moduleKey)]; if (!entry) return false; return entry.actions.includes("*") || entry.actions.map(normalizeKey).includes(normalizeKey(action)); }
-export function getPermissionScope(permissions = {}, moduleKey) { return normalizePermissions(permissions)[normalizeKey(moduleKey)]?.scope || "none"; }
+export function hasPermission(permissions = {}, moduleKey, action = "view") {
+  if (!moduleKey) return false;
+  if (permissions === "*" || permissions?.["*"] || permissions?.superAdmin) return true;
+  const value = permissions?.[moduleKey];
+  if (!value) return false;
+  if (value === "*") return true;
+  if (Array.isArray(value)) return value.includes(action) || value.includes("*");
+  if (typeof value === "object") return Boolean(value[action] || value["*"]);
+  return Boolean(value);
+}
+export function canViewModule(permissions = {}, moduleKey) { return hasPermission(permissions, moduleKey, "view"); }

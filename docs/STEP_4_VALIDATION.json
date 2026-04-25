@@ -1,0 +1,8 @@
+{
+  "projectName": "Rawyan ERP",
+  "step": "4",
+  "status": "final_setup_patch_completed",
+  "outputType": "changed_files_patch_plus_cleanup_script",
+  "deleteList": "docs/DELETE_FILES_STEP_4.md",
+  "next": "Phase 1 - Company, Branch, ERP Template, Subscription Foundation"
+}

@@ -1,9 +1,3 @@
-export default function ModulePlaceholderPage({ module }) {
-  return (
-    <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 shadow-sm">
-      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-600">Module Foundation</p>
-      <h2 className="mt-2 text-3xl font-black text-slate-950">{module?.name || "ERP Module"}</h2>
-      <p className="mt-3 max-w-2xl text-slate-500">This route is connected to the Step 3 permission portal engine. In the next migration, move the old screen logic from role folders into this feature module.</p>
-    </div>
-  );
+export default function ModulePlaceholderPage({ module, route }) {
+  return <div className="space-y-6"><div className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm"><div className="bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 p-7 text-white sm:p-9"><p className="text-xs font-bold uppercase tracking-[0.28em] text-emerald-200/80">Rawyan ERP Feature Module</p><h2 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">{module?.name || "ERP Module"}</h2><p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">{module?.description || "This module is connected to the final Step 4 portal architecture."}</p></div><div className="grid gap-4 p-6 sm:grid-cols-3"><div className="rounded-3xl bg-emerald-50 p-5"><p className="text-xs font-bold uppercase tracking-wider text-emerald-700">Canonical Route</p><p className="mt-2 break-all text-sm font-semibold text-slate-900">{route?.canonicalPath || module?.path}</p></div><div className="rounded-3xl bg-cyan-50 p-5"><p className="text-xs font-bold uppercase tracking-wider text-cyan-700">Module Key</p><p className="mt-2 text-sm font-semibold text-slate-900">{module?.key || route?.moduleKey}</p></div><div className="rounded-3xl bg-blue-50 p-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Next Phase</p><p className="mt-2 text-sm font-semibold text-slate-900">Move business logic into this feature module.</p></div></div></div></div>;
 }
