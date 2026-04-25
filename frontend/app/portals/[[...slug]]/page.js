@@ -1,2 +1,6 @@
 import PortalRouteLoader from "../../../src/app-shell/PortalRouteLoader";
-export default function DynamicPortalPage({ params }) { return <PortalRouteLoader slug={params?.slug || []} />; }
+
+export default async function DynamicPortalPage({ params }) {
+  const resolvedParams = await params;
+  return <PortalRouteLoader slug={resolvedParams?.slug || []} />;
+}

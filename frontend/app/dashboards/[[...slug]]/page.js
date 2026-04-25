@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
-export default function LegacyDashboardsRedirect({ params }) {
-  const slug = Array.isArray(params?.slug) ? params.slug.join("/") : "";
+export default async function LegacyDashboardsRedirect({ params }) {
+  const resolvedParams = await params;
+  const slug = Array.isArray(resolvedParams?.slug) ? resolvedParams.slug.join("/") : "";
   redirect(`/portals${slug ? `/${slug}` : ""}`);
 }

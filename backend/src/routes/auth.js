@@ -24,6 +24,7 @@ function buildIdentifierCandidates(rawIdentifier) {
   }
   return Array.from(candidates).filter(Boolean);
 }
+
 function buildLoosePhoneRegex(rawIdentifier) {
   const digits = String(rawIdentifier || "").replace(/\D/g, "");
   if (!digits) return null;
@@ -33,7 +34,12 @@ function buildLoosePhoneRegex(rawIdentifier) {
   if (!local) return null;
   return new RegExp(`${local.slice(-10)}$`);
 }
-function isUserActive(status) { const normalized = String(status || "active").toLowerCase().trim(); return !normalized || normalized === "active"; }
+
+function isUserActive(status) {
+  const normalized = String(status || "active").toLowerCase().trim();
+  return !normalized || normalized === "active";
+}
+
 async function findUserInTenants(buildQuery) {
   const targets = await listAllTenantTargets();
   for (const target of targets) {
@@ -44,18 +50,80 @@ async function findUserInTenants(buildQuery) {
   }
   return null;
 }
+
+async function findUserByTokenPayload(payload = {}) {
+  const id = String(payload.uid || payload._id || "").trim();
+  const userId = String(payload.userId || "").trim();
+  const username = String(payload.username || "").trim();
+  const mobile = String(payload.mobile || payload.mobileNumber || "").trim();
+  const queries = [];
+  if (id) queries.push(() => ({ _id: id }));
+  if (userId) queries.push(() => ({ userId }));
+  if (username) queries.push(() => ({ username: username.toLowerCase() }));
+  if (mobile) queries.push(() => ({ $or: [{ mobile }, { mobileNumber: mobile }, { phoneNumber: mobile }] }));
+  for (const buildQuery of queries) {
+    const root = await User.findOne(buildQuery()).lean().catch(() => null);
+    if (root) return root;
+    const tenant = await findUserInTenants(buildQuery).catch(() => null);
+    if (tenant) return tenant;
+  }
+  return null;
+}
+
 function publicUser(user, profile = {}) {
   return {
-    id: user._id, userId: user.userId || "", username: user.username, fullName: user.fullName, role: user.role, roleId: profile.roleId || user.roleId || null, roleKey: profile.roleKey || user.roleKey || String(user.role || "").toLowerCase(), portalType: profile.portalType || user.portalType || inferPortalType(user.role), landingPath: profile.landingPath || user.landingPath || "/portals", companyId: user.companyId || "", companyName: user.companyName || "", erpTemplateKey: user.erpTemplateKey || user.businessType || "distribution_erp",
-    distributorId: String(user?.role || "").trim().toLowerCase() === "distributor" ? user.distributorId || user.userId || user._id || "" : user.distributorId || "", distributorName: user.distributorName || "", regionId: user.regionId || "", regionName: user.regionName || "", zoneId: user.zoneId || "", zoneName: user.zoneName || "", territoryId: user.territoryId || "", territoryName: user.territoryName || "", fieldId: user.fieldId || "", fieldName: user.fieldName || "", mobile: user.mobile || user.mobileNumber, email: user.email, warehouseId: user.warehouseId || "",
-    permissions: profile.permissions || {}, enabledModules: profile.enabledModules || [], mobileAccess: profile.mobileAccess || false, mobileModules: profile.mobileModules || [],
+    id: user._id || user.uid,
+    userId: user.userId || "",
+    username: user.username,
+    fullName: user.fullName,
+    role: user.role,
+    roleId: profile.roleId || user.roleId || null,
+    roleName: profile.roleName || user.role || "User",
+    roleKey: profile.roleKey || user.roleKey || String(user.role || "").toLowerCase(),
+    portalType: profile.portalType || user.portalType || inferPortalType(user.role),
+    landingPath: profile.landingPath || user.landingPath || "/portals",
+    companyId: user.companyId || "",
+    companyName: user.companyName || "",
+    erpTemplateKey: user.erpTemplateKey || user.businessType || "distribution_erp",
+    distributorId: String(user?.role || "").trim().toLowerCase() === "distributor" ? user.distributorId || user.userId || user._id || "" : user.distributorId || "",
+    distributorName: user.distributorName || "",
+    regionId: user.regionId || "",
+    regionName: user.regionName || "",
+    zoneId: user.zoneId || "",
+    zoneName: user.zoneName || "",
+    territoryId: user.territoryId || "",
+    territoryName: user.territoryName || "",
+    fieldId: user.fieldId || "",
+    fieldName: user.fieldName || "",
+    mobile: user.mobile || user.mobileNumber,
+    email: user.email,
+    warehouseId: user.warehouseId || "",
+    permissions: profile.permissions || {},
+    enabledModules: profile.enabledModules || [],
+    mobileAccess: profile.mobileAccess || false,
+    mobileModules: profile.mobileModules || [],
   };
 }
+
 async function enrichUser(user) {
   await ensureDefaultModules().catch(() => null);
-  const profile = await getUserPermissionProfile(user);
-  const visibleModules = await listVisibleModules({ ...user, ...profile }).catch(() => []);
-  return { profile, visibleModules };
+  try {
+    const profile = await getUserPermissionProfile(user);
+    const visibleModules = await listVisibleModules({ ...user, ...profile }).catch(() => []);
+    return { profile, visibleModules };
+  } catch (error) {
+    const fallbackProfile = {
+      roleName: user?.role || "User",
+      roleKey: String(user?.role || "user").toLowerCase(),
+      portalType: user?.portalType || inferPortalType(user?.role),
+      permissions: { dashboard: { actions: ["view"], scope: "own" } },
+      enabledModules: ["dashboard"],
+      mobileAccess: Boolean(user?.mobileAccess),
+      mobileModules: user?.mobileModules || [],
+      landingPath: user?.landingPath || "/portals",
+    };
+    return { profile: fallbackProfile, visibleModules: [] };
+  }
 }
 
 router.post("/login", async (req, res) => {
@@ -88,7 +156,7 @@ router.post("/login", async (req, res) => {
 
 router.get("/me", requireAuth, async (req, res) => {
   try {
-    let user = req.user?.uid ? await User.findById(req.user.uid).lean() : null;
+    let user = await findUserByTokenPayload(req.user).catch(() => null);
     if (!user) user = req.user;
     const { profile, visibleModules } = await enrichUser(user);
     return res.json({ ok: true, user: publicUser(user, profile), visibleModules });

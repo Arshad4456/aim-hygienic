@@ -1,5 +1,6 @@
 function registerRoutes(app) {
   app.use("/api/companies", require("./companies"));
+  app.use("/api/company-branches", require("./companyBranches"));
   app.use("/api/users", require("./users"));
   app.use("/api/warehouses", require("./warehouses"));
   app.use("/api/regions", require("./regions"));
@@ -26,6 +27,7 @@ function registerRoutes(app) {
   app.use("/api/location", require("./location"));
   app.use("/api/module-access", require("./moduleAccess"));
   app.use("/api/erp-templates", require("../core/erp-templates/erpTemplate.routes"));
+  app.use("/api/subscriptions", require("../core/subscriptions/subscription.routes"));
   app.use("/api/roles", require("../core/roles/role.routes"));
   app.use("/api/portal-modules", require("../core/portal-modules/portalModule.routes"));
   app.get("/api/health", (req, res) => res.json({ ok: true, service: "rawyan-erp-api", name: "Rawyan ERP", time: new Date().toISOString() }));

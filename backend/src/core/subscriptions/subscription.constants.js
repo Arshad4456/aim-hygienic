@@ -1,0 +1,43 @@
+const DEFAULT_SUBSCRIPTION_PLANS = [
+  {
+    key: "starter",
+    name: "Starter",
+    description: "For small companies starting with Rawyan ERP.",
+    monthlyPrice: 0,
+    userLimit: 25,
+    branchLimit: 1,
+    warehouseLimit: 1,
+    moduleLimit: 10,
+    mobileUserLimit: 5,
+    allowedModules: ["dashboard", "companies", "users", "roles", "products", "inventory", "sales", "finance", "reports"],
+    status: "active",
+  },
+  {
+    key: "professional",
+    name: "Professional",
+    description: "For distribution companies with branches, warehouses, and mobile users.",
+    monthlyPrice: 0,
+    userLimit: 100,
+    branchLimit: 10,
+    warehouseLimit: 10,
+    moduleLimit: 30,
+    mobileUserLimit: 50,
+    allowedModules: ["*"],
+    status: "active",
+  },
+  {
+    key: "enterprise",
+    name: "Enterprise",
+    description: "For large companies needing custom limits and all ERP modules.",
+    monthlyPrice: 0,
+    userLimit: 9999,
+    branchLimit: 999,
+    warehouseLimit: 999,
+    moduleLimit: 999,
+    mobileUserLimit: 9999,
+    allowedModules: ["*"],
+    status: "active",
+  },
+];
+
+module.exports = { DEFAULT_SUBSCRIPTION_PLANS };
