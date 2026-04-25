@@ -26,4 +26,21 @@ router.post("/primary-orders", controller.createPrimaryOrder);
 router.post("/primary-orders/:id/approve", controller.approvePrimaryOrder);
 router.post("/primary-orders/:id/dispatch", controller.createDispatch);
 
+router.get("/secondary/overview", controller.secondaryOverview);
+router.get("/secondary/customers", controller.customers);
+router.get("/secondary/products", controller.distributorProducts);
+router.get("/secondary/orders", controller.secondaryOrders);
+router.post("/secondary/orders", controller.createSecondaryOrder);
+router.post("/secondary/orders/:id/approve", controller.approveSecondaryOrder);
+router.post("/secondary/orders/:id/fulfill", controller.fulfillSecondaryOrder);
+router.get("/secondary/invoices", controller.customerInvoices);
+router.get("/secondary/receipts", controller.customerReceipts);
+router.post("/secondary/invoices/:id/pay", controller.payCustomerInvoice);
+
+// Canonical aliases for phase 7 secondary sales.
+router.get("/secondary-orders", controller.secondaryOrders);
+router.post("/secondary-orders", controller.createSecondaryOrder);
+router.post("/secondary-orders/:id/approve", controller.approveSecondaryOrder);
+router.post("/secondary-orders/:id/fulfill", controller.fulfillSecondaryOrder);
+
 module.exports = router;

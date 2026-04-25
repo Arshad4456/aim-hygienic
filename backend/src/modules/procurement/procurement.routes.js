@@ -5,6 +5,8 @@ const router = express.Router();
 
 router.get("/overview", requireAuth, controller.overview);
 router.get("/suppliers", requireAuth, controller.suppliers);
+router.get("/products", requireAuth, controller.products);
+router.get("/warehouses", requireAuth, controller.warehouses);
 router.post("/suppliers", requireAuth, controller.createSupplier);
 router.get("/purchase-orders", requireAuth, controller.purchaseOrders);
 router.post("/purchase-orders", requireAuth, controller.createPurchaseOrder);

@@ -3,6 +3,8 @@ import apiClient from "./apiClient";
 const procurementService = {
   overview: () => apiClient("/procurement/overview"),
   suppliers: () => apiClient("/procurement/suppliers"),
+  products: () => apiClient("/procurement/products"),
+  warehouses: () => apiClient("/procurement/warehouses"),
   createSupplier: (payload) => apiClient("/procurement/suppliers", { method: "POST", body: JSON.stringify(payload) }),
   purchaseOrders: () => apiClient("/procurement/purchase-orders"),
   createPurchaseOrder: (payload) => apiClient("/procurement/purchase-orders", { method: "POST", body: JSON.stringify(payload) }),

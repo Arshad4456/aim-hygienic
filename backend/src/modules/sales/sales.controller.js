@@ -18,4 +18,15 @@ async function invoices(req, res) { try { return ok(res, { invoices: await sales
 async function distributorReceipts(req, res) { try { return ok(res, { receipts: await salesService.listDistributorReceipts(req) }); } catch (e) { return fail(res, e, 500); } }
 async function postDistributorReceipt(req, res) { try { return ok(res, await salesService.postDistributorReceipt(req)); } catch (e) { return fail(res, e); } }
 
-module.exports = { overview, distributors, products, warehouses, primaryOrders, createPrimaryOrder, approvePrimaryOrder, createDispatch, dispatches, postDispatch, invoices, distributorReceipts, postDistributorReceipt };
+async function secondaryOverview(req, res) { try { return ok(res, { overview: await salesService.secondaryOverview(req) }); } catch (e) { return fail(res, e, 500); } }
+async function customers(req, res) { try { return ok(res, { customers: await salesService.listCustomers(req) }); } catch (e) { return fail(res, e, 500); } }
+async function distributorProducts(req, res) { try { return ok(res, { products: await salesService.listDistributorProducts(req) }); } catch (e) { return fail(res, e, 500); } }
+async function secondaryOrders(req, res) { try { return ok(res, { orders: await salesService.listSecondaryOrders(req) }); } catch (e) { return fail(res, e, 500); } }
+async function createSecondaryOrder(req, res) { try { return created(res, { order: await salesService.createSecondaryOrder(req) }); } catch (e) { return fail(res, e); } }
+async function approveSecondaryOrder(req, res) { try { return ok(res, { order: await salesService.approveSecondaryOrder(req) }); } catch (e) { return fail(res, e); } }
+async function fulfillSecondaryOrder(req, res) { try { return ok(res, await salesService.fulfillSecondaryOrder(req)); } catch (e) { return fail(res, e); } }
+async function customerInvoices(req, res) { try { return ok(res, { invoices: await salesService.listCustomerInvoices(req) }); } catch (e) { return fail(res, e, 500); } }
+async function customerReceipts(req, res) { try { return ok(res, { receipts: await salesService.listCustomerReceipts(req) }); } catch (e) { return fail(res, e, 500); } }
+async function payCustomerInvoice(req, res) { try { return ok(res, await salesService.payCustomerInvoice(req)); } catch (e) { return fail(res, e); } }
+
+module.exports = { overview, distributors, products, warehouses, primaryOrders, createPrimaryOrder, approvePrimaryOrder, createDispatch, dispatches, postDispatch, invoices, distributorReceipts, postDistributorReceipt, secondaryOverview, customers, distributorProducts, secondaryOrders, createSecondaryOrder, approveSecondaryOrder, fulfillSecondaryOrder, customerInvoices, customerReceipts, payCustomerInvoice };

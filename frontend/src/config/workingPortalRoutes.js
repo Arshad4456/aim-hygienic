@@ -14,8 +14,8 @@ const ADMIN_PATHS = {
   "goods-receipts": "/portals/warehouse/goods-receipts",
   "primary-sales-orders": "/portals/sales/primary-orders",
   "primary-orders": "/portals/sales/primary-orders",
-  "secondary-sales-orders": "/portals/admin/order-management/sales-orders",
-  "secondary-orders": "/portals/admin/order-management/sales-orders",
+  "secondary-sales-orders": "/portals/sales/secondary-orders",
+  "secondary-orders": "/portals/sales/secondary-orders",
   customers: "/portals/admin/users",
   "customer-orders": "/portals/admin/order-management/sales-orders",
   finance: "/portals/admin/finance",
@@ -34,9 +34,9 @@ const ADMIN_PATHS = {
   settings: "/portals/admin/settings",
 };
 
-const DISTRIBUTOR_PATHS = { dashboard: "/portals/distributor", inventory: "/portals/distributor/inventory", warehouse: "/portals/distributor/stock-received", "primary-sales-orders": "/portals/sales/primary-orders", "primary-orders": "/portals/sales/primary-orders", "secondary-sales-orders": "/portals/distributor/orders", "secondary-orders": "/portals/distributor/orders", customers: "/portals/distributor/users", users: "/portals/users", "customer-orders": "/portals/distributor/customer-invoices", finance: "/portals/distributor/accounts", receipts: "/portals/distributor/receipts", payments: "/portals/distributor/payments", expenses: "/portals/distributor/expense", returns: "/portals/distributor/return-stock", "live-tracking": "/portals/distributor/live-tracking", live_tracking: "/portals/distributor/live-tracking", messages: "/portals/distributor/messages", reports: "/portals/distributor/reports", settings: "/portals/distributor/settings" };
-const SALESMAN_PATHS = { dashboard: "/portals/salesman", customers: "/portals/salesman/customers", "secondary-sales-orders": "/portals/salesman/orders", "secondary-orders": "/portals/salesman/orders", receipts: "/portals/salesman/collections", deliveries: "/portals/salesman/deliveries" };
-const ORDER_BOOKER_PATHS = { dashboard: "/portals/orderBooker", customers: "/portals/orderBooker/customers", "secondary-sales-orders": "/portals/orderBooker/orders", "secondary-orders": "/portals/orderBooker/orders", receipts: "/portals/orderBooker/collections" };
+const DISTRIBUTOR_PATHS = { dashboard: "/portals/distributor", inventory: "/portals/distributor/inventory", warehouse: "/portals/distributor/stock-received", "primary-sales-orders": "/portals/sales/primary-orders", "primary-orders": "/portals/sales/primary-orders", "secondary-sales-orders": "/portals/sales/secondary-orders", "secondary-orders": "/portals/sales/secondary-orders", customers: "/portals/distributor/users", users: "/portals/users", "customer-orders": "/portals/distributor/customer-invoices", finance: "/portals/distributor/accounts", receipts: "/portals/distributor/receipts", payments: "/portals/distributor/payments", expenses: "/portals/distributor/expense", returns: "/portals/distributor/return-stock", "live-tracking": "/portals/distributor/live-tracking", live_tracking: "/portals/distributor/live-tracking", messages: "/portals/distributor/messages", reports: "/portals/distributor/reports", settings: "/portals/distributor/settings" };
+const SALESMAN_PATHS = { dashboard: "/portals/salesman", customers: "/portals/salesman/customers", "secondary-sales-orders": "/portals/sales/secondary-orders", "secondary-orders": "/portals/sales/secondary-orders", receipts: "/portals/salesman/collections", deliveries: "/portals/salesman/deliveries" };
+const ORDER_BOOKER_PATHS = { dashboard: "/portals/orderBooker", customers: "/portals/orderBooker/customers", "secondary-sales-orders": "/portals/sales/secondary-orders", "secondary-orders": "/portals/sales/secondary-orders", receipts: "/portals/orderBooker/collections" };
 const WAREHOUSE_PATHS = { dashboard: "/portals/warehouseManager", warehouse: "/portals/warehouseManager/warehouse-inventory", inventory: "/portals/warehouseManager/stock-summary", "goods-receipts": "/portals/warehouseManager/goods-receipts", dispatches: "/portals/warehouseManager/dispatch-preparation", returns: "/portals/warehouseManager/damage-expiry", payments: "/portals/warehouseManager/payments" };
 const DELIVERY_PATHS = { dashboard: "/portals/deliveryBoy", deliveries: "/portals/deliveryBoy/orders", dispatches: "/portals/deliveryBoy/dispatches", "live-tracking": "/portals/deliveryBoy/tracking", live_tracking: "/portals/deliveryBoy/tracking" };
 const CUSTOMER_PATHS = { dashboard: "/portals/customer", customers: "/portals/customer", "customer-orders": "/portals/customer/orders", receipts: "/portals/customer/receipts", returns: "/portals/customer/returns", settings: "/portals/customer/settings" };

@@ -3,10 +3,12 @@ import { useEffect, useMemo, useState } from "react";
 import procurementService from "../../../services/procurementService";
 
 const TABS = [["overview","Overview"],["suppliers","Suppliers"],["purchase-orders","Purchase Orders"],["goods-receipts","Goods Receipts"],["supplier-finance","Supplier Finance"]];
-const emptyLine = { productName: "", qty: 1, unitCost: 0 };
+const emptyLine = { productId: "", productCode: "", productName: "", uom: "pack", qty: 1, unitCost: 0 };
 function money(value) { return `PKR ${Number(value || 0).toLocaleString()}`; }
 function dateText(value) { if (!value) return "-"; const date = new Date(value); return Number.isNaN(date.getTime()) ? "-" : date.toLocaleDateString(); }
 function supplierName(row) { return row?.supplierName || row?.fullName || row?.username || row?.supplier?.partyName || row?.partyName || "-"; }
+function productName(row) { return row?.name || row?.productName || row?.productId || row?.code || "Product"; }
+function warehouseName(row) { return row?.name || row?.warehouseName || row?.warehouseId || "Warehouse"; }
 function lineTotal(line) { return Number(line.qty || 0) * Number(line.unitCost || 0); }
 function canApprove(row) { return ["draft", "pending_approval"].includes(String(row?.status || "")); }
 function grnForPo(row, goodsReceipts) { return goodsReceipts.find((g) => String(g.purchaseOrderId) === String(row._id) && g.status !== "reversed"); }
@@ -21,21 +23,25 @@ export default function ProcurementFoundationPage({ mode = "overview" }) {
   const [notice, setNotice] = useState("");
   const [overview, setOverview] = useState(null);
   const [suppliers, setSuppliers] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [goodsReceipts, setGoodsReceipts] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [payments, setPayments] = useState([]);
   const [supplierForm, setSupplierForm] = useState({ supplierName: "", phone: "", email: "", city: "", paymentTermsDays: 15 });
-  const [poForm, setPoForm] = useState({ supplierId: "", expectedDate: "", notes: "", lines: [{ ...emptyLine }] });
+  const [poForm, setPoForm] = useState({ supplierId: "", warehouseId: "", expectedDate: "", notes: "", lines: [{ ...emptyLine }] });
 
   async function load() {
     setLoading(true); setError("");
     try {
-      const [overviewPayload, suppliersPayload, poPayload, grnPayload, invoicePayload, paymentPayload] = await Promise.all([
-        procurementService.overview(), procurementService.suppliers(), procurementService.purchaseOrders(), procurementService.goodsReceipts(), procurementService.supplierInvoices(), procurementService.supplierPayments(),
+      const [overviewPayload, suppliersPayload, productsPayload, warehousesPayload, poPayload, grnPayload, invoicePayload, paymentPayload] = await Promise.all([
+        procurementService.overview(), procurementService.suppliers(), procurementService.products(), procurementService.warehouses(), procurementService.purchaseOrders(), procurementService.goodsReceipts(), procurementService.supplierInvoices(), procurementService.supplierPayments(),
       ]);
       setOverview(overviewPayload?.kpis || {});
       setSuppliers(suppliersPayload?.suppliers || []);
+      setProducts(productsPayload?.products || []);
+      setWarehouses(warehousesPayload?.warehouses || []);
       setPurchaseOrders(poPayload?.purchaseOrders || []);
       setGoodsReceipts(grnPayload?.goodsReceipts || []);
       setInvoices(invoicePayload?.invoices || []);
@@ -45,20 +51,41 @@ export default function ProcurementFoundationPage({ mode = "overview" }) {
   }
   useEffect(() => { load(); }, []);
   const selectedSupplier = useMemo(() => suppliers.find((s) => String(s._id || s.id || s.linkedUserId || "") === String(poForm.supplierId)), [poForm.supplierId, suppliers]);
+  const selectedWarehouse = useMemo(() => warehouses.find((w) => String(w._id || w.warehouseId || "") === String(poForm.warehouseId)), [poForm.warehouseId, warehouses]);
   const poTotal = useMemo(() => poForm.lines.reduce((sum, line) => sum + lineTotal(line), 0), [poForm.lines]);
-  function setLine(index, field, value) { setPoForm((current) => ({ ...current, lines: current.lines.map((line, i) => i === index ? { ...line, [field]: value } : line) })); }
+
+  function setLine(index, field, value) {
+    setPoForm((current) => {
+      const lines = current.lines.map((line, i) => i === index ? { ...line, [field]: value } : line);
+      if (field === "productId") {
+        const product = products.find((p) => String(p.productId || p._id || p.code || p.name) === String(value));
+        if (product) {
+          lines[index] = {
+            ...lines[index],
+            productId: product.productId || product._id || product.name,
+            productCode: product.code || product.sku || product.productId || "",
+            productName: productName(product),
+            uom: product.unit || "pack",
+            unitCost: Number(product.costPrice || lines[index].unitCost || 0),
+          };
+        }
+      }
+      return { ...current, lines };
+    });
+  }
   function addLine() { setPoForm((current) => ({ ...current, lines: [...current.lines, { ...emptyLine }] })); }
   function removeLine(index) { setPoForm((current) => ({ ...current, lines: current.lines.filter((_, i) => i !== index) })); }
   async function saveSupplier() { setSaving(true); setError(""); setNotice(""); try { await procurementService.createSupplier(supplierForm); setSupplierForm({ supplierName: "", phone: "", email: "", city: "", paymentTermsDays: 15 }); setNotice("Supplier created successfully."); await load(); setTab("suppliers"); } catch (e) { setError(e.message || "Unable to save supplier"); } finally { setSaving(false); } }
   async function savePurchaseOrder() {
     setSaving(true); setError(""); setNotice("");
     try {
-      const lines = poForm.lines.filter((line) => line.productName).map((line) => ({ productName: line.productName, qty: Number(line.qty || 0), unitCost: Number(line.unitCost || 0) }));
+      const lines = poForm.lines.filter((line) => line.productName || line.productId).map((line) => ({ productId: line.productId, productCode: line.productCode, productName: line.productName, uom: line.uom, qty: Number(line.qty || 0), unitCost: Number(line.unitCost || 0) }));
       if (!selectedSupplier) throw new Error("Select a supplier first");
+      if (!selectedWarehouse) throw new Error("Select receiving warehouse first. Stock will be added to this warehouse after GRN posting.");
       if (!lines.length) throw new Error("Add at least one purchase item");
-      await procurementService.createPurchaseOrder({ supplier: selectedSupplier, expectedDate: poForm.expectedDate, notes: poForm.notes, lines });
-      setPoForm({ supplierId: "", expectedDate: "", notes: "", lines: [{ ...emptyLine }] });
-      setNotice("Purchase order created successfully.");
+      await procurementService.createPurchaseOrder({ supplier: selectedSupplier, expectedDate: poForm.expectedDate, notes: poForm.notes, warehouse: { partyId: selectedWarehouse._id || selectedWarehouse.warehouseId, partyName: warehouseName(selectedWarehouse), address: selectedWarehouse.address }, lines });
+      setPoForm({ supplierId: "", warehouseId: "", expectedDate: "", notes: "", lines: [{ ...emptyLine }] });
+      setNotice("Purchase order created successfully. Product IDs are now linked to the product master, so posted GRNs will update salable stock.");
       await load();
       setTab("purchase-orders");
     } catch (e) { setError(e.message || "Unable to save purchase order"); } finally { setSaving(false); }
@@ -69,21 +96,15 @@ export default function ProcurementFoundationPage({ mode = "overview" }) {
   async function payInvoice(id, amount) { setSaving(true); setError(""); setNotice(""); try { await procurementService.paySupplierInvoice(id, { amount, paymentMethod: "cash" }); setNotice("Supplier payment posted and invoice balance updated."); await load(); setTab("supplier-finance"); } catch (e) { setError(e.message || "Unable to post supplier payment"); } finally { setSaving(false); } }
 
   return <div className="space-y-5">
-    <div className="rounded-3xl bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-600 p-6 text-white shadow-lg">
-      <p className="text-xs font-black uppercase tracking-[0.24em] opacity-90">Phase 5 Inventory Connection</p>
-      <h2 className="mt-2 text-3xl font-black">Supplier → Company Procurement</h2>
-      <p className="mt-2 max-w-3xl text-sm text-cyan-50">PO → one draft GRN → post GRN → stock ledger + supplier invoice → supplier payment.</p>
-    </div>
-    <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800"><b>Correct flow:</b> a draft GRN does not update stock. Only a posted GRN updates inventory and generates the supplier invoice.</div>
+    <div className="rounded-3xl bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-600 p-6 text-white shadow-lg"><p className="text-xs font-black uppercase tracking-[0.24em] opacity-90">Phase 7 Product Stock Fix</p><h2 className="mt-2 text-3xl font-black">Supplier → Company Procurement</h2><p className="mt-2 max-w-3xl text-sm text-cyan-50">Select products from product master and select receiving warehouse. PO → GRN → posted stock will then be available for primary sales.</p></div>
+    <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800"><b>Correct flow:</b> a draft GRN does not update stock. Only a posted GRN updates company warehouse stock and generates the supplier invoice.</div>
     <div className="flex flex-wrap gap-2">{TABS.map(([key, label]) => <button key={key} onClick={() => setTab(key)} className={`rounded-full px-4 py-2 text-sm font-bold ${tab === key ? "bg-slate-950 text-white" : "bg-white text-slate-600 shadow-sm ring-1 ring-slate-200"}`}>{label}</button>)}</div>
     {error ? <div className="rounded-2xl bg-red-50 p-4 text-sm font-semibold text-red-600">{error}</div> : null}{notice ? <div className="rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">{notice}</div> : null}
     {loading ? <div className="rounded-3xl border border-slate-200 bg-white p-6 text-slate-500 shadow-sm">Loading procurement data…</div> : null}
-    {!loading && tab === "overview" ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{[
-      ["Suppliers", overview?.suppliers, "Active supplier master and linked supplier users"], ["Purchase Orders", overview?.purchaseOrders, `${overview?.openOrders || 0} open orders`], ["Draft GRNs", overview?.draftReceipts, "Created but not posted to stock"], ["Posted GRNs", overview?.postedReceipts, "Posted to inventory ledger"], ["Payable Balance", money(overview?.payableBalance), "Outstanding supplier balance"], ["Paid Total", money(overview?.paidTotal), "Posted supplier payments"],
-    ].map(([label, value, help]) => <div key={label} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">{label}</p><p className="mt-3 text-3xl font-black text-slate-950">{value || 0}</p><p className="mt-2 text-sm text-slate-500">{help}</p></div>)}</div> : null}
+    {!loading && tab === "overview" ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{[["Products", products.length, "Product master items available for purchase lines"],["Warehouses", warehouses.length, "Warehouses selectable for GRN stock"],["Suppliers", overview?.suppliers, "Active supplier master and linked supplier users"],["Purchase Orders", overview?.purchaseOrders, `${overview?.openOrders || 0} open orders`],["Posted GRNs", overview?.postedReceipts, "Posted to inventory ledger"],["Payable Balance", money(overview?.payableBalance), "Outstanding supplier balance"]].map(([label, value, help]) => <div key={label} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">{label}</p><p className="mt-3 text-3xl font-black text-slate-950">{value || 0}</p><p className="mt-2 text-sm text-slate-500">{help}</p></div>)}</div> : null}
     {!loading && tab === "suppliers" ? <div className="grid gap-5 xl:grid-cols-[1fr_420px]"><Table title="Supplier Master" rows={suppliers} columns={["Supplier", "Phone", "Email", "Status"]} render={(row) => [supplierName(row), row.phone || row.mobile || row.mobileNumber || "-", row.email || "-", row.status || "active"]} /><FormCard title="Create Supplier"><Input label="Supplier name" value={supplierForm.supplierName} onChange={(v) => setSupplierForm({ ...supplierForm, supplierName: v })} /><Input label="Phone" value={supplierForm.phone} onChange={(v) => setSupplierForm({ ...supplierForm, phone: v })} /><Input label="Email" value={supplierForm.email} onChange={(v) => setSupplierForm({ ...supplierForm, email: v })} /><Input label="City" value={supplierForm.city} onChange={(v) => setSupplierForm({ ...supplierForm, city: v })} /><button disabled={saving || !supplierForm.supplierName} onClick={saveSupplier} className="mt-4 w-full rounded-2xl bg-slate-950 px-4 py-3 text-sm font-black text-white disabled:opacity-50">Save Supplier</button></FormCard></div> : null}
-    {!loading && tab === "purchase-orders" ? <div className="grid gap-5 xl:grid-cols-[1fr_460px]"><Table title="Purchase Orders" rows={purchaseOrders} columns={["PO", "Supplier", "Amount", "Status", "Actions"]} render={(row) => { const grn = grnForPo(row, goodsReceipts); return [row.documentNo, row.supplier?.partyName || "-", money(row.totals?.grandTotal), row.status, <div className="flex flex-wrap gap-2" key="a">{canApprove(row) ? <button disabled={saving} onClick={() => approvePO(row._id)} className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">Approve</button> : null}{canCreateGrn(row, goodsReceipts) ? <button disabled={saving} onClick={() => receivePO(row._id)} className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">Create GRN</button> : null}{grn ? <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">GRN: {grn.status}</span> : null}</div>]; }} /><FormCard title="Create Purchase Order"><label className="text-sm font-bold text-slate-700">Supplier<select value={poForm.supplierId} onChange={(e) => setPoForm({ ...poForm, supplierId: e.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"><option value="">Select supplier</option>{suppliers.map((s) => <option key={s._id || s.linkedUserId} value={s._id || s.linkedUserId}>{supplierName(s)}</option>)}</select></label><Input label="Expected date" type="date" value={poForm.expectedDate} onChange={(v) => setPoForm({ ...poForm, expectedDate: v })} />{poForm.lines.map((line, index) => <div key={index} className="grid gap-2 rounded-2xl border border-slate-200 p-3 md:grid-cols-[1fr_80px_100px_auto]"><input value={line.productName} onChange={(e) => setLine(index, "productName", e.target.value)} placeholder="Product" className="rounded-xl border border-slate-200 px-3 py-2" /><input value={line.qty} onChange={(e) => setLine(index, "qty", e.target.value)} type="number" placeholder="Qty" className="rounded-xl border border-slate-200 px-3 py-2" /><input value={line.unitCost} onChange={(e) => setLine(index, "unitCost", e.target.value)} type="number" placeholder="Cost" className="rounded-xl border border-slate-200 px-3 py-2" /><button onClick={() => removeLine(index)} className="rounded-xl bg-slate-100 px-3 text-xs font-bold">Remove</button></div>)}<button onClick={addLine} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold">Add Line</button><p className="text-right text-sm font-black text-slate-900">Total: {money(poTotal)}</p><button disabled={saving} onClick={savePurchaseOrder} className="w-full rounded-2xl bg-gradient-to-r from-emerald-500 to-blue-600 px-4 py-3 text-sm font-black text-white disabled:opacity-50">Save Purchase Order</button></FormCard></div> : null}
-    {!loading && tab === "goods-receipts" ? <Table title="Goods Receipts" rows={goodsReceipts} columns={["GRN", "PO", "Supplier", "Status", "Received", "Actions"]} render={(row) => [row.documentNo, row.purchaseOrderNo || "-", row.supplier?.partyName || "-", row.status, dateText(row.receivedAt || row.createdAt), row.status === "draft" ? <button key="post" disabled={saving} onClick={() => postGRN(row._id)} className="rounded-full bg-slate-950 px-3 py-1 text-xs font-bold text-white">Post GRN</button> : <span key="posted" className="text-xs font-bold text-emerald-700">Inventory posted</span>]} /> : null}
+    {!loading && tab === "purchase-orders" ? <div className="grid gap-5 xl:grid-cols-[1fr_500px]"><Table title="Purchase Orders" rows={purchaseOrders} columns={["PO", "Supplier", "Warehouse", "Amount", "Status", "Actions"]} render={(row) => { const grn = grnForPo(row, goodsReceipts); return [row.documentNo, row.supplier?.partyName || "-", row.warehouse?.partyName || row.receivedAtWarehouse?.partyName || "-", money(row.totals?.grandTotal), row.status, <div className="flex flex-wrap gap-2" key="a">{canApprove(row) ? <button disabled={saving} onClick={() => approvePO(row._id)} className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">Approve</button> : null}{canCreateGrn(row, goodsReceipts) ? <button disabled={saving} onClick={() => receivePO(row._id)} className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">Create GRN</button> : null}{grn ? <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">GRN: {grn.status}</span> : null}</div>]; }} /><FormCard title="Create Purchase Order"><label className="text-sm font-bold text-slate-700">Supplier<select value={poForm.supplierId} onChange={(e) => setPoForm({ ...poForm, supplierId: e.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"><option value="">Select supplier</option>{suppliers.map((s) => <option key={s._id || s.linkedUserId} value={s._id || s.linkedUserId}>{supplierName(s)}</option>)}</select></label><label className="text-sm font-bold text-slate-700">Receiving warehouse<select value={poForm.warehouseId} onChange={(e) => setPoForm({ ...poForm, warehouseId: e.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"><option value="">Select warehouse</option>{warehouses.map((w) => <option key={w._id || w.warehouseId} value={w._id || w.warehouseId}>{warehouseName(w)}</option>)}</select></label><Input label="Expected date" type="date" value={poForm.expectedDate} onChange={(v) => setPoForm({ ...poForm, expectedDate: v })} />{poForm.lines.map((line, index) => <div key={index} className="grid gap-2 rounded-2xl border border-slate-200 p-3 md:grid-cols-[1fr_80px_100px_auto]"><select value={line.productId} onChange={(e) => setLine(index, "productId", e.target.value)} className="rounded-xl border border-slate-200 px-3 py-2"><option value="">Select product</option>{products.map((p) => <option key={p.productId || p._id || p.code} value={p.productId || p._id || p.code}>{productName(p)} {p.code ? `(${p.code})` : ""}</option>)}</select><input value={line.qty} onChange={(e) => setLine(index, "qty", e.target.value)} type="number" placeholder="Qty" className="rounded-xl border border-slate-200 px-3 py-2" /><input value={line.unitCost} onChange={(e) => setLine(index, "unitCost", e.target.value)} type="number" placeholder="Cost" className="rounded-xl border border-slate-200 px-3 py-2" /><button onClick={() => removeLine(index)} className="rounded-xl bg-slate-100 px-3 text-xs font-bold">Remove</button></div>)}<button onClick={addLine} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold">Add Line</button><p className="text-right text-sm font-black text-slate-900">Total: {money(poTotal)}</p><button disabled={saving} onClick={savePurchaseOrder} className="w-full rounded-2xl bg-gradient-to-r from-emerald-500 to-blue-600 px-4 py-3 text-sm font-black text-white disabled:opacity-50">Save Purchase Order</button></FormCard></div> : null}
+    {!loading && tab === "goods-receipts" ? <Table title="Goods Receipts" rows={goodsReceipts} columns={["GRN", "PO", "Supplier", "Warehouse", "Status", "Received", "Actions"]} render={(row) => [row.documentNo, row.purchaseOrderNo || "-", row.supplier?.partyName || "-", row.receivedAtWarehouse?.partyName || "-", row.status, dateText(row.receivedAt || row.createdAt), row.status === "draft" ? <button key="post" disabled={saving} onClick={() => postGRN(row._id)} className="rounded-full bg-slate-950 px-3 py-1 text-xs font-bold text-white">Post GRN</button> : <span key="posted" className="text-xs font-bold text-emerald-700">Inventory posted</span>]} /> : null}
     {!loading && tab === "supplier-finance" ? <div className="grid gap-5 xl:grid-cols-2"><Table title="Supplier Invoices" rows={invoices} columns={["Invoice", "Supplier", "Total", "Balance", "Status", "Action"]} render={(row) => [row.documentNo, row.supplier?.partyName || "-", money(row.invoiceTotal), money(row.balanceAmount), row.paymentStatus, Number(row.balanceAmount || 0) > 0 ? <button key="pay" disabled={saving} onClick={() => payInvoice(row._id, row.balanceAmount)} className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">Pay</button> : <span key="paid" className="text-xs font-bold text-slate-500">Paid</span>]} /><Table title="Supplier Payments" rows={payments} columns={["Payment", "Supplier", "Amount", "Method", "Status"]} render={(row) => [row.documentNo, row.supplier?.partyName || "-", money(row.amount), row.paymentMethod || "-", row.status]} /></div> : null}
   </div>;
 }

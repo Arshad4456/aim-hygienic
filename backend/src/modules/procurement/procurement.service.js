@@ -5,6 +5,8 @@ const GoodsReceipt = require("../../models/GoodsReceipt");
 const SupplierInvoice = require("../../models/SupplierInvoice");
 const SupplierPayment = require("../../models/SupplierPayment");
 const InventoryLedger = require("../../models/InventoryLedger");
+const Product = require("../../models/Product");
+const Warehouse = require("../../models/Warehouse");
 const { asText, getScopedModels } = require("../../services/scopedModels");
 
 function companyIdFrom(req) { return asText(req.query.companyId || req.body?.companyId || req.user?.companyId); }
@@ -69,6 +71,8 @@ async function scoped(req) {
     SupplierInvoiceModel: SupplierInvoice,
     SupplierPaymentModel: SupplierPayment,
     InventoryLedgerModel: InventoryLedger,
+    ProductModel: Product,
+    WarehouseModel: Warehouse,
     UserModel: User,
   });
 }
@@ -96,6 +100,16 @@ async function listSuppliers(req) {
   }));
   const existingLinked = new Set(supplierDocs.map((s) => String(s.linkedUserId || "")));
   return [...supplierDocs.map((s) => ({ ...s, source: "supplier_master" })), ...mappedLegacy.filter((u) => !existingLinked.has(String(u.linkedUserId || u._id)))];
+}
+async function listProducts(req) {
+  const { ProductModel } = await scoped(req);
+  const companyId = companyIdFrom(req);
+  return ProductModel.find({ companyId }).select("_id productId code sku name unit costPrice tradePrice wholesalePrice retailPrice customerPrice barcode category").sort({ name: 1 }).limit(1000).lean().catch(() => []);
+}
+async function listWarehouses(req) {
+  const { WarehouseModel } = await scoped(req);
+  const companyId = companyIdFrom(req);
+  return WarehouseModel.find({ companyId, status: { $ne: "inactive" } }).select("_id warehouseId name warehouseName address city status").sort({ name: 1 }).limit(500).lean().catch(() => []);
 }
 async function createSupplier(req) {
   const { SupplierModel } = await scoped(req);
@@ -287,4 +301,4 @@ async function paySupplierInvoice(req) {
   await updateSupplierBalance(SupplierModel, invoice.companyId, invoice.supplier, -amount);
   return { supplierInvoice: invoice, supplierPayment: payment };
 }
-module.exports = { overview, listSuppliers, createSupplier, listPurchaseOrders, createPurchaseOrder, approvePurchaseOrder, receivePurchaseOrder, postGoodsReceipt, listGoodsReceipts, listSupplierInvoices, listSupplierPayments, paySupplierInvoice };
+module.exports = { overview, listSuppliers, listProducts, listWarehouses, createSupplier, listPurchaseOrders, createPurchaseOrder, approvePurchaseOrder, receivePurchaseOrder, postGoodsReceipt, listGoodsReceipts, listSupplierInvoices, listSupplierPayments, paySupplierInvoice };
