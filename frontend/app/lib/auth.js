@@ -21,5 +21,5 @@ export function clearAuth() {
 }
 
 export function roleToDashboard(role) {
-  return resolveRoleDefinition(role).dashboardPath || "/dashboards/admin";
+  return resolveRoleDefinition(role).dashboardPath || "/portals/admin";
 }

@@ -1,2 +1,3 @@
-export { default as LiveTrackingModule } from './LiveTrackingModule';
-export { default as RoutePlaybackModule } from './RoutePlaybackModule';
+// Compatibility layer: live-tracking moved to src/features/live-tracking in Step 2.
+export * from "../../features/live-tracking";
+export { default } from "../../features/live-tracking";

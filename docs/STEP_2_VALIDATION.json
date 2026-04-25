@@ -1,0 +1,14 @@
+{
+  "projectName": "Rawyan ERP",
+  "step": 2,
+  "backendIncluded": true,
+  "frontendIncluded": true,
+  "mobileIncluded": true,
+  "nodeModulesFoundInProject": 0,
+  "portalsRouteExists": true,
+  "legacyDashboardsRedirectExists": true,
+  "liveTrackingMovedToFeatures": true,
+  "liveTrackingJsxRemainingInFeatureFolder": 0,
+  "erpTemplatesBackendExists": true,
+  "notes": "Only documentation/legacy redirect references should mention /dashboards after Step 2."
+}

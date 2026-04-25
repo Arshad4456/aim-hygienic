@@ -40,8 +40,8 @@ export function getRuleByKey(rules = [], key = "") {
 }
 
 const HREF_RULES = [
-  [/\/dashboards\/admin$/, "dashboard.overview"],
-  [/\/dashboards\/distributor$/, "distributor.dashboard"],
+  [/\/portals\/admin$/, "dashboard.overview"],
+  [/\/portals\/distributor$/, "distributor.dashboard"],
   [/\/operations$/, "dashboard.operations"],
   [/\/sales-kpi$/, "dashboard.sales-kpi"],
 

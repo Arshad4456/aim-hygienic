@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "Aim Hygienics",
-  description: "Aim Hygienics",
+  title: "Rawyan ERP",
+  description: "Rawyan ERP - modular SaaS ERP for distribution, inventory, sales, finance and field teams.",
 };
 
 export default function RootLayout({ children }) {

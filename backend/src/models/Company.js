@@ -11,6 +11,12 @@ const CompanySchema = new mongoose.Schema(
     email: { type: String, trim: true, lowercase: true },
     mainOfficeAddress: { type: String, trim: true },
 
+    erpTemplateId: { type: mongoose.Schema.Types.ObjectId, ref: "ErpTemplate" },
+    erpTemplateKey: { type: String, trim: true, default: "distribution_erp" },
+    businessType: { type: String, trim: true, default: "distribution_erp" },
+    enabledModules: { type: [String], default: [] },
+    systemName: { type: String, trim: true, default: "Rawyan ERP" },
+
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }

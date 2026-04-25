@@ -24,7 +24,7 @@ export default function LoginPage() {
   }, [router]);
 
   const roleRedirect = (role) => {
-    return resolveRoleDefinition(role).dashboardPath || "/dashboards/admin";
+    return resolveRoleDefinition(role).dashboardPath || "/portals/admin";
   };
 
   async function onSubmit(e) {
