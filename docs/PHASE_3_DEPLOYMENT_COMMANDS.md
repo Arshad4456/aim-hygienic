@@ -1,6 +1,6 @@
-# Phase 2 Deployment Commands
+# Phase 3 Deployment Commands
 
-After applying the patch locally:
+After copying the patch into your project:
 
 ```bash
 cd frontend
@@ -13,11 +13,11 @@ Then commit and push:
 ```bash
 cd ..
 git add .
-git commit -m "Phase 2: users roles permissions and portal access"
+git commit -m "Phase 3: fix live permissions and add territory architecture"
 git push origin main
 ```
 
-On Hostinger:
+On server:
 
 ```bash
 cd /apps/aim-hygienic
@@ -36,4 +36,9 @@ sudo systemctl restart aim-backend
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-After deployment, open `/portals/roles`, click **Seed defaults**, then open `/portals/users` and assign roles.
+After deploy, open an incognito window, login again, and test:
+
+- `/portals/roles`
+- `/portals/users`
+- `/portals/territory`
+- `/api/health`

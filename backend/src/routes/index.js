@@ -7,6 +7,7 @@ function registerRoutes(app) {
   app.use("/api/zones", require("./zones"));
   app.use("/api/fields", require("./fields"));
   app.use("/api/areas", require("./areas"));
+  app.use("/api/territory", require("../modules/territory/territory.routes"));
   app.use("/api/vehicles", require("./vehicles"));
   app.use("/api/products", require("./products"));
   app.use("/api/inventory", require("./inventory"));
