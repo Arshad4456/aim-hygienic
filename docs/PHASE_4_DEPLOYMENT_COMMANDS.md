@@ -1,6 +1,6 @@
-# Phase 3 Deployment Commands
+# Phase 4 Deployment Commands
 
-After copying the patch into your project:
+After applying the patch locally:
 
 ```bash
 cd frontend
@@ -13,11 +13,11 @@ Then commit and push:
 ```bash
 cd ..
 git add .
-git commit -m "Phase 3: fix live permissions and add territory architecture"
+git commit -m "Phase 4: procurement supplier purchase foundation"
 git push origin main
 ```
 
-On server:
+On Hostinger/server:
 
 ```bash
 cd /apps/aim-hygienic
@@ -35,10 +35,3 @@ sudo systemctl restart aim-backend
 
 sudo nginx -t && sudo systemctl reload nginx
 ```
-
-After deploy, open an incognito window, login again, and test:
-
-- `/portals/roles`
-- `/portals/users`
-- `/portals/territory`
-- `/api/health`

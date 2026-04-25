@@ -1,2 +1,17 @@
-// Step 2 wrapper. Add new endpoints here; legacy routes remain registered from src/routes/index.js.
-module.exports = require("./index").routes;
+const express = require("express");
+const { requireAuth } = require("../../utils/auth");
+const controller = require("./procurement.controller");
+const router = express.Router();
+
+router.get("/overview", requireAuth, controller.overview);
+router.get("/suppliers", requireAuth, controller.suppliers);
+router.post("/suppliers", requireAuth, controller.createSupplier);
+router.get("/purchase-orders", requireAuth, controller.purchaseOrders);
+router.post("/purchase-orders", requireAuth, controller.createPurchaseOrder);
+router.post("/purchase-orders/:id/approve", requireAuth, controller.approvePurchaseOrder);
+router.post("/purchase-orders/:id/receive", requireAuth, controller.receivePurchaseOrder);
+router.get("/goods-receipts", requireAuth, controller.goodsReceipts);
+router.get("/supplier-invoices", requireAuth, controller.supplierInvoices);
+router.get("/supplier-payments", requireAuth, controller.supplierPayments);
+
+module.exports = router;

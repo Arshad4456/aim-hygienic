@@ -254,8 +254,8 @@ export const v2Api = {
   },
 
   procurement: {
-    overview: (params = {}) => apiGet(withQuery("/reports/procurement", params)),
-    suppliers: (params = {}) => apiGet(withQuery("/users", { role: "Supplier", ...params })),
+    overview: (params = {}) => apiGet(withQuery("/procurement/overview", params)),
+    suppliers: (params = {}) => apiGet(withQuery("/procurement/suppliers", params)),
     supplierById: async (id, params = {}) => {
       if (!id) return { ok: true, user: null };
       try {
@@ -266,10 +266,13 @@ export const v2Api = {
         return { ok: true, user: matched || null };
       }
     },
-    purchaseOrders: (params = {}) => apiGet(withQuery("/inventory/ledger", params)),
-    goodsReceipts: (params = {}) => apiGet(withQuery("/inventory/ledger", params)),
-    supplierInvoices: (params = {}) => apiGet(withQuery("/payments/supplier-invoices", params)),
-    supplierPayments: (params = {}) => apiGet(withQuery("/payments/supplier-payments", params)),
+    purchaseOrders: (params = {}) => apiGet(withQuery("/procurement/purchase-orders", params)),
+    createPurchaseOrder: (payload) => apiPost("/procurement/purchase-orders", payload),
+    approvePurchaseOrder: (id) => apiPost(`/procurement/purchase-orders/${id}/approve`, {}),
+    receivePurchaseOrder: (id, payload = {}) => apiPost(`/procurement/purchase-orders/${id}/receive`, payload),
+    goodsReceipts: (params = {}) => apiGet(withQuery("/procurement/goods-receipts", params)),
+    supplierInvoices: (params = {}) => apiGet(withQuery("/procurement/supplier-invoices", params)),
+    supplierPayments: (params = {}) => apiGet(withQuery("/procurement/supplier-payments", params)),
     supplierPrimaryOrders: () => apiGet("/inventory/transactions/supplier/primary"),
   },
 

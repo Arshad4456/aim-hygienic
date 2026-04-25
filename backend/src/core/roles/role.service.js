@@ -144,9 +144,13 @@ async function seedDefaultRoles(options = {}) {
       isSystemRole: true,
       status: "active",
     };
+    const { companyId: seedCompanyId, key: seedKey, ...seedUpdates } = data;
     const role = await Role.findOneAndUpdate(
-      { companyId: data.companyId, key: data.key },
-      { $setOnInsert: data, $set: { erpTemplateKey: data.erpTemplateKey, isSystemRole: true } },
+      { companyId: seedCompanyId, key: seedKey },
+      {
+        $set: seedUpdates,
+        $setOnInsert: { companyId: seedCompanyId, key: seedKey },
+      },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
     rows.push(role);
