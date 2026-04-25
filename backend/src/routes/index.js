@@ -2,6 +2,7 @@ function registerRoutes(app) {
   app.use("/api/companies", require("./companies"));
   app.use("/api/company-branches", require("./companyBranches"));
   app.use("/api/users", require("./users"));
+  app.use("/api/warehouse", require("../modules/warehouse/warehouse.routes"));
   app.use("/api/warehouses", require("./warehouses"));
   app.use("/api/regions", require("./regions"));
   app.use("/api/zones", require("./zones"));
@@ -11,6 +12,7 @@ function registerRoutes(app) {
   app.use("/api/procurement", require("../modules/procurement/procurement.routes"));
   app.use("/api/vehicles", require("./vehicles"));
   app.use("/api/products", require("./products"));
+  app.use("/api/inventory", require("../modules/inventory/inventory.routes"));
   app.use("/api/inventory", require("./inventory"));
   app.use("/api/messages", require("./messages"));
   app.use("/api/expenses", require("./expenses"));

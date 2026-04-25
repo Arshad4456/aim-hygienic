@@ -1,2 +1,8 @@
-// Step 2 wrapper. Add new endpoints here; legacy routes remain registered from src/routes/index.js.
-module.exports = require("./index").routes;
+const express = require("express");
+const { requireAuth } = require("../../utils/auth");
+const controller = require("./warehouse.controller");
+const router = express.Router();
+
+router.get("/overview", requireAuth, controller.overview);
+
+module.exports = router;

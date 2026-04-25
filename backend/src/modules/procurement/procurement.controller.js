@@ -10,8 +10,10 @@ async function purchaseOrders(req, res) { try { return ok(res, { purchaseOrders:
 async function createPurchaseOrder(req, res) { try { return res.status(201).json({ ok: true, purchaseOrder: await service.createPurchaseOrder(req) }); } catch (e) { return fail(res, e, "Unable to create purchase order"); } }
 async function approvePurchaseOrder(req, res) { try { return ok(res, { purchaseOrder: await service.approvePurchaseOrder(req) }); } catch (e) { return fail(res, e, "Unable to approve purchase order"); } }
 async function receivePurchaseOrder(req, res) { try { return ok(res, await service.receivePurchaseOrder(req)); } catch (e) { return fail(res, e, "Unable to create goods receipt"); } }
+async function postGoodsReceipt(req, res) { try { return ok(res, await service.postGoodsReceipt(req)); } catch (e) { return fail(res, e, "Unable to post goods receipt"); } }
 async function goodsReceipts(req, res) { try { return ok(res, { goodsReceipts: await service.listGoodsReceipts(req) }); } catch (e) { return fail(res, e, "Unable to load goods receipts", 500); } }
 async function supplierInvoices(req, res) { try { return ok(res, { invoices: await service.listSupplierInvoices(req) }); } catch (e) { return fail(res, e, "Unable to load supplier invoices", 500); } }
 async function supplierPayments(req, res) { try { return ok(res, { payments: await service.listSupplierPayments(req) }); } catch (e) { return fail(res, e, "Unable to load supplier payments", 500); } }
+async function paySupplierInvoice(req, res) { try { return ok(res, await service.paySupplierInvoice(req)); } catch (e) { return fail(res, e, "Unable to pay supplier invoice"); } }
 
-module.exports = { overview, suppliers, createSupplier, purchaseOrders, createPurchaseOrder, approvePurchaseOrder, receivePurchaseOrder, goodsReceipts, supplierInvoices, supplierPayments };
+module.exports = { overview, suppliers, createSupplier, purchaseOrders, createPurchaseOrder, approvePurchaseOrder, receivePurchaseOrder, postGoodsReceipt, goodsReceipts, supplierInvoices, supplierPayments, paySupplierInvoice };

@@ -1,15 +1,18 @@
 import apiClient from "./apiClient";
-function qs(params = {}) { const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== "")).toString(); return query ? `?${query}` : ""; }
-export const procurementService = {
-  overview: (params = {}) => apiClient(`/procurement/overview${qs(params)}`),
-  suppliers: (params = {}) => apiClient(`/procurement/suppliers${qs(params)}`),
-  createSupplier: (data) => apiClient("/procurement/suppliers", { method: "POST", body: JSON.stringify(data) }),
-  purchaseOrders: (params = {}) => apiClient(`/procurement/purchase-orders${qs(params)}`),
-  createPurchaseOrder: (data) => apiClient("/procurement/purchase-orders", { method: "POST", body: JSON.stringify(data) }),
-  approvePurchaseOrder: (id) => apiClient(`/procurement/purchase-orders/${id}/approve`, { method: "POST", body: JSON.stringify({}) }),
-  receivePurchaseOrder: (id, data = {}) => apiClient(`/procurement/purchase-orders/${id}/receive`, { method: "POST", body: JSON.stringify(data) }),
-  goodsReceipts: (params = {}) => apiClient(`/procurement/goods-receipts${qs(params)}`),
-  supplierInvoices: (params = {}) => apiClient(`/procurement/supplier-invoices${qs(params)}`),
-  supplierPayments: (params = {}) => apiClient(`/procurement/supplier-payments${qs(params)}`),
+
+const procurementService = {
+  overview: () => apiClient("/procurement/overview"),
+  suppliers: () => apiClient("/procurement/suppliers"),
+  createSupplier: (payload) => apiClient("/procurement/suppliers", { method: "POST", body: JSON.stringify(payload) }),
+  purchaseOrders: () => apiClient("/procurement/purchase-orders"),
+  createPurchaseOrder: (payload) => apiClient("/procurement/purchase-orders", { method: "POST", body: JSON.stringify(payload) }),
+  approvePurchaseOrder: (id) => apiClient(`/procurement/purchase-orders/${id}/approve`, { method: "POST" }),
+  receivePurchaseOrder: (id, payload = {}) => apiClient(`/procurement/purchase-orders/${id}/receive`, { method: "POST", body: JSON.stringify(payload) }),
+  goodsReceipts: () => apiClient("/procurement/goods-receipts"),
+  postGoodsReceipt: (id) => apiClient(`/procurement/goods-receipts/${id}/post`, { method: "POST" }),
+  supplierInvoices: () => apiClient("/procurement/supplier-invoices"),
+  paySupplierInvoice: (id, payload = {}) => apiClient(`/procurement/supplier-invoices/${id}/pay`, { method: "POST", body: JSON.stringify(payload) }),
+  supplierPayments: () => apiClient("/procurement/supplier-payments"),
 };
+
 export default procurementService;

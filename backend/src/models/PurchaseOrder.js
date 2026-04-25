@@ -8,7 +8,12 @@ const PurchaseOrderSchema = new mongoose.Schema({
   expectedDate: Date,
   orderDate: { type: Date, default: Date.now },
   warehouse: PartySnapshotSchema,
-  status: { type: String, enum: ["draft", "pending_approval", "approved", "partially_received", "received", "cancelled", "closed"], default: "draft", index: true },
+  status: {
+    type: String,
+    enum: ["draft", "pending_approval", "approved", "receiving", "partially_received", "received", "invoiced", "cancelled", "closed"],
+    default: "draft",
+    index: true,
+  },
   lines: { type: [LineItemSchema], default: [] },
   totals: { type: TotalsSchema, default: () => ({}) },
   receivedTotal: { type: Number, default: 0 },

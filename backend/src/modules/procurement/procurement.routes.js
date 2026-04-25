@@ -11,7 +11,9 @@ router.post("/purchase-orders", requireAuth, controller.createPurchaseOrder);
 router.post("/purchase-orders/:id/approve", requireAuth, controller.approvePurchaseOrder);
 router.post("/purchase-orders/:id/receive", requireAuth, controller.receivePurchaseOrder);
 router.get("/goods-receipts", requireAuth, controller.goodsReceipts);
+router.post("/goods-receipts/:id/post", requireAuth, controller.postGoodsReceipt);
 router.get("/supplier-invoices", requireAuth, controller.supplierInvoices);
+router.post("/supplier-invoices/:id/pay", requireAuth, controller.paySupplierInvoice);
 router.get("/supplier-payments", requireAuth, controller.supplierPayments);
 
 module.exports = router;
