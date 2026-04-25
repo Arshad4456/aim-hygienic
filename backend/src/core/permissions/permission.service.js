@@ -2,12 +2,20 @@ const Role = require("../../models/Role");
 const PortalModule = require("../../models/PortalModule");
 const { DEFAULT_ROLE_PERMISSIONS, ADMIN_ROLES } = require("./permission.constants");
 
+const MODULE_ALIASES = {
+  "erp-templates": ["erp_templates"],
+  "primary-sales-orders": ["primary-orders", "primary_sales_orders", "primary_orders"],
+  "secondary-sales-orders": ["secondary-orders", "secondary_sales_orders", "secondary_orders"],
+  "customer-orders": ["customer_orders"],
+  "live-tracking": ["live_tracking"],
+};
 function normalizeKey(value) { return String(value || "").trim().toLowerCase(); }
 function normalizeRoleName(value) { return normalizeKey(value).replace(/_/g, " "); }
 function inferPortalType(role) { const r = normalizeRoleName(role); if (["admin", "system admin", "super admin"].includes(r)) return "system_admin"; if (r === "company admin") return "company_admin"; return r.replace(/\s+/g, "_") || "company_user"; }
-function normalizeEntry(entry) { if (!entry) return { actions: [], scope: "company" }; if (Array.isArray(entry)) return { actions: entry, scope: "company" }; return { actions: Array.isArray(entry.actions) ? entry.actions : [], scope: entry.scope || "company" }; }
+function normalizeEntry(entry) { if (!entry) return { actions: [], scope: "company" }; if (entry === "*") return { actions: ["*"], scope: "all" }; if (Array.isArray(entry)) return { actions: entry, scope: "company" }; return { actions: Array.isArray(entry.actions) ? entry.actions : [], scope: entry.scope || "company" }; }
 function permissionsToPlainObject(permissions) { if (!permissions) return {}; const source = permissions instanceof Map ? Object.fromEntries(permissions.entries()) : permissions; return Object.entries(source).reduce((acc, [k, v]) => { acc[normalizeKey(k)] = normalizeEntry(v); return acc; }, {}); }
 function fallbackPermissions(role) { return permissionsToPlainObject(DEFAULT_ROLE_PERMISSIONS[normalizeRoleName(role)] || { dashboard: { actions: ["view"], scope: "own" } }); }
+function candidateKeys(moduleKey) { const key = normalizeKey(moduleKey); const dash = key.replace(/_/g, "-"); const under = key.replace(/-/g, "_"); return Array.from(new Set([key, dash, under, ...(MODULE_ALIASES[key] || []), ...(MODULE_ALIASES[dash] || [])])); }
 
 async function findRoleForUser(user) {
   if (!user) return null;
@@ -22,8 +30,9 @@ async function findRoleForUser(user) {
 
 async function getUserPermissionProfile(user) {
   const role = await findRoleForUser(user);
+  const userPermissions = permissionsToPlainObject(user?.permissions || {});
   const rolePermissions = role ? permissionsToPlainObject(role.permissions) : {};
-  const permissions = Object.keys(rolePermissions).length ? rolePermissions : fallbackPermissions(user?.role);
+  const permissions = Object.keys(userPermissions).length ? userPermissions : Object.keys(rolePermissions).length ? rolePermissions : fallbackPermissions(user?.role);
   const isAdmin = ADMIN_ROLES.has(normalizeRoleName(user?.role));
   return {
     roleId: role?._id || user?.roleId || null,
@@ -31,26 +40,29 @@ async function getUserPermissionProfile(user) {
     roleKey: role?.key || normalizeKey(user?.role),
     portalType: user?.portalType || role?.portalType || inferPortalType(user?.role),
     permissions,
-    enabledModules: role?.enabledModules?.length ? role.enabledModules : isAdmin ? ["*"] : Object.keys(permissions).filter((k) => k !== "*"),
-    mobileAccess: Boolean(role?.mobileAccess || user?.mobileAccess),
-    mobileModules: role?.mobileModules || user?.mobileModules || [],
-    landingPath: role?.landingPath || user?.landingPath || "/portals",
+    enabledModules: Array.isArray(user?.enabledModules) && user.enabledModules.length ? user.enabledModules : role?.enabledModules?.length ? role.enabledModules : isAdmin ? ["*"] : Object.keys(permissions).filter((k) => k !== "*"),
+    mobileAccess: Boolean(user?.mobileAccess || role?.mobileAccess),
+    mobileModules: Array.isArray(user?.mobileModules) && user.mobileModules.length ? user.mobileModules : role?.mobileModules || [],
+    landingPath: user?.landingPath || role?.landingPath || "/portals",
   };
 }
 
 function hasPermission(permissions, moduleKey, action = "view") {
   const map = permissionsToPlainObject(permissions);
+  const requested = normalizeKey(action);
   const wildcard = map["*"];
-  if (wildcard?.actions?.includes("*") || wildcard?.actions?.includes(action)) return true;
-  const entry = map[normalizeKey(moduleKey)];
-  if (!entry) return false;
-  return entry.actions.includes("*") || entry.actions.map(normalizeKey).includes(normalizeKey(action));
+  if (wildcard?.actions?.includes("*") || wildcard?.actions?.map(normalizeKey).includes(requested)) return true;
+  return candidateKeys(moduleKey).some((key) => {
+    const entry = map[key];
+    if (!entry) return false;
+    const actions = (entry.actions || []).map(normalizeKey);
+    return actions.includes("*") || actions.includes(requested);
+  });
 }
 
 async function listVisibleModules(user) {
   const profile = await getUserPermissionProfile(user);
   const modules = await PortalModule.find({ status: "active", webEnabled: true }).sort({ order: 1, name: 1 }).lean().catch(() => []);
-  return modules.filter((m) => profile.enabledModules.includes("*") || hasPermission(profile.permissions, m.key, "view"));
+  return modules.filter((m) => profile.enabledModules.includes("*") || profile.enabledModules.includes(m.key) || hasPermission(profile.permissions, m.key, "view"));
 }
-
-module.exports = { normalizeKey, normalizeRoleName, inferPortalType, permissionsToPlainObject, getUserPermissionProfile, hasPermission, listVisibleModules };
+module.exports = { normalizeKey, normalizeRoleName, inferPortalType, permissionsToPlainObject, getUserPermissionProfile, hasPermission, listVisibleModules, candidateKeys };

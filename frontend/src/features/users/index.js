@@ -1,3 +1,1 @@
-// Rawyan ERP feature: users
-export const featureKey = "users";
-export default featureKey;
+export { default as UsersAccessPage } from "./pages/UsersAccessPage";

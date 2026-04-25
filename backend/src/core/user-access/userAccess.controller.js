@@ -1,0 +1,7 @@
+const service = require("./userAccess.service");
+async function listUsers(req, res) { try { res.json({ ok: true, users: await service.listUsers(req.query || {}, req.user || {}) }); } catch (e) { res.status(500).json({ ok: false, message: e.message || "Unable to list users" }); } }
+async function getUser(req, res) { try { res.json({ ok: true, user: await service.getUser(req.params.id, req.user || {}) }); } catch (e) { res.status(e.message === "Forbidden" ? 403 : 404).json({ ok: false, message: e.message || "Unable to load user" }); } }
+async function assignRole(req, res) { try { res.json({ ok: true, user: await service.assignRole(req.params.id, req.body?.roleId, req.user || {}) }); } catch (e) { res.status(400).json({ ok: false, message: e.message || "Unable to assign role" }); } }
+async function updateAccess(req, res) { try { res.json({ ok: true, user: await service.updateUserAccess(req.params.id, req.body || {}, req.user || {}) }); } catch (e) { res.status(400).json({ ok: false, message: e.message || "Unable to update access" }); } }
+async function setStatus(req, res) { try { res.json({ ok: true, user: await service.setStatus(req.params.id, req.body?.status, req.user || {}) }); } catch (e) { res.status(400).json({ ok: false, message: e.message || "Unable to update status" }); } }
+module.exports = { listUsers, getUser, assignRole, updateAccess, setStatus };
