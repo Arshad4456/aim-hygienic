@@ -4,6 +4,8 @@ export const MOBILE_ROUTE_REGISTRY = {
   orders: { label: "Orders", feature: "orders", roles: ["salesman", "order_booker", "distributor", "customer"] },
   collections: { label: "Collections", feature: "collections", roles: ["salesman", "order_booker", "distributor"] },
   delivery: { label: "Delivery", feature: "delivery", roles: ["delivery_boy", "warehouse_manager", "manager"] },
+  logistics: { label: "Logistics", feature: "logistics", roles: ["delivery_boy", "warehouse_manager", "manager", "distributor"] },
+  fleet: { label: "Fleet", feature: "fleet", roles: ["delivery_boy", "warehouse_manager", "manager"] },
   warehouse: { label: "Warehouse", feature: "warehouse", roles: ["warehouse_manager", "manager"] },
   inventory: { label: "Inventory", feature: "inventory", roles: ["warehouse_manager", "distributor", "manager"] },
   liveTracking: { label: "Live Tracking", feature: "live-tracking", roles: ["salesman", "order_booker", "delivery_boy", "manager"] },

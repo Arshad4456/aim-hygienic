@@ -1,6 +1,4 @@
-# Phase 8 Deployment Commands
-
-Local test:
+# Phase 9 Deployment Commands
 
 ```bash
 cd frontend
@@ -8,16 +6,14 @@ npm install
 npm run build
 ```
 
-Commit and push:
-
 ```bash
 cd ..
 git add .
-git commit -m "Phase 8: finance foundation and distributor stock fixes"
+git commit -m "Phase 9: logistics delivery tracking and finance separation"
 git push origin main
 ```
 
-Server:
+On server:
 
 ```bash
 cd /apps/aim-hygienic
