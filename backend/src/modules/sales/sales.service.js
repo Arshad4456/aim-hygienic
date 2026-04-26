@@ -112,6 +112,27 @@ async function hydrateLinesFromProducts(ProductModel, companyId, lines = []) {
     return { ...line, productId: asText(product.productId || product._id || line.productId), productCode: asText(product.code || product.sku || product.productId || line.productCode), productName: isGenericProductName(line.productName) ? asText(product.name) : line.productName, uom: asText(line.uom || product.unit || "pack"), unitCost: Number(line.unitCost || product.costPrice || 0), unitPrice: Number(line.unitPrice || product.tradePrice || product.wholesalePrice || product.retailPrice || product.customerPrice || 0) };
   });
 }
+
+function customerIdFromRequest(req) {
+  return asText(req.query.customerId || req.user?.customerId || req.user?.uid || req.user?._id || req.user?.userId);
+}
+function isCustomerUser(req) {
+  const text = `${req.user?.portalType || ""} ${req.user?.role || ""} ${req.user?.roleKey || ""}`.toLowerCase();
+  return text.includes("customer");
+}
+function applyCustomerScope(req, filter) {
+  if (!isCustomerUser(req) || req.query.scope === "all") return filter;
+  const customerId = customerIdFromRequest(req);
+  if (!customerId) return filter;
+  filter.$or = [
+    { "customer.partyId": customerId },
+    { customerId },
+    { ownerId: customerId },
+    { createdByUserId: customerId },
+  ];
+  return filter;
+}
+
 function isDistributorUser(req) {
   const text = `${req.user?.portalType || ""} ${req.user?.role || ""} ${req.user?.roleKey || ""}`.toLowerCase();
   return text.includes("distributor");
@@ -676,20 +697,27 @@ async function listCustomerInvoices(req) {
   const { CustomerInvoiceModel } = await scoped(req);
   const filter = { companyId: companyIdFrom(req) };
   const distributorId = distributorIdFromRequest(req);
-  if (distributorId && req.query.scope !== "all") filter.distributorId = distributorId;
+  if (!isCustomerUser(req) && distributorId && req.query.scope !== "all") filter.distributorId = distributorId;
+  applyCustomerScope(req, filter);
   return CustomerInvoiceModel.find(filter).sort({ createdAt: -1 }).lean();
 }
 async function listCustomerReceipts(req) {
   const { CustomerReceiptModel } = await scoped(req);
   const filter = { companyId: companyIdFrom(req) };
   const distributorId = distributorIdFromRequest(req);
-  if (distributorId && req.query.scope !== "all") filter.distributorId = distributorId;
+  if (!isCustomerUser(req) && distributorId && req.query.scope !== "all") filter.distributorId = distributorId;
+  applyCustomerScope(req, filter);
   return CustomerReceiptModel.find(filter).sort({ createdAt: -1 }).lean();
 }
 async function payCustomerInvoice(req) {
   const { CustomerInvoiceModel, CustomerReceiptModel, SecondaryOrderModel } = await scoped(req);
   const invoice = await CustomerInvoiceModel.findOne({ _id: req.params.id, companyId: companyIdFrom(req) });
   if (!invoice) throw new Error("Customer invoice not found");
+  if (isCustomerUser(req)) {
+    const customerId = customerIdFromRequest(req);
+    const invoiceCustomerId = asText(invoice.customer?.partyId || invoice.customerId || invoice.ownerId);
+    if (invoiceCustomerId && customerId && invoiceCustomerId !== customerId) throw new Error("This invoice does not belong to your customer portal.");
+  }
   if (invoice.status !== "posted") throw new Error("Only posted customer invoices can be paid.");
   const balance = Number(invoice.balanceAmount || 0);
   if (balance <= 0) throw new Error("Customer invoice is already paid.");

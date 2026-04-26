@@ -1,4 +1,6 @@
-# Phase 9 Deployment Commands
+# Phase 10 Deployment Commands
+
+## Local
 
 ```bash
 cd frontend
@@ -9,11 +11,11 @@ npm run build
 ```bash
 cd ..
 git add .
-git commit -m "Phase 9: logistics delivery tracking and finance separation"
+git commit -m "Phase 10: final operations reports tracking and customer billing"
 git push origin main
 ```
 
-On server:
+## Server
 
 ```bash
 cd /apps/aim-hygienic

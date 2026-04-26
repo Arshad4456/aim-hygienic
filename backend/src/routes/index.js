@@ -19,6 +19,7 @@ function registerRoutes(app) {
   app.use("/api/accounts", require("./accounts"));
   app.use("/api/finance", require("../modules/finance/finance.routes"));
   app.use("/api/logistics", require("../modules/logistics/logistics.routes"));
+  app.use("/api/operations", require("../modules/operations/operations.routes"));
   app.use("/api/reports", require("./reports"));
   app.use("/api/live-tracking", require("./liveTracking"));
   app.use("/api/dashboard", require("./dashboard"));
