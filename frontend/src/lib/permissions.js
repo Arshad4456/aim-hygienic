@@ -1,9 +1,16 @@
 const MODULE_ALIASES = {
+  "system-admin": ["system-admin", "system_admin", "core"],
   "erp-templates": ["erp-templates", "erp_templates"],
-  "primary-sales-orders": ["primary-sales-orders", "primary-orders", "primary_sales_orders", "primary_orders"],
-  "secondary-sales-orders": ["secondary-sales-orders", "secondary-orders", "secondary_sales_orders", "secondary_orders"],
-  "customer-orders": ["customer-orders", "customer_orders"],
+  "primary-sales-orders": ["primary-sales-orders", "primary-orders", "primary_sales_orders", "primary_orders", "sales"],
+  "secondary-sales-orders": ["secondary-sales-orders", "secondary-orders", "secondary_sales_orders", "secondary_orders", "distribution"],
+  "customer-orders": ["customer-orders", "customer_orders", "customers"],
+  "customer-billing": ["customer-billing", "customer_billing", "customers", "receipts"],
   "live-tracking": ["live-tracking", "live_tracking"],
+  notifications: ["notifications", "messages"],
+  messages: ["messages", "notifications"],
+  "supplier-payments": ["supplier-payments", "supplier_payments", "payments", "procurement"],
+  receipts: ["receipts", "finance"],
+  payments: ["payments", "finance"],
 };
 
 function normalize(value) {

@@ -1,186 +1,34 @@
 module.exports = [
-  {
-    "key": "core",
-    "name": "Core",
-    "path": "/portals/admin",
-    "category": "system",
-    "webEnabled": true,
-    "mobileEnabled": false
-  },
-  {
-    "key": "companies",
-    "name": "Companies",
-    "path": "/portals/admin/companies",
-    "category": "core",
-    "webEnabled": true,
-    "mobileEnabled": false
-  },
-  {
-    "key": "users",
-    "name": "Users & HR",
-    "path": "/portals/admin/users",
-    "category": "core",
-    "webEnabled": true,
-    "mobileEnabled": false
-  },
-  {
-    "key": "roles",
-    "name": "Roles & Permissions",
-    "path": "/portals/admin/module-access",
-    "category": "core",
-    "webEnabled": true,
-    "mobileEnabled": false
-  },
-  {
-    "key": "erp_templates",
-    "name": "ERP Templates",
-    "path": "/portals/admin/erp-templates",
-    "category": "core",
-    "webEnabled": true,
-    "mobileEnabled": false
-  },
-  {
-    "key": "territory",
-    "name": "Territory",
-    "path": "/portals/admin/regions",
-    "category": "territory",
-    "webEnabled": true,
-    "mobileEnabled": false
-  },
-  {
-    "key": "products",
-    "name": "Products",
-    "path": "/portals/admin/products",
-    "category": "inventory",
-    "webEnabled": true,
-    "mobileEnabled": false
-  },
-  {
-    "key": "procurement",
-    "name": "Procurement",
-    "path": "/portals/admin/procurement",
-    "category": "procurement",
-    "webEnabled": true,
-    "mobileEnabled": false
-  },
-  {
-    "key": "inventory",
-    "name": "Inventory",
-    "path": "/portals/admin/warehouse-inventory",
-    "category": "inventory",
-    "webEnabled": true,
-    "mobileEnabled": false
-  },
-  {
-    "key": "warehouse",
-    "name": "Warehouse",
-    "path": "/portals/warehouseManager",
-    "category": "inventory",
-    "webEnabled": true,
-    "mobileEnabled": true
-  },
-  {
-    "key": "sales",
-    "name": "Sales",
-    "path": "/portals/admin/order-management",
-    "category": "sales",
-    "webEnabled": true,
-    "mobileEnabled": true
-  },
-  {
-    "key": "distribution",
-    "name": "Distribution",
-    "path": "/portals/distributor",
-    "category": "sales",
-    "webEnabled": true,
-    "mobileEnabled": true
-  },
-  {
-    "key": "customers",
-    "name": "Customers",
-    "path": "/portals/customer",
-    "category": "sales",
-    "webEnabled": true,
-    "mobileEnabled": true
-  },
-  {
-    "key": "finance",
-    "name": "Finance",
-    "path": "/portals/admin/finance",
-    "category": "finance",
-    "webEnabled": true,
-    "mobileEnabled": false
-  },
-  {
-    "key": "expenses",
-    "name": "Expenses",
-    "path": "/portals/admin/expense",
-    "category": "finance",
-    "webEnabled": true,
-    "mobileEnabled": false
-  },
-  {
-    "key": "loans",
-    "name": "Loans",
-    "path": "/portals/admin/finance",
-    "category": "finance",
-    "webEnabled": true,
-    "mobileEnabled": false
-  },
-  {
-    "key": "returns",
-    "name": "Returns",
-    "path": "/portals/distributor/return-stock",
-    "category": "sales",
-    "webEnabled": true,
-    "mobileEnabled": false
-  },
-  {
-    "key": "logistics",
-    "name": "Logistics",
-    "path": "/portals/admin/logistics",
-    "category": "logistics",
-    "webEnabled": true,
-    "mobileEnabled": false
-  },
-  {
-    "key": "fleet",
-    "name": "Fleet",
-    "path": "/portals/admin/vehicle-management",
-    "category": "logistics",
-    "webEnabled": true,
-    "mobileEnabled": false
-  },
-  {
-    "key": "live_tracking",
-    "name": "Live Tracking",
-    "path": "/portals/admin/live-tracking",
-    "category": "logistics",
-    "webEnabled": true,
-    "mobileEnabled": true
-  },
-  {
-    "key": "messages",
-    "name": "Messages",
-    "path": "/portals/admin/messages",
-    "category": "communication",
-    "webEnabled": true,
-    "mobileEnabled": true
-  },
-  {
-    "key": "reports",
-    "name": "Reports",
-    "path": "/portals/admin/reports",
-    "category": "analytics",
-    "webEnabled": true,
-    "mobileEnabled": true
-  },
-  {
-    "key": "settings",
-    "name": "Settings",
-    "path": "/portals/admin/settings",
-    "category": "core",
-    "webEnabled": true,
-    "mobileEnabled": false
-  }
+  { key: "dashboard", name: "Dashboard", path: "/portals", category: "core", webEnabled: true, mobileEnabled: true },
+  { key: "system-admin", name: "System Admin", path: "/portals/system-admin", category: "core", webEnabled: true, mobileEnabled: false },
+  { key: "companies", name: "Companies", path: "/portals/companies", category: "core", webEnabled: true, mobileEnabled: false },
+  { key: "erp-templates", name: "ERP Templates", path: "/portals/erp-templates", category: "core", webEnabled: true, mobileEnabled: false },
+  { key: "roles", name: "Roles & Permissions", path: "/portals/roles", category: "core", webEnabled: true, mobileEnabled: false },
+  { key: "users", name: "Users", path: "/portals/users", category: "core", webEnabled: true, mobileEnabled: true },
+  { key: "territory", name: "Territory", path: "/portals/territory", category: "territory", webEnabled: true, mobileEnabled: false },
+  { key: "products", name: "Products", path: "/portals/products", category: "inventory", webEnabled: true, mobileEnabled: false },
+  { key: "procurement", name: "Procurement", path: "/portals/procurement", category: "procurement", webEnabled: true, mobileEnabled: false },
+  { key: "purchase-orders", name: "Purchase Orders", path: "/portals/procurement/purchase-orders", category: "procurement", webEnabled: true, mobileEnabled: false },
+  { key: "supplier-payments", name: "Supplier Payments", path: "/portals/procurement/payments", category: "procurement", webEnabled: true, mobileEnabled: false },
+  { key: "inventory", name: "Inventory", path: "/portals/inventory", category: "inventory", webEnabled: true, mobileEnabled: true },
+  { key: "warehouse", name: "Warehouse", path: "/portals/warehouse", category: "inventory", webEnabled: true, mobileEnabled: true },
+  { key: "goods-receipts", name: "Goods Receipts", path: "/portals/warehouse/goods-receipts", category: "inventory", webEnabled: true, mobileEnabled: true },
+  { key: "primary-sales-orders", name: "Primary Sales Orders", path: "/portals/sales/primary-orders", category: "sales", webEnabled: true, mobileEnabled: true },
+  { key: "secondary-sales-orders", name: "Secondary Sales Orders", path: "/portals/sales/secondary-orders", category: "sales", webEnabled: true, mobileEnabled: true },
+  { key: "customers", name: "Customers", path: "/portals/customers", category: "sales", webEnabled: true, mobileEnabled: true },
+  { key: "customer-billing", name: "Customer Billing", path: "/portals/customer/billing", category: "sales", webEnabled: true, mobileEnabled: true },
+  { key: "finance", name: "Finance", path: "/portals/finance", category: "finance", webEnabled: true, mobileEnabled: false },
+  { key: "receipts", name: "Receipts", path: "/portals/finance/receipts", category: "finance", webEnabled: true, mobileEnabled: true },
+  { key: "payments", name: "Payments", path: "/portals/finance/payments", category: "finance", webEnabled: true, mobileEnabled: false },
+  { key: "expenses", name: "Expenses", path: "/portals/expenses", category: "finance", webEnabled: true, mobileEnabled: true },
+  { key: "loans", name: "Loans", path: "/portals/loans", category: "finance", webEnabled: true, mobileEnabled: false },
+  { key: "returns", name: "Returns", path: "/portals/returns", category: "operations", webEnabled: true, mobileEnabled: true },
+  { key: "operations", name: "Operations Center", path: "/portals/operations", category: "operations", webEnabled: true, mobileEnabled: false },
+  { key: "fleet", name: "Fleet", path: "/portals/fleet", category: "logistics", webEnabled: true, mobileEnabled: false },
+  { key: "dispatches", name: "Dispatches", path: "/portals/logistics/dispatches", category: "logistics", webEnabled: true, mobileEnabled: true },
+  { key: "deliveries", name: "Deliveries", path: "/portals/deliveries", category: "logistics", webEnabled: true, mobileEnabled: true },
+  { key: "live-tracking", name: "Live Tracking", path: "/portals/live-tracking", category: "logistics", webEnabled: true, mobileEnabled: true },
+  { key: "notifications", name: "Notifications", path: "/portals/notifications", category: "communication", webEnabled: true, mobileEnabled: true },
+  { key: "reports", name: "Reports", path: "/portals/reports", category: "analytics", webEnabled: true, mobileEnabled: true },
+  { key: "settings", name: "Settings", path: "/portals/settings", category: "core", webEnabled: true, mobileEnabled: false },
 ];
