@@ -17,6 +17,7 @@ function registerRoutes(app) {
   app.use("/api/messages", require("./messages"));
   app.use("/api/expenses", require("./expenses"));
   app.use("/api/accounts", require("./accounts"));
+  app.use("/api/finance", require("../modules/finance/finance.routes"));
   app.use("/api/reports", require("./reports"));
   app.use("/api/live-tracking", require("./liveTracking"));
   app.use("/api/dashboard", require("./dashboard"));

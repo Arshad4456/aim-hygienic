@@ -99,6 +99,23 @@ function normalizeLine(line = {}, index = 0) {
 function normalizeLines(lines = []) {
   return Array.isArray(lines) ? lines.map(normalizeLine).filter((line) => line.productName && Number(line.qty || 0) > 0) : [];
 }
+function isGenericProductName(name) { return !name || /^(primary sale item|procurement item|product)$/i.test(String(name).trim()); }
+async function hydrateLinesFromProducts(ProductModel, companyId, lines = []) {
+  const normalized = normalizeLines(lines);
+  if (!normalized.length || !ProductModel) return normalized;
+  const products = await ProductModel.find({ companyId }).select("_id productId code sku name unit costPrice tradePrice wholesalePrice retailPrice customerPrice").lean().catch(() => []);
+  const map = new Map();
+  for (const product of products) [product._id, product.productId, product.code, product.sku, product.name].filter(Boolean).forEach((key) => map.set(String(key), product));
+  return normalized.map((line) => {
+    const product = map.get(String(line.productId || "")) || map.get(String(line.productCode || "")) || map.get(String(line.productName || ""));
+    if (!product) return line;
+    return { ...line, productId: asText(product.productId || product._id || line.productId), productCode: asText(product.code || product.sku || product.productId || line.productCode), productName: isGenericProductName(line.productName) ? asText(product.name) : line.productName, uom: asText(line.uom || product.unit || "pack"), unitCost: Number(line.unitCost || product.costPrice || 0), unitPrice: Number(line.unitPrice || product.tradePrice || product.wholesalePrice || product.retailPrice || product.customerPrice || 0) };
+  });
+}
+function isDistributorUser(req) {
+  const text = `${req.user?.portalType || ""} ${req.user?.role || ""} ${req.user?.roleKey || ""}`.toLowerCase();
+  return text.includes("distributor");
+}
 
 function calculateTotals(lines = [], supplied = {}) {
   const subtotal = lines.reduce((sum, line) => sum + Number(line.qty || 0) * Number(line.unitPrice || 0), 0);
@@ -152,7 +169,7 @@ async function listPrimaryOrders(req) {
 }
 
 async function createPrimaryOrder(req) {
-  const { CompanySalesOrderModel, UserModel, WarehouseModel } = await scoped(req);
+  const { CompanySalesOrderModel, UserModel, WarehouseModel, ProductModel } = await scoped(req);
   const body = req.body || {};
   const companyId = companyIdFrom(req);
   const distributorId = asText(body.distributorId || body.distributor?.partyId);
@@ -162,7 +179,7 @@ async function createPrimaryOrder(req) {
   const warehouseDoc = body.dispatchFromWarehouse?.partyId
     ? await WarehouseModel.findOne({ companyId, $or: [{ _id: body.dispatchFromWarehouse.partyId }, { warehouseId: body.dispatchFromWarehouse.partyId }] }).lean().catch(() => null)
     : await WarehouseModel.findOne({ companyId, status: { $ne: "inactive" } }).sort({ createdAt: 1 }).lean().catch(() => null);
-  const lines = normalizeLines(body.lines);
+  const lines = await hydrateLinesFromProducts(ProductModel, companyId, body.lines);
   if (!lines.length) throw new Error("Add at least one product line.");
   const totals = calculateTotals(lines, body.totals || {});
   return CompanySalesOrderModel.create({
@@ -199,7 +216,7 @@ async function approvePrimaryOrder(req) {
 }
 
 async function createDispatchFromOrder(req) {
-  const { CompanySalesOrderModel, CompanyDispatchNoteModel } = await scoped(req);
+  const { CompanySalesOrderModel, CompanyDispatchNoteModel, ProductModel } = await scoped(req);
   const companyId = companyIdFrom(req);
   const order = await CompanySalesOrderModel.findOne({ _id: req.params.id, companyId });
   if (!order) throw new Error("Primary sales order not found");
@@ -207,7 +224,7 @@ async function createDispatchFromOrder(req) {
   const existing = await CompanyDispatchNoteModel.findOne({ companySalesOrderId: order._id, companyId, status: { $ne: "reversed" } }).sort({ createdAt: -1 });
   if (existing) return { order, dispatch: existing, duplicateBlocked: true, message: "A dispatch note already exists for this sales order." };
   const body = req.body || {};
-  const lines = normalizeLines(body.lines?.length ? body.lines : order.lines).map((line) => ({ ...line, dispatchedQty: Number(line.dispatchedQty || line.qty || 0) }));
+  const lines = (await hydrateLinesFromProducts(ProductModel, companyId, body.lines?.length ? body.lines : order.lines)).map((line) => ({ ...line, dispatchedQty: Number(line.dispatchedQty || line.qty || 0) }));
   const dispatch = await CompanyDispatchNoteModel.create({
     companyId,
     documentNo: asText(body.documentNo || makeDocNo("CDN")),
@@ -262,7 +279,7 @@ async function oldStockBalanceUnused(InventoryLedgerModel, companyId, warehouseI
 }
 
 async function postDispatch(req) {
-  const { CompanySalesOrderModel, CompanyDispatchNoteModel, CompanyInvoiceModel, DistributorStockReceiptModel, InventoryLedgerModel } = await scoped(req);
+  const { CompanySalesOrderModel, CompanyDispatchNoteModel, CompanyInvoiceModel, DistributorStockReceiptModel, InventoryLedgerModel, ProductModel } = await scoped(req);
   const companyId = companyIdFrom(req);
   const dispatch = await CompanyDispatchNoteModel.findOne({ _id: req.params.id, companyId });
   if (!dispatch) throw new Error("Dispatch note not found");
@@ -270,7 +287,8 @@ async function postDispatch(req) {
   const order = await CompanySalesOrderModel.findOne({ _id: dispatch.companySalesOrderId, companyId });
   if (!order) throw new Error("Linked primary sales order not found");
   const warehouseId = dispatch.dispatchFromWarehouse?.partyId || order.dispatchFromWarehouse?.partyId || "company-main";
-  for (const rawLine of dispatch.lines || []) {
+  const dispatchLines = await hydrateLinesFromProducts(ProductModel, companyId, dispatch.lines || []);
+  for (const rawLine of dispatchLines) {
     const line = normalizeLine(rawLine);
     const qty = Number(line.dispatchedQty || line.qty || 0);
     if (qty <= 0) continue;
@@ -278,7 +296,7 @@ async function postDispatch(req) {
     if (available < qty) throw new Error(`Not enough stock for ${line.productName}. Available ${available}, required ${qty}.`);
   }
   const ledgerRows = [];
-  for (const rawLine of dispatch.lines || []) {
+  for (const rawLine of dispatchLines) {
     const line = normalizeLine(rawLine);
     const qty = Number(line.dispatchedQty || line.qty || 0);
     if (qty <= 0) continue;
@@ -348,7 +366,7 @@ async function postDispatch(req) {
       sourceDispatchId: dispatch._id,
       receivedAtWarehouse: order.receiveAtWarehouse || { partyType: "warehouse", partyId: order.distributorId, partyName: `${order.distributor?.partyName || "Distributor"} Warehouse` },
       status: "draft",
-      lines: dispatch.lines,
+      lines: dispatchLines,
       createdByUserId: uidFrom(req),
       statusHistory: [{ status: "draft", changedBy: uidFrom(req), note: "Distributor receipt draft created from company dispatch" }],
     });
@@ -362,7 +380,7 @@ async function postDispatch(req) {
 }
 
 async function postDistributorReceipt(req) {
-  const { DistributorStockReceiptModel, CompanyDispatchNoteModel, CompanySalesOrderModel, InventoryLedgerModel } = await scoped(req);
+  const { DistributorStockReceiptModel, CompanyDispatchNoteModel, CompanySalesOrderModel, InventoryLedgerModel, ProductModel } = await scoped(req);
   const companyId = companyIdFrom(req);
   const receipt = await DistributorStockReceiptModel.findOne({ _id: req.params.id, companyId });
   if (!receipt) throw new Error("Distributor stock receipt not found");
@@ -370,8 +388,9 @@ async function postDistributorReceipt(req) {
   const dispatch = await CompanyDispatchNoteModel.findOne({ _id: receipt.sourceDispatchId, companyId });
   if (!dispatch || dispatch.status !== "posted") throw new Error("Company dispatch must be posted before distributor receipt can be posted.");
   const warehouseId = receipt.receivedAtWarehouse?.partyId || receipt.distributorId;
+  const receiptLines = await hydrateLinesFromProducts(ProductModel, companyId, receipt.lines || []);
   const rows = [];
-  for (const rawLine of receipt.lines || []) {
+  for (const rawLine of receiptLines) {
     const line = normalizeLine(rawLine);
     const qty = Number(line.receivedQty || line.dispatchedQty || line.qty || 0);
     if (qty <= 0) continue;
@@ -444,22 +463,32 @@ async function listCustomers(req) {
     .catch(() => []);
 }
 function distributorIdFromRequest(req) {
-  return asText(req.query.distributorId || req.body?.distributorId || req.user?.distributorId || req.user?._id || req.user?.uid || req.user?.userId);
+  const explicit = asText(req.query.distributorId || req.body?.distributorId);
+  if (explicit) return explicit;
+  if (!isDistributorUser(req)) return "";
+  return asText(req.user?.distributorId || req.user?._id || req.user?.uid || req.user?.userId);
 }
 async function listDistributorProducts(req) {
-  const { InventoryLedgerModel } = await scoped(req);
+  const { InventoryLedgerModel, ProductModel, UserModel } = await scoped(req);
   const companyId = companyIdFrom(req);
   const distributorId = distributorIdFromRequest(req);
   const match = { companyId, ownerType: "distributor" };
   if (distributorId) match.ownerId = distributorId;
   const rows = await InventoryLedgerModel.aggregate([
     { $match: match },
-    { $group: { _id: { ownerId: "$ownerId", warehouseId: "$warehouseId", productId: "$productId", productCode: "$productCode", productName: "$productName" }, inQty: { $sum: { $cond: [{ $eq: ["$direction", "in"] }, "$qty", 0] } }, outQty: { $sum: { $cond: [{ $eq: ["$direction", "out"] }, "$qty", 0] } }, unitCost: { $last: "$unitCost" } } },
-    { $project: { _id: 0, distributorId: "$_id.ownerId", warehouseId: "$_id.warehouseId", productId: "$_id.productId", productCode: "$_id.productCode", productName: "$_id.productName", availableQty: { $subtract: ["$inQty", "$outQty"] }, unitCost: 1 } },
+    { $group: { _id: { ownerId: "$ownerId", warehouseId: "$warehouseId", warehouseName: "$warehouseName", productId: "$productId", productCode: "$productCode", productName: "$productName" }, inQty: { $sum: { $cond: [{ $eq: ["$direction", "in"] }, "$qty", 0] } }, outQty: { $sum: { $cond: [{ $eq: ["$direction", "out"] }, "$qty", 0] } }, unitCost: { $last: "$unitCost" } } },
+    { $project: { _id: 0, distributorId: "$_id.ownerId", warehouseId: "$_id.warehouseId", warehouseName: "$_id.warehouseName", productId: "$_id.productId", productCode: "$_id.productCode", productName: "$_id.productName", availableQty: { $subtract: ["$inQty", "$outQty"] }, unitCost: 1 } },
     { $match: { availableQty: { $gt: 0 } } },
     { $sort: { productName: 1 } },
   ]).catch(() => []);
-  return rows;
+  const products = await ProductModel.find({ companyId }).select("_id productId code sku name").lean().catch(() => []);
+  const productNames = new Map();
+  for (const product of products) [product._id, product.productId, product.code, product.sku].filter(Boolean).forEach((key) => productNames.set(String(key), product.name));
+  const distributorIds = [...new Set(rows.map((row) => String(row.distributorId || "")).filter(Boolean))];
+  const users = distributorIds.length ? await UserModel.find({ companyId, $or: [{ _id: { $in: distributorIds } }, { userId: { $in: distributorIds } }, { distributorId: { $in: distributorIds } }] }).select("_id userId distributorId fullName username distributorName").lean().catch(() => []) : [];
+  const distributorNames = new Map();
+  for (const user of users) [user._id, user.userId, user.distributorId].filter(Boolean).forEach((key) => distributorNames.set(String(key), user.distributorName || user.fullName || user.username));
+  return rows.map((row) => ({ ...row, productName: isGenericProductName(row.productName) ? (productNames.get(String(row.productId || "")) || productNames.get(String(row.productCode || "")) || row.productName) : row.productName, distributorName: distributorNames.get(String(row.distributorId || "")) || row.distributorId }));
 }
 async function listSecondaryOrders(req) {
   const { SecondaryOrderModel } = await scoped(req);
@@ -470,16 +499,17 @@ async function listSecondaryOrders(req) {
   return SecondaryOrderModel.find(filter).sort({ createdAt: -1 }).lean();
 }
 async function createSecondaryOrder(req) {
-  const { SecondaryOrderModel, UserModel } = await scoped(req);
+  const { SecondaryOrderModel, UserModel, ProductModel } = await scoped(req);
   const body = req.body || {};
   const companyId = companyIdFrom(req);
-  const distributorId = asText(body.distributorId || req.user?.distributorId || req.user?._id || req.user?.uid || req.user?.userId);
-  if (!distributorId) throw new Error("Distributor is required for secondary sales.");
+  const bodyLines = Array.isArray(body.lines) ? body.lines : [];
+  const distributorId = asText(body.distributorId || bodyLines.find((line) => line.distributorId)?.distributorId || distributorIdFromRequest(req));
+  if (!distributorId) throw new Error("Select distributor before creating a secondary sales order.");
   const customerId = asText(body.customerId || body.customer?.partyId);
   if (!customerId) throw new Error("Select customer before creating a secondary sales order.");
   const customerDoc = await UserModel.findOne({ companyId, $or: [{ _id: customerId }, { userId: customerId }, { customerId }] }).lean().catch(() => null);
   const customer = customerSnapshot(body.customer || customerDoc || { partyId: customerId, partyName: body.customerName });
-  const lines = normalizeLines(body.lines || []);
+  const lines = await hydrateLinesFromProducts(ProductModel, companyId, body.lines || []);
   if (!lines.length) throw new Error("Add at least one product line.");
   const totals = calculateTotals(lines, body.totals || {});
   return SecondaryOrderModel.create({
@@ -500,7 +530,7 @@ async function approveSecondaryOrder(req) {
   return order.save();
 }
 async function fulfillSecondaryOrder(req) {
-  const { SecondaryOrderModel, CustomerInvoiceModel, InventoryLedgerModel } = await scoped(req);
+  const { SecondaryOrderModel, CustomerInvoiceModel, InventoryLedgerModel, ProductModel } = await scoped(req);
   const companyId = companyIdFrom(req);
   const order = await SecondaryOrderModel.findOne({ _id: req.params.id, companyId });
   if (!order) throw new Error("Secondary sales order not found");
@@ -510,8 +540,9 @@ async function fulfillSecondaryOrder(req) {
   }
   if (!["approved", "reserved"].includes(order.status)) throw new Error("Approve the secondary order before delivery/invoice posting.");
   const distributorId = order.distributorId;
-  const warehouseId = asText(req.body?.warehouseId || distributorId);
-  for (const rawLine of order.lines || []) {
+  const warehouseId = asText(req.body?.warehouseId || order.lines?.find((line) => line.warehouseId)?.warehouseId || distributorId);
+  const orderLines = await hydrateLinesFromProducts(ProductModel, companyId, order.lines || []);
+  for (const rawLine of orderLines) {
     const line = normalizeLine(rawLine);
     const qty = Number(line.qty || 0);
     if (qty <= 0) continue;
@@ -520,7 +551,7 @@ async function fulfillSecondaryOrder(req) {
   }
   const alreadyPosted = await InventoryLedgerModel.countDocuments({ companyId, referenceType: "SecondaryOrder", referenceId: order._id });
   if (!alreadyPosted) {
-    const rows = (order.lines || []).map((rawLine) => {
+    const rows = orderLines.map((rawLine) => {
       const line = normalizeLine(rawLine); const qty = Number(line.qty || 0);
       return { companyId, ownerType: "distributor", ownerId: distributorId, distributorId, warehouseId, warehouseName: "Distributor stock", productId: line.productId, productCode: line.productCode, productName: line.productName, batchNo: line.batchNo, movementType: "secondary_dispatch", direction: "out", qty, unitCost: Number(line.unitCost || line.unitPrice || 0), totalValue: toMoney(qty * Number(line.unitCost || line.unitPrice || 0)), referenceType: "SecondaryOrder", referenceId: order._id, referenceNo: order.documentNo, postedByUserId: uidFrom(req) };
     }).filter((row) => row.qty > 0);
@@ -529,7 +560,7 @@ async function fulfillSecondaryOrder(req) {
   let invoice = await CustomerInvoiceModel.findOne({ secondaryOrderId: order._id, companyId, status: { $ne: "void" } });
   if (!invoice) {
     const total = Number(order.totals?.grandTotal || 0);
-    invoice = await CustomerInvoiceModel.create({ companyId, documentNo: makeDocNo("CUSTINV"), ownerType: "distributor", ownerId: distributorId, distributorId, customer: order.customer, secondaryOrderId: order._id, invoiceDate: new Date(), dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), status: "posted", paymentStatus: total > 0 ? "unpaid" : "paid", invoiceTotal: total, balanceAmount: total, lines: order.lines, totals: order.totals, ledgerPosting: { postingState: "posted", postingKey: "customer-invoice:" + order._id, postedAt: new Date() }, createdByUserId: uidFrom(req), statusHistory: [{ status: "posted", changedBy: uidFrom(req), note: "Customer invoice generated from secondary order delivery" }] });
+    invoice = await CustomerInvoiceModel.create({ companyId, documentNo: makeDocNo("CUSTINV"), ownerType: "distributor", ownerId: distributorId, distributorId, customer: order.customer, secondaryOrderId: order._id, invoiceDate: new Date(), dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), status: "posted", paymentStatus: total > 0 ? "unpaid" : "paid", invoiceTotal: total, balanceAmount: total, lines: orderLines, totals: order.totals, ledgerPosting: { postingState: "posted", postingKey: "customer-invoice:" + order._id, postedAt: new Date() }, createdByUserId: uidFrom(req), statusHistory: [{ status: "posted", changedBy: uidFrom(req), note: "Customer invoice generated from secondary order delivery" }] });
   }
   order.status = "delivered";
   order.dispatchStatus = "delivered";

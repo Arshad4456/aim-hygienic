@@ -16,8 +16,9 @@ import ProcurementFoundationPage from "../features/procurement/pages/Procurement
 import InventoryWarehouseFoundationPage from "../features/inventory/pages/InventoryWarehouseFoundationPage";
 import PrimarySalesFoundationPage from "../features/sales/pages/PrimarySalesFoundationPage";
 import SecondarySalesFoundationPage from "../features/sales/pages/SecondarySalesFoundationPage";
+import FinanceFoundationPage from "../features/finance/pages/FinanceFoundationPage";
 
-const FOUNDATION_MODULES = ["dashboard", "roles", "users", "territory", "procurement", "purchase-orders", "supplier-payments", "goods-receipts", "inventory", "warehouse", "primary-sales-orders", "secondary-sales-orders"];
+const FOUNDATION_MODULES = ["dashboard", "roles", "users", "territory", "procurement", "purchase-orders", "supplier-payments", "goods-receipts", "inventory", "warehouse", "primary-sales-orders", "secondary-sales-orders", "finance", "payments", "receipts"];
 function buildPath(slug = []) { const parts = Array.isArray(slug) ? slug.filter(Boolean) : []; return `/portals${parts.length ? `/${parts.join("/")}` : ""}`; }
 function renderPortalContent(route, context) {
   if (route.moduleKey === "dashboard") return <DynamicPortalHome {...context} />;
@@ -28,6 +29,7 @@ function renderPortalContent(route, context) {
   if (["inventory", "warehouse"].includes(route.moduleKey)) return <InventoryWarehouseFoundationPage mode={route.moduleKey} />;
   if (route.moduleKey === "primary-sales-orders") return <PrimarySalesFoundationPage />;
   if (route.moduleKey === "secondary-sales-orders") return <SecondarySalesFoundationPage />;
+  if (["finance", "payments", "receipts"].includes(route.moduleKey)) return <FinanceFoundationPage mode={route.moduleKey} />;
   if (route.moduleKey === "live-tracking") return <LiveTrackingModule playbackBasePath="/portals/live-tracking/playback" />;
   return <ModulePlaceholderPage module={route.module} route={route} />;
 }
