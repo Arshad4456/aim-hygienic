@@ -3,6 +3,9 @@ import { MODULE_BY_KEY, findModuleByPath } from "./moduleCatalog";
 export const CANONICAL_PORTAL_ROUTES = {
   "/portals": "dashboard",
   "/portals/system-admin": "system-admin",
+  "/portals/system-admin/companies": "system-admin-companies",
+  "/portals/system-admin/subscriptions": "subscription-plans",
+  "/portals/system-admin/modules": "module-controls",
   "/portals/companies": "companies",
   "/portals/erp-templates": "erp-templates",
   "/portals/roles": "roles",

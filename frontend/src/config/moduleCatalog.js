@@ -1,6 +1,9 @@
 export const RAWYAN_MODULE_CATALOG = [
   ["dashboard", "Dashboard", "Core", "/portals", "Role-aware business overview."],
   ["system-admin", "System Admin", "Core", "/portals/system-admin", "SaaS owner control center for companies, subscriptions, modules, and support."],
+  ["system-admin-companies", "Client Companies", "SaaS", "/portals/system-admin/companies", "Activate, suspend, and control client company limits."],
+  ["subscription-plans", "Subscription Plans", "SaaS", "/portals/system-admin/subscriptions", "Create SaaS plans, module limits, and user limits."],
+  ["module-controls", "Module Controls", "SaaS", "/portals/system-admin/modules", "Global module access and package availability."],
   ["companies", "Companies", "Core", "/portals/companies", "Company, branch, tenant records, and company activation."],
   ["erp-templates", "ERP Templates", "Core", "/portals/erp-templates", "ERP templates and business types."],
   ["roles", "Roles & Permissions", "Core", "/portals/roles", "Database-driven roles and permissions."],

@@ -36,7 +36,7 @@ function buildPath(slug = []) {
 
 function renderPortalContent(route, context) {
   if (route.moduleKey === "dashboard") return <DynamicPortalHome {...context} />;
-  if (route.moduleKey === "system-admin") return <SystemAdminPortalPage />;
+  if (["system-admin", "system-admin-companies", "subscription-plans", "module-controls"].includes(route.moduleKey)) return <SystemAdminPortalPage mode={route.moduleKey} />;
   if (route.moduleKey === "companies") return <CompaniesPortalPage />;
   if (route.moduleKey === "erp-templates") return <ErpTemplatesPortalPage />;
   if (route.moduleKey === "roles") return <RolesPage />;
