@@ -11,6 +11,7 @@ const Loan = require("../../models/Loan");
 const LoanPayment = require("../../models/LoanPayment");
 const CompanySalesOrder = require("../../models/CompanySalesOrder");
 const PurchaseOrder = require("../../models/PurchaseOrder");
+const SecondaryOrder = require("../../models/SecondaryOrder");
 const { asText, getScopedModels } = require("../../services/scopedModels");
 
 function companyIdFrom(req) { return asText(req.query.companyId || req.body?.companyId || req.user?.companyId); }
@@ -35,6 +36,7 @@ async function scoped(req) {
     LoanPaymentModel: LoanPayment,
     CompanySalesOrderModel: CompanySalesOrder,
     PurchaseOrderModel: PurchaseOrder,
+    SecondaryOrderModel: SecondaryOrder,
   });
 }
 
@@ -99,6 +101,52 @@ async function receiveDistributorInvoice(req) {
   return { invoice, receipt };
 }
 
+async function receiveCustomerInvoice(req) {
+  const { CustomerInvoiceModel, CustomerReceiptModel, SecondaryOrderModel } = await scoped(req);
+  const invoice = await CustomerInvoiceModel.findOne({ _id: req.params.id, companyId: companyIdFrom(req) });
+  if (!invoice) throw new Error("Customer invoice not found.");
+  if (invoice.status !== "posted") throw new Error("Only posted customer invoices can be received.");
+  const balance = Number(invoice.balanceAmount || 0);
+  if (balance <= 0) throw new Error("Customer invoice is already paid.");
+  const body = req.body || {};
+  const amount = Math.min(balance, toMoney(body.amount || balance));
+  if (amount <= 0) throw new Error("Receipt amount must be greater than zero.");
+  const receipt = await CustomerReceiptModel.create({
+    companyId: invoice.companyId,
+    documentNo: makeDocNo("CREC"),
+    ownerType: "distributor",
+    ownerId: invoice.ownerId || invoice.distributorId,
+    distributorId: invoice.distributorId,
+    customer: invoice.customer,
+    paymentDate: body.paymentDate ? new Date(body.paymentDate) : new Date(),
+    amount,
+    paymentMethod: asText(body.paymentMethod || "cash"),
+    toAccountId: asText(body.toAccountId),
+    status: "posted",
+    allocations: [{ invoiceId: invoice._id, invoiceNo: invoice.documentNo, allocatedAmount: amount }],
+    referenceNo: asText(body.referenceNo),
+    ledgerPosting: { postingState: "posted", postingKey: `CREC:${invoice._id}:${Date.now()}`, postedAt: new Date() },
+    statusHistory: [{ status: "posted", changedBy: uidFrom(req), note: `Customer receipt posted against ${invoice.documentNo}` }],
+    createdByUserId: uidFrom(req),
+    notes: asText(body.notes),
+  });
+  invoice.allocatedReceiptTotal = toMoney(Number(invoice.allocatedReceiptTotal || 0) + amount);
+  invoice.balanceAmount = toMoney(Math.max(0, Number(invoice.invoiceTotal || 0) - Number(invoice.allocatedReceiptTotal || 0)));
+  invoice.paymentStatus = invoice.balanceAmount <= 0 ? "paid" : "partial";
+  invoice.statusHistory.push({ status: invoice.paymentStatus, changedBy: uidFrom(req), note: `Customer receipt ${receipt.documentNo} posted` });
+  await invoice.save();
+  await postAccountTransaction(req, { type: "cash_in", amount, referenceType: "secondary_payment", referenceId: receipt._id, description: `Customer receipt ${receipt.documentNo}`, accountId: body.toAccountId });
+  if (invoice.secondaryOrderId) {
+    const order = await SecondaryOrderModel.findOne({ _id: invoice.secondaryOrderId, companyId: invoice.companyId }).catch(() => null);
+    if (order) {
+      order.financialStatus = invoice.paymentStatus;
+      if (invoice.paymentStatus === "paid" && order.status === "invoiced") order.status = "closed";
+      await order.save().catch(() => null);
+    }
+  }
+  return { invoice, receipt };
+}
+
 async function paySupplierInvoice(req) {
   const { SupplierInvoiceModel, SupplierPaymentModel, PurchaseOrderModel } = await scoped(req);
   const invoice = await SupplierInvoiceModel.findOne({ _id: req.params.id, companyId: companyIdFrom(req) });
@@ -130,4 +178,4 @@ async function overview(req) {
   return { distributorInvoices, distributorReceipts, customerInvoices, customerReceipts, supplierInvoices, supplierPayments, accounts, transactions, expenses, loans, kpis: { primaryReceivable: toMoney(sum(distributorInvoices, "balanceAmount")), primaryInvoiceTotal: toMoney(sum(distributorInvoices, "invoiceTotal")), distributorReceiptTotal: toMoney(sum(distributorReceipts.filter((r) => r.status === "posted"), "amount")), customerReceivable: toMoney(sum(customerInvoices, "balanceAmount")), supplierPayable: toMoney(sum(supplierInvoices, "balanceAmount")), supplierPaymentTotal: toMoney(sum(supplierPayments.filter((p) => p.status === "posted"), "amount")), accountBalance: toMoney(accounts.reduce((total, account) => total + Number(account.currentBalance || account.openingBalance || 0), 0)), openDistributorInvoices: distributorInvoices.filter((i) => Number(i.balanceAmount || 0) > 0).length, openSupplierInvoices: supplierInvoices.filter((i) => Number(i.balanceAmount || 0) > 0).length, cashIn: toMoney(sum(transactions.filter((t) => t.type === "cash_in"), "amount")), cashOut: toMoney(sum(transactions.filter((t) => t.type === "cash_out"), "amount")), pendingExpenses: toMoney(sum(expenses.filter((e) => ["pending", "approved"].includes(e.status)), "amount")), paidExpenses: toMoney(statusTotal(expenses, "paid") + statusTotal(expenses, "posted")), loansReceivable: toMoney(sum(loans.filter((l) => l.loanType === "given" && l.status === "open"), "remainingAmount")), loansPayable: toMoney(sum(loans.filter((l) => l.loanType === "received" && l.status === "open"), "remainingAmount")) } };
 }
 
-module.exports = { overview, ledgerSummary, listDistributorInvoices, listDistributorReceipts, receiveDistributorInvoice, listCustomerInvoices, listCustomerReceipts, listSupplierInvoices, listSupplierPayments, paySupplierInvoice, listAccounts, createAccount, listTransactions, listExpenses, listLoans };
+module.exports = { overview, ledgerSummary, listDistributorInvoices, listDistributorReceipts, receiveDistributorInvoice, receiveCustomerInvoice, listCustomerInvoices, listCustomerReceipts, listSupplierInvoices, listSupplierPayments, paySupplierInvoice, listAccounts, createAccount, listTransactions, listExpenses, listLoans };

@@ -8,6 +8,7 @@ async function ledgerSummary(req, res) { try { return ok(res, await service.ledg
 async function distributorInvoices(req, res) { try { return ok(res, { invoices: await service.listDistributorInvoices(req) }); } catch (e) { return fail(res, e, "Unable to load distributor invoices", 500); } }
 async function distributorReceipts(req, res) { try { return ok(res, { receipts: await service.listDistributorReceipts(req) }); } catch (e) { return fail(res, e, "Unable to load distributor receipts", 500); } }
 async function receiveDistributorInvoice(req, res) { try { return ok(res, await service.receiveDistributorInvoice(req)); } catch (e) { return fail(res, e, "Unable to receive distributor payment"); } }
+async function receiveCustomerInvoice(req, res) { try { return ok(res, await service.receiveCustomerInvoice(req)); } catch (e) { return fail(res, e, "Unable to receive customer payment"); } }
 async function customerInvoices(req, res) { try { return ok(res, { invoices: await service.listCustomerInvoices(req) }); } catch (e) { return fail(res, e, "Unable to load customer invoices", 500); } }
 async function customerReceipts(req, res) { try { return ok(res, { receipts: await service.listCustomerReceipts(req) }); } catch (e) { return fail(res, e, "Unable to load customer receipts", 500); } }
 async function supplierInvoices(req, res) { try { return ok(res, { invoices: await service.listSupplierInvoices(req) }); } catch (e) { return fail(res, e, "Unable to load supplier invoices", 500); } }
@@ -19,4 +20,4 @@ async function transactions(req, res) { try { return ok(res, { transactions: awa
 async function expenses(req, res) { try { return ok(res, { expenses: await service.listExpenses(req) }); } catch (e) { return fail(res, e, "Unable to load expenses", 500); } }
 async function loans(req, res) { try { return ok(res, { loans: await service.listLoans(req) }); } catch (e) { return fail(res, e, "Unable to load loans", 500); } }
 
-module.exports = { overview, ledgerSummary, distributorInvoices, distributorReceipts, receiveDistributorInvoice, customerInvoices, customerReceipts, supplierInvoices, supplierPayments, paySupplierInvoice, accounts, createAccount, transactions, expenses, loans };
+module.exports = { overview, ledgerSummary, distributorInvoices, distributorReceipts, receiveDistributorInvoice, receiveCustomerInvoice, customerInvoices, customerReceipts, supplierInvoices, supplierPayments, paySupplierInvoice, accounts, createAccount, transactions, expenses, loans };

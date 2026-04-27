@@ -16,6 +16,7 @@ router.get("/loans", controller.loans);
 router.get("/distributor-invoices", controller.distributorInvoices);
 router.get("/distributor-receipts", controller.distributorReceipts);
 router.post("/distributor-invoices/:id/receive", controller.receiveDistributorInvoice);
+router.post("/customer-invoices/:id/receive", controller.receiveCustomerInvoice);
 
 router.get("/customer-invoices", controller.customerInvoices);
 router.get("/customer-receipts", controller.customerReceipts);
