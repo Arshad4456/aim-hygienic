@@ -4,6 +4,7 @@ import { hasPermission } from "../lib/permissions";
 const DEFAULT_KEYS = [
   "dashboard",
   "system-admin",
+  "system-admin-users",
   "companies",
   "erp-templates",
   "roles",

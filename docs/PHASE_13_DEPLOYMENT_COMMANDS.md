@@ -1,4 +1,4 @@
-# Phase 12 Deployment Commands
+# Phase 13 Deployment Commands
 
 ## Local
 
@@ -11,7 +11,7 @@ npm run build
 ```bash
 cd ..
 git add .
-git commit -m "Phase 12: system admin SaaS control center"
+git commit -m "Phase 13: user creation and finance accounts ledger foundation"
 git push origin main
 ```
 
@@ -34,9 +34,10 @@ sudo systemctl restart aim-backend
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-## Test URLs
+## First System Admin Bootstrap
 
-- `/portals/system-admin`
-- `/portals/system-admin/companies`
-- `/portals/system-admin/subscriptions`
-- `/portals/system-admin/modules`
+```bash
+curl -X POST https://aimhygienics.com/api/system-admin/bootstrap-system-admin \
+  -H "Content-Type: application/json" \
+  -d '{"fullName":"Rawyan Owner","username":"owner","mobile":"03000000000","password":"ChangeMe123"}'
+```

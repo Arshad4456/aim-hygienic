@@ -3,6 +3,7 @@ const { requireAuth } = require("../../utils/auth");
 const controller = require("./userAccess.controller");
 const router = express.Router();
 router.get("/users", requireAuth, controller.listUsers);
+router.post("/users", requireAuth, controller.createUser);
 router.get("/users/:id", requireAuth, controller.getUser);
 router.patch("/users/:id/role", requireAuth, controller.assignRole);
 router.patch("/users/:id/access", requireAuth, controller.updateAccess);

@@ -4,6 +4,7 @@ function ok(res, payload = {}) { return res.json({ ok: true, ...payload }); }
 function fail(res, error, fallback = "Request failed", status = 400) { return res.status(status).json({ ok: false, message: error.message || fallback }); }
 
 async function overview(req, res) { try { return ok(res, await service.overview(req)); } catch (e) { return fail(res, e, "Unable to load finance overview", 500); } }
+async function ledgerSummary(req, res) { try { return ok(res, await service.ledgerSummary(req)); } catch (e) { return fail(res, e, "Unable to load ledger summary", 500); } }
 async function distributorInvoices(req, res) { try { return ok(res, { invoices: await service.listDistributorInvoices(req) }); } catch (e) { return fail(res, e, "Unable to load distributor invoices", 500); } }
 async function distributorReceipts(req, res) { try { return ok(res, { receipts: await service.listDistributorReceipts(req) }); } catch (e) { return fail(res, e, "Unable to load distributor receipts", 500); } }
 async function receiveDistributorInvoice(req, res) { try { return ok(res, await service.receiveDistributorInvoice(req)); } catch (e) { return fail(res, e, "Unable to receive distributor payment"); } }
@@ -13,6 +14,9 @@ async function supplierInvoices(req, res) { try { return ok(res, { invoices: awa
 async function supplierPayments(req, res) { try { return ok(res, { payments: await service.listSupplierPayments(req) }); } catch (e) { return fail(res, e, "Unable to load supplier payments", 500); } }
 async function paySupplierInvoice(req, res) { try { return ok(res, await service.paySupplierInvoice(req)); } catch (e) { return fail(res, e, "Unable to pay supplier invoice"); } }
 async function accounts(req, res) { try { return ok(res, { accounts: await service.listAccounts(req) }); } catch (e) { return fail(res, e, "Unable to load accounts", 500); } }
+async function createAccount(req, res) { try { return ok(res, { account: await service.createAccount(req) }); } catch (e) { return fail(res, e, "Unable to create account"); } }
 async function transactions(req, res) { try { return ok(res, { transactions: await service.listTransactions(req) }); } catch (e) { return fail(res, e, "Unable to load account transactions", 500); } }
+async function expenses(req, res) { try { return ok(res, { expenses: await service.listExpenses(req) }); } catch (e) { return fail(res, e, "Unable to load expenses", 500); } }
+async function loans(req, res) { try { return ok(res, { loans: await service.listLoans(req) }); } catch (e) { return fail(res, e, "Unable to load loans", 500); } }
 
-module.exports = { overview, distributorInvoices, distributorReceipts, receiveDistributorInvoice, customerInvoices, customerReceipts, supplierInvoices, supplierPayments, paySupplierInvoice, accounts, transactions };
+module.exports = { overview, ledgerSummary, distributorInvoices, distributorReceipts, receiveDistributorInvoice, customerInvoices, customerReceipts, supplierInvoices, supplierPayments, paySupplierInvoice, accounts, createAccount, transactions, expenses, loans };

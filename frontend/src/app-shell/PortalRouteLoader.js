@@ -28,6 +28,7 @@ import ReturnsPortalPage from "../features/returns/pages/ReturnsPortalPage";
 import NotificationCenterPage from "../features/notifications/pages/NotificationCenterPage";
 import SettingsPortalPage from "../features/settings/pages/SettingsPortalPage";
 import SystemAdminPortalPage from "../features/system-admin/pages/SystemAdminPortalPage";
+import SystemAdminUsersPage from "../features/system-admin/pages/SystemAdminUsersPage";
 
 function buildPath(slug = []) {
   const parts = Array.isArray(slug) ? slug.filter(Boolean) : [];
@@ -36,6 +37,7 @@ function buildPath(slug = []) {
 
 function renderPortalContent(route, context) {
   if (route.moduleKey === "dashboard") return <DynamicPortalHome {...context} />;
+  if (route.moduleKey === "system-admin-users") return <SystemAdminUsersPage />;
   if (["system-admin", "system-admin-companies", "subscription-plans", "module-controls"].includes(route.moduleKey)) return <SystemAdminPortalPage mode={route.moduleKey} />;
   if (route.moduleKey === "companies") return <CompaniesPortalPage />;
   if (route.moduleKey === "erp-templates") return <ErpTemplatesPortalPage />;

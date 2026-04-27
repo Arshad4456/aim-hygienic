@@ -4,6 +4,7 @@ export const CANONICAL_PORTAL_ROUTES = {
   "/portals": "dashboard",
   "/portals/system-admin": "system-admin",
   "/portals/system-admin/companies": "system-admin-companies",
+  "/portals/system-admin/users": "system-admin-users",
   "/portals/system-admin/subscriptions": "subscription-plans",
   "/portals/system-admin/modules": "module-controls",
   "/portals/companies": "companies",

@@ -1,6 +1,7 @@
 module.exports = [
   { key: "dashboard", name: "Dashboard", path: "/portals", category: "core", webEnabled: true, mobileEnabled: true },
   { key: "system-admin", name: "System Admin", path: "/portals/system-admin", category: "core", webEnabled: true, mobileEnabled: false },
+  { key: "system-admin-users", name: "System Users", path: "/portals/system-admin/users", category: "core", webEnabled: true, mobileEnabled: false },
   { key: "companies", name: "Companies", path: "/portals/companies", category: "core", webEnabled: true, mobileEnabled: false },
   { key: "erp-templates", name: "ERP Templates", path: "/portals/erp-templates", category: "core", webEnabled: true, mobileEnabled: false },
   { key: "roles", name: "Roles & Permissions", path: "/portals/roles", category: "core", webEnabled: true, mobileEnabled: false },
