@@ -15,6 +15,7 @@ function registerRoutes(app) {
   app.use("/api/inventory", require("../modules/inventory/inventory.routes"));
   app.use("/api/inventory", require("./inventory"));
   app.use("/api/messages", require("./messages"));
+  app.use("/api/notifications", require("../modules/notifications/notifications.routes"));
   app.use("/api/expenses", require("./expenses"));
   app.use("/api/accounts", require("./accounts"));
   app.use("/api/finance", require("../modules/finance/finance.routes"));
