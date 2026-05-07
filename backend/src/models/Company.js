@@ -10,7 +10,7 @@ const CompanySchema = new mongoose.Schema({
   activatedAt: { type: Date },
   suspendedAt: { type: Date },
   suspensionReason: { type: String, trim: true },
-  subscription: { planKey: { type: String, trim: true, default: "starter" }, status: { type: String, trim: true, default: "active" }, userLimit: { type: Number, default: 25 }, branchLimit: { type: Number, default: 1 }, moduleLimit: { type: Number, default: 10 } },
+  subscription: { planKey: { type: String, trim: true, default: "starter" }, status: { type: String, trim: true, default: "active" }, userLimit: { type: Number, default: 25 }, branchLimit: { type: Number, default: 1 }, warehouseLimit: { type: Number, default: 1 }, moduleLimit: { type: Number, default: 10 }, mobileUserLimit: { type: Number, default: 5 }, allowedModules: { type: [String], default: [] }, expiresAt: { type: Date } },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
 }, { timestamps: true });
 CompanySchema.index({ status: 1, erpTemplateKey: 1 });

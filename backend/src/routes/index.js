@@ -44,6 +44,7 @@ function registerRoutes(app) {
   app.use("/api/portal-modules", require("../core/portal-modules/portalModule.routes"));
   app.use("/api/user-access", require("../core/user-access/userAccess.routes"));
   app.use("/api/system-admin", require("../core/system-admin/systemAdmin.routes"));
+  app.use("/api/settings", require("../core/settings/settings.routes"));
 
   app.get("/api/health", (req, res) => res.json({ ok: true, service: APP_BRAND.serviceName, name: APP_BRAND.name, time: new Date().toISOString() }));
   app.use("/api/auth", require("./auth"));

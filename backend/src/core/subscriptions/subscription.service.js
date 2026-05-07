@@ -18,24 +18,24 @@ async function upsertCompanySubscription(companyId, payload = {}, userId = null)
   const planKey = String(payload.planKey || "starter").trim().toLowerCase();
   const plan = await SubscriptionPlan.findOne({ key: planKey }).lean();
   const limits = plan || {};
+  const update = {
+    companyId,
+    planKey,
+    status: payload.status || "active",
+    expiresAt: payload.expiresAt || undefined,
+    userLimit: payload.userLimit ?? limits.userLimit ?? 25,
+    branchLimit: payload.branchLimit ?? limits.branchLimit ?? 1,
+    warehouseLimit: payload.warehouseLimit ?? limits.warehouseLimit ?? 1,
+    moduleLimit: payload.moduleLimit ?? limits.moduleLimit ?? 10,
+    mobileUserLimit: payload.mobileUserLimit ?? limits.mobileUserLimit ?? 5,
+    allowedModules: payload.allowedModules || limits.allowedModules || [],
+    notes: payload.notes || "",
+    updatedBy: userId,
+  };
   return CompanySubscription.findOneAndUpdate(
     { companyId },
-    {
-      companyId,
-      planKey,
-      status: payload.status || "active",
-      expiresAt: payload.expiresAt || undefined,
-      userLimit: payload.userLimit ?? limits.userLimit ?? 25,
-      branchLimit: payload.branchLimit ?? limits.branchLimit ?? 1,
-      warehouseLimit: payload.warehouseLimit ?? limits.warehouseLimit ?? 1,
-      moduleLimit: payload.moduleLimit ?? limits.moduleLimit ?? 10,
-      mobileUserLimit: payload.mobileUserLimit ?? limits.mobileUserLimit ?? 5,
-      allowedModules: payload.allowedModules || limits.allowedModules || [],
-      notes: payload.notes || "",
-      updatedBy: userId,
-      $setOnInsert: { createdBy: userId },
-    },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
+    { $set: update, $setOnInsert: { createdBy: userId } },
+    { upsert: true, new: true, setDefaultsOnInsert: true, runValidators: true }
   );
 }
 
