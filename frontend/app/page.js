@@ -1,5 +1,6 @@
-import { redirect } from "next/navigation";
+import PublicSiteLayout from "@/src/public-site/PublicSiteLayout";
+import { CTASection, CloudStorageSection, HeroSection, IndustriesGrid, ModulesGrid, PricingSection } from "@/src/public-site/PublicSections";
 
 export default function Home() {
-  redirect("/login");
+  return <PublicSiteLayout><HeroSection /><ModulesGrid /><IndustriesGrid /><CloudStorageSection /><PricingSection /><CTASection /></PublicSiteLayout>;
 }

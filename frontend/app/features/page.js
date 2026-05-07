@@ -1,0 +1,5 @@
+import PublicSiteLayout from "@/src/public-site/PublicSiteLayout";
+import { CTASection, CloudStorageSection, ModulesGrid, SectionIntro } from "@/src/public-site/PublicSections";
+import { platformHighlights } from "@/src/public-site/marketingData";
+export const metadata = { title: "ERP Features" };
+export default function FeaturesPage(){return <PublicSiteLayout><section className="px-5 py-20 lg:px-8"><SectionIntro eyebrow="Features" title="Everything needed to turn your ERP into a serious SaaS product" description="Phase 1 gives your product a professional public face and configurable brand foundation. Later phases will turn every module into production-ready screens and workflows."/><div className="mx-auto mt-12 grid max-w-7xl gap-4 sm:grid-cols-2 lg:grid-cols-4">{platformHighlights.map((item)=><div key={item} className="rounded-[2rem] border border-white/10 bg-white/[0.06] p-5 text-sm font-bold text-slate-200">✓ {item}</div>)}</div></section><ModulesGrid/><CloudStorageSection/><CTASection/></PublicSiteLayout>}

@@ -7,10 +7,11 @@ const User = require("../models/User");
 const SecondaryOrder = require("../models/SecondaryOrder");
 const CompanySalesOrder = require("../models/CompanySalesOrder");
 const CompanyDispatchNote = require("../models/CompanyDispatchNote");
-const { getScopedModels, asText } = require("../services/scopedModels");
+const { getScopedModels } = require("../services/scopedModels");
+const { APP_BRAND } = require("../config/brand");
 
 const router = express.Router();
-const DEFAULT_PUBLIC_BASE_URL = "https://files.aimhygienics.com";
+const DEFAULT_PUBLIC_BASE_URL = APP_BRAND.publicFileBaseUrl;
 
 function normalizeRole(value) {
   return String(value || "").trim().toLowerCase();
@@ -154,7 +155,7 @@ async function validateSalesmanPodRequest(req, orderId) {
 }
 
 function resolvePublicBaseUrl() {
-  return firstNonEmpty(process.env.CLOUDFLARE_R2_PUBLIC_BASE_URL, process.env.R2_PUBLIC_BASE_URL, DEFAULT_PUBLIC_BASE_URL).replace(/\/$/, "");
+  return firstNonEmpty(process.env.CLOUDFLARE_R2_PUBLIC_BASE_URL, process.env.R2_PUBLIC_BASE_URL, process.env.PUBLIC_FILE_BASE_URL, DEFAULT_PUBLIC_BASE_URL).replace(/\/$/, "");
 }
 
 function firstNonEmpty(...values) {
@@ -217,66 +218,6 @@ function normalizeBase64Payload(value) {
   const idx = raw.indexOf(",");
   if (raw.startsWith("data:") && idx >= 0) return raw.slice(idx + 1);
   return raw;
-}
-
-async function validateSupplierTransactionPodRequest(req, transactionId) {
-  if (String(req.user?.role || "") !== "Supplier") {
-    return { status: 403, body: { ok: false, message: "Only Supplier can request POD upload URLs" } };
-  }
-
-  const { WarehouseTransactionModel } = await getScopedUploadModels(req.user);
-  const me = await findScopedUploadUser(req.user);
-  if (!me) return { status: 404, body: { ok: false, message: "User not found" } };
-
-  const transaction = await WarehouseTransactionModel.findById(transactionId).lean();
-  if (!transaction) return { status: 404, body: { ok: false, message: "Primary order not found" } };
-  if (String(transaction.transactionType || "").toUpperCase() !== "SALE_STOCK") {
-    return { status: 400, body: { ok: false, message: "POD upload URL is only available for primary sale requests" } };
-  }
-  const requestStatus = String(transaction.requestStatus || "").toUpperCase();
-  if (!["APPROVED", "DISPATCHED"].includes(requestStatus)) {
-    return { status: 400, body: { ok: false, message: "POD upload is allowed only after approval" } };
-  }
-
-  const allowedSupplierIds = [String(me.userId || "").trim(), String(me.supplierId || "").trim(), String(me._id || "").trim()].filter(Boolean);
-  const allowedSupplierNames = [String(me.supplierName || "").trim(), String(me.businessName || "").trim(), String(me.fullName || "").trim()].filter(Boolean);
-  const assignedSupplierId = String(transaction.supplierId || "").trim();
-  const assignedSupplierName = String(transaction.supplierName || "").trim();
-  const isAllowed = allowedSupplierIds.includes(assignedSupplierId) || allowedSupplierNames.includes(assignedSupplierName);
-  if (!isAllowed) {
-    return { status: 403, body: { ok: false, message: "This primary order is not assigned to you" } };
-  }
-
-  return { transaction };
-}
-
-async function validateSalesmanPodRequest(req, orderId) {
-  const requestRole = normalizeRole(req.user?.role);
-  if (!["salesman", "delivery boy"].includes(requestRole)) {
-    return { status: 403, body: { ok: false, message: "Only Salesman or Delivery Boy can request POD upload URLs" } };
-  }
-
-  const { SalesOrderModel } = await getScopedUploadModels(req.user);
-  const me = await findScopedUploadUser(req.user);
-  if (!me) {
-    return { status: 404, body: { ok: false, message: "User not found" } };
-  }
-
-  const actor = {
-    fieldId: String(me?.fieldId || req.user?.fieldId || "").trim(),
-    actorIds: uniqueScopedIds(me?._id, me?.userId, me?.salesmanId, me?.deliveryBoyId, req.user?.uid, req.user?.userId, req.user?.salesmanId, req.user?.deliveryBoyId),
-  };
-
-  const order = await SalesOrderModel.findById(orderId).lean();
-  if (!order) return { status: 404, body: { ok: false, message: "Order not found" } };
-  if (!canDeliveryActorAccessOrder(order, actor)) {
-    return { status: 403, body: { ok: false, message: "Order is outside your delivery scope" } };
-  }
-  if (order.status !== "dispatched") {
-    return { status: 400, body: { ok: false, message: "POD upload is allowed only for dispatched orders" } };
-  }
-
-  return { order };
 }
 
 function sha256Hex(data) {
@@ -589,6 +530,24 @@ function sanitizeFileLabel(value) {
     .replace(/_+/g, "_");
   return clean || "document";
 }
+
+
+const SUPPORTED_DOCUMENT_ENTITIES = new Set(["user-document", "company-document", "payment-proof", "proof-of-delivery", "invoice-attachment", "receipt-attachment", "vehicle-proof"]);
+function isSupportedUploadContentType(contentType = "") { const normalized = String(contentType || "").toLowerCase().trim(); return ["image/jpeg", "image/jpg", "image/png", "image/webp", "application/pdf"].some((type) => normalized.startsWith(type)); }
+function tenantUploadScope(req) { return sanitizeFileLabel(req.user?.companyId || req.user?.tenantId || req.user?.companySlug || "global"); }
+function normalizeUploadEntity(value = "") { const entityType = sanitizeFileLabel(String(value || "").toLowerCase().trim()); return SUPPORTED_DOCUMENT_ENTITIES.has(entityType) ? entityType : ""; }
+function buildDocumentObjectKey(req, { entityType, entityId, slot, contentType, fileName }) { const ext = extensionFromContentType(contentType); const tenant = tenantUploadScope(req); const safeEntity = normalizeUploadEntity(entityType); const safeEntityId = sanitizeFileLabel(entityId || "general"); const safeSlot = sanitizeFileLabel(slot || fileName || "attachment").replace(/\.[a-z0-9]+$/i, ""); return `documents/${tenant}/${safeEntity}/${safeEntityId}/${safeSlot}-${crypto.randomUUID()}.${ext}`; }
+function readAndValidateDocumentUploadConfig({ entityType, entityId, contentType }) {
+  const safeEntity = normalizeUploadEntity(entityType);
+  if (!safeEntity) return { error: { status: 400, body: { ok: false, message: `entityType must be one of: ${Array.from(SUPPORTED_DOCUMENT_ENTITIES).join(", ")}` } } };
+  if (!entityId) return { error: { status: 400, body: { ok: false, message: "entityId is required" } } };
+  if (!contentType || !isSupportedUploadContentType(contentType)) return { error: { status: 400, body: { ok: false, message: "contentType must be image/jpeg, image/png, image/webp, or application/pdf" } } };
+  const r2 = readR2Config();
+  if (r2.missing.length) return { error: { status: 500, body: { ok: false, message: `R2 storage is not configured (${r2.missing.join(", ")}). Configure S3-compatible Access Key + Secret for Cloudflare R2 uploads.` } } };
+  return { safeEntity, r2 };
+}
+router.post("/document-url", requireAuth, async (req, res) => { try { const { entityType, entityId, slot, contentType, fileName } = req.body || {}; const validation = readAndValidateDocumentUploadConfig({ entityType, entityId, contentType }); if (validation.error) return res.status(validation.error.status).json(validation.error.body); const objectKey = buildDocumentObjectKey(req, { entityType: validation.safeEntity, entityId, slot, contentType, fileName }); const publicUrl = `${resolvePublicBaseUrl()}/${objectKey}`; const uploadUrl = getPresignedPutUrl({ accountId: validation.r2.accountId, accessKeyId: validation.r2.accessKeyId, secretAccessKey: validation.r2.secretAccessKey, bucket: validation.r2.bucket, key: objectKey, endpoint: validation.r2.endpoint, jurisdiction: validation.r2.jurisdiction }); assertR2UploadHost(uploadUrl); return res.json({ ok: true, uploadUrl, objectKey, publicUrl, entityType: validation.safeEntity }); } catch (_error) { return res.status(500).json({ ok: false, message: "Failed to generate document upload URL" }); } });
+router.post("/document", requireAuth, async (req, res) => { try { const { entityType, entityId, slot, contentType, fileName, fileBase64 } = req.body || {}; if (!fileBase64) return res.status(400).json({ ok: false, message: "fileBase64 is required" }); const validation = readAndValidateDocumentUploadConfig({ entityType, entityId, contentType }); if (validation.error) return res.status(validation.error.status).json(validation.error.body); const base64Payload = normalizeBase64Payload(fileBase64); const fileBuffer = Buffer.from(base64Payload, "base64"); if (!fileBuffer.length) return res.status(400).json({ ok: false, message: "Invalid base64 file payload" }); const objectKey = buildDocumentObjectKey(req, { entityType: validation.safeEntity, entityId, slot, contentType, fileName }); const publicUrl = `${resolvePublicBaseUrl()}/${objectKey}`; const uploadUrl = getPresignedPutUrl({ accountId: validation.r2.accountId, accessKeyId: validation.r2.accessKeyId, secretAccessKey: validation.r2.secretAccessKey, bucket: validation.r2.bucket, key: objectKey, endpoint: validation.r2.endpoint, jurisdiction: validation.r2.jurisdiction }); assertR2UploadHost(uploadUrl); const cloudRes = await uploadBufferToPresignedUrl(uploadUrl, { contentType: String(contentType).trim(), body: fileBuffer }); if (!cloudRes.ok) return res.status(502).json({ ok: false, message: `R2 upload failed (${cloudRes.status})` }); return res.json({ ok: true, objectKey, publicUrl, entityType: validation.safeEntity }); } catch (error) { const message = String(error?.message || "").trim(); return res.status(500).json({ ok: false, message: message ? `Failed to upload document: ${message}` : "Failed to upload document" }); } });
 
 router.post("/user-document", requireAuth, async (req, res) => {
   try {

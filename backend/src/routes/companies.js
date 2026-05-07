@@ -2,6 +2,7 @@ const express = require("express");
 const Company = require("../models/Company");
 const { requireAuth, requireRole } = require("../utils/auth");
 const { ensureDatabaseExists, toTenantDatabaseName } = require("../utils/tenantDatabases");
+const { APP_BRAND } = require("../config/brand");
 
 const router = express.Router();
 
@@ -48,7 +49,7 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
     if (!companyId) {
       return res.status(400).json({ ok: false, message: "Company ID is required." });
     }
-    const companyName = String(body.name || "").trim() || "AIM Hygienic (Pvt) Limited";
+    const companyName = String(body.name || "").trim() || APP_BRAND.name;
     const exists = await Company.findOne({ companyId }).lean();
     if (exists) {
       return res.status(409).json({ ok: false, message: "Company ID already exists" });
@@ -120,7 +121,7 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
     if (!companyId) {
       return res.status(400).json({ ok: false, message: "Company ID is required." });
     }
-    const companyName = String(body.name || "").trim() || "AIM Hygienic (Pvt) Limited";
+    const companyName = String(body.name || "").trim() || APP_BRAND.name;
     const current = await Company.findById(req.params.id).lean();
     if (!current) return res.status(404).json({ ok: false, message: "Not found" });
     const duplicate = await Company.findOne({ companyId, _id: { $ne: req.params.id } }).lean();

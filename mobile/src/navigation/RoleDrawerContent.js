@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ADMIN_SIDEBAR_MODULES } from './AdminSidebarConfig';
+import { APP_CONFIG, getAppInitials } from '../config/app';
 
 function toGroupTitle(name = '') {
   return name
@@ -143,8 +144,8 @@ export default function RoleDrawerContent({ roleKey, userRole, modules, activeRo
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.brandBlock}>
-        <View style={styles.brandAvatar}><Text style={styles.brandAvatarText}>AH</Text></View>
-        <Text style={styles.brandText}>AIM Hygienics</Text>
+        <View style={styles.brandAvatar}><Text style={styles.brandAvatarText}>{getAppInitials()}</Text></View>
+        <Text style={styles.brandText}>{APP_CONFIG.shortName}</Text>
       </View>
 
       <TextInput

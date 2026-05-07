@@ -1,4 +1,5 @@
 import { MODULE_BY_KEY, findModuleByPath } from "./moduleCatalog";
+import { BRAND_CONFIG } from "./brand";
 
 export const CANONICAL_PORTAL_ROUTES = {
   "/portals": "dashboard",
@@ -154,7 +155,7 @@ export function getPortalRoute(pathname = "/portals") {
     pathname,
     canonicalPath,
     moduleKey: key || module?.key || "dashboard",
-    title: module?.name || "Rawyan ERP",
+    title: module?.name || BRAND_CONFIG.name,
     module: module || MODULE_BY_KEY.dashboard,
     isLegacyAlias: normalizedPath !== canonicalPath,
   };

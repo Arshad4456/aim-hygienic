@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "../lib/api";
 import { getAuthItem, setAuthSession } from "../lib/clientAuth";
 import { resolveRoleDefinition } from "../lib/roleRegistry";
+import { BRAND_CONFIG, getBrandInitials } from "@/src/config/brand";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -60,10 +61,10 @@ export default function LoginPage() {
       <div className="w-full max-w-md rounded-2xl bg-white shadow-sm border p-6">
         <div className="flex items-center gap-3 mb-6">
           <div className="h-12 w-12 rounded-full bg-emerald-100 flex items-center justify-center">
-            <span className="text-emerald-700 font-bold">AH</span>
+            <span className="text-emerald-700 font-bold">{getBrandInitials()}</span>
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-zinc-900">AIM Hygienic ERP</h1>
+            <h1 className="text-xl font-semibold text-zinc-900">{BRAND_CONFIG.name}</h1>
             <p className="text-sm text-zinc-500">Login to continue</p>
           </div>
         </div>

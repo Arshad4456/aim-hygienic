@@ -1,8 +1,9 @@
 const mongoose = require("mongoose");
+const { APP_BRAND } = require("../config/brand");
 const CompanySchema = new mongoose.Schema({
   companyId: { type: String, required: true, trim: true, unique: true }, slug: { type: String, trim: true }, name: { type: String, required: true, trim: true },
   phone1: { type: String, trim: true }, phone2: { type: String, trim: true }, email: { type: String, trim: true, lowercase: true }, mainOfficeAddress: { type: String, trim: true },
-  erpTemplateId: { type: mongoose.Schema.Types.ObjectId, ref: "ErpTemplate" }, erpTemplateKey: { type: String, trim: true, default: "distribution_erp" }, businessType: { type: String, trim: true, default: "distribution_erp" }, enabledModules: { type: [String], default: [] }, systemName: { type: String, trim: true, default: "Rawyan ERP" },
+  erpTemplateId: { type: mongoose.Schema.Types.ObjectId, ref: "ErpTemplate" }, erpTemplateKey: { type: String, trim: true, default: "distribution_erp" }, businessType: { type: String, trim: true, default: "distribution_erp" }, enabledModules: { type: [String], default: [] }, systemName: { type: String, trim: true, default: () => APP_BRAND.name },
   portalTheme: { primary: { type: String, default: "emerald" }, gradient: { type: String, default: "from-emerald-500 via-cyan-500 to-blue-600" }, sidebar: { type: String, default: "dark" } },
   status: { type: String, enum: ["trial", "active", "inactive", "suspended", "expired", "cancelled"], default: "active", index: true },
   systemAdminNotes: { type: String, trim: true },

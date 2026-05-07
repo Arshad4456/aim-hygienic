@@ -1,6 +1,7 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import ClientProviders from "./lib/clientProviders";
+import { BRAND_CONFIG } from "@/src/config/brand";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -13,8 +14,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "Rawyan ERP",
-  description: "Rawyan ERP - modular SaaS ERP for distribution, inventory, sales, finance and field teams.",
+  title: {
+    default: BRAND_CONFIG.name,
+    template: `%s | ${BRAND_CONFIG.shortName}`,
+  },
+  description: BRAND_CONFIG.description,
 };
 
 export default function RootLayout({ children }) {

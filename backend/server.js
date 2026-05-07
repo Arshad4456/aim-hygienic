@@ -9,6 +9,7 @@ require("dotenv").config();
 const { connectDB } = require("./src/db");
 const { buildCorsOptions } = require("./src/config/cors");
 const { registerRoutes } = require("./src/routes");
+const { APP_BRAND } = require("./src/config/brand");
 const { createSocketServer } = require("./src/socket");
 const { registerLocationSocket } = require("./src/modules/location/socket");
 
@@ -25,7 +26,7 @@ const io = createSocketServer(server);
 if (io) registerLocationSocket(io);
 
 server.listen(PORT, () => {
-  console.log("Rawyan ERP backend running on port", PORT);
+  console.log(`${APP_BRAND.name} backend running on port`, PORT);
 });
 
 connectDB(process.env.MONGODB_URI);

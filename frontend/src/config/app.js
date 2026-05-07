@@ -1,10 +1,17 @@
+import { BRAND_CONFIG } from "./brand";
+
 export const APP_CONFIG = {
-  name: "Rawyan ERP",
-  shortName: "Rawyan",
-  previousName: "Aim Hygienics",
+  name: BRAND_CONFIG.name,
+  shortName: BRAND_CONFIG.shortName,
+  previousName: BRAND_CONFIG.previousName,
   routeBase: "/portals",
   legacyRouteBase: "/dashboards",
-  tagline: "Modern ERP for distribution, inventory, sales, finance, and field operations.",
+  tagline: BRAND_CONFIG.tagline,
+  description: BRAND_CONFIG.description,
+  domain: BRAND_CONFIG.domain,
+  supportEmail: BRAND_CONFIG.supportEmail,
+  whatsappNumber: BRAND_CONFIG.whatsappNumber,
+  currency: BRAND_CONFIG.currency,
 };
 
 export default APP_CONFIG;

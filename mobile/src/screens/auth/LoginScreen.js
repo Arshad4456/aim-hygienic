@@ -4,6 +4,7 @@ import { useAuth } from '../../auth/useAuth';
 import Button from '../../ui/Button';
 import Input from '../../ui/Input';
 import Toast from '../../ui/Toast';
+import { APP_CONFIG, getAppInitials } from '../../config/app';
 
 export default function LoginScreen() {
   const { login } = useAuth();
@@ -36,9 +37,9 @@ export default function LoginScreen() {
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.page}>
       <View style={styles.card}>
         <View style={styles.header}>
-          <View style={styles.badge}><Text style={styles.badgeText}>AH</Text></View>
+          <View style={styles.badge}><Text style={styles.badgeText}>{getAppInitials()}</Text></View>
           <View>
-            <Text style={styles.title}>AIM Hygienic ERP</Text>
+            <Text style={styles.title}>{APP_CONFIG.name}</Text>
             <Text style={styles.subtitle}>Login to continue</Text>
           </View>
         </View>
@@ -61,7 +62,7 @@ export default function LoginScreen() {
             </Pressable>
           </View>
           <Button title={loading ? 'Signing in...' : 'Login'} onPress={onSubmit} loading={loading} />
-          <Text style={styles.hint}>If Password forgot, Contact to the AIM Admin.</Text>
+          <Text style={styles.hint}>If password is forgotten, contact your ERP admin.</Text>
         </View>
       </View>
     </KeyboardAvoidingView>
