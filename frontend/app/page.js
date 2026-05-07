@@ -1,6 +1,15 @@
 import PublicSiteLayout from "@/src/public-site/PublicSiteLayout";
-import { CTASection, CloudStorageSection, HeroSection, IndustriesGrid, ModulesGrid, PricingSection } from "@/src/public-site/PublicSections";
+import { CTASection, CloudStorageSection, FeatureGroups, HeroSection, ModulesGrid, PricingSection } from "@/src/public-site/PublicSections";
 
 export default function Home() {
-  return <PublicSiteLayout><HeroSection /><ModulesGrid /><IndustriesGrid /><CloudStorageSection /><PricingSection /><CTASection /></PublicSiteLayout>;
+  return (
+    <PublicSiteLayout>
+      <HeroSection />
+      <FeatureGroups />
+      <ModulesGrid />
+      <CloudStorageSection />
+      <PricingSection />
+      <CTASection />
+    </PublicSiteLayout>
+  );
 }

@@ -212,7 +212,7 @@ export default function DistributorScreen() {
 
       <Modal visible={Boolean(selectedReceipt)} transparent animationType="fade" onRequestClose={() => setSelectedReceipt(null)}>
         <View style={styles.overlay}><View style={styles.modal}>
-          <Text style={styles.h2}>AIM Hygienic Distributor Expense Receipt</Text>
+          <Text style={styles.h2}>Rawyan ERP Distributor Expense Receipt</Text>
           <KV label="Date" value={fmtDate(selectedReceipt?.expenseDate)} />
           <KV label="Distributor" value={distributorMap[selectedReceipt?.distributorId] || '-'} />
           <KV label="Territory" value={selectedReceipt?.territory || '-'} />

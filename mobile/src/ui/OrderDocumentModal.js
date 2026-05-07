@@ -81,7 +81,7 @@ export default function OrderDocumentModal({ visible, onClose, order, receipts =
 
           <ScrollView contentContainerStyle={styles.body}>
             <View style={styles.brandCard}>
-              <Text style={styles.brandTitle}>AIM Hygienics (Pvt) Limited</Text>
+              <Text style={styles.brandTitle}>Rawyan ERP</Text>
               <Text style={styles.brandSubtitle}>Mobile document view</Text>
             </View>
 

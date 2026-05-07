@@ -88,7 +88,7 @@ function buildTablePdf(rows) {
   }
 
   function drawHeader() {
-    drawText(margin, y, `AIM Hygienic - User List (${new Date().toLocaleString()})`, 10);
+    drawText(margin, y, `Rawyan ERP - User List (${new Date().toLocaleString()})`, 10);
     y -= 16;
     let x = margin;
     const top = y + 6;

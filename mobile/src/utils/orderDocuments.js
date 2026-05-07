@@ -113,9 +113,9 @@ function baseDocumentShell({ title, subTitle, metaHtml, summaryHtml, itemRowsHtm
       <body style="font-family:Arial,sans-serif;padding:16px;color:#111;">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;">
           <div style="display:flex;align-items:center;gap:10px;">
-            <div style="width:56px;height:56px;border-radius:12px;background:linear-gradient(135deg,#0f766e,#2563eb);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;">AH</div>
+            <div style="width:56px;height:56px;border-radius:12px;background:linear-gradient(135deg,#0f766e,#2563eb);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;">RE</div>
             <div>
-              <div style="font-weight:700;font-size:20px;">AIM Hygienic (Pvt) Limited</div>
+              <div style="font-weight:700;font-size:20px;">Rawyan ERP</div>
               <div style="font-size:12px;color:#555;">${escapeHtml(subTitle)}</div>
             </div>
           </div>
@@ -211,9 +211,9 @@ export function buildPrimarySupplierDocumentHtml(order, receipts = []) {
       <body style="font-family:Arial,sans-serif;padding:16px;color:#111;">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;">
           <div style="display:flex;align-items:center;gap:10px;">
-            <div style="width:56px;height:56px;border-radius:12px;background:linear-gradient(135deg,#0f766e,#2563eb);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;">AH</div>
+            <div style="width:56px;height:56px;border-radius:12px;background:linear-gradient(135deg,#0f766e,#2563eb);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;">RE</div>
             <div>
-              <div style="font-weight:700;font-size:20px;">AIM Hygienic (Pvt) Limited</div>
+              <div style="font-weight:700;font-size:20px;">Rawyan ERP</div>
               <div style="font-size:12px;color:#555;">Mobile supplier primary order document</div>
             </div>
           </div>

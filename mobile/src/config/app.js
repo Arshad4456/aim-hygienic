@@ -1,8 +1,10 @@
 export const APP_CONFIG = {
-  name: process.env.EXPO_PUBLIC_APP_NAME || "Enterprise ERP Suite",
-  shortName: process.env.EXPO_PUBLIC_APP_SHORT_NAME || "ERP Suite",
+  name: process.env.EXPO_PUBLIC_APP_NAME || "Rawyan ERP",
+  shortName: process.env.EXPO_PUBLIC_APP_SHORT_NAME || "Rawyan",
   apiBaseUrl: process.env.EXPO_PUBLIC_API_URL || "http://localhost:5000/api",
-  whatsappNumber: process.env.EXPO_PUBLIC_WHATSAPP_NUMBER || "+92 300 0000000",
+  supportEmail: process.env.EXPO_PUBLIC_SUPPORT_EMAIL || "mdarshadkhan344@gmail.com",
+  whatsappNumber: process.env.EXPO_PUBLIC_WHATSAPP_NUMBER || "+923339933057",
+  phoneNumber: process.env.EXPO_PUBLIC_PHONE_NUMBER || "+923339933057",
 };
 export function getAppInitials(name = APP_CONFIG.shortName) {
   const words = String(name || 'ERP').replace(/[^a-zA-Z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);

@@ -131,7 +131,7 @@ export default function DailyScreen() {
 
       <Modal visible={Boolean(selectedReceipt)} transparent animationType="fade" onRequestClose={() => setSelectedReceipt(null)}>
         <View style={styles.overlay}><View style={styles.modal}>
-          <Text style={styles.h2}>AIM Hygienic Daily Expense Receipt</Text>
+          <Text style={styles.h2}>Rawyan ERP Daily Expense Receipt</Text>
           <KV label="Expense Date" value={fmtDate(selectedReceipt?.expenseDate)} />
           <KV label="Spender" value={selectedReceipt?.spenderName || '-'} />
           <KV label="Type" value={selectedReceipt?.expenseType || selectedReceipt?.category || '-'} />

@@ -1,5 +1,14 @@
 import PublicSiteLayout from "@/src/public-site/PublicSiteLayout";
-import { ContactCards, SectionIntro } from "@/src/public-site/PublicSections";
-import { industrySolutions } from "@/src/public-site/marketingData";
-export const metadata = { title: "Book Demo" };
-export default function BookDemoPage(){return <PublicSiteLayout><section className="px-5 py-20 lg:px-8"><SectionIntro eyebrow="Book Demo" title="Demo request page" description="This static phase-1 page is ready for conversion into a connected lead form in a later phase. For now it provides a professional SaaS entry point."/><div className="mx-auto mt-12 grid max-w-7xl gap-8 lg:grid-cols-[0.9fr_1.1fr]"><div className="rounded-[2rem] border border-white/10 bg-white/[0.06] p-8"><h2 className="text-2xl font-black">What the form should collect later</h2><div className="mt-5 grid gap-3 text-sm text-slate-300">{["Company name","Contact person","Phone/WhatsApp","Email","Industry type","Users/branches/warehouses","Required modules","Deployment preference"].map((item)=><span key={item}>✓ {item}</span>)}</div></div><div className="rounded-[2rem] border border-white/10 bg-white/[0.06] p-8"><h2 className="text-2xl font-black">ERP types available</h2><div className="mt-5 flex flex-wrap gap-2">{industrySolutions.map((industry)=><span key={industry.slug} className="rounded-full bg-slate-950 px-4 py-2 text-sm font-bold text-slate-300">{industry.name}</span>)}</div></div></div><div className="mx-auto mt-8 max-w-7xl"><ContactCards/></div></section></PublicSiteLayout>}
+import { ContactCards, DemoRequestSection, SectionIntro } from "@/src/public-site/PublicSections";
+export const metadata = { title: "Book Demo | Rawyan ERP" };
+export default function BookDemoPage() {
+  return (
+    <PublicSiteLayout>
+      <DemoRequestSection />
+      <section className="px-4 pb-16 sm:px-5 lg:px-8 lg:pb-20">
+        <SectionIntro eyebrow="Contact" title="Talk directly with Rawyan ERP" description="Use email, mobile, or WhatsApp to discuss your ERP requirements, demo timing, and deployment plan." />
+        <div className="mx-auto mt-12 max-w-7xl"><ContactCards /></div>
+      </section>
+    </PublicSiteLayout>
+  );
+}

@@ -1,6 +1,6 @@
 "use client";
 import { useMemo } from "react";
-import { RAWYAN_MODULE_CATALOG } from "../config/moduleCatalog";
+import { RAWYAN_MODULE_CATALOG, sortModules } from "../config/moduleCatalog";
 import { buildMenuFromPermissions, RAWYAN_DEFAULT_MENU } from "../config/menus";
 
 const LEGACY_KEY_MAP = {
@@ -22,22 +22,24 @@ function normalizeModule(module) {
     key: catalogItem?.key || key,
     name: catalogItem?.name || module.name,
     category: catalogItem?.category || module.category || "Core",
+    icon: catalogItem?.icon || module.icon || "•",
     path: catalogItem?.path || module.path || module.canonicalPath || "/portals",
     canonicalPath: catalogItem?.canonicalPath || catalogItem?.path || module.canonicalPath || module.path || "/portals",
     description: catalogItem?.description || module.description || "",
     order: catalogItem?.order || module.order || 999,
+    menu: catalogItem?.menu ?? module.menu ?? true,
+    isPlanned: catalogItem?.isPlanned || module.isPlanned || false,
   };
 }
 
 export function useSidebar(user, visibleModules = []) {
   return useMemo(() => {
     const permissions = user?.permissions || user?.rolePermissions;
-    const modules = (visibleModules?.length ? visibleModules : RAWYAN_MODULE_CATALOG)
-      .map(normalizeModule)
-      .filter(Boolean)
-      .sort((a, b) => (a.order || 999) - (b.order || 999));
+    const modules = sortModules((visibleModules?.length ? visibleModules : RAWYAN_MODULE_CATALOG).map(normalizeModule).filter(Boolean));
     const menu = permissions ? buildMenuFromPermissions(permissions, modules) : RAWYAN_DEFAULT_MENU;
-    return (menu?.length ? menu : RAWYAN_DEFAULT_MENU).map((item) => ({ ...item, path: item.canonicalPath || item.path || "/portals" }));
+    return (menu?.length ? menu : RAWYAN_DEFAULT_MENU)
+      .filter((item) => item.menu !== false)
+      .map((item) => ({ ...item, path: item.canonicalPath || item.path || "/portals" }));
   }, [user, visibleModules]);
 }
 

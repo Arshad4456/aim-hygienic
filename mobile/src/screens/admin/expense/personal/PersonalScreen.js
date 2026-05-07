@@ -124,7 +124,7 @@ export default function PersonalScreen() {
 
       <Modal visible={Boolean(selectedReceipt)} transparent animationType="fade" onRequestClose={() => setSelectedReceipt(null)}>
         <View style={styles.overlay}><View style={styles.modal}>
-          <Text style={styles.h2}>AIM Hygienic Expense Receipt</Text>
+          <Text style={styles.h2}>Rawyan ERP Expense Receipt</Text>
           <KV label="Expense Date" value={fmtDate(selectedReceipt?.expenseDate)} />
           <KV label="Category" value={selectedReceipt?.category || '-'} />
           <KV label="Amount" value={money(selectedReceipt?.amount)} />

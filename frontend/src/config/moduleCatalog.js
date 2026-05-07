@@ -1,45 +1,95 @@
-export const RAWYAN_MODULE_CATALOG = [
-  ["dashboard", "Dashboard", "Core", "/portals", "Role-aware business overview."],
-  ["system-admin", "System Admin", "Core", "/portals/system-admin", "SaaS owner control center for companies, subscriptions, modules, and support."],
-  ["system-admin-companies", "Client Companies", "SaaS", "/portals/system-admin/companies", "Activate, suspend, and control client company limits."],
-  ["system-admin-users", "System Users", "SaaS", "/portals/system-admin/users", "Create system admins and company admins from SaaS owner portal."],
-  ["subscription-plans", "Subscription Plans", "SaaS", "/portals/system-admin/subscriptions", "Create SaaS plans, module limits, and user limits."],
-  ["module-controls", "Module Controls", "SaaS", "/portals/system-admin/modules", "Global module access and package availability."],
-  ["companies", "Companies", "Core", "/portals/companies", "Company, branch, tenant records, and company activation."],
-  ["erp-templates", "ERP Templates", "Core", "/portals/erp-templates", "ERP templates and business types."],
-  ["roles", "Roles & Permissions", "Core", "/portals/roles", "Database-driven roles and permissions."],
-  ["users", "Users", "Core", "/portals/users", "Company users, portal access, and mobile access."],
-  ["territory", "Territory", "Territory", "/portals/territory", "Regions, zones, areas, fields, routes, and beat plans."],
-  ["products", "Products", "Inventory", "/portals/products", "Product catalog, SKU, pricing, and barcode setup."],
-  ["procurement", "Procurement", "Supply Chain", "/portals/procurement", "Supplier to company purchase flow."],
-  ["purchase-orders", "Purchase Orders", "Supply Chain", "/portals/procurement/purchase-orders", "Supplier order workflow."],
-  ["supplier-payments", "Supplier Payments", "Supply Chain", "/portals/procurement/payments", "Company payments to suppliers."],
-  ["inventory", "Inventory", "Inventory", "/portals/inventory", "Stock availability, ledgers, valuation, and movement."],
-  ["warehouse", "Warehouse", "Inventory", "/portals/warehouse", "Goods receipts, dispatch preparation, transfers, and warehouse stock."],
-  ["goods-receipts", "Goods Receipts", "Inventory", "/portals/warehouse/goods-receipts", "Receiving stock into company warehouse."],
-  ["primary-sales-orders", "Primary Sales Orders", "Sales", "/portals/sales/primary-orders", "Company sells to distributor."],
-  ["secondary-sales-orders", "Secondary Sales Orders", "Sales", "/portals/sales/secondary-orders", "Distributor sells to customer or retailer."],
-  ["customers", "Customers", "Sales", "/portals/customers", "Customer and retailer management."],
-  ["customer-orders", "Customer Orders", "Sales", "/portals/customers/orders", "Customer order requests and history."],
-  ["customer-billing", "Customer Billing", "Sales", "/portals/customer/billing", "Customer invoices, receipts, outstanding balance, and payments."],
-  ["finance", "Finance", "Finance", "/portals/finance", "Accounts, invoices, ledgers, balances, aging, and reports."],
-  ["receipts", "Receipts", "Finance", "/portals/finance/receipts", "Distributor and customer collections."],
-  ["payments", "Payments", "Finance", "/portals/finance/payments", "Supplier, distributor, expense, and loan payment workflows."],
-  ["expenses", "Expenses", "Finance", "/portals/expenses", "Company and distributor expenses."],
-  ["loans", "Loans", "Finance", "/portals/loans", "Loan details and repayment tracking."],
-  ["returns", "Returns", "Operations", "/portals/returns", "Return stock, damage, expiry, and approval workflow."],
-  ["operations", "Operations Center", "Operations", "/portals/operations", "Executive control center for primary delivery, secondary delivery, fleet, finance, and live tracking."],
-  ["fleet", "Fleet", "Logistics", "/portals/fleet", "Vehicles, trips, fuel, maintenance, and assignments."],
-  ["dispatches", "Dispatches", "Logistics", "/portals/logistics/dispatches", "Warehouse dispatch to delivery users."],
-  ["deliveries", "Deliveries", "Logistics", "/portals/deliveries", "Delivery day plan, proof of delivery, and exceptions."],
-  ["live-tracking", "Live Tracking", "Logistics", "/portals/live-tracking", "Live location, duty sessions, route playback, and tracking reports."],
-  ["notifications", "Notifications", "Communication", "/portals/notifications", "In-app, mobile push, SMS, WhatsApp, email, and notification logs."],
-  ["messages", "Messages", "Communication", "/portals/messages", "Legacy messages mapped to Notification Center."],
-  ["reports", "Reports", "Reports", "/portals/reports", "Sales, inventory, finance, territory, fleet, and user activity reports."],
-  ["settings", "Settings", "Core", "/portals/settings", "Company, user, portal, and password settings."],
-].map(([key, name, category, path, description], index) => ({ key, name, category, path, canonicalPath: path, description, order: index + 1 }));
+const moduleRows = [
+  { key: "dashboard", name: "Dashboard", category: "Home", icon: "▣", path: "/portals", description: "Role-aware business overview and quick actions." },
+
+  { key: "system-admin", name: "System Admin", category: "SaaS Control", icon: "◎", path: "/portals/system-admin", description: "SaaS owner control center for clients, subscriptions, modules, and support." },
+  { key: "system-admin-companies", name: "Client Companies", category: "SaaS Control", icon: "◫", path: "/portals/system-admin/companies", description: "Activate, suspend, and control client company limits." },
+  { key: "system-admin-users", name: "System Users", category: "SaaS Control", icon: "◉", path: "/portals/system-admin/users", description: "Create system admins and company admins from the owner portal." },
+  { key: "subscription-plans", name: "Subscription Plans", category: "SaaS Control", icon: "◈", path: "/portals/system-admin/subscriptions", description: "Create SaaS plans, module limits, and user limits." },
+  { key: "module-controls", name: "Module Controls", category: "SaaS Control", icon: "▤", path: "/portals/system-admin/modules", description: "Control module access and package availability." },
+
+  { key: "companies", name: "Companies", category: "Setup", icon: "🏢", path: "/portals/companies", description: "Company, branch, tenant records, and company activation." },
+  { key: "erp-templates", name: "ERP Templates", category: "Setup", icon: "▧", path: "/portals/erp-templates", description: "ERP templates, business types, and enabled modules." },
+  { key: "roles", name: "Roles & Permissions", category: "Setup", icon: "🔐", path: "/portals/roles", description: "Database-driven roles and permissions." },
+  { key: "users", name: "Users", category: "Setup", icon: "👥", path: "/portals/users", description: "Company users, portal access, and mobile access." },
+  { key: "settings", name: "Settings", category: "Setup", icon: "⚙", path: "/portals/settings", description: "Company, user, portal, password, and notification settings." },
+
+  { key: "products", name: "Products", category: "Master Data", icon: "▦", path: "/portals/products", description: "Product catalog, SKU, pricing, categories, units, and barcode setup." },
+  { key: "customers", name: "Customers", category: "Master Data", icon: "☻", path: "/portals/customers", description: "Customer and retailer management." },
+  { key: "territory", name: "Territory", category: "Master Data", icon: "⌖", path: "/portals/territory", description: "Regions, zones, areas, fields, routes, and beat plans." },
+
+  { key: "primary-sales-orders", name: "Primary Sales", category: "Sales", icon: "↗", path: "/portals/sales/primary-orders", description: "Company sales to distributors." },
+  { key: "secondary-sales-orders", name: "Secondary Sales", category: "Sales", icon: "↘", path: "/portals/sales/secondary-orders", description: "Distributor sales to customers or retailers." },
+  { key: "customer-orders", name: "Customer Orders", category: "Sales", icon: "□", path: "/portals/customers/orders", description: "Customer order requests and history." },
+  { key: "customer-billing", name: "Customer Billing", category: "Sales", icon: "▣", path: "/portals/customer/billing", description: "Customer invoices, receipts, outstanding balance, and payments." },
+  { key: "returns", name: "Returns", category: "Sales", icon: "↺", path: "/portals/returns", description: "Return stock, damage, expiry, and approval workflow." },
+
+  { key: "procurement", name: "Procurement", category: "Purchase", icon: "⇣", path: "/portals/procurement", description: "Supplier to company purchase flow." },
+  { key: "purchase-orders", name: "Purchase Orders", category: "Purchase", icon: "✎", path: "/portals/procurement/purchase-orders", description: "Supplier order workflow." },
+  { key: "supplier-payments", name: "Supplier Payments", category: "Purchase", icon: "₨", path: "/portals/procurement/payments", description: "Company payments to suppliers." },
+
+  { key: "inventory", name: "Inventory", category: "Inventory", icon: "▥", path: "/portals/inventory", description: "Stock availability, ledgers, valuation, and movement." },
+  { key: "warehouse", name: "Warehouse", category: "Inventory", icon: "▨", path: "/portals/warehouse", description: "Goods receipts, dispatch preparation, transfers, and warehouse stock." },
+  { key: "goods-receipts", name: "Goods Receipts", category: "Inventory", icon: "⇥", path: "/portals/warehouse/goods-receipts", description: "Receiving stock into warehouse." },
+
+  { key: "finance", name: "Finance", category: "Finance", icon: "₨", path: "/portals/finance", description: "Accounts, invoices, ledgers, balances, aging, and reports." },
+  { key: "receipts", name: "Receipts", category: "Finance", icon: "▤", path: "/portals/finance/receipts", description: "Distributor and customer collections." },
+  { key: "payments", name: "Payments", category: "Finance", icon: "▥", path: "/portals/finance/payments", description: "Supplier, distributor, expense, and loan payment workflows." },
+  { key: "expenses", name: "Expenses", category: "Finance", icon: "−", path: "/portals/expenses", description: "Company and distributor expenses." },
+  { key: "loans", name: "Loans", category: "Finance", icon: "∑", path: "/portals/loans", description: "Loan details and repayment tracking." },
+
+  { key: "operations", name: "Operations Center", category: "Logistics", icon: "✦", path: "/portals/operations", description: "Control center for delivery, fleet, finance, and live tracking." },
+  { key: "fleet", name: "Fleet", category: "Logistics", icon: "▰", path: "/portals/fleet", description: "Vehicles, trips, fuel, maintenance, and assignments." },
+  { key: "dispatches", name: "Dispatches", category: "Logistics", icon: "⇢", path: "/portals/logistics/dispatches", description: "Warehouse dispatch to delivery users." },
+  { key: "deliveries", name: "Deliveries", category: "Logistics", icon: "✓", path: "/portals/deliveries", description: "Delivery plan, proof of delivery, and exceptions." },
+  { key: "live-tracking", name: "Live Tracking", category: "Logistics", icon: "⌁", path: "/portals/live-tracking", description: "Live location, duty sessions, route playback, and tracking reports." },
+
+  { key: "notifications", name: "Notifications", category: "Communication", icon: "◍", path: "/portals/notifications", description: "In-app, mobile push, SMS, WhatsApp, email, and notification logs." },
+  { key: "messages", name: "Messages", category: "Communication", icon: "✉", path: "/portals/messages", description: "Legacy messages mapped to Notification Center." },
+  { key: "reports", name: "Reports", category: "Reports", icon: "▧", path: "/portals/reports", description: "Sales, inventory, finance, territory, fleet, and user activity reports." },
+
+  { key: "retail-pos", name: "Retail POS", category: "Future Modules", icon: "⌁", path: "/portals/retail-pos", description: "POS billing, cashier shifts, receipt printing, discounts, and returns.", isPlanned: true, menu: false },
+  { key: "manufacturing", name: "Manufacturing", category: "Future Modules", icon: "⚒", path: "/portals/manufacturing", description: "BOM, production planning, work orders, quality, and costing.", isPlanned: true, menu: false },
+  { key: "service", name: "Service ERP", category: "Future Modules", icon: "☑", path: "/portals/service", description: "Tickets, service orders, SLA, AMC, spare parts, and service invoices.", isPlanned: true, menu: false },
+  { key: "trading", name: "Trading/Import", category: "Future Modules", icon: "⇄", path: "/portals/trading", description: "Import/export, LC, shipment, landed cost, multi-currency, and margins.", isPlanned: true, menu: false },
+];
+
+export const MENU_CATEGORY_ORDER = ["Home", "SaaS Control", "Setup", "Master Data", "Sales", "Purchase", "Inventory", "Finance", "Logistics", "Communication", "Reports", "Future Modules"];
+
+export const RAWYAN_MODULE_CATALOG = moduleRows.map((item, index) => ({
+  ...item,
+  canonicalPath: item.canonicalPath || item.path,
+  order: index + 1,
+  menu: item.menu !== false,
+}));
 
 export const MODULE_BY_KEY = Object.fromEntries(RAWYAN_MODULE_CATALOG.map((item) => [item.key, item]));
+export const MODULES_BY_CATEGORY = RAWYAN_MODULE_CATALOG.reduce((acc, item) => {
+  const category = item.category || "Other";
+  acc[category] = acc[category] || [];
+  acc[category].push(item);
+  return acc;
+}, {});
+
+export function sortModules(modules = []) {
+  return [...modules].sort((a, b) => (a.order || 999) - (b.order || 999));
+}
+
+export function groupModulesByCategory(modules = []) {
+  const grouped = modules.reduce((acc, item) => {
+    const category = item.category || "Other";
+    acc[category] = acc[category] || [];
+    acc[category].push(item);
+    return acc;
+  }, {});
+
+  return Object.entries(grouped)
+    .sort(([a], [b]) => {
+      const ai = MENU_CATEGORY_ORDER.indexOf(a);
+      const bi = MENU_CATEGORY_ORDER.indexOf(b);
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi) || a.localeCompare(b);
+    })
+    .map(([category, items]) => ({ category, items: sortModules(items) }));
+}
 
 export function findModuleByPath(pathname = "") {
   const clean = (pathname || "/portals").replace(/\/$/, "") || "/portals";
