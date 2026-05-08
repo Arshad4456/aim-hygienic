@@ -33,7 +33,7 @@ export function AuthProvider({ children }) {
         if (session?.token) {
           setToken(session.token);
           setUser(session.user || null);
-          setRole(session.role || session.user?.role || null);
+          setRole(session.role || session.user?.roleName || session.user?.role || session.user?.portalType || null);
         }
       } finally {
         setIsBootstrapping(false);
@@ -45,7 +45,7 @@ export function AuthProvider({ children }) {
     const data = await loginWithMobile({ mobile, password });
     const nextToken = data?.token;
     const nextUser = data?.user || null;
-    const nextRole = nextUser?.role || '';
+    const nextRole = nextUser?.roleName || nextUser?.role || nextUser?.portalType || '';
 
     await saveSession({ token: nextToken, user: nextUser, role: nextRole });
     setToken(nextToken);

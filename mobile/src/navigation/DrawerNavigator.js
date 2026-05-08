@@ -39,7 +39,7 @@ function Header({
         </Pressable>
 
         <View style={styles.headerIdentity}>
-          <Text numberOfLines={1} style={styles.companyText}>AIM HYGIENICS (PVT) LIMITED</Text>
+          <Text numberOfLines={1} style={styles.companyText}>{user?.company?.name || user?.companyName || 'Rawyan ERP'}</Text>
           <Text numberOfLines={1} style={styles.headerTitle}>{title}</Text>
           {subtitle ? <Text numberOfLines={1} style={styles.headerSubtitle}>{subtitle}</Text> : null}
         </View>
@@ -81,7 +81,7 @@ function Header({
 export default function DrawerNavigator() {
   const insets = useSafeAreaInsets();
   const { roleKey, user, logout } = useAuth();
-  const modules = getRoleModules(roleKey);
+  const modules = getRoleModules(roleKey, user);
 
   const screens = useMemo(() => {
     const base = {

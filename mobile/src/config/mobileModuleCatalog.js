@@ -1,15 +1,10 @@
-export const MOBILE_MODULES = [
-  { key: "dashboard", label: "Dashboard", screen: "Dashboard" },
-  { key: "customers", label: "Customers", screen: "Customers" },
-  { key: "secondary-orders", label: "Orders", screen: "Orders" },
-  { key: "receipts", label: "Receipts", screen: "Receipts" },
-  { key: "customer-billing", label: "Invoices & Receipts", screen: "CustomerBilling" },
-  { key: "inventory", label: "Inventory", screen: "Inventory" },
-  { key: "warehouse", label: "Warehouse", screen: "Warehouse" },
-  { key: "operations", label: "Operations Center", screen: "Operations" },
-  { key: "dispatches", label: "Dispatches", screen: "Dispatches" },
-  { key: "deliveries", label: "Deliveries", screen: "Deliveries" },
-  { key: "live-tracking", label: "Live Tracking", screen: "LiveTracking" },
-  { key: "messages", label: "Messages", screen: "Messages" },
-  { key: "settings", label: "Settings", screen: "Settings" },
-];
+import { MOBILE_MODULE_DETAILS } from './mobileErpAccess';
+
+export const MOBILE_MODULES = Object.entries(MOBILE_MODULE_DETAILS).map(([key, item]) => ({
+  key,
+  label: item.title,
+  screen: item.screen,
+  group: item.group,
+}));
+
+export default MOBILE_MODULES;

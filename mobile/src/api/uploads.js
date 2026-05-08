@@ -36,3 +36,35 @@ export async function uploadTransactionPodViaProxy({ transactionId, fileUri, con
   });
   return data;
 }
+
+
+export async function createDocumentUploadUrl(payload) {
+  const { data } = await apiClient.post('/uploads/document-url', payload);
+  return data;
+}
+
+export async function uploadDocumentViaApi({ fileBase64, fileName, contentType, type = 'company-document', entityType, entityId, metadata = {} }) {
+  const { data } = await apiClient.post('/uploads/document', {
+    fileBase64,
+    fileName,
+    contentType,
+    type,
+    entityType,
+    entityId,
+    metadata,
+  });
+  return data;
+}
+
+export const DOCUMENT_UPLOAD_TYPES = [
+  'user-document',
+  'company-document',
+  'payment-proof',
+  'proof-of-delivery',
+  'invoice-attachment',
+  'receipt-attachment',
+  'vehicle-proof',
+  'service-proof',
+  'trading-document',
+  'manufacturing-qc-proof',
+];

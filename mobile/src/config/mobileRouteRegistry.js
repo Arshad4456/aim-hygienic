@@ -1,18 +1,22 @@
-export const MOBILE_ROUTE_REGISTRY = {
-  dashboard: { label: "Dashboard", feature: "dashboard", roles: ["owner", "manager", "distributor", "salesman", "order_booker", "delivery_boy", "warehouse_manager"] },
-  customers: { label: "Customers", feature: "customers", roles: ["salesman", "order_booker", "distributor", "manager"] },
-  orders: { label: "Orders", feature: "orders", roles: ["salesman", "order_booker", "distributor", "customer"] },
-  collections: { label: "Collections", feature: "collections", roles: ["salesman", "order_booker", "distributor"] },
-  customerBilling: { label: "Invoices & Receipts", feature: "customer-billing", roles: ["customer", "distributor"] },
-  delivery: { label: "Delivery", feature: "delivery", roles: ["delivery_boy", "warehouse_manager", "manager"] },
-  logistics: { label: "Logistics", feature: "logistics", roles: ["delivery_boy", "warehouse_manager", "manager", "distributor"] },
-  operations: { label: "Operations Center", feature: "operations", roles: ["owner", "manager", "company_admin", "distributor"] },
-  fleet: { label: "Fleet", feature: "fleet", roles: ["delivery_boy", "warehouse_manager", "manager"] },
-  warehouse: { label: "Warehouse", feature: "warehouse", roles: ["warehouse_manager", "manager"] },
-  inventory: { label: "Inventory", feature: "inventory", roles: ["warehouse_manager", "distributor", "manager"] },
-  liveTracking: { label: "Live Tracking", feature: "live-tracking", roles: ["salesman", "order_booker", "delivery_boy", "manager"] },
-  approvals: { label: "Approvals", feature: "approvals", roles: ["owner", "manager", "company_admin"] },
-  messages: { label: "Messages", feature: "messages", roles: ["owner", "manager", "distributor", "salesman", "order_booker", "delivery_boy", "warehouse_manager", "customer", "supplier"] },
-  profile: { label: "Profile", feature: "profile", roles: ["*"] },
-};
-export function getMobileModulesForRole(role) { return Object.entries(MOBILE_ROUTE_REGISTRY).filter(([, item]) => item.roles.includes("*") || item.roles.includes(role)).map(([key, item]) => ({ key, ...item })); }
+import { MOBILE_MODULE_DETAILS, MOBILE_ROLE_MODULES } from './mobileErpAccess';
+
+export const MOBILE_ROUTE_REGISTRY = Object.fromEntries(
+  Object.entries(MOBILE_MODULE_DETAILS).map(([key, item]) => [key, {
+    label: item.title,
+    feature: key,
+    group: item.group,
+    screen: item.screen,
+    roles: Object.entries(MOBILE_ROLE_MODULES)
+      .filter(([, modules]) => modules.includes(key))
+      .map(([role]) => role),
+  }])
+);
+
+export function getMobileModulesForRole(role) {
+  const modules = MOBILE_ROLE_MODULES[role] || [];
+  return modules
+    .map((key) => MOBILE_ROUTE_REGISTRY[key] ? ({ key, ...MOBILE_ROUTE_REGISTRY[key] }) : null)
+    .filter(Boolean);
+}
+
+export default MOBILE_ROUTE_REGISTRY;

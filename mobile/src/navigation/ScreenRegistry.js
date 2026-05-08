@@ -135,7 +135,42 @@ import S124 from '../screens/supplier/DashboardScreen';
 import S124a from '../screens/supplier/primary-orders/PrimaryOrdersScreen';
 import S125 from '../screens/vendor/DashboardScreen';
 
+import SystemAdminMobileScreen from '../screens/systemAdmin/SystemAdminMobileScreen';
+import CompanyAdminMobileScreen from '../screens/industry/CompanyAdminMobileScreen';
+import RetailPosMobileScreen from '../screens/industry/RetailPosMobileScreen';
+import ManufacturingMobileScreen from '../screens/industry/ManufacturingMobileScreen';
+import ServiceMobileScreen from '../screens/industry/ServiceMobileScreen';
+import TradingMobileScreen from '../screens/industry/TradingMobileScreen';
+
 export const screenRegistry = {
+  'industry:dashboard': CompanyAdminMobileScreen,
+  'companyAdmin:users': CompanyAdminMobileScreen,
+  'companyAdmin:products': CompanyAdminMobileScreen,
+  'companyAdmin:customers': CompanyAdminMobileScreen,
+  'companyAdmin:suppliers': CompanyAdminMobileScreen,
+  'companyAdmin:warehouses': CompanyAdminMobileScreen,
+  'companyAdmin:inventory': CompanyAdminMobileScreen,
+  'companyAdmin:warehouse': CompanyAdminMobileScreen,
+  'companyAdmin:finance': CompanyAdminMobileScreen,
+  'companyAdmin:receipts': CompanyAdminMobileScreen,
+  'companyAdmin:payments': CompanyAdminMobileScreen,
+  'companyAdmin:reports': CompanyAdminMobileScreen,
+  'companyAdmin:procurement': CompanyAdminMobileScreen,
+  'companyAdmin:returns': CompanyAdminMobileScreen,
+  'companyAdmin:delivery': CompanyAdminMobileScreen,
+  'companyAdmin:live-tracking': CompanyAdminMobileScreen,
+  'companyAdmin:messages': CompanyAdminMobileScreen,
+  'companyAdmin:orders': CompanyAdminMobileScreen,
+  'companyAdmin:collections': CompanyAdminMobileScreen,
+  'retailPos:workspace': RetailPosMobileScreen,
+  'manufacturing:workspace': ManufacturingMobileScreen,
+  'manufacturing:quality': ManufacturingMobileScreen,
+  'service:workspace': ServiceMobileScreen,
+  'trading:workspace': TradingMobileScreen,
+  'systemAdmin:companies': SystemAdminMobileScreen,
+  'systemAdmin:users': SystemAdminMobileScreen,
+  'systemAdmin:modules': SystemAdminMobileScreen,
+
   'accountOfficer:dashboard': S0,
   'admin:account/loan-detail': S1,
   'admin:account/manage': S2,

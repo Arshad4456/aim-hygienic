@@ -1,9 +1,18 @@
+import { normalizeMobileRole } from '../config/mobileErpAccess';
+
 const ROLE_TO_DASHBOARD = {
-  admin: 'admin',
-  'Company Admin': 'admin',
-  'Purchase Manager': 'admin',
-  'Finance / Accounts': 'admin',
-  'Dispatch / Logistics': 'admin',
+  admin: 'systemAdmin',
+  'System Admin': 'systemAdmin',
+  'Super Admin': 'systemAdmin',
+  'Company Admin': 'companyAdmin',
+  CEO: 'ceo',
+  'Purchase Manager': 'purchaseManager',
+  'Finance Manager': 'financeManager',
+  'Finance / Accounts': 'financeManager',
+  Accountant: 'accountOfficer',
+  'Account Officer': 'accountOfficer',
+  'Sales Manager': 'brandManager',
+  'Dispatch / Logistics': 'deliveryBoy',
   'Warehouse Manager': 'warehouseManager',
   'Brand Manager': 'brandManager',
   Distributor: 'distributor',
@@ -16,13 +25,26 @@ const ROLE_TO_DASHBOARD = {
   customer: 'customer',
   Customer: 'customer',
   Supplier: 'supplier',
+  Vendor: 'vendor',
+  'Store Manager': 'storeManager',
+  Cashier: 'cashier',
+  'Production Manager': 'productionManager',
+  'Production Supervisor': 'productionSupervisor',
+  'Quality Manager': 'qualityManager',
+  'Service Manager': 'serviceManager',
+  'Service Agent': 'serviceAgent',
+  Technician: 'technician',
+  'Trading Manager': 'tradingManager',
+  'Import Officer': 'importOfficer',
+  'Export Officer': 'exportOfficer',
 };
 
-
 export function roleToDashboardKey(role) {
-  return ROLE_TO_DASHBOARD[role] || 'admin';
+  if (ROLE_TO_DASHBOARD[role]) return ROLE_TO_DASHBOARD[role];
+  return normalizeMobileRole(role);
 }
 
 export function isKnownRole(role) {
-  return Boolean(ROLE_TO_DASHBOARD[role]);
+  const mapped = roleToDashboardKey(role);
+  return Boolean(mapped && mapped !== role) || Boolean(ROLE_TO_DASHBOARD[role]);
 }
