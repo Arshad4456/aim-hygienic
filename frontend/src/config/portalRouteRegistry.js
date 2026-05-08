@@ -50,6 +50,8 @@ export const CANONICAL_PORTAL_ROUTES = {
   "/portals/notifications": "notifications",
   "/portals/messages": "notifications",
   "/portals/reports": "reports",
+  "/portals/retail-pos": "retail-pos",
+  "/portals/manufacturing": "manufacturing",
   "/portals/settings": "settings",
 };
 

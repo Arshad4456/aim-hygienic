@@ -16,6 +16,9 @@ const LEGACY_KEY_MAP = {
   logistics: "operations",
   live_tracking: "live-tracking",
   messages: "notifications",
+  pos: "retail-pos",
+  production: "manufacturing",
+  quality: "manufacturing",
 };
 
 function normalizeModule(module) {

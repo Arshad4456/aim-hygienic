@@ -55,13 +55,13 @@ const moduleRows = [
   { key: "messages", name: "Messages", category: "Communication", icon: "✉", path: "/portals/messages", description: "Legacy messages mapped to Notification Center." },
   { key: "reports", name: "Reports", category: "Reports", icon: "▧", path: "/portals/reports", description: "Sales, inventory, finance, territory, fleet, and user activity reports." },
 
-  { key: "retail-pos", name: "Retail POS", category: "Future Modules", icon: "⌁", path: "/portals/retail-pos", description: "POS billing, cashier shifts, receipt printing, discounts, and returns.", isPlanned: true, menu: false },
-  { key: "manufacturing", name: "Manufacturing", category: "Future Modules", icon: "⚒", path: "/portals/manufacturing", description: "BOM, production planning, work orders, quality, and costing.", isPlanned: true, menu: false },
+  { key: "retail-pos", name: "Retail POS", category: "Retail POS", icon: "⌁", path: "/portals/retail-pos", description: "POS billing, cashier shifts, barcode selling, receipt printing, discounts, returns, and daily cash closing." },
+  { key: "manufacturing", name: "Manufacturing", category: "Manufacturing", icon: "⚒", path: "/portals/manufacturing", description: "BOM, production orders, raw material issue, finished goods receipt, quality, maintenance, and costing." },
   { key: "service", name: "Service ERP", category: "Future Modules", icon: "☑", path: "/portals/service", description: "Tickets, service orders, SLA, AMC, spare parts, and service invoices.", isPlanned: true, menu: false },
   { key: "trading", name: "Trading/Import", category: "Future Modules", icon: "⇄", path: "/portals/trading", description: "Import/export, LC, shipment, landed cost, multi-currency, and margins.", isPlanned: true, menu: false },
 ];
 
-export const MENU_CATEGORY_ORDER = ["Home", "SaaS Control", "Setup", "Master Data", "Sales", "Purchase", "Inventory", "Finance", "Logistics", "Communication", "Reports", "Future Modules"];
+export const MENU_CATEGORY_ORDER = ["Home", "SaaS Control", "Setup", "Master Data", "Sales", "Purchase", "Inventory", "Finance", "Retail POS", "Manufacturing", "Logistics", "Communication", "Reports", "Future Modules"];
 
 export const RAWYAN_MODULE_CATALOG = moduleRows.map((item, index) => ({
   ...item,

@@ -78,8 +78,7 @@ export const ERP_TEMPLATES = [
       "procurement",
       "inventory",
       "warehouse",
-      "production",
-      "quality",
+      "manufacturing",
       "sales",
       "finance",
       "reports"
@@ -106,7 +105,7 @@ export const ERP_TEMPLATES = [
       "products",
       "inventory",
       "warehouse",
-      "pos",
+      "retail-pos",
       "customers",
       "finance",
       "reports"

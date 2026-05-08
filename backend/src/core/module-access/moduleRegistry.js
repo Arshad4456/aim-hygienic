@@ -45,4 +45,6 @@ module.exports = [
   { key: "notifications", name: "Notifications", path: "/portals/notifications", category: "Communication", webEnabled: true, mobileEnabled: true },
   { key: "messages", name: "Messages", path: "/portals/messages", category: "Communication", webEnabled: true, mobileEnabled: true },
   { key: "reports", name: "Reports", path: "/portals/reports", category: "Reports", webEnabled: true, mobileEnabled: true },
+  { key: "retail-pos", name: "Retail POS", path: "/portals/retail-pos", category: "Retail POS", webEnabled: true, mobileEnabled: true },
+  { key: "manufacturing", name: "Manufacturing", path: "/portals/manufacturing", category: "Manufacturing", webEnabled: true, mobileEnabled: false },
 ];

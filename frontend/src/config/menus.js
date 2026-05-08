@@ -14,6 +14,8 @@ const DEFAULT_KEYS = [
   "primary-sales-orders",
   "secondary-sales-orders",
   "finance",
+  "retail-pos",
+  "manufacturing",
   "receipts",
   "payments",
   "reports",
