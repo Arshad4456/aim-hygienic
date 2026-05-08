@@ -14,9 +14,11 @@ const secondarySalesService = {
   createOrder: (payload) => apiClient("/sales/secondary/orders", { method: "POST", body: JSON.stringify(payload) }),
   approveOrder: (id) => apiClient(`/sales/secondary/orders/${id}/approve`, { method: "POST" }),
   fulfillOrder: (id, payload = {}) => apiClient(`/sales/secondary/orders/${id}/fulfill`, { method: "POST", body: JSON.stringify(payload) }),
+  attachPod: (id, payload = {}) => apiClient(`/sales/secondary/orders/${id}/pod`, { method: "POST", body: JSON.stringify(payload) }),
   invoices: (params = {}) => apiClient(`/sales/secondary/invoices${query(params)}`),
   receipts: (params = {}) => apiClient(`/sales/secondary/receipts${query(params)}`),
   payInvoice: (id, payload = {}) => apiClient(`/sales/secondary/invoices/${id}/pay`, { method: "POST", body: JSON.stringify(payload) }),
+  printDocument: (type, id) => apiClient(`/sales/print/${type}/${id}`),
 };
 
 export default secondarySalesService;

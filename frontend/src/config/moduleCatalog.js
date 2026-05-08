@@ -23,6 +23,7 @@ const moduleRows = [
   { key: "areas", name: "Territories / Areas", category: "Master Data", icon: "⌾", path: "/portals/master-data/areas", description: "Territories and areas used for retailer coverage and field assignment." },
   { key: "fields", name: "Fields / Beats", category: "Master Data", icon: "⌁", path: "/portals/master-data/fields", description: "Field beats and route points for salesmen, order bookers, and deliveries." },
 
+  { key: "sales-quotations", name: "Sales Quotations", category: "Sales", icon: "✎", path: "/portals/sales/quotations", description: "Distributor and customer quotations before order conversion." },
   { key: "primary-sales-orders", name: "Primary Sales", category: "Sales", icon: "↗", path: "/portals/sales/primary-orders", description: "Company sales to distributors." },
   { key: "secondary-sales-orders", name: "Secondary Sales", category: "Sales", icon: "↘", path: "/portals/sales/secondary-orders", description: "Distributor sales to customers or retailers." },
   { key: "customer-orders", name: "Customer Orders", category: "Sales", icon: "□", path: "/portals/customers/orders", description: "Customer order requests and history." },
@@ -30,6 +31,7 @@ const moduleRows = [
   { key: "returns", name: "Returns", category: "Sales", icon: "↺", path: "/portals/returns", description: "Return stock, damage, expiry, and approval workflow." },
 
   { key: "procurement", name: "Procurement", category: "Purchase", icon: "⇣", path: "/portals/procurement", description: "Supplier to company purchase flow." },
+  { key: "purchase-requests", name: "Purchase Requests", category: "Purchase", icon: "＋", path: "/portals/procurement/purchase-requests", description: "Internal material requests before PO creation." },
   { key: "purchase-orders", name: "Purchase Orders", category: "Purchase", icon: "✎", path: "/portals/procurement/purchase-orders", description: "Supplier order workflow." },
   { key: "supplier-payments", name: "Supplier Payments", category: "Purchase", icon: "₨", path: "/portals/procurement/payments", description: "Company payments to suppliers." },
 

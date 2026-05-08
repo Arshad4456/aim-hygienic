@@ -5,6 +5,8 @@ const InventoryLedger = require("../../models/InventoryLedger");
 const CompanySalesOrder = require("../../models/CompanySalesOrder");
 const CompanyDispatchNote = require("../../models/CompanyDispatchNote");
 const CompanyInvoiceToDistributor = require("../../models/CompanyInvoiceToDistributor");
+const CompanyReceiptFromDistributor = require("../../models/CompanyReceiptFromDistributor");
+const SalesQuotation = require("../../models/SalesQuotation");
 const DistributorStockReceipt = require("../../models/DistributorStockReceipt");
 const SecondaryOrder = require("../../models/SecondaryOrder");
 const CustomerInvoice = require("../../models/CustomerInvoice");
@@ -26,6 +28,8 @@ async function scoped(req) {
     CompanySalesOrderModel: CompanySalesOrder,
     CompanyDispatchNoteModel: CompanyDispatchNote,
     CompanyInvoiceModel: CompanyInvoiceToDistributor,
+    CompanyReceiptModel: CompanyReceiptFromDistributor,
+    SalesQuotationModel: SalesQuotation,
     DistributorStockReceiptModel: DistributorStockReceipt,
     SecondaryOrderModel: SecondaryOrder,
     CustomerInvoiceModel: CustomerInvoice,
@@ -55,6 +59,10 @@ function customerSnapshot(source = {}) {
     mobile: asText(source.mobile || source.mobileNumber || source.phoneNumber || source.phone),
     address: asText(source.address || source.shopAddress),
   };
+}
+
+function quotationPartySnapshot(type, source = {}) {
+  return type === "secondary" ? customerSnapshot(source) : distributorSnapshot(source);
 }
 
 function warehouseSnapshot(source = {}) {
@@ -733,6 +741,270 @@ async function payCustomerInvoice(req) {
   if (order) { order.financialStatus = invoice.paymentStatus; await order.save(); }
   return { invoice, receipt };
 }
+
+async function listSalesQuotations(req) {
+  const { SalesQuotationModel } = await scoped(req);
+  const filter = { companyId: companyIdFrom(req) };
+  if (req.query.type && req.query.type !== "all") filter.quotationType = asText(req.query.type);
+  if (req.query.status && req.query.status !== "all") filter.status = asText(req.query.status);
+  return SalesQuotationModel.find(filter).sort({ createdAt: -1 }).lean();
+}
+
+async function createSalesQuotation(req) {
+  const { SalesQuotationModel, ProductModel, UserModel } = await scoped(req);
+  const companyId = companyIdFrom(req);
+  const body = req.body || {};
+  const quotationType = asText(body.quotationType || body.type || "primary") === "secondary" ? "secondary" : "primary";
+  const partyId = asText(body.partyId || body.distributorId || body.customerId || body.party?.partyId);
+  if (!partyId) throw new Error("Select a distributor/customer before creating a quotation.");
+  const partyDoc = await UserModel.findOne({ companyId, $or: [{ _id: partyId }, { userId: partyId }, { distributorId: partyId }, { customerId: partyId }] }).lean().catch(() => null);
+  const party = quotationPartySnapshot(quotationType, body.party || partyDoc || { partyId, partyName: body.partyName });
+  const lines = await hydrateLinesFromProducts(ProductModel, companyId, body.lines || []);
+  if (!lines.length) throw new Error("Add at least one product line.");
+  const totals = calculateTotals(lines, body.totals || {});
+  return SalesQuotationModel.create({
+    companyId,
+    companyName: asText(req.user?.companyName),
+    documentNo: asText(body.documentNo || makeDocNo(quotationType === "secondary" ? "SQ-C" : "SQ-D")),
+    quotationType,
+    distributorId: quotationType === "primary" ? party.partyId : asText(body.distributorId || distributorIdFromRequest(req)),
+    customerId: quotationType === "secondary" ? party.partyId : "",
+    party,
+    validUntil: body.validUntil ? new Date(body.validUntil) : new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
+    status: asText(body.status || "sent"),
+    lines,
+    totals,
+    createdByUserId: uidFrom(req),
+    notes: asText(body.notes),
+    statusHistory: [{ status: asText(body.status || "sent"), changedBy: uidFrom(req), note: "Quotation created" }],
+  });
+}
+
+async function approveSalesQuotation(req) {
+  const { SalesQuotationModel } = await scoped(req);
+  const quote = await SalesQuotationModel.findOne({ _id: req.params.id, companyId: companyIdFrom(req) });
+  if (!quote) throw new Error("Quotation not found");
+  if (!["draft", "sent"].includes(quote.status)) throw new Error(`Cannot approve quotation because it is ${quote.status}.`);
+  quote.status = "approved";
+  quote.approvedByUserId = uidFrom(req);
+  quote.statusHistory.push({ status: "approved", changedBy: uidFrom(req), note: "Quotation approved for order conversion" });
+  return quote.save();
+}
+
+async function convertSalesQuotation(req) {
+  const { SalesQuotationModel, CompanySalesOrderModel, SecondaryOrderModel } = await scoped(req);
+  const companyId = companyIdFrom(req);
+  const quote = await SalesQuotationModel.findOne({ _id: req.params.id, companyId });
+  if (!quote) throw new Error("Quotation not found");
+  if (!["approved", "sent"].includes(quote.status)) throw new Error("Only sent/approved quotations can be converted.");
+  if (quote.convertedOrderId) return { quotation: quote, message: "Quotation is already converted." };
+  let order;
+  if (quote.quotationType === "secondary") {
+    const distributorId = asText(quote.distributorId || distributorIdFromRequest(req));
+    if (!distributorId) throw new Error("Distributor is required to convert customer quotation.");
+    order = await SecondaryOrderModel.create({
+      companyId,
+      companyName: quote.companyName,
+      documentNo: makeDocNo("SSO"),
+      ownerType: "distributor",
+      ownerId: distributorId,
+      distributorId,
+      customer: quote.party,
+      status: "submitted",
+      financialStatus: "not_invoiced",
+      dispatchStatus: "not_dispatched",
+      lines: quote.lines,
+      totals: quote.totals,
+      createdByUserId: uidFrom(req),
+      notes: `Converted from quotation ${quote.documentNo}`,
+      statusHistory: [{ status: "submitted", changedBy: uidFrom(req), note: `Converted from quotation ${quote.documentNo}` }],
+    });
+  } else {
+    order = await CompanySalesOrderModel.create({
+      companyId,
+      companyName: quote.companyName,
+      documentNo: makeDocNo("PSO"),
+      ownerType: "company",
+      ownerId: companyId,
+      distributorId: quote.distributorId || quote.party?.partyId,
+      distributor: quote.party,
+      dispatchFromWarehouse: req.body?.dispatchFromWarehouse || {},
+      receiveAtWarehouse: req.body?.receiveAtWarehouse || { partyId: quote.distributorId || quote.party?.partyId, partyName: `${quote.party?.partyName || "Distributor"} Warehouse` },
+      status: "draft",
+      financialStatus: "not_invoiced",
+      lines: quote.lines,
+      totals: quote.totals,
+      createdByUserId: uidFrom(req),
+      notes: `Converted from quotation ${quote.documentNo}`,
+      statusHistory: [{ status: "draft", changedBy: uidFrom(req), note: `Converted from quotation ${quote.documentNo}` }],
+    });
+  }
+  quote.status = "converted";
+  quote.convertedOrderId = order._id;
+  quote.convertedOrderNo = order.documentNo;
+  quote.statusHistory.push({ status: "converted", changedBy: uidFrom(req), note: `Converted to order ${order.documentNo}` });
+  await quote.save();
+  return { quotation: quote, order };
+}
+
+async function listCompanyReceipts(req) {
+  const { CompanyReceiptModel } = await scoped(req);
+  const filter = { companyId: companyIdFrom(req) };
+  if (req.query.distributorId) filter.distributorId = asText(req.query.distributorId);
+  return CompanyReceiptModel.find(filter).sort({ createdAt: -1 }).lean();
+}
+
+async function payDistributorInvoice(req) {
+  const { CompanyInvoiceModel, CompanyReceiptModel, CompanySalesOrderModel } = await scoped(req);
+  const invoice = await CompanyInvoiceModel.findOne({ _id: req.params.id, companyId: companyIdFrom(req) });
+  if (!invoice) throw new Error("Distributor invoice not found");
+  if (invoice.status !== "posted") throw new Error("Only posted distributor invoices can be paid.");
+  const balance = Number(invoice.balanceAmount || 0);
+  if (balance <= 0) throw new Error("Distributor invoice is already paid.");
+  const body = req.body || {};
+  const amount = Math.min(balance, toMoney(body.amount || balance));
+  if (amount <= 0) throw new Error("Receipt amount must be greater than zero.");
+  const receipt = await CompanyReceiptModel.create({
+    companyId: invoice.companyId,
+    documentNo: makeDocNo("DREC"),
+    ownerType: "company",
+    ownerId: invoice.companyId,
+    distributorId: invoice.distributorId,
+    payer: invoice.distributor,
+    paymentDate: body.paymentDate ? new Date(body.paymentDate) : new Date(),
+    amount,
+    paymentMethod: asText(body.paymentMethod || "cash"),
+    toAccountId: asText(body.toAccountId),
+    status: "posted",
+    allocations: [{ invoiceId: invoice._id, invoiceNo: invoice.documentNo, allocatedAmount: amount }],
+    attachmentUrl: asText(body.attachmentUrl),
+    referenceNo: asText(body.referenceNo),
+    ledgerPosting: { postingState: "posted", postingKey: `distributor-receipt:${invoice._id}:${Date.now()}`, postedAt: new Date() },
+    createdByUserId: uidFrom(req),
+    notes: asText(body.notes),
+    statusHistory: [{ status: "posted", changedBy: uidFrom(req), note: `Receipt posted against ${invoice.documentNo}` }],
+  });
+  invoice.allocatedReceiptTotal = toMoney(Number(invoice.allocatedReceiptTotal || 0) + amount);
+  invoice.balanceAmount = toMoney(Math.max(0, Number(invoice.invoiceTotal || 0) - Number(invoice.allocatedReceiptTotal || 0)));
+  invoice.paymentStatus = invoice.balanceAmount <= 0 ? "paid" : "partial";
+  invoice.statusHistory.push({ status: invoice.paymentStatus, changedBy: uidFrom(req), note: `Receipt ${receipt.documentNo} posted` });
+  await invoice.save();
+  const order = await CompanySalesOrderModel.findOne({ _id: invoice.companySalesOrderId, companyId: invoice.companyId }).catch(() => null);
+  if (order) { order.financialStatus = invoice.paymentStatus; await order.save(); }
+  return { invoice, receipt };
+}
+
+async function attachDispatchPod(req) {
+  const { CompanyDispatchNoteModel, CompanySalesOrderModel } = await scoped(req);
+  const dispatch = await CompanyDispatchNoteModel.findOne({ _id: req.params.id, companyId: companyIdFrom(req) });
+  if (!dispatch) throw new Error("Dispatch note not found");
+  const podUrl = asText(req.body?.podUrl || req.body?.attachmentUrl || req.body?.fileUrl);
+  if (!podUrl) throw new Error("POD document URL is required. Upload proof first, then attach its URL here.");
+  dispatch.podUrl = podUrl;
+  dispatch.status = dispatch.status === "posted" ? "delivered" : dispatch.status;
+  dispatch.statusHistory.push({ status: dispatch.status, changedBy: uidFrom(req), note: "Proof of delivery attached" });
+  await dispatch.save();
+  const order = await CompanySalesOrderModel.findOne({ _id: dispatch.companySalesOrderId, companyId: dispatch.companyId }).catch(() => null);
+  if (order && order.status === "dispatched") { order.status = "received"; order.statusHistory.push({ status: "received", changedBy: uidFrom(req), note: `POD attached to dispatch ${dispatch.documentNo}` }); await order.save(); }
+  return { dispatch, order };
+}
+
+async function attachSecondaryPod(req) {
+  const { SecondaryOrderModel } = await scoped(req);
+  const order = await SecondaryOrderModel.findOne({ _id: req.params.id, companyId: companyIdFrom(req) });
+  if (!order) throw new Error("Secondary order not found");
+  const podUrl = asText(req.body?.podUrl || req.body?.attachmentUrl || req.body?.fileUrl);
+  if (!podUrl) throw new Error("POD document URL is required. Upload proof first, then attach its URL here.");
+  order.podUrl = podUrl;
+  order.podUploadedBy = uidFrom(req);
+  order.podUploadedAt = new Date();
+  order.statusHistory.push({ status: order.status || "delivered", changedBy: uidFrom(req), note: "Customer proof of delivery attached" });
+  return order.save();
+}
+
+async function distributorStatement(req) {
+  const { CompanySalesOrderModel, CompanyInvoiceModel, CompanyReceiptModel, DistributorStockReceiptModel, InventoryLedgerModel } = await scoped(req);
+  const companyId = companyIdFrom(req);
+  const distributorId = asText(req.query.distributorId || req.params.distributorId);
+  if (!distributorId) throw new Error("Distributor is required for statement.");
+  const [orders, invoices, receipts, stockReceipts, stockRows] = await Promise.all([
+    CompanySalesOrderModel.find({ companyId, distributorId }).sort({ createdAt: -1 }).limit(50).lean(),
+    CompanyInvoiceModel.find({ companyId, distributorId }).sort({ invoiceDate: -1 }).lean(),
+    CompanyReceiptModel.find({ companyId, distributorId }).sort({ paymentDate: -1 }).lean(),
+    DistributorStockReceiptModel.find({ companyId, distributorId }).sort({ createdAt: -1 }).limit(50).lean(),
+    InventoryLedgerModel.aggregate([
+      { $match: { companyId, ownerType: "distributor", $or: [{ ownerId: distributorId }, { distributorId }] } },
+      { $group: { _id: { productId: "$productId", productCode: "$productCode", productName: "$productName" }, inQty: { $sum: { $cond: [{ $eq: ["$direction", "in"] }, "$qty", 0] } }, outQty: { $sum: { $cond: [{ $eq: ["$direction", "out"] }, "$qty", 0] } }, value: { $sum: { $cond: [{ $eq: ["$direction", "in"] }, "$totalValue", { $multiply: ["$totalValue", -1] }] } } } },
+      { $project: { _id: 0, productId: "$_id.productId", productCode: "$_id.productCode", productName: "$_id.productName", balanceQty: { $subtract: ["$inQty", "$outQty"] }, stockValue: "$value" } },
+      { $sort: { productName: 1 } },
+    ]).catch(() => []),
+  ]);
+  const invoiceTotal = invoices.reduce((sum, row) => sum + Number(row.invoiceTotal || 0), 0);
+  const receiptTotal = receipts.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const balance = invoices.reduce((sum, row) => sum + Number(row.balanceAmount || 0), 0);
+  return { distributorId, kpis: { orders: orders.length, invoices: invoices.length, invoiceTotal: toMoney(invoiceTotal), receiptTotal: toMoney(receiptTotal), balance: toMoney(balance), stockProducts: stockRows.length }, orders, invoices, receipts, stockReceipts, stock: stockRows };
+}
+
+async function distributionOverview(req) {
+  const { UserModel, CompanyInvoiceModel, CompanyReceiptModel, SecondaryOrderModel, InventoryLedgerModel } = await scoped(req);
+  const companyId = companyIdFrom(req);
+  const [distributors, invoices, receipts, secondaryOrders, stockRows] = await Promise.all([
+    listDistributors(req),
+    CompanyInvoiceModel.find({ companyId }).select("distributorId invoiceTotal balanceAmount paymentStatus dueDate").lean().catch(() => []),
+    CompanyReceiptModel.find({ companyId }).select("distributorId amount status").lean().catch(() => []),
+    SecondaryOrderModel.find({ companyId }).select("distributorId status totals dispatchStatus").lean().catch(() => []),
+    InventoryLedgerModel.aggregate([
+      { $match: { companyId, ownerType: "distributor" } },
+      { $group: { _id: "$distributorId", inQty: { $sum: { $cond: [{ $eq: ["$direction", "in"] }, "$qty", 0] } }, outQty: { $sum: { $cond: [{ $eq: ["$direction", "out"] }, "$qty", 0] } }, value: { $sum: { $cond: [{ $eq: ["$direction", "in"] }, "$totalValue", { $multiply: ["$totalValue", -1] }] } } } },
+      { $project: { _id: 0, distributorId: "$_id", balanceQty: { $subtract: ["$inQty", "$outQty"] }, stockValue: "$value" } },
+    ]).catch(() => []),
+  ]);
+  const map = new Map(distributors.map((d) => [String(d._id || d.userId || d.distributorId), d]));
+  const creditRows = distributors.map((dist) => {
+    const id = asText(dist._id || dist.userId || dist.distributorId);
+    const inv = invoices.filter((i) => String(i.distributorId) === id);
+    const rec = receipts.filter((r) => String(r.distributorId) === id && ["approved", "posted"].includes(String(r.status)));
+    const stock = stockRows.find((row) => String(row.distributorId) === id) || {};
+    const orders = secondaryOrders.filter((o) => String(o.distributorId) === id);
+    return {
+      distributorId: id,
+      distributorName: distributorName(dist),
+      creditLimit: Number(dist.creditLimit || 0),
+      receivableBalance: toMoney(inv.reduce((sum, row) => sum + Number(row.balanceAmount || 0), 0)),
+      invoiceTotal: toMoney(inv.reduce((sum, row) => sum + Number(row.invoiceTotal || 0), 0)),
+      receiptTotal: toMoney(rec.reduce((sum, row) => sum + Number(row.amount || 0), 0)),
+      stockQty: Number(stock.balanceQty || 0),
+      stockValue: toMoney(stock.stockValue || 0),
+      secondaryOrders: orders.length,
+      deliveredOrders: orders.filter((o) => o.status === "delivered" || o.dispatchStatus === "delivered").length,
+    };
+  });
+  const totalReceivable = creditRows.reduce((sum, row) => sum + Number(row.receivableBalance || 0), 0);
+  return { kpis: { distributors: distributors.length, receivableBalance: toMoney(totalReceivable), stockQty: creditRows.reduce((sum, row) => sum + Number(row.stockQty || 0), 0), activeCoverage: creditRows.filter((row) => Number(row.stockQty || 0) > 0 || Number(row.receivableBalance || 0) > 0).length }, creditRows };
+}
+
+async function printDocumentData(req) {
+  const { SalesQuotationModel, CompanySalesOrderModel, CompanyDispatchNoteModel, CompanyInvoiceModel, CompanyReceiptModel, DistributorStockReceiptModel, SecondaryOrderModel, CustomerInvoiceModel, CustomerReceiptModel } = await scoped(req);
+  const companyId = companyIdFrom(req);
+  const type = asText(req.params.type);
+  const models = {
+    quotation: SalesQuotationModel,
+    primaryOrder: CompanySalesOrderModel,
+    dispatch: CompanyDispatchNoteModel,
+    distributorInvoice: CompanyInvoiceModel,
+    distributorReceipt: CompanyReceiptModel,
+    stockReceipt: DistributorStockReceiptModel,
+    secondaryOrder: SecondaryOrderModel,
+    customerInvoice: CustomerInvoiceModel,
+    customerReceipt: CustomerReceiptModel,
+  };
+  const Model = models[type];
+  if (!Model) throw new Error("Unsupported print document type.");
+  const document = await Model.findOne({ _id: req.params.id, companyId }).lean();
+  if (!document) throw new Error("Document not found for print.");
+  return { type, document, printMeta: { title: document.documentNo || type, generatedAt: new Date(), brand: "Rawyan ERP" } };
+}
+
 async function secondaryOverview(req) {
   const { SecondaryOrderModel, CustomerInvoiceModel, CustomerReceiptModel } = await scoped(req);
   const companyId = companyIdFrom(req); const distributorId = distributorIdFromRequest(req);
@@ -745,13 +1017,15 @@ async function secondaryOverview(req) {
 }
 
 async function overview(req) {
-  const { CompanySalesOrderModel, CompanyDispatchNoteModel, CompanyInvoiceModel, DistributorStockReceiptModel, InventoryLedgerModel } = await scoped(req);
+  const { CompanySalesOrderModel, CompanyDispatchNoteModel, CompanyInvoiceModel, CompanyReceiptModel, DistributorStockReceiptModel, InventoryLedgerModel, SalesQuotationModel } = await scoped(req);
   const companyId = companyIdFrom(req);
-  const [orders, dispatches, invoices, receipts, stockRows] = await Promise.all([
+  const [orders, dispatches, invoices, receipts, distributorReceipts, quotations, stockRows] = await Promise.all([
     CompanySalesOrderModel.find({ companyId }).sort({ createdAt: -1 }).limit(20).lean(),
     CompanyDispatchNoteModel.find({ companyId }).sort({ createdAt: -1 }).limit(20).lean(),
     CompanyInvoiceModel.find({ companyId }).sort({ createdAt: -1 }).limit(20).lean(),
     DistributorStockReceiptModel.find({ companyId }).sort({ createdAt: -1 }).limit(20).lean(),
+    CompanyReceiptModel.find({ companyId }).sort({ createdAt: -1 }).limit(20).lean(),
+    SalesQuotationModel.find({ companyId }).sort({ createdAt: -1 }).limit(20).lean(),
     InventoryLedgerModel.aggregate([{ $match: { companyId, ownerType: "company" } }, { $group: { _id: null, inQty: { $sum: { $cond: [{ $eq: ["$direction", "in"] }, "$qty", 0] } }, outQty: { $sum: { $cond: [{ $eq: ["$direction", "out"] }, "$qty", 0] } } } }]).catch(() => []),
   ]);
   const invoiceTotal = invoices.reduce((sum, row) => sum + Number(row.invoiceTotal || 0), 0);
@@ -771,6 +1045,8 @@ async function overview(req) {
       invoiceTotal: toMoney(invoiceTotal),
       invoiceBalance: toMoney(invoiceBalance),
       distributorReceiptDrafts: receipts.filter((r) => r.status === "draft").length,
+      distributorReceipts: distributorReceipts.length,
+      quotations: quotations.length,
       companyStockBalance: Number(stock.inQty || 0) - Number(stock.outQty || 0),
     },
   };
@@ -800,4 +1076,15 @@ module.exports = {
   listCustomerReceipts,
   payCustomerInvoice,
   secondaryOverview,
+  listSalesQuotations,
+  createSalesQuotation,
+  approveSalesQuotation,
+  convertSalesQuotation,
+  listCompanyReceipts,
+  payDistributorInvoice,
+  attachDispatchPod,
+  attachSecondaryPod,
+  distributorStatement,
+  distributionOverview,
+  printDocumentData,
 };

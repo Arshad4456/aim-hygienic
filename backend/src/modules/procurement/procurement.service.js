@@ -1,6 +1,7 @@
 const Supplier = require("../../models/Supplier");
 const User = require("../../models/User");
 const PurchaseOrder = require("../../models/PurchaseOrder");
+const PurchaseRequest = require("../../models/PurchaseRequest");
 const GoodsReceipt = require("../../models/GoodsReceipt");
 const SupplierInvoice = require("../../models/SupplierInvoice");
 const SupplierPayment = require("../../models/SupplierPayment");
@@ -63,9 +64,29 @@ function supplierSnapshot(source = {}) {
     address: asText(source.address),
   };
 }
+
+function requesterSnapshot(req) {
+  return {
+    partyType: "employee",
+    partyId: uidFrom(req),
+    partyName: asText(req.user?.fullName || req.user?.username || req.user?.email || "Requester"),
+    mobile: asText(req.user?.mobile || req.user?.mobileNumber || req.user?.phone),
+    address: asText(req.user?.branchName || req.user?.department),
+  };
+}
+function warehouseSnapshot(source = {}) {
+  return {
+    partyType: "warehouse",
+    partyId: asText(source._id || source.id || source.partyId || source.warehouseId),
+    partyCode: asText(source.warehouseId || source.partyCode || source.code),
+    partyName: asText(source.warehouseName || source.partyName || source.name || "Warehouse"),
+    address: asText(source.address),
+  };
+}
 async function scoped(req) {
   return getScopedModels(req, {
     SupplierModel: Supplier,
+    PurchaseRequestModel: PurchaseRequest,
     PurchaseOrderModel: PurchaseOrder,
     GoodsReceiptModel: GoodsReceipt,
     SupplierInvoiceModel: SupplierInvoice,
@@ -162,6 +183,84 @@ async function deleteSupplier(req) {
   if (!supplier) throw new Error("Supplier not found.");
   return supplier;
 }
+
+async function listPurchaseRequests(req) {
+  const { PurchaseRequestModel } = await scoped(req);
+  const filter = { companyId: companyIdFrom(req) };
+  if (req.query.status && req.query.status !== "all") filter.status = asText(req.query.status);
+  return PurchaseRequestModel.find(filter).sort({ createdAt: -1 }).lean();
+}
+
+async function createPurchaseRequest(req) {
+  const { PurchaseRequestModel, ProductModel, WarehouseModel } = await scoped(req);
+  const body = req.body || {};
+  const companyId = companyIdFrom(req);
+  const lines = normalizeLines(body.lines || []);
+  if (!lines.length) throw new Error("Add at least one requested item.");
+  const totals = calculateTotals(lines, body.totals || {});
+  let warehouse = body.targetWarehouse || body.warehouse || null;
+  if (!warehouse && body.warehouseId) warehouse = await WarehouseModel.findOne({ companyId, $or: [{ _id: body.warehouseId }, { warehouseId: body.warehouseId }] }).lean().catch(() => null);
+  return PurchaseRequestModel.create({
+    companyId,
+    documentNo: asText(body.documentNo || makeDocNo("PR")),
+    requester: body.requester || requesterSnapshot(req),
+    department: asText(body.department || req.user?.department),
+    requiredDate: body.requiredDate ? new Date(body.requiredDate) : null,
+    targetWarehouse: warehouse ? warehouseSnapshot(warehouse) : null,
+    status: asText(body.status || "submitted"),
+    lines,
+    totals,
+    createdByUserId: uidFrom(req),
+    notes: asText(body.notes),
+    statusHistory: [{ status: asText(body.status || "submitted"), changedBy: uidFrom(req), note: "Purchase request created" }],
+  });
+}
+
+async function approvePurchaseRequest(req) {
+  const { PurchaseRequestModel } = await scoped(req);
+  const pr = await PurchaseRequestModel.findOne({ _id: req.params.id, companyId: companyIdFrom(req) });
+  if (!pr) throw new Error("Purchase request not found");
+  if (!["draft", "submitted"].includes(pr.status)) throw new Error(`Cannot approve purchase request because it is ${pr.status}.`);
+  pr.status = "approved";
+  pr.approvedByUserId = uidFrom(req);
+  pr.statusHistory.push({ status: "approved", changedBy: uidFrom(req), note: "Approved for purchase order creation" });
+  return pr.save();
+}
+
+async function convertPurchaseRequest(req) {
+  const { PurchaseRequestModel, PurchaseOrderModel, SupplierModel } = await scoped(req);
+  const pr = await PurchaseRequestModel.findOne({ _id: req.params.id, companyId: companyIdFrom(req) });
+  if (!pr) throw new Error("Purchase request not found");
+  if (pr.convertedPurchaseOrderId) return { purchaseRequest: pr, message: "Purchase request already converted." };
+  if (pr.status !== "approved") throw new Error("Approve purchase request before converting it to purchase order.");
+  const body = req.body || {};
+  const supplierId = asText(body.supplierId || body.supplier?.partyId);
+  if (!supplierId) throw new Error("Select supplier before converting PR to PO.");
+  const supplierDoc = await SupplierModel.findOne({ companyId: pr.companyId, $or: [{ _id: supplierId }, { supplierCode: supplierId }, { linkedUserId: supplierId }] }).lean().catch(() => null);
+  const supplier = supplierSnapshot(body.supplier || supplierDoc || { partyId: supplierId, partyName: body.supplierName });
+  const po = await PurchaseOrderModel.create({
+    companyId: pr.companyId,
+    documentNo: asText(body.documentNo || makeDocNo("PO")),
+    supplier,
+    expectedDate: body.expectedDate ? new Date(body.expectedDate) : pr.requiredDate,
+    orderDate: new Date(),
+    warehouse: body.warehouse || pr.targetWarehouse || null,
+    status: "pending_approval",
+    lines: pr.lines,
+    totals: pr.totals,
+    balanceAmount: Number(pr.totals?.grandTotal || 0),
+    notes: asText(body.notes || `Converted from purchase request ${pr.documentNo}`),
+    createdByUserId: uidFrom(req),
+    statusHistory: [{ status: "pending_approval", changedBy: uidFrom(req), note: `Converted from purchase request ${pr.documentNo}` }],
+  });
+  pr.status = "converted";
+  pr.convertedPurchaseOrderId = po._id;
+  pr.convertedPurchaseOrderNo = po.documentNo;
+  pr.statusHistory.push({ status: "converted", changedBy: uidFrom(req), note: `Converted to purchase order ${po.documentNo}` });
+  await pr.save();
+  return { purchaseRequest: pr, purchaseOrder: po };
+}
+
 async function listPurchaseOrders(req) {
   const { PurchaseOrderModel } = await scoped(req);
   const filter = { companyId: companyIdFrom(req) };
@@ -283,11 +382,57 @@ async function listGoodsReceipts(req) {
 }
 async function listSupplierInvoices(req) { const { SupplierInvoiceModel } = await scoped(req); return SupplierInvoiceModel.find({ companyId: companyIdFrom(req) }).sort({ createdAt: -1 }).lean(); }
 async function listSupplierPayments(req) { const { SupplierPaymentModel } = await scoped(req); return SupplierPaymentModel.find({ companyId: companyIdFrom(req) }).sort({ createdAt: -1 }).lean(); }
-async function overview(req) {
-  const { PurchaseOrderModel, GoodsReceiptModel, SupplierInvoiceModel, SupplierPaymentModel } = await scoped(req);
+
+async function attachGoodsReceiptProof(req) {
+  const { GoodsReceiptModel } = await scoped(req);
+  const grn = await GoodsReceiptModel.findOne({ _id: req.params.id, companyId: companyIdFrom(req) });
+  if (!grn) throw new Error("Goods receipt not found");
+  const podUrl = asText(req.body?.podUrl || req.body?.attachmentUrl || req.body?.fileUrl);
+  if (!podUrl) throw new Error("Proof document URL is required. Upload proof first, then attach its URL here.");
+  grn.podUrl = podUrl;
+  grn.statusHistory.push({ status: grn.status, changedBy: uidFrom(req), note: "Receiving proof attached" });
+  return grn.save();
+}
+
+async function supplierStatement(req) {
+  const { SupplierModel, PurchaseOrderModel, GoodsReceiptModel, SupplierInvoiceModel, SupplierPaymentModel } = await scoped(req);
   const companyId = companyIdFrom(req);
-  const [suppliers, purchaseOrders, openOrders, receipts, draftReceipts, postedReceipts, invoices, payments] = await Promise.all([
+  const supplierId = asText(req.query.supplierId || req.params.id);
+  if (!supplierId) throw new Error("Supplier is required for statement.");
+  const supplier = await SupplierModel.findOne({ companyId, $or: [{ _id: supplierId }, { supplierCode: supplierId }, { linkedUserId: supplierId }] }).lean().catch(() => null);
+  const supplierName = supplier?.supplierName || supplierId;
+  const supplierClauses = [{ "supplier.partyId": supplierId }, { "supplier.partyCode": supplierId }, { "supplier.partyName": supplierName }];
+  const [purchaseOrders, goodsReceipts, invoices, payments] = await Promise.all([
+    PurchaseOrderModel.find({ companyId, $or: supplierClauses }).sort({ createdAt: -1 }).lean(),
+    GoodsReceiptModel.find({ companyId, $or: supplierClauses }).sort({ createdAt: -1 }).lean(),
+    SupplierInvoiceModel.find({ companyId, $or: supplierClauses }).sort({ invoiceDate: -1 }).lean(),
+    SupplierPaymentModel.find({ companyId, $or: supplierClauses }).sort({ paymentDate: -1 }).lean(),
+  ]);
+  const invoiceTotal = invoices.reduce((sum, row) => sum + Number(row.invoiceTotal || 0), 0);
+  const paymentTotal = payments.filter((p) => ["approved", "posted"].includes(String(p.status))).reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const balance = invoices.reduce((sum, row) => sum + Number(row.balanceAmount || 0), 0);
+  return { supplier: supplier || { supplierName }, kpis: { purchaseOrders: purchaseOrders.length, goodsReceipts: goodsReceipts.length, invoices: invoices.length, invoiceTotal: toMoney(invoiceTotal), paymentTotal: toMoney(paymentTotal), balance: toMoney(balance) }, purchaseOrders, goodsReceipts, invoices, payments };
+}
+
+async function printDocumentData(req) {
+  const { PurchaseRequestModel, PurchaseOrderModel, GoodsReceiptModel, SupplierInvoiceModel, SupplierPaymentModel } = await scoped(req);
+  const companyId = companyIdFrom(req);
+  const type = asText(req.params.type);
+  const models = { purchaseRequest: PurchaseRequestModel, purchaseOrder: PurchaseOrderModel, goodsReceipt: GoodsReceiptModel, supplierInvoice: SupplierInvoiceModel, supplierPayment: SupplierPaymentModel };
+  const Model = models[type];
+  if (!Model) throw new Error("Unsupported procurement print document type.");
+  const document = await Model.findOne({ _id: req.params.id, companyId }).lean();
+  if (!document) throw new Error("Document not found for print.");
+  return { type, document, printMeta: { title: document.documentNo || type, generatedAt: new Date(), brand: "Rawyan ERP" } };
+}
+
+async function overview(req) {
+  const { PurchaseRequestModel, PurchaseOrderModel, GoodsReceiptModel, SupplierInvoiceModel, SupplierPaymentModel } = await scoped(req);
+  const companyId = companyIdFrom(req);
+  const [suppliers, purchaseRequests, approvedRequests, purchaseOrders, openOrders, receipts, draftReceipts, postedReceipts, invoices, payments] = await Promise.all([
     listSuppliers(req),
+    PurchaseRequestModel.countDocuments({ companyId }),
+    PurchaseRequestModel.countDocuments({ companyId, status: "approved" }),
     PurchaseOrderModel.countDocuments({ companyId }),
     PurchaseOrderModel.countDocuments({ companyId, status: { $in: ["draft", "pending_approval", "approved", "receiving", "partially_received"] } }),
     GoodsReceiptModel.countDocuments({ companyId }),
@@ -299,7 +444,7 @@ async function overview(req) {
   const invoiceTotal = invoices.reduce((sum, row) => sum + Number(row.invoiceTotal || 0), 0);
   const payableBalance = invoices.reduce((sum, row) => sum + Number(row.balanceAmount || 0), 0);
   const paidTotal = payments.filter((p) => ["approved", "posted"].includes(String(p.status))).reduce((sum, row) => sum + Number(row.amount || 0), 0);
-  return { ok: true, kpis: { suppliers: suppliers.length, purchaseOrders, openOrders, goodsReceipts: receipts, draftReceipts, postedReceipts, invoiceTotal, payableBalance, paidTotal } };
+  return { ok: true, kpis: { suppliers: suppliers.length, purchaseRequests, approvedRequests, purchaseOrders, openOrders, goodsReceipts: receipts, draftReceipts, postedReceipts, invoiceTotal, payableBalance, paidTotal } };
 }
 async function paySupplierInvoice(req) {
   const { SupplierInvoiceModel, SupplierPaymentModel, SupplierModel } = await scoped(req);
@@ -328,4 +473,4 @@ async function paySupplierInvoice(req) {
   await updateSupplierBalance(SupplierModel, invoice.companyId, invoice.supplier, -amount);
   return { supplierInvoice: invoice, supplierPayment: payment };
 }
-module.exports = { overview, listSuppliers, listProducts, listWarehouses, createSupplier, updateSupplier, deleteSupplier, listPurchaseOrders, createPurchaseOrder, approvePurchaseOrder, receivePurchaseOrder, postGoodsReceipt, listGoodsReceipts, listSupplierInvoices, listSupplierPayments, paySupplierInvoice };
+module.exports = { overview, listSuppliers, listProducts, listWarehouses, createSupplier, updateSupplier, deleteSupplier, listPurchaseRequests, createPurchaseRequest, approvePurchaseRequest, convertPurchaseRequest, listPurchaseOrders, createPurchaseOrder, approvePurchaseOrder, receivePurchaseOrder, postGoodsReceipt, attachGoodsReceiptProof, listGoodsReceipts, listSupplierInvoices, listSupplierPayments, paySupplierInvoice, supplierStatement, printDocumentData };

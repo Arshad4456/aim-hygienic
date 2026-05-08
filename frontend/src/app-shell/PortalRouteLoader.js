@@ -60,9 +60,9 @@ function renderPortalContent(route, context) {
   if (route.moduleKey === "territory") return <TerritoryArchitecturePage />;
   if (["suppliers", "warehouses", "regions", "zones", "areas", "fields"].includes(route.moduleKey)) return <MasterDataCrudPage resourceKey={route.moduleKey} />;
   if (route.moduleKey === "products") return <ProductsPortalPage />;
-  if (["procurement", "purchase-orders", "supplier-payments", "goods-receipts"].includes(route.moduleKey)) return <ProcurementFoundationPage mode={route.moduleKey} />;
+  if (["procurement", "purchase-requests", "purchase-orders", "supplier-payments", "goods-receipts"].includes(route.moduleKey)) return <ProcurementFoundationPage mode={route.moduleKey} />;
   if (["inventory", "warehouse"].includes(route.moduleKey)) return <InventoryWarehouseFoundationPage mode={route.moduleKey} />;
-  if (route.moduleKey === "primary-sales-orders") return <PrimarySalesFoundationPage />;
+  if (["sales-quotations", "primary-sales-orders"].includes(route.moduleKey)) return <PrimarySalesFoundationPage mode={route.moduleKey} />;
   if (route.moduleKey === "secondary-sales-orders") return <SecondarySalesFoundationPage />;
   if (route.moduleKey === "customers") return <CustomersPortalPage />;
   if (route.moduleKey === "customer-orders" || route.moduleKey === "customer-billing") return <CustomerBillingPortalPage />;

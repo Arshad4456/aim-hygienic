@@ -1,12 +1,14 @@
 const MODULE_ALIASES = {
   "system-admin": ["system-admin", "system_admin", "core"],
   "erp-templates": ["erp-templates", "erp_templates"],
+  "sales-quotations": ["sales-quotations", "sales_quotations", "quotations", "sales"],
   "primary-sales-orders": ["primary-sales-orders", "primary-orders", "primary_sales_orders", "primary_orders", "sales"],
   "secondary-sales-orders": ["secondary-sales-orders", "secondary-orders", "secondary_sales_orders", "secondary_orders", "distribution"],
   "customer-billing": ["customer-billing", "customer_billing", "customers", "receipts"],
   "live-tracking": ["live-tracking", "live_tracking"],
   notifications: ["notifications", "messages"],
   messages: ["messages", "notifications"],
+  "purchase-requests": ["purchase-requests", "purchase_requests", "purchase-requisitions", "procurement"],
   "supplier-payments": ["supplier-payments", "supplier_payments", "payments", "procurement"],
 };
 function normalize(value) { return String(value || "").trim().toLowerCase(); }
