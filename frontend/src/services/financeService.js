@@ -1,65 +1,46 @@
-import apiClient from "./apiClient";
+import { apiDelete, apiGet, apiPost, apiPut, withQuery } from "./apiClient";
 
-function jsonOptions(method, payload) {
-  return {
-    method,
-    body: JSON.stringify(payload || {}),
-  };
-}
+export const financeService = {
+  overview: (params = {}) => apiGet(withQuery("/finance/overview", params)),
+  ledgerSummary: (params = {}) => apiGet(withQuery("/finance/ledger-summary", params)),
+  reports: (params = {}) => apiGet(withQuery("/finance/reports", params)),
+  trialBalance: (params = {}) => apiGet(withQuery("/finance/trial-balance", params)),
+  profitLoss: (params = {}) => apiGet(withQuery("/finance/profit-loss", params)),
+  balanceSheet: (params = {}) => apiGet(withQuery("/finance/balance-sheet", params)),
+  aging: (params = {}) => apiGet(withQuery("/finance/aging", params)),
+  cashbook: (params = {}) => apiGet(withQuery("/finance/cashbook", params)),
 
-export function overview(params = {}) {
-  const query = new URLSearchParams(params).toString();
-  return apiClient(`/finance/overview${query ? `?${query}` : ""}`);
-}
+  listChartAccounts: (params = {}) => apiGet(withQuery("/finance/chart-of-accounts", params)),
+  createChartAccount: (payload) => apiPost("/finance/chart-of-accounts", payload),
+  updateChartAccount: (id, payload) => apiPut(`/finance/chart-of-accounts/${encodeURIComponent(id)}`, payload),
+  deleteChartAccount: (id) => apiDelete(`/finance/chart-of-accounts/${encodeURIComponent(id)}`),
 
-export function ledgerSummary(params = {}) {
-  const query = new URLSearchParams(params).toString();
-  return apiClient(`/finance/ledger-summary${query ? `?${query}` : ""}`);
-}
+  listJournalEntries: (params = {}) => apiGet(withQuery("/finance/journal-entries", params)),
+  createJournalEntry: (payload) => apiPost("/finance/journal-entries", payload),
+  postJournalEntry: (id) => apiPost(`/finance/journal-entries/${encodeURIComponent(id)}/post`, {}),
+  reverseJournalEntry: (id) => apiPost(`/finance/journal-entries/${encodeURIComponent(id)}/reverse`, {}),
 
-export function listAccounts() {
-  return apiClient("/finance/accounts");
-}
+  listAccounts: () => apiGet("/finance/accounts"),
+  createAccount: (payload) => apiPost("/finance/accounts", payload),
+  listTransactions: (params = {}) => apiGet(withQuery("/finance/transactions", params)),
+  createTransaction: (payload) => apiPost("/finance/transactions", payload),
+  listExpenses: (params = {}) => apiGet(withQuery("/finance/expenses", params)),
+  listLoans: (params = {}) => apiGet(withQuery("/finance/loans", params)),
 
-export function createAccount(payload) {
-  return apiClient("/finance/accounts", jsonOptions("POST", payload));
-}
-
-export function listTransactions() {
-  return apiClient("/finance/transactions");
-}
-
-export function listExpenses() {
-  return apiClient("/finance/expenses");
-}
-
-export function listLoans() {
-  return apiClient("/finance/loans");
-}
-
-export function receiveDistributorInvoice(invoiceId, payload) {
-  return apiClient(`/finance/distributor-invoices/${encodeURIComponent(invoiceId)}/receive`, jsonOptions("POST", payload));
-}
-
-export function receiveCustomerInvoice(invoiceId, payload) {
-  return apiClient(`/finance/customer-invoices/${encodeURIComponent(invoiceId)}/receive`, jsonOptions("POST", payload));
-}
-
-export function paySupplierInvoice(invoiceId, payload) {
-  return apiClient(`/finance/supplier-invoices/${encodeURIComponent(invoiceId)}/pay`, jsonOptions("POST", payload));
-}
-
-const financeService = {
-  overview,
-  ledgerSummary,
-  listAccounts,
-  createAccount,
-  listTransactions,
-  listExpenses,
-  listLoans,
-  receiveDistributorInvoice,
-  receiveCustomerInvoice,
-  paySupplierInvoice,
+  receiveDistributorInvoice: (invoiceId, payload) => apiPost(`/finance/distributor-invoices/${encodeURIComponent(invoiceId)}/receive`, payload),
+  receiveCustomerInvoice: (invoiceId, payload) => apiPost(`/finance/customer-invoices/${encodeURIComponent(invoiceId)}/receive`, payload),
+  paySupplierInvoice: (invoiceId, payload) => apiPost(`/finance/supplier-invoices/${encodeURIComponent(invoiceId)}/pay`, payload),
 };
+
+export const overview = financeService.overview;
+export const ledgerSummary = financeService.ledgerSummary;
+export const listAccounts = financeService.listAccounts;
+export const createAccount = financeService.createAccount;
+export const listTransactions = financeService.listTransactions;
+export const listExpenses = financeService.listExpenses;
+export const listLoans = financeService.listLoans;
+export const receiveDistributorInvoice = financeService.receiveDistributorInvoice;
+export const receiveCustomerInvoice = financeService.receiveCustomerInvoice;
+export const paySupplierInvoice = financeService.paySupplierInvoice;
 
 export default financeService;

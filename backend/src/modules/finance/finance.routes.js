@@ -7,9 +7,28 @@ router.use(requireAuth);
 
 router.get("/overview", controller.overview);
 router.get("/ledger-summary", controller.ledgerSummary);
+
+router.get("/chart-of-accounts", controller.chartAccounts);
+router.post("/chart-of-accounts", controller.createChartAccount);
+router.put("/chart-of-accounts/:id", controller.updateChartAccount);
+router.delete("/chart-of-accounts/:id", controller.deleteChartAccount);
+
+router.get("/journal-entries", controller.journalEntries);
+router.post("/journal-entries", controller.createJournalEntry);
+router.post("/journal-entries/:id/post", controller.postJournalEntry);
+router.post("/journal-entries/:id/reverse", controller.reverseJournalEntry);
+
+router.get("/reports", controller.reports);
+router.get("/trial-balance", controller.trialBalance);
+router.get("/profit-loss", controller.profitLoss);
+router.get("/balance-sheet", controller.balanceSheet);
+router.get("/aging", controller.aging);
+router.get("/cashbook", controller.cashbook);
+
 router.get("/accounts", controller.accounts);
 router.post("/accounts", controller.createAccount);
 router.get("/transactions", controller.transactions);
+router.post("/transactions", controller.createTransaction);
 router.get("/expenses", controller.expenses);
 router.get("/loans", controller.loans);
 
