@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "../lib/api";
-import { getAuthItem, setAuthSession } from "../lib/clientAuth";
-import { resolveRoleDefinition } from "../lib/roleRegistry";
+import { getAuthItem, getAuthUser, setAuthSession } from "../lib/clientAuth";
+import { getDashboardPathForUser } from "../lib/roleRegistry";
 import { BRAND_CONFIG, getBrandInitials } from "@/src/config/brand";
 
 export default function LoginPage() {
@@ -17,16 +17,15 @@ export default function LoginPage() {
 
   // If already logged in
   useEffect(() => {
-    const token = typeof window !== "undefined" ? getAuthItem("aim_token") : null;
-    const role = typeof window !== "undefined" ? getAuthItem("aim_role") : null;
-    if (token && role) {
-      router.replace(roleRedirect(role));
+    const token = typeof window !== "undefined" ? (getAuthItem("rawyan_token") || getAuthItem("aim_token")) : null;
+    const user = typeof window !== "undefined" ? getAuthUser() : null;
+    const role = typeof window !== "undefined" ? (getAuthItem("rawyan_role") || getAuthItem("aim_role")) : null;
+    if (token && (user || role)) {
+      router.replace(roleRedirect(user || role));
     }
   }, [router]);
 
-  const roleRedirect = (role) => {
-    return resolveRoleDefinition(role).dashboardPath || "/portals/admin";
-  };
+  const roleRedirect = (userOrRole) => getDashboardPathForUser(userOrRole);
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -44,10 +43,12 @@ export default function LoginPage() {
       setAuthSession({ token: data.token, role: data.user?.role || "", user: data.user || {} });
 
       // Cookie for middleware/protection (optional now, useful later)
+      document.cookie = `rawyan_token=${data.token}; path=/; Secure; SameSite=Lax`;
+      document.cookie = `rawyan_role=${data.user?.role || ""}; path=/; Secure; SameSite=Lax`;
       document.cookie = `aim_token=${data.token}; path=/; Secure; SameSite=Lax`;
       document.cookie = `aim_role=${data.user?.role || ""}; path=/; Secure; SameSite=Lax`;
 
-      const destination = roleRedirect(data.user?.role);
+      const destination = roleRedirect(data.user || data.user?.role);
       router.replace(destination);
     } catch (err) {
       setError(err.message || "Failed to login");

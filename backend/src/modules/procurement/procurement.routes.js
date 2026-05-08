@@ -8,6 +8,8 @@ router.get("/suppliers", requireAuth, controller.suppliers);
 router.get("/products", requireAuth, controller.products);
 router.get("/warehouses", requireAuth, controller.warehouses);
 router.post("/suppliers", requireAuth, controller.createSupplier);
+router.put("/suppliers/:id", requireAuth, controller.updateSupplier);
+router.delete("/suppliers/:id", requireAuth, controller.deleteSupplier);
 router.get("/purchase-orders", requireAuth, controller.purchaseOrders);
 router.post("/purchase-orders", requireAuth, controller.createPurchaseOrder);
 router.post("/purchase-orders/:id/approve", requireAuth, controller.approvePurchaseOrder);

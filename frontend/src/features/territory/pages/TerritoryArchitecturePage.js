@@ -4,10 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import territoryService from "../../../services/territoryService";
 
 const QUICK_LINKS = [
-  { label: "Regions", href: "/portals/admin/regions", description: "Top-level sales and warehouse coverage." },
-  { label: "Zones", href: "/portals/admin/zones", description: "Region-wise zone planning." },
-  { label: "Territories / Areas", href: "/portals/admin/areas", description: "Selling territories and customer coverage." },
-  { label: "Fields", href: "/portals/admin/fields", description: "Field-level beat or route coverage." },
+  { label: "Regions", href: "/portals/master-data/regions", description: "Top-level sales and warehouse coverage." },
+  { label: "Zones", href: "/portals/master-data/zones", description: "Region-wise zone planning." },
+  { label: "Territories / Areas", href: "/portals/master-data/areas", description: "Selling territories and customer coverage." },
+  { label: "Fields", href: "/portals/master-data/fields", description: "Field-level beat or route coverage." },
 ];
 
 function StatCard({ label, value, hint }) {
@@ -52,11 +52,10 @@ export default function TerritoryArchitecturePage() {
   return (
     <div className="space-y-6">
       <section className="overflow-hidden rounded-[2rem] bg-gradient-to-br from-emerald-500 via-cyan-500 to-blue-600 p-8 text-white shadow-xl">
-        <p className="text-xs font-black uppercase tracking-[0.35em] text-white/80">Phase 3 Territory Architecture</p>
+        <p className="text-xs font-black uppercase tracking-[0.35em] text-white/80">Phase 4 Territory Master Data</p>
         <h2 className="mt-4 text-3xl font-black">Region → Zone → Territory → Field</h2>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-white/85">
-          This phase creates the territory foundation for Rawyan ERP. Sales users, distributors, warehouses, live tracking,
-          reports, and customer coverage will connect to this hierarchy in the next phases.
+          This workspace connects territory overview with real CRUD screens for Regions, Zones, Territories/Areas, and Fields. Sales users, distributors, warehouses, live tracking, reports, and customer coverage use this hierarchy.
         </p>
       </section>
 

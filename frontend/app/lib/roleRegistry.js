@@ -5,94 +5,104 @@ export function normalizeRoleKey(value = "") {
     .replace(/[\s_/]+/g, " ");
 }
 
+
+function rawRoleFromUser(value = "") {
+  if (!value || typeof value !== "object") return value;
+  const portalType = normalizeRoleKey(value.portalType || "");
+  const roleKey = normalizeRoleKey(value.roleKey || "");
+  if (["system admin", "super admin"].includes(portalType) || ["super admin", "system admin"].includes(roleKey)) return "system admin";
+  if (portalType === "company admin" || roleKey === "company admin") return "company admin";
+  return value.roleName || value.role || value.type || value.portalType || "";
+}
+
 export const ROLE_REGISTRY = {
   "system admin": {
     label: "System Admin",
-    dashboardPath: "/portals/admin",
+    dashboardPath: "/portals/system-admin",
     scope: "system",
-    aliases: ["admin"],
+    aliases: ["admin", "super admin", "system_admin", "super_admin"],
   },
   "company admin": {
     label: "Company Admin",
-    dashboardPath: "/portals/admin",
+    dashboardPath: "/portals",
     scope: "company",
-    aliases: [],
+    aliases: ["company_admin"],
   },
   "purchase manager": {
     label: "Purchase Manager",
-    dashboardPath: "/portals/admin/procurement",
+    dashboardPath: "/portals/procurement",
     scope: "company",
     aliases: [],
   },
   "brand manager": {
     label: "Brand Manager",
-    dashboardPath: "/portals/brandManager",
+    dashboardPath: "/portals/sales/primary-orders",
     scope: "company",
     aliases: [],
   },
   "warehouse manager": {
     label: "Warehouse Manager",
-    dashboardPath: "/portals/warehouseManager",
+    dashboardPath: "/portals/warehouse",
     scope: "company",
     aliases: [],
   },
   "finance / accounts": {
     label: "Finance / Accounts",
-    dashboardPath: "/portals/admin/finance",
+    dashboardPath: "/portals/finance",
     scope: "company",
-    aliases: [],
+    aliases: ["finance manager", "account officer", "accountant", "auditor", "finance user"],
   },
   "dispatch / logistics": {
     label: "Dispatch / Logistics",
-    dashboardPath: "/portals/admin/logistics",
+    dashboardPath: "/portals/operations",
     scope: "company",
     aliases: ["logistics", "dispatch"],
   },
   supplier: {
     label: "Supplier",
-    dashboardPath: "/portals/supplier",
+    dashboardPath: "/portals/procurement/purchase-orders",
     scope: "company",
     aliases: [],
   },
   distributor: {
     label: "Distributor",
-    dashboardPath: "/portals/distributor",
+    dashboardPath: "/portals/sales/secondary-orders",
     scope: "distributor",
     aliases: [],
   },
   "distributor accountant": {
     label: "Distributor Accountant",
-    dashboardPath: "/portals/distributor/accounts",
+    dashboardPath: "/portals/finance",
     scope: "distributor",
     aliases: ["distributor finance", "accountant"],
   },
   "distributor store manager": {
     label: "Distributor Store Manager",
-    dashboardPath: "/portals/distributor/inventory",
+    dashboardPath: "/portals/inventory",
     scope: "distributor",
     aliases: ["distributor storekeeper", "store manager"],
   },
   salesman: {
     label: "Salesman",
-    dashboardPath: "/portals/salesman",
+    dashboardPath: "/portals/sales/secondary-orders",
     scope: "distributor",
     aliases: [],
   },
   "order booker": {
     label: "Order Booker",
-    dashboardPath: "/portals/orderBooker",
+    dashboardPath: "/portals/sales/secondary-orders",
     scope: "distributor",
     aliases: ["orderbooker"],
   },
   "driver / delivery": {
     label: "Driver / Delivery",
-    dashboardPath: "/portals/deliveryBoy",
+    dashboardPath: "/portals/deliveries",
     scope: "distributor",
     aliases: ["delivery boy", "driver", "delivery"],
   },
   customer: {
     label: "Customer",
-    dashboardPath: "/portals/customer",
+    dashboardPath: "/portals/customer/billing",
     scope: "distributor",
     aliases: [],
   },
@@ -101,7 +111,7 @@ export const ROLE_REGISTRY = {
 export const FINAL_ROLE_OPTIONS = Object.values(ROLE_REGISTRY).map((item) => item.label);
 
 export function resolveRoleDefinition(value = "") {
-  const normalized = normalizeRoleKey(value);
+  const normalized = normalizeRoleKey(rawRoleFromUser(value));
   const direct = ROLE_REGISTRY[normalized];
   if (direct) return { key: normalized, ...direct };
 
@@ -114,10 +124,14 @@ export function resolveRoleDefinition(value = "") {
   return {
     key: normalized,
     label: String(value || "User").trim() || "User",
-    dashboardPath: "/portals/admin",
+    dashboardPath: "/portals",
     scope: "general",
     aliases: [],
   };
+}
+
+export function getDashboardPathForUser(value = "") {
+  return resolveRoleDefinition(value).dashboardPath || "/portals";
 }
 
 export function isSystemRole(value = "") {

@@ -111,10 +111,9 @@ async function listWarehouses(req) {
   const companyId = companyIdFrom(req);
   return WarehouseModel.find({ companyId, status: { $ne: "inactive" } }).select("_id warehouseId name warehouseName address city status").sort({ name: 1 }).limit(500).lean().catch(() => []);
 }
-async function createSupplier(req) {
-  const { SupplierModel } = await scoped(req);
+function normalizeSupplierPayload(req) {
   const body = req.body || {};
-  const doc = await SupplierModel.create({
+  return {
     companyId: companyIdFrom(req),
     supplierCode: asText(body.supplierCode || `SUP-${Date.now().toString().slice(-5)}`),
     supplierName: asText(body.supplierName || body.name),
@@ -131,9 +130,37 @@ async function createSupplier(req) {
     linkedUserId: asText(body.linkedUserId),
     status: ["active", "inactive", "blocked"].includes(body.status) ? body.status : "active",
     notes: asText(body.notes),
-    createdByUserId: uidFrom(req),
-  });
+  };
+}
+async function createSupplier(req) {
+  const { SupplierModel } = await scoped(req);
+  const payload = normalizeSupplierPayload(req);
+  if (!payload.companyId) throw new Error("Company is required for supplier master.");
+  if (!payload.supplierName) throw new Error("Supplier name is required.");
+  const doc = await SupplierModel.create({ ...payload, createdByUserId: uidFrom(req) });
   return doc;
+}
+async function updateSupplier(req) {
+  const { SupplierModel } = await scoped(req);
+  const companyId = companyIdFrom(req);
+  const payload = normalizeSupplierPayload(req);
+  if (!companyId) throw new Error("Company is required for supplier master.");
+  if (!payload.supplierName) throw new Error("Supplier name is required.");
+  const supplier = await SupplierModel.findOneAndUpdate(
+    { _id: req.params.id, companyId },
+    { $set: { ...payload, companyId, updatedByUserId: uidFrom(req) } },
+    { new: true, runValidators: true },
+  );
+  if (!supplier) throw new Error("Supplier not found.");
+  return supplier;
+}
+async function deleteSupplier(req) {
+  const { SupplierModel } = await scoped(req);
+  const companyId = companyIdFrom(req);
+  if (!companyId) throw new Error("Company is required for supplier master.");
+  const supplier = await SupplierModel.findOneAndDelete({ _id: req.params.id, companyId });
+  if (!supplier) throw new Error("Supplier not found.");
+  return supplier;
 }
 async function listPurchaseOrders(req) {
   const { PurchaseOrderModel } = await scoped(req);
@@ -301,4 +328,4 @@ async function paySupplierInvoice(req) {
   await updateSupplierBalance(SupplierModel, invoice.companyId, invoice.supplier, -amount);
   return { supplierInvoice: invoice, supplierPayment: payment };
 }
-module.exports = { overview, listSuppliers, listProducts, listWarehouses, createSupplier, listPurchaseOrders, createPurchaseOrder, approvePurchaseOrder, receivePurchaseOrder, postGoodsReceipt, listGoodsReceipts, listSupplierInvoices, listSupplierPayments, paySupplierInvoice };
+module.exports = { overview, listSuppliers, listProducts, listWarehouses, createSupplier, updateSupplier, deleteSupplier, listPurchaseOrders, createPurchaseOrder, approvePurchaseOrder, receivePurchaseOrder, postGoodsReceipt, listGoodsReceipts, listSupplierInvoices, listSupplierPayments, paySupplierInvoice };

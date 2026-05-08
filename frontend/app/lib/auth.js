@@ -1,4 +1,4 @@
-import { resolveRoleDefinition } from "./roleRegistry";
+import { getDashboardPathForUser } from "./roleRegistry";
 
 export const TOKEN_KEY = "aim_token_v1";
 export const USER_KEY = "aim_user_v1";

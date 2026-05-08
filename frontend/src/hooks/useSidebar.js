@@ -1,13 +1,18 @@
 "use client";
 import { useMemo } from "react";
 import { RAWYAN_MODULE_CATALOG, sortModules } from "../config/moduleCatalog";
-import { buildMenuFromPermissions, RAWYAN_DEFAULT_MENU } from "../config/menus";
+import { buildMenuFromPermissions } from "../config/menus";
+import { filterModulesForRole, getRolePortalProfile } from "../config/roleAccess";
 
 const LEGACY_KEY_MAP = {
   core: "dashboard",
   erp_templates: "erp-templates",
   sales: "primary-sales-orders",
+  "primary-orders": "primary-sales-orders",
+  "primary-sales-orders": "primary-sales-orders",
   distribution: "secondary-sales-orders",
+  "secondary-orders": "secondary-sales-orders",
+  "secondary-sales-orders": "secondary-sales-orders",
   logistics: "operations",
   live_tracking: "live-tracking",
   messages: "notifications",
@@ -32,14 +37,22 @@ function normalizeModule(module) {
   };
 }
 
+function intersectAllowed(roleModules = [], visibleModules = []) {
+  if (!Array.isArray(visibleModules) || !visibleModules.length) return roleModules;
+  const visible = new Set(visibleModules.map((module) => normalizeModule(module)?.key).filter(Boolean));
+  return roleModules.filter((module) => visible.has(module.key) || module.key === "dashboard" || module.category === "SaaS Control");
+}
+
 export function useSidebar(user, visibleModules = []) {
   return useMemo(() => {
+    const profile = getRolePortalProfile(user || {});
+    const roleModules = sortModules(filterModulesForRole(profile.key, RAWYAN_MODULE_CATALOG).map(normalizeModule).filter(Boolean));
+    const modules = intersectAllowed(roleModules, visibleModules);
     const permissions = user?.permissions || user?.rolePermissions;
-    const modules = sortModules((visibleModules?.length ? visibleModules : RAWYAN_MODULE_CATALOG).map(normalizeModule).filter(Boolean));
-    const menu = permissions ? buildMenuFromPermissions(permissions, modules) : RAWYAN_DEFAULT_MENU;
-    return (menu?.length ? menu : RAWYAN_DEFAULT_MENU)
+    const menu = permissions ? buildMenuFromPermissions(permissions, modules) : modules;
+    return (menu?.length ? menu : modules)
       .filter((item) => item.menu !== false)
-      .map((item) => ({ ...item, path: item.canonicalPath || item.path || "/portals" }));
+      .map((item) => ({ ...item, path: item.canonicalPath || item.path || profile.homePath || "/portals" }));
   }, [user, visibleModules]);
 }
 

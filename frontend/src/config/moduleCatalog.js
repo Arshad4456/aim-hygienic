@@ -14,8 +14,14 @@ const moduleRows = [
   { key: "settings", name: "Settings", category: "Setup", icon: "⚙", path: "/portals/settings", description: "Company, user, portal, password, and notification settings." },
 
   { key: "products", name: "Products", category: "Master Data", icon: "▦", path: "/portals/products", description: "Product catalog, SKU, pricing, categories, units, and barcode setup." },
+  { key: "suppliers", name: "Suppliers", category: "Master Data", icon: "◇", path: "/portals/master-data/suppliers", description: "Supplier profiles, payment terms, opening balances, and procurement contacts." },
   { key: "customers", name: "Customers", category: "Master Data", icon: "☻", path: "/portals/customers", description: "Customer and retailer management." },
+  { key: "warehouses", name: "Warehouses", category: "Master Data", icon: "▨", path: "/portals/master-data/warehouses", description: "Warehouse records, address, manager, status, and company stock locations." },
   { key: "territory", name: "Territory", category: "Master Data", icon: "⌖", path: "/portals/territory", description: "Regions, zones, areas, fields, routes, and beat plans." },
+  { key: "regions", name: "Regions", category: "Master Data", icon: "◎", path: "/portals/master-data/regions", description: "Top-level sales, warehouse, and distribution coverage regions." },
+  { key: "zones", name: "Zones", category: "Master Data", icon: "◌", path: "/portals/master-data/zones", description: "Region-wise operational zones for distribution coverage." },
+  { key: "areas", name: "Territories / Areas", category: "Master Data", icon: "⌾", path: "/portals/master-data/areas", description: "Territories and areas used for retailer coverage and field assignment." },
+  { key: "fields", name: "Fields / Beats", category: "Master Data", icon: "⌁", path: "/portals/master-data/fields", description: "Field beats and route points for salesmen, order bookers, and deliveries." },
 
   { key: "primary-sales-orders", name: "Primary Sales", category: "Sales", icon: "↗", path: "/portals/sales/primary-orders", description: "Company sales to distributors." },
   { key: "secondary-sales-orders", name: "Secondary Sales", category: "Sales", icon: "↘", path: "/portals/sales/secondary-orders", description: "Distributor sales to customers or retailers." },

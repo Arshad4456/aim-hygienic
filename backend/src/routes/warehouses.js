@@ -62,10 +62,13 @@ router.post("/", requireAuth, async (req, res) => {
       payload: {
         warehouseId: String(body.warehouseId || "").trim(),
         name: String(body.name || "").trim(),
+        companyName: scope.companyName || String(body.companyName || "").trim(),
         mobileNumber: String(body.mobileNumber || "").trim(),
         phoneNumber: String(body.phoneNumber || "").trim(),
         phone: String(body.phoneNumber || body.phone || "").trim(),
         address: String(body.address || "").trim(),
+        city: String(body.city || "").trim(),
+        managerName: String(body.managerName || "").trim(),
         capacity: Number(body.capacity || 0),
         status: String(body.status || "active").trim(),
         createdBy: req.user?.uid,
@@ -113,10 +116,13 @@ router.put("/:id", requireAuth, async (req, res) => {
     const payload = {
       warehouseId: String(body.warehouseId || "").trim(),
       name: String(body.name || "").trim(),
+      companyName: scope.companyName || String(body.companyName || existing.companyName || "").trim(),
       mobileNumber: String(body.mobileNumber || "").trim(),
       phoneNumber: String(body.phoneNumber || "").trim(),
       phone: String(body.phoneNumber || body.phone || "").trim(),
       address: String(body.address || "").trim(),
+      city: String(body.city || "").trim(),
+      managerName: String(body.managerName || "").trim(),
       capacity: Number(body.capacity || 0),
       status: String(body.status || "active").trim(),
     };

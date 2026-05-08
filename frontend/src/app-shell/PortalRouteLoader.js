@@ -1,9 +1,12 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import PortalShell from "./PortalShell";
 import useAuth from "../hooks/useAuth";
 import useSidebar from "../hooks/useSidebar";
 import { getPortalRoute } from "../config/portalRouteRegistry";
+import { getRolePortalProfile, getSafeRouteForUser, isPathAllowedForRole } from "../config/roleAccess";
 import DynamicPortalHome from "../features/dashboard/pages/DynamicPortalHome";
 import ModulePlaceholderPage from "../features/common/pages/ModulePlaceholderPage";
 import RolesPage from "../features/roles/pages/RolesPage";
@@ -29,10 +32,21 @@ import NotificationCenterPage from "../features/notifications/pages/Notification
 import SettingsPortalPage from "../features/settings/pages/SettingsPortalPage";
 import SystemAdminPortalPage from "../features/system-admin/pages/SystemAdminPortalPage";
 import SystemAdminUsersPage from "../features/system-admin/pages/SystemAdminUsersPage";
+import MasterDataCrudPage from "../features/master-data/pages/MasterDataCrudPage";
 
 function buildPath(slug = []) {
   const parts = Array.isArray(slug) ? slug.filter(Boolean) : [];
   return `/portals${parts.length ? `/${parts.join("/")}` : ""}`;
+}
+
+function AccessDenied({ route, profile, safePath }) {
+  return <div className="rounded-[2rem] border border-amber-200 bg-amber-50 p-6 text-amber-900 shadow-sm">
+    <p className="text-xs font-black uppercase tracking-[0.3em] text-amber-600">Portal access corrected</p>
+    <h2 className="mt-3 text-2xl font-black">This module is not available in the {profile.label} portal.</h2>
+    <p className="mt-2 text-sm leading-6">Rawyan ERP now keeps System Admin, Company Admin, Distributor, Customer, Supplier, Warehouse, Finance, Sales, and Delivery portals separate so modules do not conflict with each other.</p>
+    <p className="mt-3 text-xs font-bold text-amber-700">Requested route: {route.canonicalPath}</p>
+    <a href={safePath} className="mt-5 inline-flex rounded-full bg-slate-950 px-4 py-2 text-sm font-black text-white">Open my correct portal</a>
+  </div>;
 }
 
 function renderPortalContent(route, context) {
@@ -44,6 +58,7 @@ function renderPortalContent(route, context) {
   if (route.moduleKey === "roles") return <RolesPage />;
   if (route.moduleKey === "users") return <UsersAccessPage />;
   if (route.moduleKey === "territory") return <TerritoryArchitecturePage />;
+  if (["suppliers", "warehouses", "regions", "zones", "areas", "fields"].includes(route.moduleKey)) return <MasterDataCrudPage resourceKey={route.moduleKey} />;
   if (route.moduleKey === "products") return <ProductsPortalPage />;
   if (["procurement", "purchase-orders", "supplier-payments", "goods-receipts"].includes(route.moduleKey)) return <ProcurementFoundationPage mode={route.moduleKey} />;
   if (["inventory", "warehouse"].includes(route.moduleKey)) return <InventoryWarehouseFoundationPage mode={route.moduleKey} />;
@@ -65,17 +80,27 @@ function renderPortalContent(route, context) {
 }
 
 export default function PortalRouteLoader({ slug = [] }) {
+  const router = useRouter();
   const pathname = buildPath(slug);
   const route = getPortalRoute(pathname);
   const { user, visibleModules = [], loading, error } = useAuth();
+  const profile = getRolePortalProfile(user || {});
   const menu = useSidebar(user, visibleModules);
+  const safePath = getSafeRouteForUser(user || {});
+  const allowed = !loading && user ? isPathAllowedForRole(user, route) : true;
   const subtitle = route.isLegacyAlias
-    ? `Legacy path mapped to ${route.canonicalPath}. The screen is now rendered through src/features, not role folders.`
+    ? `Legacy path mapped to ${route.canonicalPath}. Your ${profile.label} portal menu is role-scoped.`
     : route.module?.description;
+
+  useEffect(() => {
+    if (!loading && user && !allowed && safePath && safePath !== pathname) {
+      router.replace(safePath);
+    }
+  }, [allowed, loading, pathname, router, safePath, user]);
 
   return <PortalShell title={route.title} subtitle={subtitle} user={user} menu={menu}>
     {loading ? <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">Loading your portal permissions…</div> : null}
-    {error ? <div className="mb-4 rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">Could not load live permissions. Showing the safe default portal menu.</div> : null}
-    {renderPortalContent(route, { user, menu, visibleModules })}
+    {error ? <div className="mb-4 rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">Could not load live permissions. Showing the role-safe portal menu.</div> : null}
+    {!loading && user && !allowed ? <AccessDenied route={route} profile={profile} safePath={safePath} /> : renderPortalContent(route, { user, menu, visibleModules })}
   </PortalShell>;
 }

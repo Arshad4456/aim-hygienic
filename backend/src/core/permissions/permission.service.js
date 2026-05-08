@@ -5,7 +5,9 @@ const { DEFAULT_ROLE_PERMISSIONS, ADMIN_ROLES } = require("./permission.constant
 const MODULE_ALIASES = {
   "erp-templates": ["erp_templates"],
   "primary-sales-orders": ["primary-orders", "primary_sales_orders", "primary_orders"],
+  "primary-orders": ["primary-sales-orders", "primary_sales_orders", "primary_orders"],
   "secondary-sales-orders": ["secondary-orders", "secondary_sales_orders", "secondary_orders"],
+  "secondary-orders": ["secondary-sales-orders", "secondary_sales_orders", "secondary_orders"],
   "customer-orders": ["customer_orders"],
   "live-tracking": ["live_tracking"],
 };
