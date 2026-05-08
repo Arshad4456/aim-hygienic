@@ -5,9 +5,9 @@ const VehicleMaintenance = require("../../models/VehicleMaintenance");
 const CompanyDispatchNote = require("../../models/CompanyDispatchNote");
 const SecondaryOrder = require("../../models/SecondaryOrder");
 const User = require("../../models/User");
-const { asText, getScopedModels } = require("../../services/scopedModels");
+const { asText, getScopedModels, scopedCompanyId } = require("../../services/scopedModels");
 
-function companyIdFrom(req) { return asText(req.query.companyId || req.body?.companyId || req.user?.companyId); }
+function companyIdFrom(req) { return scopedCompanyId(req); }
 
 async function scoped(req) {
   return getScopedModels(req, {

@@ -19,6 +19,14 @@ const LEGACY_KEY_MAP = {
   pos: "retail-pos",
   production: "manufacturing",
   quality: "manufacturing",
+  service_erp: "service",
+  tickets: "service",
+  tasks: "service",
+  projects: "service",
+  trading_erp: "trading",
+  import: "trading",
+  export: "trading",
+  shipments: "trading",
 };
 
 function normalizeModule(module) {

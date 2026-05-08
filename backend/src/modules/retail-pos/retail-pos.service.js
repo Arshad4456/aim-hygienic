@@ -4,9 +4,9 @@ const Product = require("../../models/Product");
 const Customer = require("../../models/User");
 const Warehouse = require("../../models/Warehouse");
 const InventoryLedger = require("../../models/InventoryLedger");
-const { asText, getScopedModels } = require("../../services/scopedModels");
+const { asText, getScopedModels, scopedCompanyId } = require("../../services/scopedModels");
 
-function companyIdFrom(req) { return asText(req.query.companyId || req.body?.companyId || req.user?.companyId); }
+function companyIdFrom(req) { return scopedCompanyId(req); }
 function uidFrom(req) { return asText(req.user?.uid || req.user?._id || req.user?.userId); }
 function toNumber(value) { const n = Number(value); return Number.isFinite(n) ? n : 0; }
 function money(value) { return Math.round(Number(value || 0) * 100) / 100; }

@@ -10,9 +10,18 @@ function normalizeRole(value) {
   return asText(value).toLowerCase();
 }
 
-function isSystemLevelAdmin(role) {
+function isSystemLevelAdmin(roleOrUser) {
+  const role = typeof roleOrUser === "object" && roleOrUser ? (roleOrUser.role || roleOrUser.roleKey || roleOrUser.portalType) : roleOrUser;
   const normalized = normalizeRole(role);
-  return normalized === "admin" || normalized === "system admin";
+  const portalType = typeof roleOrUser === "object" && roleOrUser ? normalizeRole(roleOrUser.portalType) : "";
+  const roleKey = typeof roleOrUser === "object" && roleOrUser ? normalizeRole(roleOrUser.roleKey) : "";
+  return ["admin", "system admin", "super admin", "super_admin", "system_admin"].includes(normalized) || portalType === "system_admin" || roleKey === "super_admin";
+}
+
+function scopedCompanyId(req = {}, payload = {}) {
+  const requested = asText(payload.companyId || req.body?.companyId || req.query?.companyId || req.user?.companyId);
+  if (isSystemLevelAdmin(req.user || {})) return requested;
+  return asText(req.user?.companyId);
 }
 
 async function resolveTenantDbName(companyId, companyName = "") {
@@ -35,12 +44,12 @@ async function getScopedModels(req, registry = {}, options = {}) {
   const requestedCompanyId = asText(options.companyId || req.body?.companyId || req.query?.companyId || req.user?.companyId);
   const requestedCompanyName = asText(options.companyName || req.body?.companyName || req.query?.companyName || req.user?.companyName);
 
-  const scopedCompanyId = isSystemLevelAdmin(req.user?.role) ? requestedCompanyId : asText(req.user?.companyId);
-  const scopedCompanyName = isSystemLevelAdmin(req.user?.role) ? requestedCompanyName : asText(req.user?.companyName);
+  const companyScopeId = isSystemLevelAdmin(req.user || {}) ? requestedCompanyId : asText(req.user?.companyId);
+  const companyScopeName = isSystemLevelAdmin(req.user || {}) ? requestedCompanyName : asText(req.user?.companyName);
 
-  if (!scopedCompanyId) return registry;
+  if (!companyScopeId) return registry;
 
-  const dbName = await resolveTenantDbName(scopedCompanyId, scopedCompanyName);
+  const dbName = await resolveTenantDbName(companyScopeId, companyScopeName);
   if (!dbName) return registry;
 
   const tenantDb = mongoose.connection.useDb(dbName, { useCache: true });
@@ -53,6 +62,7 @@ module.exports = {
   asText,
   normalizeRole,
   isSystemLevelAdmin,
+  scopedCompanyId,
   resolveTenantDbName,
   getScopedModels,
 };

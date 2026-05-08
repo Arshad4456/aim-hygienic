@@ -10,6 +10,12 @@ const MODULE_ALIASES = {
   messages: ["messages", "notifications"],
   "purchase-requests": ["purchase-requests", "purchase_requests", "purchase-requisitions", "procurement"],
   "supplier-payments": ["supplier-payments", "supplier_payments", "payments", "procurement"],
+  "retail-pos": ["retail-pos", "retail_pos", "pos"],
+  manufacturing: ["manufacturing", "production", "quality"],
+  service: ["service", "service_erp", "tickets", "tasks", "projects"],
+  "service-erp": ["service", "service_erp"],
+  trading: ["trading", "trading_erp", "import", "export", "shipments"],
+  "trading-erp": ["trading", "trading_erp"],
 };
 function normalize(value) { return String(value || "").trim().toLowerCase(); }
 function candidateKeys(moduleKey) {

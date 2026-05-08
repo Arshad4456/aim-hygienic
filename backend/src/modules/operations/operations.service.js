@@ -10,8 +10,8 @@ const VehicleTrip = require('../../models/VehicleTrip');
 const VehicleAssignment = require('../../models/VehicleAssignment');
 const VehicleMaintenance = require('../../models/VehicleMaintenance');
 const User = require('../../models/User');
-const { asText, getScopedModels } = require('../../services/scopedModels');
-function companyIdFrom(req) { return asText(req.query.companyId || req.body?.companyId || req.user?.companyId); }
+const { asText, getScopedModels, scopedCompanyId } = require('../../services/scopedModels');
+function companyIdFrom(req) { return scopedCompanyId(req); }
 function userIdFrom(req) { return asText(req.user?.uid || req.user?._id || req.user?.userId); }
 function roleText(req) { return `${req.user?.role || ''} ${req.user?.roleKey || ''} ${req.user?.portalType || ''}`.toLowerCase(); }
 function isDistributor(req) { return roleText(req).includes('distributor'); }

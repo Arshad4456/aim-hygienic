@@ -1,158 +1,52 @@
 export const ERP_TEMPLATES = [
   {
-    "key": "distribution_erp",
-    "name": "Distribution ERP",
-    "description": "Supplier \u2192 Company \u2192 Distributor \u2192 Customer flow with primary and secondary sales.",
-    "modules": [
-      "companies",
-      "users",
-      "territory",
-      "products",
-      "procurement",
-      "inventory",
-      "warehouse",
-      "sales",
-      "distribution",
-      "customers",
-      "finance",
-      "expenses",
-      "returns",
-      "fleet",
-      "live_tracking",
-      "messages",
-      "reports"
-    ],
-    "defaultRoles": [
-      "Company Admin",
-      "Sales Manager",
-      "Warehouse Manager",
-      "Distributor",
-      "Order Booker",
-      "Salesman",
-      "Delivery Boy",
-      "Accountant"
-    ],
-    "mobileRoles": [
-      "Salesman",
-      "Order Booker",
-      "Delivery Boy",
-      "Warehouse Manager",
-      "Distributor"
-    ]
+    key: "distribution_erp",
+    name: "Distribution ERP",
+    description: "Supplier → Company → Distributor → Customer flow with primary sales, secondary sales, credit, routes, delivery, and collections.",
+    modules: ["dashboard", "roles", "users", "companies", "territory", "regions", "zones", "areas", "fields", "products", "customers", "suppliers", "warehouses", "sales-quotations", "primary-sales-orders", "secondary-sales-orders", "customer-orders", "customer-billing", "returns", "procurement", "purchase-requests", "purchase-orders", "supplier-payments", "goods-receipts", "inventory", "warehouse", "finance", "receipts", "payments", "expenses", "operations", "fleet", "dispatches", "deliveries", "live-tracking", "notifications", "reports", "settings"],
+    defaultRoles: ["Company Admin", "CEO", "Sales Manager", "Warehouse Manager", "Distributor", "Salesman", "Order Booker", "Delivery Boy", "Accountant"],
+    mobileRoles: ["Salesman", "Order Booker", "Delivery Boy", "Warehouse Manager", "Distributor"],
   },
   {
-    "key": "trading_erp",
-    "name": "Trading ERP",
-    "description": "Supplier \u2192 Company \u2192 Customer flow for buy-and-sell businesses.",
-    "modules": [
-      "companies",
-      "users",
-      "products",
-      "procurement",
-      "inventory",
-      "warehouse",
-      "sales",
-      "customers",
-      "finance",
-      "reports"
-    ],
-    "defaultRoles": [
-      "Company Admin",
-      "Purchase Manager",
-      "Sales Manager",
-      "Warehouse Manager",
-      "Accountant"
-    ],
-    "mobileRoles": [
-      "Salesman",
-      "Warehouse Manager"
-    ]
+    key: "trading_erp",
+    name: "Trading ERP",
+    description: "Import/export, purchase, sales, shipment, LC, landed cost, multi-currency, inventory and accounting workflow.",
+    modules: ["dashboard", "roles", "users", "products", "customers", "suppliers", "warehouses", "sales-quotations", "primary-sales-orders", "customer-orders", "returns", "procurement", "purchase-requests", "purchase-orders", "supplier-payments", "goods-receipts", "inventory", "warehouse", "finance", "receipts", "payments", "expenses", "trading", "notifications", "reports", "settings"],
+    defaultRoles: ["Company Admin", "Trading Manager", "Import Officer", "Export Officer", "Purchase Manager", "Sales Manager", "Warehouse Manager", "Accountant"],
+    mobileRoles: ["Warehouse Manager"],
   },
   {
-    "key": "manufacturing_erp",
-    "name": "Manufacturing ERP",
-    "description": "Raw material, production, finished goods, quality, and sales.",
-    "modules": [
-      "companies",
-      "users",
-      "procurement",
-      "inventory",
-      "warehouse",
-      "manufacturing",
-      "sales",
-      "finance",
-      "reports"
-    ],
-    "defaultRoles": [
-      "Company Admin",
-      "Production Manager",
-      "Quality Manager",
-      "Warehouse Manager",
-      "Accountant"
-    ],
-    "mobileRoles": [
-      "Warehouse Manager",
-      "Production Supervisor"
-    ]
+    key: "manufacturing_erp",
+    name: "Manufacturing ERP",
+    description: "BOM, raw material, work orders, production, finished goods, quality control, costing and maintenance.",
+    modules: ["dashboard", "roles", "users", "products", "customers", "suppliers", "warehouses", "sales-quotations", "primary-sales-orders", "returns", "procurement", "purchase-requests", "purchase-orders", "supplier-payments", "goods-receipts", "inventory", "warehouse", "finance", "receipts", "payments", "expenses", "manufacturing", "notifications", "reports", "settings"],
+    defaultRoles: ["Company Admin", "Production Manager", "Production Supervisor", "Quality Manager", "Warehouse Manager", "Purchase Manager", "Accountant"],
+    mobileRoles: ["Warehouse Manager", "Production Supervisor"],
   },
   {
-    "key": "retail_pos_erp",
-    "name": "Retail POS ERP",
-    "description": "Supplier \u2192 Store \u2192 Walk-in/customer POS flow.",
-    "modules": [
-      "companies",
-      "users",
-      "products",
-      "inventory",
-      "warehouse",
-      "retail-pos",
-      "customers",
-      "finance",
-      "reports"
-    ],
-    "defaultRoles": [
-      "Company Admin",
-      "Store Manager",
-      "Cashier",
-      "Accountant"
-    ],
-    "mobileRoles": [
-      "Store Manager"
-    ]
+    key: "retail_pos_erp",
+    name: "Retail POS ERP",
+    description: "Store inventory, POS billing, cashier shifts, barcode selling, returns, loyalty-ready receipts and daily cash reconciliation.",
+    modules: ["dashboard", "roles", "users", "products", "customers", "suppliers", "warehouses", "retail-pos", "customer-orders", "customer-billing", "returns", "goods-receipts", "inventory", "warehouse", "finance", "receipts", "payments", "expenses", "notifications", "reports", "settings"],
+    defaultRoles: ["Company Admin", "Store Manager", "Cashier", "Warehouse Manager", "Accountant"],
+    mobileRoles: ["Store Manager"],
   },
   {
-    "key": "service_erp",
-    "name": "Service ERP",
-    "description": "Client, service team, task, invoice, and payment flow.",
-    "modules": [
-      "companies",
-      "users",
-      "customers",
-      "projects",
-      "tasks",
-      "finance",
-      "reports"
-    ],
-    "defaultRoles": [
-      "Company Admin",
-      "Project Manager",
-      "Service Agent",
-      "Accountant"
-    ],
-    "mobileRoles": [
-      "Service Agent"
-    ]
+    key: "service_erp",
+    name: "Service ERP",
+    description: "Tickets, service orders, technicians, SLA, AMC contracts, customer assets, spare parts, service proof and billing.",
+    modules: ["dashboard", "roles", "users", "customers", "products", "inventory", "finance", "receipts", "payments", "expenses", "service", "notifications", "reports", "settings"],
+    defaultRoles: ["Company Admin", "Service Manager", "Service Agent", "Technician", "Accountant"],
+    mobileRoles: ["Service Agent", "Technician"],
   },
   {
-    "key": "custom_erp",
-    "name": "Custom ERP",
-    "description": "Super Admin selects modules and role defaults manually.",
-    "modules": [],
-    "defaultRoles": [
-      "Company Admin"
-    ],
-    "mobileRoles": []
-  }
+    key: "custom_erp",
+    name: "Custom ERP",
+    description: "Configurable ERP package where the SaaS owner enables exact modules, roles, reports and workflows for the client.",
+    modules: ["dashboard", "roles", "users", "companies", "territory", "products", "customers", "suppliers", "warehouses", "sales-quotations", "primary-sales-orders", "secondary-sales-orders", "procurement", "purchase-requests", "purchase-orders", "goods-receipts", "retail-pos", "manufacturing", "service", "trading", "operations", "fleet", "dispatches", "deliveries", "live-tracking", "inventory", "warehouse", "finance", "notifications", "reports", "settings"],
+    defaultRoles: ["Company Admin"],
+    mobileRoles: [],
+  },
 ];
 
 export function getErpTemplateByKey(key) {

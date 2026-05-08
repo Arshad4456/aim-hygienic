@@ -2,7 +2,7 @@ const Role = require("../../models/Role");
 const User = require("../../models/User");
 const PortalModule = require("../../models/PortalModule");
 const { normalizeKey, permissionsToPlainObject } = require("../permissions/permission.service");
-const { DEFAULT_ROLE_BLUEPRINTS } = require("../permissions/permission.constants");
+const { getDefaultRoleBlueprints } = require("../permissions/permission.constants");
 const { ensureDefaultModules } = require("../portal-modules/portalModule.service");
 
 function makeRoleKey(name) {
@@ -66,6 +66,8 @@ async function listRoleOptions(query = {}, user = {}) {
     key: role.key,
     portalType: role.portalType,
     landingPath: role.landingPath,
+    companyId: role.companyId || "",
+    erpTemplateKey: role.erpTemplateKey || "distribution_erp",
     mobileAccess: Boolean(role.mobileAccess),
     mobileModules: role.mobileModules || [],
     permissions: role.permissions || {},
@@ -121,13 +123,16 @@ async function seedDefaultRoles(options = {}) {
   const companyId = String(options.companyId || "").trim();
   const erpTemplateKey = String(options.erpTemplateKey || "distribution_erp").trim();
   const rows = [];
-  for (const blueprint of DEFAULT_ROLE_BLUEPRINTS) {
+  for (const blueprint of getDefaultRoleBlueprints(erpTemplateKey, !companyId)) {
     const permissions = permissionsToPlainObject(blueprint.permissions || {});
-    const enabledModules = Object.keys(permissions).includes("*")
-      ? ["*"]
-      : Object.keys(permissions).filter((key) => validModuleKeys.has(key) || key === "dashboard");
+    const blueprintModules = Array.isArray(blueprint.enabledModules) ? blueprint.enabledModules : [];
+    const enabledModules = blueprintModules.length
+      ? blueprintModules.filter((key) => validModuleKeys.has(key) || key === "dashboard" || key === "*")
+      : Object.keys(permissions).includes("*")
+        ? ["*"]
+        : Object.keys(permissions).filter((key) => validModuleKeys.has(key) || key === "dashboard");
     const mobileModules = blueprint.mobileAccess
-      ? enabledModules.filter((key) => mobileKeys.has(key) || ["dashboard", "customers", "secondary-sales-orders", "receipts", "deliveries", "live-tracking"].includes(key))
+      ? (Array.isArray(blueprint.mobileModules) && blueprint.mobileModules.length ? blueprint.mobileModules : enabledModules).filter((key) => mobileKeys.has(key) || ["dashboard", "customers", "secondary-sales-orders", "receipts", "deliveries", "live-tracking", "retail-pos", "manufacturing", "service", "trading"].includes(key))
       : [];
     const data = {
       companyId: companyId || "",

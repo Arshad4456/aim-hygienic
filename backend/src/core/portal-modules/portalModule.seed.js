@@ -37,6 +37,10 @@ const DEFAULT_PORTAL_MODULES = [
   ["live-tracking", "Live Tracking", "Logistics", "/portals/live-tracking", "MapPin", 140, ["view", "track"], true],
   ["messages", "Messages", "Communication", "/portals/messages", "MessageSquare", 150, ["view", "create", "edit"], true],
   ["reports", "Reports", "Reports", "/portals/reports", "BarChart3", 160, ["view", "export", "print"], false],
+  ["retail-pos", "Retail POS", "Retail POS", "/portals/retail-pos", "BadgeDollarSign", 170, ["view", "create", "edit", "approve", "print", "export"], true],
+  ["manufacturing", "Manufacturing", "Manufacturing", "/portals/manufacturing", "Factory", 180, ["view", "create", "edit", "approve", "print", "export"], false],
+  ["service", "Service ERP", "Service", "/portals/service", "Wrench", 190, ["view", "create", "edit", "approve", "print", "export", "assign"], true],
+  ["trading", "Trading/Import", "Trading", "/portals/trading", "Ship", 200, ["view", "create", "edit", "approve", "print", "export"], false],
   ["settings", "Settings", "Core", "/portals/settings", "Settings", 999, ["view", "edit"], true],
 ].map(([key, name, category, path, icon, order, actions, mobileEnabled]) => ({ key, name, category, path, icon, order, actions, mobileEnabled, webEnabled: true, allowedErpTemplates: ["distribution_erp", "trading_erp", "manufacturing_erp", "retail_pos_erp", "service_erp", "custom_erp"] }));
 module.exports = { DEFAULT_PORTAL_MODULES };

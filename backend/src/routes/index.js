@@ -30,6 +30,8 @@ function registerRoutes(app) {
   app.use("/api/sales", require("../modules/sales/sales.routes"));
   app.use("/api/retail-pos", require("../modules/retail-pos/retail-pos.routes"));
   app.use("/api/manufacturing", require("../modules/manufacturing/manufacturing.routes"));
+  app.use("/api/service", require("../modules/service/service.routes"));
+  app.use("/api/trading", require("../modules/trading/trading.routes"));
   app.use("/api/orders", require("./orders"));
   app.use("/api/returns", require("./returns"));
   app.use("/api/payments", require("./payments"));

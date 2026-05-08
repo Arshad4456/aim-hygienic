@@ -1,6 +1,6 @@
 const Role = require("../../models/Role");
 const PortalModule = require("../../models/PortalModule");
-const { DEFAULT_ROLE_PERMISSIONS, ADMIN_ROLES } = require("./permission.constants");
+const { DEFAULT_ROLE_PERMISSIONS, ADMIN_ROLES, ERP_MODULE_SETS } = require("./permission.constants");
 
 const MODULE_ALIASES = {
   "erp-templates": ["erp_templates"],
@@ -10,6 +10,8 @@ const MODULE_ALIASES = {
   "secondary-orders": ["secondary-sales-orders", "secondary_sales_orders", "secondary_orders"],
   "customer-orders": ["customer_orders"],
   "live-tracking": ["live_tracking"],
+  service: ["service_erp", "tickets", "tasks", "projects"],
+  trading: ["trading_erp", "import", "export", "shipments"],
 };
 function normalizeKey(value) { return String(value || "").trim().toLowerCase(); }
 function normalizeRoleName(value) { return normalizeKey(value).replace(/_/g, " "); }
@@ -62,9 +64,19 @@ function hasPermission(permissions, moduleKey, action = "view") {
   });
 }
 
+function isSystemUser(user = {}, profile = {}) {
+  const role = normalizeRoleName(profile.roleName || user.role || user.portalType || user.roleKey);
+  return ["admin", "system admin", "super admin"].includes(role) || normalizeKey(profile.portalType || user.portalType).includes("system");
+}
+
 async function listVisibleModules(user) {
   const profile = await getUserPermissionProfile(user);
   const modules = await PortalModule.find({ status: "active", webEnabled: true }).sort({ order: 1, name: 1 }).lean().catch(() => []);
-  return modules.filter((m) => profile.enabledModules.includes("*") || profile.enabledModules.includes(m.key) || hasPermission(profile.permissions, m.key, "view"));
+  const erpKey = normalizeKey(user?.erpTemplateKey || user?.businessType || profile?.erpTemplateKey || "distribution_erp");
+  const erpAllowed = isSystemUser(user, profile) ? null : new Set([...(ERP_MODULE_SETS[erpKey] || ERP_MODULE_SETS.distribution_erp || []), "dashboard"]);
+  return modules.filter((m) => {
+    if (erpAllowed && !erpAllowed.has(m.key)) return false;
+    return profile.enabledModules.includes("*") || profile.enabledModules.includes(m.key) || hasPermission(profile.permissions, m.key, "view");
+  });
 }
 module.exports = { normalizeKey, normalizeRoleName, inferPortalType, permissionsToPlainObject, getUserPermissionProfile, hasPermission, listVisibleModules, candidateKeys };

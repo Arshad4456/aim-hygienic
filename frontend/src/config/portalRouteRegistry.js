@@ -52,6 +52,8 @@ export const CANONICAL_PORTAL_ROUTES = {
   "/portals/reports": "reports",
   "/portals/retail-pos": "retail-pos",
   "/portals/manufacturing": "manufacturing",
+  "/portals/service": "service",
+  "/portals/trading": "trading",
   "/portals/settings": "settings",
 };
 

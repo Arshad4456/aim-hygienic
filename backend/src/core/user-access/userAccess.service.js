@@ -106,7 +106,7 @@ function accessPayloadFromRole(role, overrides = {}) {
     enabledModules,
     mobileAccess: typeof overrides.mobileAccess === "boolean" ? overrides.mobileAccess : Boolean(role.mobileAccess),
     mobileModules,
-    erpTemplateKey: role.erpTemplateKey || overrides.erpTemplateKey,
+    erpTemplateKey: overrides.erpTemplateKey || role.erpTemplateKey,
   };
 }
 
@@ -114,6 +114,11 @@ async function resolveCompany(companyId = "") {
   const clean = text(companyId);
   if (!clean) return null;
   return Company.findOne({ companyId: clean }).lean();
+}
+
+function isSystemRoleName(roleName = "") {
+  const role = roleText({ role: roleName });
+  return ["admin", "system admin", "super admin"].includes(role) || ["system_admin", "super_admin"].includes(lower(roleName));
 }
 
 async function assertNoDuplicateIdentity({ username, mobile, companyId }) {
@@ -147,19 +152,25 @@ async function createUser(payload = {}, actor = {}) {
 
   let companyId = text(payload.companyId);
   let companyName = text(payload.companyName);
+  let erpTemplateKey = text(payload.erpTemplateKey || actor.erpTemplateKey || "distribution_erp");
+  let company = null;
   if (!isRootAdmin) {
     companyId = text(actor.companyId);
     companyName = text(actor.companyName);
+    erpTemplateKey = text(actor.erpTemplateKey || erpTemplateKey);
+  }
+  if (companyId) {
+    company = await resolveCompany(companyId);
+    if (!company) throw new Error("Selected company was not found");
+    companyName = text(companyName || company.name || companyId);
+    erpTemplateKey = text(payload.erpTemplateKey || company.erpTemplateKey || company.businessType || erpTemplateKey);
   }
 
-  const role = payload.roleId ? await resolveRole(payload.roleId, actor) : null;
+  const role = payload.roleId ? await resolveRole(payload.roleId, { ...actor, companyId, erpTemplateKey }) : null;
   const roleName = text(payload.role || role?.name || (companyId ? "Company User" : "System Admin"));
   if (!canCreateRole(roleName, actor)) throw new Error("You cannot create this role from your portal");
-
-  if (companyId && !companyName) {
-    const company = await resolveCompany(companyId);
-    companyName = text(company?.name || companyId);
-  }
+  if (isRootAdmin && !companyId && !isSystemRoleName(roleName)) throw new Error("Select a company before creating a company user");
+  if (companyId && role?.erpTemplateKey && role.erpTemplateKey !== erpTemplateKey && role.key !== "super_admin") throw new Error("Selected role does not belong to the selected ERP type");
 
   await assertNoDuplicateIdentity({ username, mobile, companyId });
 
@@ -172,7 +183,7 @@ async function createUser(payload = {}, actor = {}) {
     enabledModules: Array.isArray(payload.enabledModules) ? payload.enabledModules : (companyId ? [] : ["*"]),
     mobileAccess: Boolean(payload.mobileAccess),
     mobileModules: Array.isArray(payload.mobileModules) ? payload.mobileModules : [],
-    erpTemplateKey: text(payload.erpTemplateKey || actor.erpTemplateKey || "distribution_erp"),
+    erpTemplateKey,
   };
 
   const document = {
@@ -213,8 +224,14 @@ async function updateUserAccess(id, payload = {}, actor = {}) {
   const plain = sanitizeUser(found.user);
   if (!canSeeUser(plain, actor)) throw new Error("Forbidden");
   const update = {};
-  if (payload.roleId) Object.assign(update, accessPayloadFromRole(await resolveRole(payload.roleId, actor), payload));
-  else {
+  if (payload.roleId) {
+    const targetCompanyId = text(plain.companyId || found.companyId);
+    const targetErpTemplateKey = text(plain.erpTemplateKey || actor.erpTemplateKey || "distribution_erp");
+    const role = await resolveRole(payload.roleId, { ...actor, companyId: targetCompanyId, erpTemplateKey: targetErpTemplateKey });
+    if (targetCompanyId && role.companyId && text(role.companyId) !== targetCompanyId) throw new Error("Selected role does not belong to this user's company");
+    if (targetCompanyId && role.erpTemplateKey && role.erpTemplateKey !== targetErpTemplateKey && role.key !== "super_admin") throw new Error("Selected role does not belong to this user's ERP type");
+    Object.assign(update, accessPayloadFromRole(role, { ...payload, erpTemplateKey: targetErpTemplateKey }));
+  } else {
     if (payload.permissions) update.permissions = permissionsToPlainObject(payload.permissions);
     if (Array.isArray(payload.enabledModules)) update.enabledModules = payload.enabledModules;
     if (typeof payload.mobileAccess === "boolean") update.mobileAccess = payload.mobileAccess;

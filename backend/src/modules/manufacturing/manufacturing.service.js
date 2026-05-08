@@ -5,9 +5,9 @@ const MachineMaintenance = require("../../models/MachineMaintenance");
 const Product = require("../../models/Product");
 const Warehouse = require("../../models/Warehouse");
 const InventoryLedger = require("../../models/InventoryLedger");
-const { asText, getScopedModels } = require("../../services/scopedModels");
+const { asText, getScopedModels, scopedCompanyId } = require("../../services/scopedModels");
 
-function companyIdFrom(req) { return asText(req.query.companyId || req.body?.companyId || req.user?.companyId); }
+function companyIdFrom(req) { return scopedCompanyId(req); }
 function uidFrom(req) { return asText(req.user?.uid || req.user?._id || req.user?.userId); }
 function n(value) { const num = Number(value); return Number.isFinite(num) ? num : 0; }
 function money(value) { return Math.round(Number(value || 0) * 100) / 100; }

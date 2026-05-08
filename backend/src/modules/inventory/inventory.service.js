@@ -4,9 +4,9 @@ const Warehouse = require("../../models/Warehouse");
 const Product = require("../../models/Product");
 const StockTransfer = require("../../models/StockTransfer");
 const StockAdjustment = require("../../models/StockAdjustment");
-const { asText, getScopedModels } = require("../../services/scopedModels");
+const { asText, getScopedModels, scopedCompanyId } = require("../../services/scopedModels");
 
-function companyIdFrom(req) { return asText(req.query.companyId || req.body?.companyId || req.user?.companyId); }
+function companyIdFrom(req) { return scopedCompanyId(req); }
 function uidFrom(req) { return asText(req.user?.uid || req.user?._id || req.user?.userId); }
 function makeDocNo(prefix) { return `${prefix}-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Date.now().toString().slice(-6)}`; }
 function toNumber(value) { const n = Number(value); return Number.isFinite(n) ? n : 0; }

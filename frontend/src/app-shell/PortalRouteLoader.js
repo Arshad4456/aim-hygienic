@@ -35,6 +35,8 @@ import SystemAdminUsersPage from "../features/system-admin/pages/SystemAdminUser
 import MasterDataCrudPage from "../features/master-data/pages/MasterDataCrudPage";
 import RetailPosPortalPage from "../features/retail-pos/pages/RetailPosPortalPage";
 import ManufacturingPortalPage from "../features/manufacturing/pages/ManufacturingPortalPage";
+import ServicePortalPage from "../features/service/pages/ServicePortalPage";
+import TradingPortalPage from "../features/trading/pages/TradingPortalPage";
 
 function buildPath(slug = []) {
   const parts = Array.isArray(slug) ? slug.filter(Boolean) : [];
@@ -79,6 +81,8 @@ function renderPortalContent(route, context) {
   if (route.moduleKey === "reports") return <ReportsAutomationPage />;
   if (route.moduleKey === "retail-pos") return <RetailPosPortalPage />;
   if (route.moduleKey === "manufacturing") return <ManufacturingPortalPage />;
+  if (route.moduleKey === "service") return <ServicePortalPage />;
+  if (route.moduleKey === "trading") return <TradingPortalPage />;
   if (route.moduleKey === "settings") return <SettingsPortalPage />;
   return <ModulePlaceholderPage module={route.module} route={route} />;
 }

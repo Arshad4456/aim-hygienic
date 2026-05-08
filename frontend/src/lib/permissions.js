@@ -9,8 +9,12 @@ const MODULE_ALIASES = {
   notifications: ["notifications", "messages"],
   messages: ["messages", "notifications"],
   "supplier-payments": ["supplier-payments", "supplier_payments", "payments", "procurement"],
+  "retail-pos": ["retail-pos", "retail_pos", "pos"],
+  manufacturing: ["manufacturing", "production", "quality"],
   receipts: ["receipts", "finance"],
   payments: ["payments", "finance"],
+  service: ["service", "service_erp", "tickets", "tasks", "projects"],
+  trading: ["trading", "trading_erp", "import", "export", "shipments"],
 };
 
 function normalize(value) {

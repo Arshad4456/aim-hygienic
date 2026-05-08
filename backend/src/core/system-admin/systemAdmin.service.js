@@ -8,6 +8,8 @@ const CompanySubscription = require("../subscriptions/companySubscription.model"
 const ModuleAccessConfig = require("../../models/ModuleAccessConfig");
 const { ensureDefaultTemplates } = require("../erp-templates/erpTemplate.service");
 const { ensureDefaultModules, listModules, upsertModule } = require("../portal-modules/portalModule.service");
+const { seedDefaultRoles } = require("../roles/role.service");
+const { ERP_MODULE_SETS } = require("../permissions/permission.constants");
 const { ensureDefaultSubscriptionPlans, upsertCompanySubscription } = require("../subscriptions/subscription.service");
 const { hashPassword } = require("../../utils/passwordHash");
 const { ensureDatabaseExists, toTenantDatabaseName } = require("../../utils/tenantDatabases");
@@ -173,6 +175,7 @@ async function createClientCompany(payload = {}, actor = {}) {
 
   await upsertCompanySubscription(companyId, { ...subscriptionMirror, notes: text(payload.systemAdminNotes || payload.notes) }, actor.uid || actor._id || null);
   await ModuleAccessConfig.findOneAndUpdate({ companyId }, { companyId, modules: enabledModules, updatedBy: actor.uid || actor._id || null }, { upsert: true, new: true });
+  await seedDefaultRoles({ companyId, erpTemplateKey }).catch(() => null);
 
   await Promise.all([
     ensureDatabaseExists("system-admin").catch(() => null),
@@ -335,7 +338,13 @@ async function createCompanyAdminUser(company = {}, payload = {}, actor = {}) {
   const password = text(payload.adminPassword);
   if (!fullName || !password || (!username && !mobile)) return null;
   const companyId = text(company.companyId);
-  const permissions = { "*": { actions: ["*"], scope: "company" } };
+  const erpTemplateKey = text(company.erpTemplateKey || company.businessType || "distribution_erp");
+  const moduleKeys = ERP_MODULE_SETS[erpTemplateKey] || ERP_MODULE_SETS.distribution_erp || [];
+  const adminActions = ["view", "create", "edit", "delete", "approve", "reject", "export", "print", "assign", "track"];
+  const permissions = moduleKeys.reduce((acc, key) => {
+    acc[key] = { actions: adminActions, scope: "company" };
+    return acc;
+  }, {});
   const document = {
     fullName,
     username: username || mobile,
@@ -348,14 +357,14 @@ async function createCompanyAdminUser(company = {}, payload = {}, actor = {}) {
     portalType: "company_admin",
     landingPath: "/portals",
     permissions,
-    enabledModules: company.enabledModules || [],
+    enabledModules: moduleKeys,
     mobileAccess: true,
-    mobileModules: [],
+    mobileModules: moduleKeys.filter((key) => !["finance", "settings", "system-admin"].includes(key)),
     status: "active",
     userId: `CADMIN-${Date.now().toString().slice(-8)}`,
     companyId,
     companyName: text(company.name),
-    erpTemplateKey: text(company.erpTemplateKey || "distribution_erp"),
+    erpTemplateKey,
   };
   const created = await createUserInTenant(document);
   return sanitizeUser(created);

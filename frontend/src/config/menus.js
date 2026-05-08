@@ -16,6 +16,8 @@ const DEFAULT_KEYS = [
   "finance",
   "retail-pos",
   "manufacturing",
+  "service",
+  "trading",
   "receipts",
   "payments",
   "reports",

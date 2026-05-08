@@ -47,4 +47,6 @@ module.exports = [
   { key: "reports", name: "Reports", path: "/portals/reports", category: "Reports", webEnabled: true, mobileEnabled: true },
   { key: "retail-pos", name: "Retail POS", path: "/portals/retail-pos", category: "Retail POS", webEnabled: true, mobileEnabled: true },
   { key: "manufacturing", name: "Manufacturing", path: "/portals/manufacturing", category: "Manufacturing", webEnabled: true, mobileEnabled: false },
+  { key: "service", name: "Service ERP", path: "/portals/service", category: "Service", webEnabled: true, mobileEnabled: true },
+  { key: "trading", name: "Trading/Import", path: "/portals/trading", category: "Trading", webEnabled: true, mobileEnabled: false },
 ];

@@ -1,9 +1,9 @@
 const Warehouse = require("../../models/Warehouse");
 const GoodsReceipt = require("../../models/GoodsReceipt");
 const InventoryLedger = require("../../models/InventoryLedger");
-const { asText, getScopedModels } = require("../../services/scopedModels");
+const { asText, getScopedModels, scopedCompanyId } = require("../../services/scopedModels");
 
-function companyIdFrom(req) { return asText(req.query.companyId || req.body?.companyId || req.user?.companyId); }
+function companyIdFrom(req) { return scopedCompanyId(req); }
 async function scoped(req) { return getScopedModels(req, { WarehouseModel: Warehouse, GoodsReceiptModel: GoodsReceipt, InventoryLedgerModel: InventoryLedger }); }
 async function overview(req) {
   const { WarehouseModel, GoodsReceiptModel, InventoryLedgerModel } = await scoped(req);

@@ -57,11 +57,11 @@ const moduleRows = [
 
   { key: "retail-pos", name: "Retail POS", category: "Retail POS", icon: "⌁", path: "/portals/retail-pos", description: "POS billing, cashier shifts, barcode selling, receipt printing, discounts, returns, and daily cash closing." },
   { key: "manufacturing", name: "Manufacturing", category: "Manufacturing", icon: "⚒", path: "/portals/manufacturing", description: "BOM, production orders, raw material issue, finished goods receipt, quality, maintenance, and costing." },
-  { key: "service", name: "Service ERP", category: "Future Modules", icon: "☑", path: "/portals/service", description: "Tickets, service orders, SLA, AMC, spare parts, and service invoices.", isPlanned: true, menu: false },
-  { key: "trading", name: "Trading/Import", category: "Future Modules", icon: "⇄", path: "/portals/trading", description: "Import/export, LC, shipment, landed cost, multi-currency, and margins.", isPlanned: true, menu: false },
+  { key: "service", name: "Service ERP", category: "Service", icon: "☑", path: "/portals/service", description: "Tickets, service orders, SLA, AMC contracts, customer assets, spare parts, proof uploads, and service invoices." },
+  { key: "trading", name: "Trading/Import", category: "Trading", icon: "⇄", path: "/portals/trading", description: "Import/export, LC, shipment/container tracking, landed cost, multi-currency, proof documents, and margins." },
 ];
 
-export const MENU_CATEGORY_ORDER = ["Home", "SaaS Control", "Setup", "Master Data", "Sales", "Purchase", "Inventory", "Finance", "Retail POS", "Manufacturing", "Logistics", "Communication", "Reports", "Future Modules"];
+export const MENU_CATEGORY_ORDER = ["Home", "SaaS Control", "Setup", "Master Data", "Sales", "Purchase", "Inventory", "Finance", "Retail POS", "Manufacturing", "Service", "Trading", "Logistics", "Communication", "Reports", "Future Modules"];
 
 export const RAWYAN_MODULE_CATALOG = moduleRows.map((item, index) => ({
   ...item,
