@@ -5,7 +5,6 @@ export const APP_CONFIG = {
   shortName: BRAND_CONFIG.shortName,
   previousName: BRAND_CONFIG.previousName,
   routeBase: "/portals",
-  legacyRouteBase: "/dashboards",
   tagline: BRAND_CONFIG.tagline,
   description: BRAND_CONFIG.description,
   domain: BRAND_CONFIG.domain,

@@ -17,3 +17,15 @@ Rawyan ERP is a modular SaaS ERP system for distribution, procurement, inventory
 - `mobile/src/features` holds role-based mobile modules.
 
 See `docs/RAWYAN_ERP_STEP_2_REFACTOR.md` for details.
+
+## Phase 9 Status
+
+Phase 9 adds final mobile synchronization and deployment readiness:
+
+- ERP-type-aware mobile menus and role routing
+- Retail POS, Manufacturing, Service, Trading, System Admin, and Company Admin mobile workspaces
+- Generic mobile document upload helpers for Cloudflare R2-backed uploads
+- Backend health/readiness checks at `/api/health` and `/api/health/ready`
+- Deployment checklist for MongoDB Atlas, Cloudflare, frontend, backend, and Expo mobile
+
+See `docs/PHASE_9_MOBILE_TEST_DEPLOYMENT.md` and `docs/DEPLOYMENT_CHECKLIST.md`.

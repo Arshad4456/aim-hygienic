@@ -2,17 +2,11 @@
 import { useEffect, useMemo, useState } from "react";
 import userAccessService from "../../../services/userAccessService";
 import roleService from "../../../services/roleService";
+import { ERP_TYPES, normalizeErpType } from "../../../config/erpAccessMatrix";
 
 function userName(user) { return user?.fullName || user?.username || user?.mobile || "User"; }
 function userId(user) { return user?._id || user?.id || user?.userId; }
-const ERP_TYPES = [
-  ["distribution_erp", "Distribution ERP"],
-  ["trading_erp", "Trading ERP"],
-  ["manufacturing_erp", "Manufacturing ERP"],
-  ["retail_pos_erp", "Retail POS ERP"],
-  ["service_erp", "Service ERP"],
-  ["custom_erp", "Custom ERP"],
-];
+
 const emptyForm = { fullName: "", username: "", mobile: "", email: "", password: "", roleId: "", companyId: "", companyName: "", erpTemplateKey: "distribution_erp", mobileAccess: false };
 
 export default function UsersAccessPage({ companyOptions = [], systemMode = false }) {
@@ -41,7 +35,7 @@ export default function UsersAccessPage({ companyOptions = [], systemMode = fals
   }
   useEffect(() => { load(); }, []);
   useEffect(() => { roleService.options({ companyId: systemMode ? form.companyId : undefined, erpTemplateKey: form.erpTemplateKey }).then((payload) => setRoles(payload.roles || [])).catch(() => {}); }, [form.companyId, form.erpTemplateKey, systemMode]);
-  const roleOptions = useMemo(() => roles.filter((role) => role.status !== "inactive"), [roles]);
+  const roleOptions = useMemo(() => roles.filter((role) => role.status !== "inactive" && (!form.erpTemplateKey || !role.erpTemplateKey || role.erpTemplateKey === normalizeErpType(form.erpTemplateKey) || role.isSystemRole)), [roles, form.erpTemplateKey]);
 
   function updateField(key, value) {
     setForm((prev) => {
@@ -77,7 +71,7 @@ export default function UsersAccessPage({ companyOptions = [], systemMode = fals
 
     {showCreate ? <div className="rounded-3xl border border-emerald-100 bg-white p-5 shadow-sm">
       <h3 className="text-lg font-black text-slate-950">Create User</h3>
-      <p className="mt-1 text-sm text-slate-500">System Admin must select the client company and ERP type before selecting the role. Company Admin creates users only inside their own company scope.</p>
+      <p className="mt-1 text-sm text-slate-500">System Admin must select a client company first; ERP type loads from that company and roles are filtered by that ERP. Company Admin creates users only inside their own company and plan limits.</p>{selectedCompany ? <p className="mt-2 rounded-2xl bg-emerald-50 p-3 text-xs font-bold text-emerald-700">Selected company: {selectedCompany.name || selectedCompany.companyId} · Plan: {selectedCompany.subscription?.planKey || selectedCompany.planKey || "active"} · Users: {selectedCompany.usage?.users ?? selectedCompany.userCount ?? 0}/{selectedCompany.subscription?.userLimit || selectedCompany.userLimit || "∞"} · Warehouses: {selectedCompany.usage?.warehouses ?? 0}/{selectedCompany.subscription?.warehouseLimit || selectedCompany.warehouseLimit || "∞"}</p> : null}
       <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <input value={form.fullName} onChange={(e) => updateField("fullName", e.target.value)} placeholder="Full name" className="rounded-2xl border border-slate-200 px-4 py-3 text-sm" />
         <input value={form.username} onChange={(e) => updateField("username", e.target.value)} placeholder="Username" className="rounded-2xl border border-slate-200 px-4 py-3 text-sm" />
@@ -86,7 +80,7 @@ export default function UsersAccessPage({ companyOptions = [], systemMode = fals
         <input value={form.password} onChange={(e) => updateField("password", e.target.value)} placeholder="Initial password" type="password" className="rounded-2xl border border-slate-200 px-4 py-3 text-sm" />
         <select value={form.roleId} onChange={(e) => updateField("roleId", e.target.value)} className="rounded-2xl border border-slate-200 px-4 py-3 text-sm"><option value="">Select role</option>{roleOptions.map((role) => <option key={role._id} value={role._id}>{role.name}</option>)}</select>
         {companyOptions.length ? <select value={form.companyId} onChange={(e) => updateField("companyId", e.target.value)} className="rounded-2xl border border-slate-200 px-4 py-3 text-sm"><option value="">System-level user / no company</option>{companyOptions.map((company) => <option key={company.companyId} value={company.companyId}>{company.name || company.companyId} — {company.erpTemplateKey || company.businessType || "distribution_erp"}</option>)}</select> : <input value={form.companyId} onChange={(e) => updateField("companyId", e.target.value)} placeholder="Company ID (auto for company admins)" className="rounded-2xl border border-slate-200 px-4 py-3 text-sm" />}
-        <select value={form.erpTemplateKey} onChange={(e) => updateField("erpTemplateKey", e.target.value)} disabled={Boolean(selectedCompany?.erpTemplateKey || selectedCompany?.businessType)} className="rounded-2xl border border-slate-200 px-4 py-3 text-sm">{ERP_TYPES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
+        <select value={form.erpTemplateKey} onChange={(e) => updateField("erpTemplateKey", e.target.value)} disabled={Boolean(selectedCompany?.erpTemplateKey || selectedCompany?.businessType)} className="rounded-2xl border border-slate-200 px-4 py-3 text-sm">{ERP_TYPES.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select>
         <label className="flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700"><input type="checkbox" checked={form.mobileAccess} onChange={(e) => updateField("mobileAccess", e.target.checked)} /> Mobile access</label>
       </div>
       <button onClick={createUser} disabled={busyId === "create"} className="mt-4 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white disabled:opacity-50">{busyId === "create" ? "Creating…" : "Create User"}</button>

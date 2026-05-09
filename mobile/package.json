@@ -7,7 +7,8 @@
     "start": "expo start",
     "android": "expo run:android",
     "lint": "expo lint",
-    "test": "jest"
+    "test": "jest",
+    "check:syntax": "node -e \"console.log('Run npm run lint after npm install. Expo JSX syntax requires project dependencies.')\""
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",

@@ -139,6 +139,17 @@ async function assertNoDuplicateIdentity({ username, mobile, companyId }) {
   }
 }
 
+
+async function assertCompanyPlanAllowsUser(company, payload = {}) {
+  if (!company?.companyId) return;
+  const subscription = company.subscription || {};
+  const companyUsers = await listTenantUsersByCompany(company.companyId).catch(() => []);
+  const activeUsers = companyUsers.filter((u) => !["inactive", "deactive"].includes(lower(u.status))).length;
+  const mobileUsers = companyUsers.filter((u) => Boolean(u.mobileAccess)).length;
+  if (subscription.userLimit && activeUsers >= Number(subscription.userLimit)) throw new Error(`User limit reached for this company's active plan (${activeUsers}/${subscription.userLimit})`);
+  if (payload.mobileAccess && subscription.mobileUserLimit && mobileUsers >= Number(subscription.mobileUserLimit)) throw new Error(`Mobile user limit reached for this company's active plan (${mobileUsers}/${subscription.mobileUserLimit})`);
+}
+
 async function createUser(payload = {}, actor = {}) {
   const isRootAdmin = isSystemAdmin(actor);
   const fullName = text(payload.fullName || payload.name);
@@ -171,6 +182,7 @@ async function createUser(payload = {}, actor = {}) {
   if (!canCreateRole(roleName, actor)) throw new Error("You cannot create this role from your portal");
   if (isRootAdmin && !companyId && !isSystemRoleName(roleName)) throw new Error("Select a company before creating a company user");
   if (companyId && role?.erpTemplateKey && role.erpTemplateKey !== erpTemplateKey && role.key !== "super_admin") throw new Error("Selected role does not belong to the selected ERP type");
+  if (company) await assertCompanyPlanAllowsUser(company, payload);
 
   await assertNoDuplicateIdentity({ username, mobile, companyId });
 

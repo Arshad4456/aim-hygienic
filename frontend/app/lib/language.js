@@ -64,7 +64,7 @@ export function translateText(text, language) {
 export function LanguageProvider({ children }) {
   const [language, setLanguage] = useState(() => {
     if (typeof window === "undefined") return "en";
-    const saved = window.localStorage.getItem("aim_language");
+    const saved = window.localStorage.getItem("rawyan_language");
     return LANGUAGE_OPTIONS.some((opt) => opt.code === saved) ? saved : "en";
   });
 
@@ -72,7 +72,7 @@ export function LanguageProvider({ children }) {
   const pendingRef = useRef(new Set());
 
   useEffect(() => {
-    if (typeof window !== "undefined") window.localStorage.setItem("aim_language", language);
+    if (typeof window !== "undefined") window.localStorage.setItem("rawyan_language", language);
     if (typeof document !== "undefined") {
       document.documentElement.lang = language;
       document.documentElement.dir = RTL_LANGS.has(language) ? "rtl" : "ltr";

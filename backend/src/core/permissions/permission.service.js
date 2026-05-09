@@ -1,6 +1,7 @@
 const Role = require("../../models/Role");
 const PortalModule = require("../../models/PortalModule");
-const { DEFAULT_ROLE_PERMISSIONS, ADMIN_ROLES, ERP_MODULE_SETS } = require("./permission.constants");
+const { DEFAULT_ROLE_PERMISSIONS, ADMIN_ROLES } = require("./permission.constants");
+const { ERP_MODULE_SETS, normalizeErpType, getAllowedModulesForRole, getLandingPathForRole } = require("../access/erpAccessMatrix");
 
 const MODULE_ALIASES = {
   "erp-templates": ["erp_templates"],
@@ -44,10 +45,10 @@ async function getUserPermissionProfile(user) {
     roleKey: role?.key || normalizeKey(user?.role),
     portalType: user?.portalType || role?.portalType || inferPortalType(user?.role),
     permissions,
-    enabledModules: Array.isArray(user?.enabledModules) && user.enabledModules.length ? user.enabledModules : role?.enabledModules?.length ? role.enabledModules : isAdmin ? ["*"] : Object.keys(permissions).filter((k) => k !== "*"),
+    enabledModules: Array.isArray(user?.enabledModules) && user.enabledModules.length ? user.enabledModules : role?.enabledModules?.length ? role.enabledModules : isAdmin ? ["*"] : getAllowedModulesForRole(user?.role, user?.erpTemplateKey || user?.businessType),
     mobileAccess: Boolean(user?.mobileAccess || role?.mobileAccess),
     mobileModules: Array.isArray(user?.mobileModules) && user.mobileModules.length ? user.mobileModules : role?.mobileModules || [],
-    landingPath: user?.landingPath || role?.landingPath || "/portals",
+    landingPath: user?.landingPath || role?.landingPath || getLandingPathForRole(user?.role, user?.erpTemplateKey || user?.businessType),
   };
 }
 
@@ -72,10 +73,15 @@ function isSystemUser(user = {}, profile = {}) {
 async function listVisibleModules(user) {
   const profile = await getUserPermissionProfile(user);
   const modules = await PortalModule.find({ status: "active", webEnabled: true }).sort({ order: 1, name: 1 }).lean().catch(() => []);
-  const erpKey = normalizeKey(user?.erpTemplateKey || user?.businessType || profile?.erpTemplateKey || "distribution_erp");
-  const erpAllowed = isSystemUser(user, profile) ? null : new Set([...(ERP_MODULE_SETS[erpKey] || ERP_MODULE_SETS.distribution_erp || []), "dashboard"]);
+  const erpKey = normalizeErpType(user?.erpTemplateKey || user?.businessType || profile?.erpTemplateKey || "distribution_erp");
+  const subscriptionAllowed = Array.isArray(user?.subscription?.allowedModules) ? user.subscription.allowedModules : [];
+  const companyAllowed = Array.isArray(user?.enabledModules) ? user.enabledModules : [];
+  const allowedByPlan = Array.from(new Set([...subscriptionAllowed, ...companyAllowed].filter(Boolean)));
+  const erpAllowed = isSystemUser(user, profile) ? null : new Set([...(ERP_MODULE_SETS[erpKey] || ERP_MODULE_SETS.distribution_erp || []), "dashboard", "settings"]);
+  const planAllowed = !isSystemUser(user, profile) && allowedByPlan.length ? new Set([...allowedByPlan, "dashboard", "settings"]) : null;
   return modules.filter((m) => {
     if (erpAllowed && !erpAllowed.has(m.key)) return false;
+    if (planAllowed && !planAllowed.has(m.key)) return false;
     return profile.enabledModules.includes("*") || profile.enabledModules.includes(m.key) || hasPermission(profile.permissions, m.key, "view");
   });
 }

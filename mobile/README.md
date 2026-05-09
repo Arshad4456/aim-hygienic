@@ -62,3 +62,22 @@ src/
 
 - Firebase Cloud Messaging push notifications.
 - Offline queue sync (order creation, trip entry, POD upload).
+## Phase 9 mobile sync
+
+The mobile app is now aligned with Rawyan ERP industry templates and supports role-aware menus for:
+
+- System Admin
+- Company Admin
+- Retail POS ERP roles
+- Manufacturing ERP roles
+- Service ERP roles
+- Trading ERP roles
+- Distribution field roles
+
+Set the production API URL before running or building:
+
+```env
+EXPO_PUBLIC_API_BASE_URL=https://your-domain.com/api
+```
+
+The mobile drawer is filtered by the logged-in user's role and company ERP type. Industry workspaces read from secured backend APIs and support print-preview data for receipts, production orders, service orders, and trading shipments.

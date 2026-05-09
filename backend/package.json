@@ -7,7 +7,9 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "migrate:v2:dry": "node src/scripts/migrations/runLegacyV2Migration.js --dry-run",
     "migrate:v2": "node src/scripts/migrations/runLegacyV2Migration.js",
-    "migrate:v2:reconcile": "node src/scripts/migrations/reconcileLegacyV2Migration.js"
+    "migrate:v2:reconcile": "node src/scripts/migrations/reconcileLegacyV2Migration.js",
+    "check:syntax": "node --check server.js && find src -name \"*.js\" -print0 | xargs -0 -n1 node --check",
+    "health:local": "node -e \"fetch(process.env.API_URL || 'http://localhost:5000/api/health/ready').then(r=>r.text()).then(console.log).catch(e=>{console.error(e.message);process.exit(1)})\""
   },
   "keywords": [],
   "author": "",

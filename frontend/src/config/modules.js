@@ -7,7 +7,6 @@ const LEGACY_MODULE_KEY_MAP = {
   distribution: "secondary-sales-orders",
   logistics: "operations",
   live_tracking: "live-tracking",
-  messages: "notifications",
 };
 
 export const ERP_MODULES = RAWYAN_MODULE_CATALOG

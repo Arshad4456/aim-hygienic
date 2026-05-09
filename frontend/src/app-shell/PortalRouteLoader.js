@@ -6,7 +6,7 @@ import PortalShell from "./PortalShell";
 import useAuth from "../hooks/useAuth";
 import useSidebar from "../hooks/useSidebar";
 import { getPortalRoute } from "../config/portalRouteRegistry";
-import { getRolePortalProfile, getSafeRouteForUser, isPathAllowedForRole } from "../config/roleAccess";
+import { getRolePortalProfile, getDefaultPathForUser, isPathAllowedForUser } from "../config/erpAccessMatrix";
 import DynamicPortalHome from "../features/dashboard/pages/DynamicPortalHome";
 import ModulePlaceholderPage from "../features/common/pages/ModulePlaceholderPage";
 import RolesPage from "../features/roles/pages/RolesPage";
@@ -46,8 +46,8 @@ function buildPath(slug = []) {
 function AccessDenied({ route, profile, safePath }) {
   return <div className="rounded-[2rem] border border-amber-200 bg-amber-50 p-6 text-amber-900 shadow-sm">
     <p className="text-xs font-black uppercase tracking-[0.3em] text-amber-600">Portal access corrected</p>
-    <h2 className="mt-3 text-2xl font-black">This module is not available in the {profile.label} portal.</h2>
-    <p className="mt-2 text-sm leading-6">Rawyan ERP now keeps System Admin, Company Admin, Distributor, Customer, Supplier, Warehouse, Finance, Sales, and Delivery portals separate so modules do not conflict with each other.</p>
+    <h2 className="mt-3 text-2xl font-black">This module is not available for your role, plan, or ERP type.</h2>
+    <p className="mt-2 text-sm leading-6">Rawyan ERP now builds access from one ERP matrix: company ERP type, active plan, enabled modules, role permissions, and your assigned data scope.</p>
     <p className="mt-3 text-xs font-bold text-amber-700">Requested route: {route.canonicalPath}</p>
     <a href={safePath} className="mt-5 inline-flex rounded-full bg-slate-950 px-4 py-2 text-sm font-black text-white">Open my correct portal</a>
   </div>;
@@ -94,10 +94,10 @@ export default function PortalRouteLoader({ slug = [] }) {
   const { user, visibleModules = [], loading, error } = useAuth();
   const profile = getRolePortalProfile(user || {});
   const menu = useSidebar(user, visibleModules);
-  const safePath = getSafeRouteForUser(user || {});
-  const allowed = !loading && user ? isPathAllowedForRole(user, route) : true;
+  const safePath = getDefaultPathForUser({ ...(user || {}), visibleModules });
+  const allowed = !loading && user ? isPathAllowedForUser(user, route, visibleModules) : true;
   const subtitle = route.isLegacyAlias
-    ? `Legacy path mapped to ${route.canonicalPath}. Your ${profile.label} portal menu is role-scoped.`
+    ? `Your ${profile.label} portal menu is role-scoped by ERP type, active plan, company modules, role, and permissions.`
     : route.module?.description;
 
   useEffect(() => {

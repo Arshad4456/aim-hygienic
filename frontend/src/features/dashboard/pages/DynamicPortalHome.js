@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { BRAND_CONFIG } from "@/src/config/brand";
 import { apiGet } from "../../../services/apiClient";
-import { getRolePortalProfile } from "../../../config/roleAccess";
+import { getRolePortalProfile, getCompanyPlan } from "../../../config/erpAccessMatrix";
 
 function num(value) { return Number(value || 0).toLocaleString(); }
 function money(value) { return `PKR ${Number(value || 0).toLocaleString()}`; }
@@ -49,6 +49,35 @@ function KpiCard({ label, value, help }) {
     <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">{label}</p>
     <p className="mt-3 text-3xl font-black text-slate-950">{value}</p>
     <p className="mt-2 text-sm text-slate-500">{help}</p>
+  </div>;
+}
+
+
+function PlanUsageCard({ user = {}, menu = [] }) {
+  const plan = getCompanyPlan(user) || {};
+  const used = user?.usage || user?.companyUsage || {};
+  const limits = [
+    ["Users", used.users ?? used.totalUsers, plan.userLimit],
+    ["Branches", used.branches, plan.branchLimit],
+    ["Warehouses", used.warehouses, plan.warehouseLimit],
+    ["Mobile Users", used.mobileUsers, plan.mobileUserLimit],
+    ["Modules", menu.length, plan.moduleLimit],
+  ];
+  return <div className="rounded-[2rem] border border-emerald-100 bg-white p-5 shadow-sm">
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-600">Company Control Center</p>
+        <h3 className="mt-2 text-xl font-black text-slate-950">{user?.companyName || "Company"} plan & access</h3>
+        <p className="mt-1 text-sm text-slate-500">ERP type: {user?.erpTemplateKey || user?.businessType || "distribution_erp"} · Plan: {plan.name || plan.planName || plan.planKey || "Active plan"}</p>
+      </div>
+      <span className="rounded-full bg-emerald-50 px-4 py-2 text-xs font-black text-emerald-700">{plan.status || user?.companyStatus || "active"}</span>
+    </div>
+    <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      {limits.map(([label, current, limit]) => <div key={label} className="rounded-2xl bg-slate-50 p-4">
+        <p className="text-xs font-bold uppercase tracking-wide text-slate-400">{label}</p>
+        <p className="mt-1 text-xl font-black text-slate-950">{num(current || 0)} / {limit ? num(limit) : "∞"}</p>
+      </div>)}
+    </div>
   </div>;
 }
 
@@ -115,6 +144,8 @@ export default function DynamicPortalHome({ user, menu = [] }) {
     {state.loading ? <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">Loading dashboard KPIs and charts…</div> : null}
 
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{headline.map((item) => <KpiCard key={item.label} {...item} />)}</div>
+
+    {!isSystem && profile.key === "company admin" ? <PlanUsageCard user={user} menu={menu} /> : null}
 
     {!isSystem ? <div className="grid gap-5 xl:grid-cols-2">
       <BarChart title="Sales Trend - Last 7 Days" rows={charts.salesTrend || []} />

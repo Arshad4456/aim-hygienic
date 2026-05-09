@@ -40,7 +40,7 @@ function isBrowserSafeFallback(base) {
 
 export function getStoredToken() {
   if (typeof window === "undefined") return null;
-  const keys = ["rawyan_token", "aim_token", "aim_token_v1", "token", "authToken"];
+  const keys = ["rawyan_token", "token", "authToken"];
   for (const storage of [window.sessionStorage, window.localStorage]) {
     for (const key of keys) {
       const value = storage.getItem(key);
@@ -54,13 +54,12 @@ export function setStoredToken(token, { remember = true } = {}) {
   if (typeof window === "undefined" || !token) return;
   const target = remember ? window.localStorage : window.sessionStorage;
   target.setItem("rawyan_token", token);
-  target.setItem("aim_token", token);
 }
 
 export function clearStoredToken() {
   if (typeof window === "undefined") return;
   for (const storage of [window.sessionStorage, window.localStorage]) {
-    ["rawyan_token", "aim_token", "aim_token_v1", "token", "authToken"].forEach((key) => storage.removeItem(key));
+    ["rawyan_token", "token", "authToken"].forEach((key) => storage.removeItem(key));
   }
 }
 

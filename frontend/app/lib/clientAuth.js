@@ -1,6 +1,6 @@
 "use client";
 
-const KEYS = ["rawyan_token", "rawyan_role", "rawyan_user", "aim_token", "aim_role", "aim_user"];
+const KEYS = ["rawyan_token", "rawyan_role", "rawyan_user"];
 
 function hasWindow() {
   return typeof window !== "undefined";
@@ -19,9 +19,6 @@ export function setAuthSession({ token, role, user }) {
   window.sessionStorage.setItem("rawyan_token", token || "");
   window.sessionStorage.setItem("rawyan_role", role || "");
   window.sessionStorage.setItem("rawyan_user", JSON.stringify(user || {}));
-  window.sessionStorage.setItem("aim_token", token || "");
-  window.sessionStorage.setItem("aim_role", role || "");
-  window.sessionStorage.setItem("aim_user", JSON.stringify(user || {}));
 }
 
 export function clearAuthStorage() {
@@ -33,7 +30,7 @@ export function clearAuthStorage() {
 }
 
 export function getAuthUser() {
-  const raw = getAuthItem("rawyan_user") || getAuthItem("aim_user");
+  const raw = getAuthItem("rawyan_user");
   if (!raw) return null;
   try {
     return JSON.parse(raw);
@@ -43,7 +40,7 @@ export function getAuthUser() {
 }
 
 export function getAuthRole() {
-  return getAuthItem("rawyan_role") || getAuthItem("aim_role") || getAuthUser()?.role || "";
+  return getAuthItem("rawyan_role") || getAuthUser()?.role || "";
 }
 
 export function decodeJwtPayload(token = "") {
@@ -61,7 +58,7 @@ export function decodeJwtPayload(token = "") {
 }
 
 export function getAuthSnapshot() {
-  const token = getAuthItem("rawyan_token") || getAuthItem("aim_token") || "";
+  const token = getAuthItem("rawyan_token") || "";
   const user = getAuthUser();
   const payload = decodeJwtPayload(token) || {};
   return {

@@ -33,9 +33,6 @@ export const CANONICAL_PORTAL_ROUTES = {
   "/portals/customers": "customers",
   "/portals/customers/orders": "customer-orders",
   "/portals/customer/billing": "customer-billing",
-  "/portals/customer/invoices": "customer-billing",
-  "/portals/customer/receipts": "customer-billing",
-  "/portals/customers/billing": "customer-billing",
   "/portals/finance": "finance",
   "/portals/finance/receipts": "receipts",
   "/portals/finance/payments": "payments",
@@ -48,7 +45,6 @@ export const CANONICAL_PORTAL_ROUTES = {
   "/portals/deliveries": "deliveries",
   "/portals/live-tracking": "live-tracking",
   "/portals/notifications": "notifications",
-  "/portals/messages": "notifications",
   "/portals/reports": "reports",
   "/portals/retail-pos": "retail-pos",
   "/portals/manufacturing": "manufacturing",
@@ -57,110 +53,15 @@ export const CANONICAL_PORTAL_ROUTES = {
   "/portals/settings": "settings",
 };
 
-export const LEGACY_PORTAL_ALIASES = {
-  "/portals/admin": "/portals",
-  "/portals/admin/users": "/portals/users",
-  "/portals/admin/companies": "/portals/companies",
-  "/portals/admin/module-access": "/portals/roles",
-  "/portals/admin/regions": "/portals/master-data/regions",
-  "/portals/admin/zones": "/portals/master-data/zones",
-  "/portals/admin/areas": "/portals/master-data/areas",
-  "/portals/admin/fields": "/portals/master-data/fields",
-  "/portals/admin/products": "/portals/products",
-  "/portals/admin/procurement": "/portals/procurement",
-  "/portals/admin/procurement/suppliers": "/portals/master-data/suppliers",
-  "/portals/admin/procurement/purchase-orders": "/portals/procurement/purchase-orders",
-  "/portals/admin/procurement/payments": "/portals/procurement/payments",
-  "/portals/admin/procurement/grn": "/portals/warehouse/goods-receipts",
-  "/portals/admin/warehouse-inventory": "/portals/warehouse",
-  "/portals/admin/warehouses": "/portals/master-data/warehouses",
-  "/portals/admin/order-management": "/portals/sales/primary-orders",
-  "/portals/admin/order-management/sales-orders": "/portals/sales/primary-orders",
-  "/portals/admin/finance": "/portals/finance",
-  "/portals/admin/expense": "/portals/expenses",
-  "/portals/admin/account": "/portals/loans",
-  "/portals/admin/vehicle-management": "/portals/fleet",
-  "/portals/admin/assets/vehicles": "/portals/fleet",
-  "/portals/admin/logistics": "/portals/operations",
-  "/portals/admin/live-tracking": "/portals/live-tracking",
-  "/portals/admin/messages": "/portals/notifications",
-  "/portals/admin/reports": "/portals/reports",
-  "/portals/admin/settings": "/portals/settings",
-  "/portals/distributor": "/portals",
-  "/portals/distributor/orders": "/portals/sales/secondary-orders",
-  "/portals/distributor/primary-order-request": "/portals/sales/primary-orders",
-  "/portals/distributor/customer-invoices": "/portals/customers/orders",
-  "/portals/distributor/receipts": "/portals/finance/receipts",
-  "/portals/distributor/payments": "/portals/finance/payments",
-  "/portals/distributor/accounts": "/portals/finance",
-  "/portals/distributor/inventory": "/portals/inventory",
-  "/portals/distributor/stock-received": "/portals/warehouse/goods-receipts",
-  "/portals/distributor/return-stock": "/portals/returns",
-  "/portals/distributor/damage-expiry": "/portals/returns",
-  "/portals/distributor/live-tracking": "/portals/live-tracking",
-  "/portals/distributor/users": "/portals/users",
-  "/portals/distributor/messages": "/portals/notifications",
-  "/portals/distributor/reports": "/portals/reports",
-  "/portals/distributor/settings": "/portals/settings",
-  "/portals/salesman": "/portals",
-  "/portals/salesman/orders": "/portals/sales/secondary-orders",
-  "/portals/salesman/customers": "/portals/customers",
-  "/portals/salesman/collections": "/portals/finance/receipts",
-  "/portals/salesman/deliveries": "/portals/deliveries",
-  "/portals/orderBooker": "/portals",
-  "/portals/orderBooker/orders": "/portals/sales/secondary-orders",
-  "/portals/orderBooker/customers": "/portals/customers",
-  "/portals/orderBooker/collections": "/portals/finance/receipts",
-  "/portals/warehouseManager": "/portals/warehouse",
-  "/portals/warehouseManager/orders": "/portals/logistics/dispatches",
-  "/portals/warehouseManager/goods-receipts": "/portals/warehouse/goods-receipts",
-  "/portals/warehouseManager/warehouse-inventory": "/portals/warehouse",
-  "/portals/warehouseManager/stock-summary": "/portals/inventory",
-  "/portals/warehouseManager/damage-expiry": "/portals/returns",
-  "/portals/warehouseManager/payments": "/portals/finance/payments",
-  "/portals/deliveryBoy": "/portals/deliveries",
-  "/portals/deliveryBoy/orders": "/portals/deliveries",
-  "/portals/deliveryBoy/dispatches": "/portals/logistics/dispatches",
-  "/portals/deliveryBoy/tracking": "/portals/live-tracking",
-  "/portals/customer": "/portals/customer/billing",
-  "/portals/customer/orders": "/portals/customer/billing",
-  "/portals/customer/invoices": "/portals/customer/billing",
-  "/portals/customer/receipts": "/portals/customer/billing",
-  "/portals/customer/returns": "/portals/returns",
-  "/portals/customer/settings": "/portals/settings",
-  "/portals/supplier": "/portals/procurement",
-  "/portals/supplier/primary-orders": "/portals/procurement/purchase-orders",
-  "/portals/supplier/messages": "/portals/notifications",
-  "/portals/supplier/settings": "/portals/settings",
-  "/portals/brandManager": "/portals/sales/primary-orders",
-  "/portals/brandManager/primary-order-request": "/portals/sales/primary-orders",
-  "/portals/brandManager/return-stock": "/portals/returns",
-  "/portals/brandManager/messages": "/portals/notifications",
-};
-
 function cleanPath(pathname = "/portals") {
   return (pathname || "/portals").replace(/\/$/, "") || "/portals";
 }
 
-function applyLegacyAlias(pathname = "/portals") {
-  const clean = cleanPath(pathname);
-  if (LEGACY_PORTAL_ALIASES[clean]) return LEGACY_PORTAL_ALIASES[clean];
-
-  const match = Object.keys(LEGACY_PORTAL_ALIASES)
-    .sort((a, b) => b.length - a.length)
-    .find((legacyPath) => clean.startsWith(`${legacyPath}/`));
-
-  if (!match) return clean;
-  const suffix = clean.slice(match.length);
-  return `${LEGACY_PORTAL_ALIASES[match]}${suffix}`;
-}
-
 export function normalizePortalPath(pathname = "/portals") {
-  return applyLegacyAlias(pathname);
+  return cleanPath(pathname);
 }
 
 export function getPortalRoute(pathname = "/portals") {
-  const normalizedPath = cleanPath(pathname);
   const canonicalPath = normalizePortalPath(pathname);
   const key = CANONICAL_PORTAL_ROUTES[canonicalPath];
   const module = key ? MODULE_BY_KEY[key] : findModuleByPath(canonicalPath);
@@ -170,7 +71,7 @@ export function getPortalRoute(pathname = "/portals") {
     moduleKey: key || module?.key || "dashboard",
     title: module?.name || BRAND_CONFIG.name,
     module: module || MODULE_BY_KEY.dashboard,
-    isLegacyAlias: normalizedPath !== canonicalPath,
+    isLegacyAlias: false,
   };
 }
 

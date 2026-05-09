@@ -1,8 +1,12 @@
 const express = require("express");
 const User = require("../models/User");
+const Company = require("../models/Company");
+const Warehouse = require("../models/Warehouse");
+const CompanyBranch = require("../models/CompanyBranch");
 const { signToken, requireAuth, inferPortalType } = require("../utils/auth");
 const { verifyPassword } = require("../utils/passwordHash");
 const { listAllTenantTargets, getTenantModel } = require("../utils/tenantModels");
+const { listTenantUsersByCompany } = require("../utils/tenantUsers");
 const { getUserPermissionProfile, listVisibleModules } = require("../core/permissions/permission.service");
 const { ensureDefaultModules } = require("../core/portal-modules/portalModule.service");
 
@@ -100,15 +104,37 @@ function publicUser(user, profile = {}) {
     warehouseId: user.warehouseId || "",
     permissions: profile.permissions || {},
     enabledModules: profile.enabledModules || [],
+    subscription: profile.subscription || user.subscription || null,
+    companyStatus: profile.companyStatus || user.companyStatus || "",
+    companyUsage: profile.companyUsage || user.companyUsage || {},
     mobileAccess: profile.mobileAccess || false,
     mobileModules: profile.mobileModules || [],
+  };
+}
+
+async function loadCompanyContext(user = {}) {
+  const companyId = String(user.companyId || "").trim();
+  if (!companyId) return {};
+  const company = await Company.findOne({ companyId }).lean().catch(() => null);
+  const tenantUsers = await listTenantUsersByCompany(companyId).catch(() => []);
+  const [branches, warehouses] = await Promise.all([
+    CompanyBranch.countDocuments({ companyId }).catch(() => 0),
+    Warehouse.countDocuments({ companyId }).catch(() => 0),
+  ]);
+  return {
+    subscription: company?.subscription || user.subscription || null,
+    companyStatus: company?.status || user.companyStatus || "",
+    enabledModules: company?.enabledModules?.length ? company.enabledModules : user.enabledModules || [],
+    erpTemplateKey: company?.erpTemplateKey || company?.businessType || user.erpTemplateKey || user.businessType || "distribution_erp",
+    companyUsage: { users: tenantUsers.length, activeUsers: tenantUsers.filter((u) => String(u.status || "active").toLowerCase() === "active").length, mobileUsers: tenantUsers.filter((u) => Boolean(u.mobileAccess)).length, branches, warehouses },
   };
 }
 
 async function enrichUser(user) {
   await ensureDefaultModules().catch(() => null);
   try {
-    const profile = await getUserPermissionProfile(user);
+    const companyContext = await loadCompanyContext(user);
+    const profile = { ...(await getUserPermissionProfile({ ...user, ...companyContext })), ...companyContext };
     const visibleModules = await listVisibleModules({ ...user, ...profile }).catch(() => []);
     return { profile, visibleModules };
   } catch (error) {

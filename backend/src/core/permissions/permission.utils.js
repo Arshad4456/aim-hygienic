@@ -6,8 +6,6 @@ const MODULE_ALIASES = {
   "secondary-sales-orders": ["secondary-sales-orders", "secondary-orders", "secondary_sales_orders", "secondary_orders", "distribution"],
   "customer-billing": ["customer-billing", "customer_billing", "customers", "receipts"],
   "live-tracking": ["live-tracking", "live_tracking"],
-  notifications: ["notifications", "messages"],
-  messages: ["messages", "notifications"],
   "purchase-requests": ["purchase-requests", "purchase_requests", "purchase-requisitions", "procurement"],
   "supplier-payments": ["supplier-payments", "supplier_payments", "payments", "procurement"],
   "retail-pos": ["retail-pos", "retail_pos", "pos"],

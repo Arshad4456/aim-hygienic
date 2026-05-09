@@ -1,7 +1,7 @@
 import apiClient from "./apiClient";
 
-const TOKEN_KEYS = ["rawyan_token", "aim_token", "aim_token_v1"];
-const USER_KEYS = ["rawyan_user", "aim_user", "aim_user_v1"];
+const TOKEN_KEYS = ["rawyan_token"];
+const USER_KEYS = ["rawyan_user"];
 
 function readStorage(keys) {
   if (typeof window === "undefined") return null;
@@ -17,12 +17,10 @@ function readStorage(keys) {
 function writeAuthCache(token, user) {
   if (typeof window === "undefined") return;
   if (token) {
-    window.sessionStorage.setItem("aim_token", token);
     window.localStorage.setItem("rawyan_token", token);
   }
   if (user) {
     const encoded = JSON.stringify(user);
-    window.sessionStorage.setItem("aim_user", encoded);
     window.localStorage.setItem("rawyan_user", encoded);
   }
 }

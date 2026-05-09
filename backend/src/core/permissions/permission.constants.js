@@ -1,15 +1,5 @@
-const PERMISSION_ACTIONS = ["view", "create", "edit", "delete", "approve", "reject", "export", "print", "assign", "track"];
+const { PERMISSION_ACTIONS, ERP_MODULE_SETS } = require("../access/erpAccessMatrix");
 const ADMIN_ROLES = new Set(["admin", "system admin", "super admin", "company admin"]);
-
-const COMMON_COMPANY_MODULES = ["dashboard", "roles", "users", "products", "customers", "suppliers", "warehouses", "inventory", "warehouse", "finance", "receipts", "payments", "expenses", "reports", "settings", "notifications"];
-const ERP_MODULE_SETS = {
-  distribution_erp: [...COMMON_COMPANY_MODULES, "companies", "territory", "regions", "zones", "areas", "fields", "sales-quotations", "primary-sales-orders", "secondary-sales-orders", "customer-orders", "customer-billing", "returns", "procurement", "purchase-requests", "purchase-orders", "supplier-payments", "goods-receipts", "operations", "fleet", "dispatches", "deliveries", "live-tracking"],
-  trading_erp: [...COMMON_COMPANY_MODULES, "sales-quotations", "primary-sales-orders", "customer-orders", "returns", "procurement", "purchase-requests", "purchase-orders", "supplier-payments", "goods-receipts", "trading"],
-  manufacturing_erp: [...COMMON_COMPANY_MODULES, "sales-quotations", "primary-sales-orders", "returns", "procurement", "purchase-requests", "purchase-orders", "supplier-payments", "goods-receipts", "manufacturing"],
-  retail_pos_erp: [...COMMON_COMPANY_MODULES, "retail-pos", "customer-orders", "customer-billing", "returns", "goods-receipts"],
-  service_erp: ["dashboard", "roles", "users", "customers", "products", "inventory", "finance", "receipts", "payments", "expenses", "service", "reports", "settings", "notifications"],
-  custom_erp: [...COMMON_COMPANY_MODULES, "companies", "territory", "sales-quotations", "primary-sales-orders", "secondary-sales-orders", "procurement", "purchase-requests", "purchase-orders", "goods-receipts", "retail-pos", "manufacturing", "service", "trading", "operations", "fleet", "dispatches", "deliveries", "live-tracking"],
-};
 
 function uniq(list = []) { return Array.from(new Set((list || []).filter(Boolean))); }
 function allow(modules = [], actions = PERMISSION_ACTIONS, scope = "company") { return Object.fromEntries(uniq(modules).map((key) => [key, { actions, scope }])); }

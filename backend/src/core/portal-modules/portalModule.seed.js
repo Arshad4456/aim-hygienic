@@ -35,7 +35,6 @@ const DEFAULT_PORTAL_MODULES = [
   ["dispatches", "Dispatches", "Logistics", "/portals/logistics/dispatches", "PackageCheck", 132, ["view", "create", "edit", "approve", "print"], true],
   ["deliveries", "Deliveries", "Logistics", "/portals/deliveries", "Navigation", 134, ["view", "edit", "print"], true],
   ["live-tracking", "Live Tracking", "Logistics", "/portals/live-tracking", "MapPin", 140, ["view", "track"], true],
-  ["messages", "Messages", "Communication", "/portals/messages", "MessageSquare", 150, ["view", "create", "edit"], true],
   ["reports", "Reports", "Reports", "/portals/reports", "BarChart3", 160, ["view", "export", "print"], false],
   ["retail-pos", "Retail POS", "Retail POS", "/portals/retail-pos", "BadgeDollarSign", 170, ["view", "create", "edit", "approve", "print", "export"], true],
   ["manufacturing", "Manufacturing", "Manufacturing", "/portals/manufacturing", "Factory", 180, ["view", "create", "edit", "approve", "print", "export"], false],

@@ -80,7 +80,7 @@ const DEFAULT_MODULE_RULES = [
   rule("finance.aging", "finance-accounts", "Aging Report", "View aging report.", ["admin", "system admin", "company admin", "account officer"]),
 
   rule("expense.overview", "expense-management", "Expense Overview", "Open expense management module.", ["admin", "system admin", "company admin", "account officer", "cashier", "distributor"]),
-  rule("expense.personal", "expense-management", "AIM Personal Expense", "Manage company personal expenses.", ["admin", "system admin", "company admin", "account officer", "cashier"]),
+  rule("expense.personal", "expense-management", "Personal Expense", "Manage company personal expenses.", ["admin", "system admin", "company admin", "account officer", "cashier"]),
   rule("expense.daily", "expense-management", "Daily Expense", "Manage daily expenses.", ["admin", "system admin", "company admin", "account officer", "cashier"]),
   rule("expense.distributor", "expense-management", "Distributor Expense", "Manage distributor expenses.", ["admin", "system admin", "company admin", "distributor", "account officer"]),
 

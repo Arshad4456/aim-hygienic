@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "check:syntax": "node -e \"console.log('Run npm run lint after npm install. Next.js JSX syntax requires project dependencies.')\""
   },
   "dependencies": {
     "next": "16.1.6",

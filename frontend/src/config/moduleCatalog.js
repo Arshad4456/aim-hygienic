@@ -52,7 +52,6 @@ const moduleRows = [
   { key: "live-tracking", name: "Live Tracking", category: "Logistics", icon: "⌁", path: "/portals/live-tracking", description: "Live location, duty sessions, route playback, and tracking reports." },
 
   { key: "notifications", name: "Notifications", category: "Communication", icon: "◍", path: "/portals/notifications", description: "In-app, mobile push, SMS, WhatsApp, email, and notification logs." },
-  { key: "messages", name: "Messages", category: "Communication", icon: "✉", path: "/portals/messages", description: "Legacy messages mapped to Notification Center." },
   { key: "reports", name: "Reports", category: "Reports", icon: "▧", path: "/portals/reports", description: "Sales, inventory, finance, territory, fleet, and user activity reports." },
 
   { key: "retail-pos", name: "Retail POS", category: "Retail POS", icon: "⌁", path: "/portals/retail-pos", description: "POS billing, cashier shifts, barcode selling, receipt printing, discounts, returns, and daily cash closing." },
