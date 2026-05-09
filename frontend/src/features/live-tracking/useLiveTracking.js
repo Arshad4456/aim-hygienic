@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { apiFetch } from "../../../app/lib/api";
+import { apiFetch } from "../../services/apiClient";
 import { buildOptionSets, computeSummary, createActivityFeed, defaultFilters, filterUsers } from "./utils";
 
 export function useLiveTracking() {

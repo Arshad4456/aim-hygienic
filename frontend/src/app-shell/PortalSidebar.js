@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BRAND_CONFIG, getBrandInitials } from "@/src/config/brand";
 import { buildSidebarSections } from "@/src/config/menus";
+import { usePortalPreferences } from "@/src/context/PortalPreferences";
 
 function isActivePath(pathname, itemPath) {
   if (!itemPath) return false;
@@ -11,6 +12,7 @@ function isActivePath(pathname, itemPath) {
 
 export default function PortalSidebar({ menu = [], user }) {
   const pathname = usePathname();
+  const { t } = usePortalPreferences();
   const sections = buildSidebarSections(menu);
 
   return (
@@ -21,11 +23,11 @@ export default function PortalSidebar({ menu = [], user }) {
             <div className="flex items-center gap-3">
               <span className="grid h-11 w-11 place-items-center rounded-2xl bg-white text-sm font-black text-slate-950">{getBrandInitials()}</span>
               <div className="min-w-0">
-                <p className="truncate text-xs uppercase tracking-[0.28em] text-white/75">{BRAND_CONFIG.shortName}</p>
-                <h2 className="mt-1 text-2xl font-black">ERP Portal</h2>
+                <p className="truncate text-xs uppercase tracking-[0.28em] text-white/75">{t(BRAND_CONFIG.shortName)}</p>
+                <h2 className="mt-1 text-2xl font-black">{t("ERP Portal")}</h2>
               </div>
             </div>
-            <p className="mt-3 truncate text-xs text-white/80">{user?.companyName || "Company Workspace"}</p>
+            <p className="mt-3 truncate text-xs text-white/80">{user?.companyName || t("Company Workspace")}</p>
             <p className="mt-1 truncate text-xs text-white/65">{user?.fullName || user?.username || user?.name || "ERP User"}</p>
           </div>
         </div>
@@ -33,7 +35,7 @@ export default function PortalSidebar({ menu = [], user }) {
         <nav className="min-h-0 flex-1 space-y-5 overflow-y-auto px-3 pb-6">
           {sections.map((section) => (
             <div key={section.category}>
-              <p className="px-3 text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">{section.category}</p>
+              <p className="px-3 text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">{t(section.category)}</p>
               <div className="mt-2 space-y-1">
                 {section.items.map((item) => {
                   const active = isActivePath(pathname, item.path);
@@ -46,8 +48,8 @@ export default function PortalSidebar({ menu = [], user }) {
                     >
                       <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl text-xs font-black ${active ? "bg-slate-950 text-white" : "bg-white/10 text-slate-300 group-hover:bg-white/15 group-hover:text-white"}`}>{item.icon || "•"}</span>
                       <span className="min-w-0">
-                        <span className="block truncate">{item.name}</span>
-                        <span className={`mt-0.5 block truncate text-[11px] font-medium ${active ? "text-slate-500" : "text-slate-500 group-hover:text-slate-300"}`}>{item.description}</span>
+                        <span className="block truncate">{t(item.name)}</span>
+                        <span className={`mt-0.5 block truncate text-[11px] font-medium ${active ? "text-slate-500" : "text-slate-500 group-hover:text-slate-300"}`}>{t(item.description)}</span>
                       </span>
                     </Link>
                   );

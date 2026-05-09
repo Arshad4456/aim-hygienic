@@ -298,22 +298,27 @@ async function findExistingUserByField(field, value, excludeId = null) {
   return null;
 }
 
-async function findScopedUserById(id, reqUser) {
+async function findScopedUserById(id, reqUser, options = {}) {
+  const selectFields = options.includePassword ? "" : "-passwordHash";
   const reqCompanyId = normalize(reqUser?.companyId);
   if (isSystemLevelAdmin(reqUser?.role)) {
-    const primary = await User.findById(id).select("-passwordHash").lean();
+    const primaryQuery = User.findById(id);
+    if (selectFields) primaryQuery.select(selectFields);
+    const primary = await primaryQuery.lean();
     if (primary) return { user: primary, isTenant: false, companyId: normalize(primary.companyId), companyName: normalize(primary.companyName) };
-    const tenantMatch = await findTenantUserById(id);
+    const tenantMatch = await findTenantUserById(id, "", "", { select: selectFields });
     if (tenantMatch?.doc) return { user: tenantMatch.doc, isTenant: true, companyId: tenantMatch.companyId, companyName: tenantMatch.companyName };
     return { user: null, isTenant: false, companyId: "", companyName: "" };
   }
 
   if (reqCompanyId) {
-    const tenantMatch = await findTenantUserById(id, reqCompanyId, normalize(reqUser?.companyName));
+    const tenantMatch = await findTenantUserById(id, reqCompanyId, normalize(reqUser?.companyName), { select: selectFields });
     if (tenantMatch?.doc) return { user: tenantMatch.doc, isTenant: true, companyId: reqCompanyId, companyName: normalize(reqUser?.companyName) };
   }
 
-  const legacy = await User.findById(id).select("-passwordHash").lean();
+  const legacyQuery = User.findById(id);
+  if (selectFields) legacyQuery.select(selectFields);
+  const legacy = await legacyQuery.lean();
   if (legacy) return { user: legacy, isTenant: false, companyId: normalize(legacy.companyId), companyName: normalize(legacy.companyName) };
   return { user: null, isTenant: false, companyId: "", companyName: "" };
 }
@@ -401,15 +406,33 @@ router.put("/me", requireAuth, async (req, res) => {
   return res.json({ ok: true, user: updated });
 });
 
+router.patch("/me/preferences", requireAuth, async (req, res) => {
+  const body = req.body || {};
+  const allowedLanguages = new Set(["en", "ur", "ar"]);
+  const allowedThemes = new Set(["light", "dark", "system"]);
+  const language = allowedLanguages.has(String(body.language || "")) ? String(body.language) : "en";
+  const theme = allowedThemes.has(String(body.theme || "")) ? String(body.theme) : "light";
+  const scoped = await findScopedUserById(req.user.uid, req.user);
+  if (!scoped.user) return res.status(404).json({ ok: false, message: "User not found" });
+  const updatePayload = { language, theme };
+  let updated;
+  if (scoped.isTenant) {
+    updated = await updateUserInTenant(req.user.uid, { $set: updatePayload }, scoped.companyId, scoped.companyName);
+  } else {
+    updated = await User.findByIdAndUpdate(req.user.uid, updatePayload, { new: true, runValidators: true }).select("-passwordHash");
+  }
+  return res.json({ ok: true, user: updated });
+});
+
 router.put("/change-password", requireAuth, async (req, res) => {
   const { currentPassword, newPassword } = req.body || {};
   const validation = validatePassword(newPassword);
   if (!validation.ok) return res.status(400).json({ ok: false, message: validation.message });
 
-  const scoped = await findScopedUserById(req.user.uid, req.user);
+  const scoped = await findScopedUserById(req.user.uid, req.user, { includePassword: true });
   const user = scoped.user;
   if (!user) return res.status(404).json({ ok: false, message: "User not found" });
-  const ok = await verifyPassword(String(currentPassword || ""), user.passwordHash);
+  const ok = await verifyPassword(String(currentPassword || ""), user.passwordHash || user.password);
   if (!ok) return res.status(401).json({ ok: false, message: "Current password is incorrect" });
 
   const nextHash = await hashPassword(newPassword);

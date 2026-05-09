@@ -54,8 +54,9 @@ async function listTenantUsersByCompany(companyId) {
   return queryAcrossTenantModels(User, { companyId: String(companyId).trim() }, { sort: { createdAt: -1 } });
 }
 
-async function findTenantUserById(id, companyId = "", companyName = "") {
-  return findTenantDocById(User, id, companyId, companyName, { select: "-passwordHash" });
+async function findTenantUserById(id, companyId = "", companyName = "", options = {}) {
+  const select = Object.prototype.hasOwnProperty.call(options, "select") ? options.select : "-passwordHash";
+  return findTenantDocById(User, id, companyId, companyName, { select });
 }
 
 module.exports = {

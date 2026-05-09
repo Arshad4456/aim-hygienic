@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { getAuthItem, getCachedUser, setAuthSession } from "@/src/services/authService";
 import { apiFetch } from "@/src/services/apiClient";
-import { getAuthItem, getAuthUser, setAuthSession } from "../lib/clientAuth";
 import { getDefaultPathForUser } from "@/src/config/erpAccessMatrix";
 import { BRAND_CONFIG, getBrandInitials } from "@/src/config/brand";
 
@@ -18,7 +18,7 @@ export default function LoginPage() {
   // If already logged in
   useEffect(() => {
     const token = typeof window !== "undefined" ? getAuthItem("rawyan_token") : null;
-    const user = typeof window !== "undefined" ? getAuthUser() : null;
+    const user = typeof window !== "undefined" ? getCachedUser() : null;
     const role = typeof window !== "undefined" ? getAuthItem("rawyan_role") : null;
     if (token && (user || role)) {
       router.replace(roleRedirect(user || role));

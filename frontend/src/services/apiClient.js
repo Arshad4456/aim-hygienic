@@ -40,7 +40,7 @@ function isBrowserSafeFallback(base) {
 
 export function getStoredToken() {
   if (typeof window === "undefined") return null;
-  const keys = ["rawyan_token", "token", "authToken"];
+  const keys = ["rawyan_token"];
   for (const storage of [window.sessionStorage, window.localStorage]) {
     for (const key of keys) {
       const value = storage.getItem(key);
@@ -59,7 +59,7 @@ export function setStoredToken(token, { remember = true } = {}) {
 export function clearStoredToken() {
   if (typeof window === "undefined") return;
   for (const storage of [window.sessionStorage, window.localStorage]) {
-    ["rawyan_token", "token", "authToken"].forEach((key) => storage.removeItem(key));
+    ["rawyan_token"].forEach((key) => storage.removeItem(key));
   }
 }
 

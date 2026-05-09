@@ -101,6 +101,8 @@ function publicUser(user, profile = {}) {
     fieldName: user.fieldName || "",
     mobile: user.mobile || user.mobileNumber,
     email: user.email,
+    language: user.language || "en",
+    theme: user.theme || "light",
     warehouseId: user.warehouseId || "",
     permissions: profile.permissions || {},
     enabledModules: profile.enabledModules || [],

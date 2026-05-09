@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { apiFetch } from "../../../app/lib/api";
+import { apiFetch } from "../../services/apiClient";
 import {
   buildOpenStreetMapLink,
   buildOsmEmbedUrl,

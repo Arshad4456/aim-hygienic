@@ -1,7 +1,7 @@
 "use client";
 
-import { LanguageProvider } from "./language";
+import { PortalPreferencesProvider } from "@/src/context/PortalPreferences";
 
 export default function ClientProviders({ children }) {
-  return <LanguageProvider>{children}</LanguageProvider>;
+  return <PortalPreferencesProvider>{children}</PortalPreferencesProvider>;
 }

@@ -1,10 +1,15 @@
 import apiClient from "./apiClient";
 
-const TOKEN_KEYS = ["rawyan_token"];
-const USER_KEYS = ["rawyan_user"];
+export const TOKEN_KEYS = ["rawyan_token"];
+export const USER_KEYS = ["rawyan_user"];
+export const ROLE_KEYS = ["rawyan_role"];
+
+function hasWindow() {
+  return typeof window !== "undefined";
+}
 
 function readStorage(keys) {
-  if (typeof window === "undefined") return null;
+  if (!hasWindow()) return null;
   for (const storage of [window.sessionStorage, window.localStorage]) {
     for (const key of keys) {
       const value = storage.getItem(key);
@@ -14,19 +19,39 @@ function readStorage(keys) {
   return null;
 }
 
-function writeAuthCache(token, user) {
-  if (typeof window === "undefined") return;
-  if (token) {
-    window.localStorage.setItem("rawyan_token", token);
-  }
+export function getAuthItem(key) {
+  if (!hasWindow()) return null;
+  return window.sessionStorage.getItem(key) || window.localStorage.getItem(key);
+}
+
+export function writeAuthCache(token, user, { remember = true } = {}) {
+  if (!hasWindow()) return;
+  const target = remember ? window.localStorage : window.sessionStorage;
+  if (token) target.setItem("rawyan_token", token);
   if (user) {
-    const encoded = JSON.stringify(user);
-    window.localStorage.setItem("rawyan_user", encoded);
+    const encoded = JSON.stringify(user || {});
+    target.setItem("rawyan_user", encoded);
+    target.setItem("rawyan_role", user?.role || user?.roleName || user?.roleKey || "");
+    if (user?.language) window.localStorage.setItem("rawyan_language", user.language);
+    if (user?.theme) window.localStorage.setItem("rawyan_theme", user.theme);
+  }
+}
+
+export function setAuthSession({ token, role, user, remember = true } = {}) {
+  if (!hasWindow()) return;
+  logout();
+  const target = remember ? window.localStorage : window.sessionStorage;
+  if (token) target.setItem("rawyan_token", token);
+  if (role || user?.role) target.setItem("rawyan_role", role || user?.role || "");
+  if (user) {
+    target.setItem("rawyan_user", JSON.stringify(user || {}));
+    if (user?.language) window.localStorage.setItem("rawyan_language", user.language);
+    if (user?.theme) window.localStorage.setItem("rawyan_theme", user.theme);
   }
 }
 
 export async function login(credentials) {
-  const payload = await apiClient("/auth/login", { method: "POST", body: JSON.stringify(credentials) });
+  const payload = await apiClient("/auth/login", { method: "POST", body: credentials });
   if (payload?.token) writeAuthCache(payload.token, payload.user || {});
   return payload;
 }
@@ -38,7 +63,7 @@ export async function getMe() {
 }
 
 export function getCachedUser() {
-  if (typeof window === "undefined") return null;
+  if (!hasWindow()) return null;
   const raw = readStorage(USER_KEYS);
   if (!raw) return null;
   try {
@@ -48,11 +73,14 @@ export function getCachedUser() {
   }
 }
 
+export function getCachedRole() {
+  return readStorage(ROLE_KEYS) || getCachedUser()?.role || "";
+}
+
 export function logout() {
-  if (typeof window !== "undefined") {
-    [...TOKEN_KEYS, ...USER_KEYS].forEach((key) => {
-      window.sessionStorage.removeItem(key);
-      window.localStorage.removeItem(key);
-    });
-  }
+  if (!hasWindow()) return;
+  [...TOKEN_KEYS, ...USER_KEYS, ...ROLE_KEYS, "token", "authToken"].forEach((key) => {
+    window.sessionStorage.removeItem(key);
+    window.localStorage.removeItem(key);
+  });
 }
