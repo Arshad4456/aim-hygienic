@@ -1,6 +1,7 @@
 const express = require("express");
 const CompanyBranch = require("../models/CompanyBranch");
 const { requireAuth, requireRole } = require("../utils/auth");
+const { assertCompanyLimit, requireCompanyModule } = require("../core/access/companyAccessGuard");
 
 const router = express.Router();
 
@@ -14,7 +15,7 @@ function resolveCompanyId(req) {
   return String(req.user?.companyId || "").trim();
 }
 
-router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
+router.get("/", requireAuth, requireRole("admin"), requireCompanyModule("company-control"), async (req, res) => {
   try {
     const companyId = resolveCompanyId(req);
     if (!companyId) return res.status(400).json({ ok: false, message: "companyId is required" });
@@ -25,10 +26,11 @@ router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
   }
 });
 
-router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
+router.post("/", requireAuth, requireRole("admin"), requireCompanyModule("company-control"), async (req, res) => {
   try {
     const companyId = resolveCompanyId(req);
     if (!companyId) return res.status(400).json({ ok: false, message: "companyId is required" });
+    await assertCompanyLimit(companyId, "branches");
     const body = req.body || {};
     const branchCode = String(body.branchCode || "").trim();
     const name = String(body.name || "").trim();
@@ -51,11 +53,12 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
     return res.status(201).json({ ok: true, branch });
   } catch (error) {
     if (error?.code === 11000) return res.status(409).json({ ok: false, message: "Branch code already exists for this company" });
+    if (/limit|plan|subscription/i.test(error?.message || "")) return res.status(402).json({ ok: false, message: error.message });
     return res.status(500).json({ ok: false, message: "Failed to create company branch" });
   }
 });
 
-router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
+router.put("/:id", requireAuth, requireRole("admin"), requireCompanyModule("company-control"), async (req, res) => {
   try {
     const companyId = resolveCompanyId(req);
     if (!companyId) return res.status(400).json({ ok: false, message: "companyId is required" });

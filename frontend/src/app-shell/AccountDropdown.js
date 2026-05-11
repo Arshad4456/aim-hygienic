@@ -116,6 +116,7 @@ export default function AccountDropdown({ user }) {
           <button onClick={() => setMode(mode === "profile" ? "" : "profile")} className="rounded-xl bg-slate-50 px-3 py-2 text-slate-700 hover:bg-emerald-50">{t("Profile Settings")}</button>
           <button onClick={() => setMode(mode === "password" ? "" : "password")} className="rounded-xl bg-slate-50 px-3 py-2 text-slate-700 hover:bg-emerald-50">{t("Change Password")}</button>
           <button onClick={() => setMode(mode === "preferences" ? "" : "preferences")} className="rounded-xl bg-slate-50 px-3 py-2 text-slate-700 hover:bg-emerald-50">{t("Language / Theme")}</button>
+          {profile.scope !== "system" ? <a href="/portals/company-control" className="rounded-xl bg-slate-50 px-3 py-2 text-center text-slate-700 hover:bg-emerald-50">{t("Company Control")}</a> : null}
           <button onClick={doLogout} className="rounded-xl bg-red-50 px-3 py-2 text-red-700 hover:bg-red-100">{t("Logout")}</button>
         </div>
         {mode ? <div className="border-t border-slate-100 p-4">

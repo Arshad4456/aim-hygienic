@@ -5,9 +5,11 @@ const Account = require("../models/Account");
 const AccountTransaction = require("../models/AccountTransaction");
 const Company = require("../models/Company");
 const { requireAuth } = require("../utils/auth");
+const { requireCompanyModule } = require("../core/access/companyAccessGuard");
 const { toTenantDatabaseName } = require("../utils/tenantDatabases");
 
 const router = express.Router();
+router.use(requireAuth, requireCompanyModule("expenses"));
 
 function toNumber(value) {
   const n = Number(value);

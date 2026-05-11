@@ -8,6 +8,7 @@ export const CANONICAL_PORTAL_ROUTES = {
   "/portals/system-admin/users": "system-admin-users",
   "/portals/system-admin/subscriptions": "subscription-plans",
   "/portals/system-admin/modules": "module-controls",
+  "/portals/company-control": "company-control",
   "/portals/companies": "companies",
   "/portals/erp-templates": "erp-templates",
   "/portals/roles": "roles",

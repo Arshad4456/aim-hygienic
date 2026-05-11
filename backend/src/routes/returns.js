@@ -1,10 +1,12 @@
 const express = require('express');
 const { requireAuth } = require('../utils/auth');
+const { requireCompanyModule } = require('../core/access/companyAccessGuard');
 const ReturnDocument = require('../models/ReturnDocument');
 const { getScopedModels, asText, normalizeRole } = require('../services/scopedModels');
 const { postReturnDocument } = require('../services/posting/postReturnDocument');
 
 const router = express.Router();
+router.use(requireAuth, requireCompanyModule("returns"));
 
 function scopedReturnQuery(req) {
   const role = normalizeRole(req.user?.role);

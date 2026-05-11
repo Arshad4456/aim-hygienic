@@ -5,6 +5,7 @@ const { findTenantDocById, listAllTenantTargets } = require("../../utils/tenantM
 const { listTenantUsersByCompany, updateUserInTenant, createUserInTenant } = require("../../utils/tenantUsers");
 const { hashPassword } = require("../../utils/passwordHash");
 const { normalizeKey, permissionsToPlainObject } = require("../permissions/permission.service");
+const { buildCompanyAccessContext, assertCompanySubscriptionActive } = require("../access/companyAccessGuard");
 
 function text(value) { return String(value || "").trim(); }
 function lower(value) { return text(value).toLowerCase(); }
@@ -142,12 +143,14 @@ async function assertNoDuplicateIdentity({ username, mobile, companyId }) {
 
 async function assertCompanyPlanAllowsUser(company, payload = {}) {
   if (!company?.companyId) return;
-  const subscription = company.subscription || {};
-  const companyUsers = await listTenantUsersByCompany(company.companyId).catch(() => []);
-  const activeUsers = companyUsers.filter((u) => !["inactive", "deactive"].includes(lower(u.status))).length;
-  const mobileUsers = companyUsers.filter((u) => Boolean(u.mobileAccess)).length;
-  if (subscription.userLimit && activeUsers >= Number(subscription.userLimit)) throw new Error(`User limit reached for this company's active plan (${activeUsers}/${subscription.userLimit})`);
-  if (payload.mobileAccess && subscription.mobileUserLimit && mobileUsers >= Number(subscription.mobileUserLimit)) throw new Error(`Mobile user limit reached for this company's active plan (${mobileUsers}/${subscription.mobileUserLimit})`);
+  const context = await buildCompanyAccessContext(company.companyId);
+  assertCompanySubscriptionActive(context);
+  const activeUsers = Number(context.usage.activeUsers || context.usage.users || 0);
+  const mobileUsers = Number(context.usage.mobileUsers || 0);
+  const userLimit = Number(context.limits.users || 0);
+  const mobileLimit = Number(context.limits.mobileUsers || 0);
+  if (userLimit && activeUsers >= userLimit) throw new Error(`User limit reached for this company's active plan (${activeUsers}/${userLimit})`);
+  if (payload.mobileAccess && mobileLimit && mobileUsers >= mobileLimit) throw new Error(`Mobile user limit reached for this company's active plan (${mobileUsers}/${mobileLimit})`);
 }
 
 async function createUser(payload = {}, actor = {}) {

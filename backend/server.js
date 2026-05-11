@@ -11,7 +11,7 @@ const { buildCorsOptions } = require("./src/config/cors");
 const { registerRoutes } = require("./src/routes");
 const { APP_BRAND } = require("./src/config/brand");
 const { createSocketServer } = require("./src/socket");
-const { registerLocationSocket } = require("./src/modules/location/socket");
+const { registerLocationSocket } = require("./src/erp/logistics/modules/live-tracking/socket");
 const { validateEnvironment } = require("./src/config/validateEnv");
 
 validateEnvironment();

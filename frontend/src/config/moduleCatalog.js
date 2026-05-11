@@ -7,6 +7,7 @@ const moduleRows = [
   { key: "subscription-plans", name: "Subscription Plans", category: "SaaS Control", icon: "◈", path: "/portals/system-admin/subscriptions", description: "Create SaaS plans, module limits, and user limits." },
   { key: "module-controls", name: "Module Controls", category: "SaaS Control", icon: "▤", path: "/portals/system-admin/modules", description: "Control module access and package availability." },
 
+  { key: "company-control", name: "Company Control", category: "Setup", icon: "◩", path: "/portals/company-control", description: "Company profile, active plan, usage limits, enabled modules, and subscription health." },
   { key: "companies", name: "Companies", category: "Setup", icon: "🏢", path: "/portals/companies", description: "Company, branch, tenant records, and company activation." },
   { key: "erp-templates", name: "ERP Templates", category: "Setup", icon: "▧", path: "/portals/erp-templates", description: "ERP templates, business types, and enabled modules." },
   { key: "roles", name: "Roles & Permissions", category: "Setup", icon: "🔐", path: "/portals/roles", description: "Database-driven roles and permissions." },

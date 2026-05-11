@@ -1,12 +1,12 @@
 const PERMISSION_ACTIONS = ["view", "create", "edit", "delete", "approve", "reject", "export", "print", "assign", "track"];
-const COMMON_COMPANY_MODULES = ["dashboard", "roles", "users", "products", "customers", "suppliers", "warehouses", "inventory", "warehouse", "finance", "receipts", "payments", "expenses", "reports", "settings", "notifications"];
+const COMMON_COMPANY_MODULES = ["dashboard", "company-control", "roles", "users", "products", "customers", "suppliers", "warehouses", "inventory", "warehouse", "finance", "receipts", "payments", "expenses", "reports", "settings", "notifications"];
 const SYSTEM_MODULE_KEYS = ["dashboard", "system-admin", "system-admin-companies", "system-admin-users", "subscription-plans", "module-controls", "erp-templates", "reports", "settings"];
 const ERP_MODULE_SETS = {
   distribution_erp: [...COMMON_COMPANY_MODULES, "territory", "regions", "zones", "areas", "fields", "sales-quotations", "primary-sales-orders", "secondary-sales-orders", "customer-orders", "customer-billing", "returns", "procurement", "purchase-requests", "purchase-orders", "supplier-payments", "goods-receipts", "operations", "fleet", "dispatches", "deliveries", "live-tracking"],
   trading_erp: [...COMMON_COMPANY_MODULES, "sales-quotations", "primary-sales-orders", "customer-orders", "returns", "procurement", "purchase-requests", "purchase-orders", "supplier-payments", "goods-receipts", "trading"],
   manufacturing_erp: [...COMMON_COMPANY_MODULES, "sales-quotations", "primary-sales-orders", "returns", "procurement", "purchase-requests", "purchase-orders", "supplier-payments", "goods-receipts", "manufacturing"],
-  retail_pos_erp: ["dashboard", "users", "roles", "products", "customers", "warehouses", "inventory", "warehouse", "retail-pos", "customer-orders", "customer-billing", "returns", "goods-receipts", "finance", "receipts", "payments", "expenses", "reports", "settings", "notifications"],
-  service_erp: ["dashboard", "users", "roles", "customers", "products", "inventory", "warehouse", "service", "finance", "receipts", "payments", "expenses", "reports", "settings", "notifications"],
+  retail_pos_erp: ["dashboard", "company-control", "users", "roles", "products", "customers", "warehouses", "inventory", "warehouse", "retail-pos", "customer-orders", "customer-billing", "returns", "goods-receipts", "finance", "receipts", "payments", "expenses", "reports", "settings", "notifications"],
+  service_erp: ["dashboard", "company-control", "users", "roles", "customers", "products", "inventory", "warehouse", "service", "finance", "receipts", "payments", "expenses", "reports", "settings", "notifications"],
   custom_erp: [...COMMON_COMPANY_MODULES, "territory", "regions", "zones", "areas", "fields", "sales-quotations", "primary-sales-orders", "secondary-sales-orders", "customer-orders", "customer-billing", "returns", "procurement", "purchase-requests", "purchase-orders", "supplier-payments", "goods-receipts", "retail-pos", "manufacturing", "service", "trading", "operations", "fleet", "dispatches", "deliveries", "live-tracking"],
 };
 const ERP_TYPES = Object.keys(ERP_MODULE_SETS);
@@ -18,7 +18,7 @@ function uniq(list = []) { return Array.from(new Set((list || []).filter(Boolean
 const role = (label, scope, landingPath, modules) => ({ label, scope, landingPath, modules });
 const ROLE_ACCESS_MATRIX = {
   "system admin": role("System Admin", "system", "/portals/system-admin", SYSTEM_MODULE_KEYS),
-  "company admin": role("Company Admin", "company", "/portals", ["*"]),
+  "company admin": role("Company Admin", "company", "/portals/company-control", ["*"]),
   ceo: role("CEO", "company", "/portals", ["dashboard", "reports", "finance", "inventory", "primary-sales-orders", "secondary-sales-orders", "retail-pos", "manufacturing", "service", "trading", "settings"]),
   "purchase manager": role("Purchase Manager", "company", "/portals/procurement", ["dashboard", "suppliers", "products", "procurement", "purchase-requests", "purchase-orders", "supplier-payments", "goods-receipts", "inventory", "warehouse", "reports", "settings", "notifications"]),
   "finance manager": role("Finance Manager", "company", "/portals/finance", ["dashboard", "finance", "receipts", "payments", "expenses", "loans", "reports", "settings", "notifications"]),

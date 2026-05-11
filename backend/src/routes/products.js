@@ -1,10 +1,12 @@
 const express = require("express");
 const Product = require("../models/Product");
 const { requireAuth } = require("../utils/auth");
+const { requireCompanyModule } = require("../core/access/companyAccessGuard");
 const { createProductInTenant, updateProductInTenant, deleteProductFromTenant, listTenantProductsByCompany, findTenantProductById } = require("../utils/tenantProducts");
 const { listAllTenantTargets, getTenantModel } = require("../utils/tenantModels");
 
 const router = express.Router();
+router.use(requireAuth, requireCompanyModule("products"));
 
 function normalizeRole(role) {
   return String(role || "").trim().toLowerCase();

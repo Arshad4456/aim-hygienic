@@ -1,14 +1,13 @@
 const express = require("express");
 const User = require("../models/User");
 const Company = require("../models/Company");
-const Warehouse = require("../models/Warehouse");
-const CompanyBranch = require("../models/CompanyBranch");
 const { signToken, requireAuth, inferPortalType } = require("../utils/auth");
 const { verifyPassword } = require("../utils/passwordHash");
 const { listAllTenantTargets, getTenantModel } = require("../utils/tenantModels");
 const { listTenantUsersByCompany } = require("../utils/tenantUsers");
 const { getUserPermissionProfile, listVisibleModules } = require("../core/permissions/permission.service");
 const { ensureDefaultModules } = require("../core/portal-modules/portalModule.service");
+const { buildCompanyAccessContext } = require("../core/access/companyAccessGuard");
 
 const router = express.Router();
 
@@ -117,18 +116,17 @@ function publicUser(user, profile = {}) {
 async function loadCompanyContext(user = {}) {
   const companyId = String(user.companyId || "").trim();
   if (!companyId) return {};
-  const company = await Company.findOne({ companyId }).lean().catch(() => null);
-  const tenantUsers = await listTenantUsersByCompany(companyId).catch(() => []);
-  const [branches, warehouses] = await Promise.all([
-    CompanyBranch.countDocuments({ companyId }).catch(() => 0),
-    Warehouse.countDocuments({ companyId }).catch(() => 0),
-  ]);
+  const context = await buildCompanyAccessContext(companyId).catch(() => null);
+  if (!context) {
+    const company = await Company.findOne({ companyId }).lean().catch(() => null);
+    return { subscription: company?.subscription || user.subscription || null, companyStatus: company?.status || user.companyStatus || "", enabledModules: company?.enabledModules || user.enabledModules || [], erpTemplateKey: company?.erpTemplateKey || user.erpTemplateKey || "distribution_erp", companyUsage: {} };
+  }
   return {
-    subscription: company?.subscription || user.subscription || null,
-    companyStatus: company?.status || user.companyStatus || "",
-    enabledModules: company?.enabledModules?.length ? company.enabledModules : user.enabledModules || [],
-    erpTemplateKey: company?.erpTemplateKey || company?.businessType || user.erpTemplateKey || user.businessType || "distribution_erp",
-    companyUsage: { users: tenantUsers.length, activeUsers: tenantUsers.filter((u) => String(u.status || "active").toLowerCase() === "active").length, mobileUsers: tenantUsers.filter((u) => Boolean(u.mobileAccess)).length, branches, warehouses },
+    subscription: context.subscription,
+    companyStatus: context.company?.status || user.companyStatus || "",
+    enabledModules: context.allowedModules,
+    erpTemplateKey: context.erpTemplateKey,
+    companyUsage: context.usage,
   };
 }
 

@@ -1,5 +1,6 @@
 const express = require('express');
 const { requireAuth } = require('../utils/auth');
+const { requireCompanyModule } = require('../core/access/companyAccessGuard');
 const {
   buildMasterReport,
   buildFocusedReport,
@@ -10,6 +11,7 @@ const {
 const { createModuleAccessGuard, normalizeRole: normalizeModuleAccessRole } = require('../utils/moduleAccess');
 
 const router = express.Router();
+router.use(requireAuth, requireCompanyModule("reports"));
 
 const ALLOWED_REPORT_PERIODS = new Set(['all', 'day', 'week', 'month', 'quarter', 'year']);
 

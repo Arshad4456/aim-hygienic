@@ -6,6 +6,7 @@ module.exports = createTenantMasterRouter({
   collectionName: "fields",
   singular: "field",
   plural: "fields",
+  moduleKey: "territory",
   duplicateMessage: "Field ID already exists",
   filterKeys: ["warehouseId", "regionId", "zoneId", "territoryId"],
   searchKeys: ["fieldId", "name", "warehouseName", "regionName", "zoneName", "territoryName"],

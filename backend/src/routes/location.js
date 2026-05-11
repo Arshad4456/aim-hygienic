@@ -1,1 +1,1 @@
-module.exports = require("../modules/location/routes");
+module.exports = require("../erp/logistics/modules/live-tracking/routes");

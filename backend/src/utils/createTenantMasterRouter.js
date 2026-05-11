@@ -1,5 +1,6 @@
 const express = require("express");
 const { requireAuth } = require("./auth");
+const { requireCompanyModule } = require("../core/access/companyAccessGuard");
 const { createMasterInTenant, updateMasterInTenant, deleteMasterFromTenant, findTenantMasterById, listTenantMasterByCompany } = require("./tenantMasters");
 const { listAllTenantTargets } = require("./tenantModels");
 
@@ -43,8 +44,10 @@ module.exports = function createTenantMasterRouter({
   filterKeys = [],
   searchKeys = [],
   duplicateMessage,
+  moduleKey = "",
 }) {
   const router = express.Router();
+  if (moduleKey) router.use(requireAuth, requireCompanyModule(moduleKey));
 
   async function listAllTenantDocs() {
     const items = [];

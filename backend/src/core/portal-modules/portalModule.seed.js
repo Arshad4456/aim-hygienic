@@ -5,6 +5,7 @@ const DEFAULT_PORTAL_MODULES = [
   ["system-admin-users", "System Users", "SaaS Control", "/portals/system-admin/users", "Users", 4, ["view", "create", "edit", "delete", "assign"], false],
   ["subscription-plans", "Subscription Plans", "SaaS Control", "/portals/system-admin/subscriptions", "BadgeDollarSign", 5, ["view", "create", "edit", "delete"], false],
   ["module-controls", "Module Controls", "SaaS Control", "/portals/system-admin/modules", "SlidersHorizontal", 6, ["view", "create", "edit", "delete"], false],
+  ["company-control", "Company Control", "Core", "/portals/company-control", "Building2", 8, ["view", "edit"], false],
   ["companies", "Companies", "Core", "/portals/companies", "Building2", 10, ["view", "create", "edit", "delete"], false],
   ["erp-templates", "ERP Templates", "Core", "/portals/erp-templates", "Layers", 12, ["view", "create", "edit", "delete"], false],
   ["roles", "Roles & Permissions", "Core", "/portals/roles", "ShieldCheck", 14, ["view", "create", "edit", "delete", "assign"], false],

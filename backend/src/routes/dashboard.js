@@ -1,9 +1,11 @@
 const express = require('express');
 const { requireAuth } = require('../utils/auth');
+const { requireCompanyModule } = require('../core/access/companyAccessGuard');
 const { createModuleAccessGuard } = require('../utils/moduleAccess');
 const { buildDashboardOverview, buildOperationsDashboard, buildFocusedReport } = require('../services/reportsMaster');
 
 const router = express.Router();
+router.use(requireAuth, requireCompanyModule("dashboard"));
 
 router.get('/overview', requireAuth, createModuleAccessGuard('dashboard.overview'), async (req, res) => {
   try {

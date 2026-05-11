@@ -15,6 +15,7 @@ const { hashPassword } = require("../../utils/passwordHash");
 const { ensureDatabaseExists, toTenantDatabaseName } = require("../../utils/tenantDatabases");
 const { createUserInTenant } = require("../../utils/tenantUsers");
 const { APP_BRAND } = require("../../config/brand");
+const { buildCompanyAccessContext } = require("../access/companyAccessGuard");
 
 function text(value) { return String(value || "").trim(); }
 function lower(value) { return text(value).toLowerCase(); }
@@ -57,13 +58,14 @@ async function getOverview() {
   const mobileUsersByCompany = users.reduce((acc, user) => { if (!user.mobileAccess) return acc; const key = String(user.companyId || "unassigned"); acc[key] = (acc[key] || 0) + 1; return acc; }, {});
   const activeModuleCount = modules.filter((m) => m.status !== "inactive" && m.webEnabled !== false).length;
 
-  const companiesWithUsage = companies.map((company) => {
+  const companiesWithUsage = await Promise.all(companies.map(async (company) => {
     const companyId = normalizeCompanyId(company);
-    const subscription = subscriptionByCompany.get(companyId) || company.subscription || {};
-    const userLimit = number(subscription.userLimit ?? company.subscription?.userLimit, 0);
-    const userCount = number(usersByCompany[companyId], 0);
-    const mobileUserCount = number(mobileUsersByCompany[companyId], 0);
-    const allowedModules = withWildcardModules(subscription.allowedModules?.length ? subscription.allowedModules : company.enabledModules || []);
+    const fallbackSubscription = subscriptionByCompany.get(companyId) || company.subscription || {};
+    const context = await buildCompanyAccessContext(companyId).catch(() => null);
+    const subscription = context?.subscription || fallbackSubscription;
+    const usage = context?.usage || { users: number(usersByCompany[companyId], 0), mobileUsers: number(mobileUsersByCompany[companyId], 0), branches: 0, warehouses: 0, modules: 0 };
+    const limits = context?.limits || {};
+    const allowedModules = context?.allowedModules || withWildcardModules(subscription.allowedModules?.length ? subscription.allowedModules : company.enabledModules || []);
     return {
       _id: company._id,
       companyId,
@@ -73,17 +75,20 @@ async function getOverview() {
       phone2: company.phone2,
       mainOfficeAddress: company.mainOfficeAddress,
       status: company.status || subscription.status || "active",
-      erpTemplateKey: company.erpTemplateKey || company.businessType || "distribution_erp",
+      erpTemplateKey: context?.erpTemplateKey || company.erpTemplateKey || company.businessType || "distribution_erp",
       planKey: subscription.planKey || company.subscription?.planKey || "starter",
       subscriptionStatus: subscription.status || company.subscription?.status || "active",
-      userCount,
-      userLimit,
-      branchLimit: number(subscription.branchLimit ?? company.subscription?.branchLimit, 0),
-      warehouseLimit: number(subscription.warehouseLimit ?? company.subscription?.warehouseLimit, 0),
-      mobileUserCount,
-      mobileUserLimit: number(subscription.mobileUserLimit ?? company.subscription?.mobileUserLimit, 0),
-      moduleCount: allowedModules.includes("*") ? activeModuleCount : allowedModules.length,
-      moduleLimit: number(subscription.moduleLimit ?? company.subscription?.moduleLimit, 0),
+      userCount: usage.users || 0,
+      activeUserCount: usage.activeUsers || usage.users || 0,
+      userLimit: number(limits.users ?? subscription.userLimit ?? company.subscription?.userLimit, 0),
+      branchCount: usage.branches || 0,
+      branchLimit: number(limits.branches ?? subscription.branchLimit ?? company.subscription?.branchLimit, 0),
+      warehouseCount: usage.warehouses || 0,
+      warehouseLimit: number(limits.warehouses ?? subscription.warehouseLimit ?? company.subscription?.warehouseLimit, 0),
+      mobileUserCount: usage.mobileUsers || 0,
+      mobileUserLimit: number(limits.mobileUsers ?? subscription.mobileUserLimit ?? company.subscription?.mobileUserLimit, 0),
+      moduleCount: usage.modules || (allowedModules.includes("*") ? activeModuleCount : allowedModules.length),
+      moduleLimit: number(limits.modules ?? subscription.moduleLimit ?? company.subscription?.moduleLimit, 0),
       allowedModules,
       moduleAccess: moduleAccessByCompany.get(companyId) || null,
       systemAdminNotes: company.systemAdminNotes || subscription.notes || "",
@@ -94,7 +99,7 @@ async function getOverview() {
       suspendedAt: company.suspendedAt,
       suspensionReason: company.suspensionReason,
     };
-  });
+  }));
 
   const byTemplate = companiesWithUsage.reduce((acc, company) => { const key = company.erpTemplateKey || "unknown"; acc[key] = (acc[key] || 0) + 1; return acc; }, {});
   const byStatus = companiesWithUsage.reduce((acc, company) => { const key = company.status || "active"; acc[key] = (acc[key] || 0) + 1; return acc; }, {});
@@ -281,31 +286,17 @@ async function updateModuleControl(moduleKey, payload = {}, userId = null) {
 
 async function getCompanyLimits(companyId) {
   if (!companyId) throw new Error("companyId is required");
-  const [company, subscription, userCount, mobileUserCount, moduleAccess, modules] = await Promise.all([
-    Company.findOne({ companyId }).lean(),
-    CompanySubscription.findOne({ companyId }).lean(),
-    User.countDocuments({ companyId }),
-    User.countDocuments({ companyId, mobileAccess: true }),
-    ModuleAccessConfig.findOne({ companyId }).lean(),
-    listModules({ status: "active" }),
-  ]);
-  if (!company) throw new Error("Company not found");
-  const effectiveSubscription = subscription || company.subscription || {};
-  const allowedModules = withWildcardModules(effectiveSubscription.allowedModules || company.enabledModules || []);
+  const context = await buildCompanyAccessContext(companyId);
+  const modules = await listModules({ status: "active" });
   return {
-    company,
-    subscription: effectiveSubscription,
-    usage: { users: userCount, mobileUsers: mobileUserCount, modules: allowedModules.includes("*") ? modules.length : allowedModules.length },
-    limits: {
-      users: number(effectiveSubscription.userLimit, 0),
-      mobileUsers: number(effectiveSubscription.mobileUserLimit, 0),
-      modules: number(effectiveSubscription.moduleLimit, 0),
-      branches: number(effectiveSubscription.branchLimit, 0),
-      warehouses: number(effectiveSubscription.warehouseLimit, 0),
-    },
-    moduleAccess,
+    company: context.company,
+    subscription: context.subscription,
+    usage: context.usage,
+    limits: context.limits,
+    percent: context.percent,
+    moduleAccess: context.moduleAccess,
     availableModules: modules,
-    allowedModules,
+    allowedModules: context.allowedModules,
   };
 }
 

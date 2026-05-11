@@ -9,6 +9,7 @@ const { requireAuth, requireRole } = require("../utils/auth");
 const { toTenantDatabaseName } = require("../utils/tenantDatabases");
 
 const router = express.Router();
+router.use(requireAuth, requireCompanyModule("loans"));
 
 function toNumber(v) {
   const n = Number(v);

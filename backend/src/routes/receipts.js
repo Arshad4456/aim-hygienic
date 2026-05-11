@@ -1,5 +1,6 @@
 const express = require('express');
 const { requireAuth } = require('../utils/auth');
+const { requireCompanyModule } = require('../core/access/companyAccessGuard');
 const CustomerReceipt = require('../models/CustomerReceipt');
 const CustomerInvoice = require('../models/CustomerInvoice');
 const CompanyReceiptFromDistributor = require('../models/CompanyReceiptFromDistributor');
@@ -13,6 +14,7 @@ const { postCompanyInvoiceToDistributor } = require('../services/posting/postCom
 const { postCompanyReceiptFromDistributor } = require('../services/posting/postCompanyReceiptFromDistributor');
 
 const router = express.Router();
+router.use(requireAuth, requireCompanyModule("receipts"));
 
 function resolveReceiptFamily(req) {
   const family = asText(req.query.family || req.body.family || '').toLowerCase();

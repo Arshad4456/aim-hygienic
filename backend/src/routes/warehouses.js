@@ -1,6 +1,7 @@
 const express = require("express");
 const Warehouse = require("../models/Warehouse");
 const { requireAuth } = require("../utils/auth");
+const { assertCompanyLimit, requireCompanyModule } = require("../core/access/companyAccessGuard");
 const { createMasterInTenant, updateMasterInTenant, deleteMasterFromTenant, findTenantMasterById, listTenantMasterByCompany } = require("../utils/tenantMasters");
 const { listAllTenantTargets } = require("../utils/tenantModels");
 
@@ -50,11 +51,12 @@ async function findScopedWarehouse(id, req, explicitScope = {}) {
   return { doc: null, isTenant: false, companyId: "", companyName: "" };
 }
 
-router.post("/", requireAuth, async (req, res) => {
+router.post("/", requireAuth, requireCompanyModule("warehouses"), async (req, res) => {
   try {
     const body = req.body || {};
     const scope = resolveCompanyScope(req, body);
     if (!scope.companyId) return res.status(400).json({ ok: false, message: "Company is required for this role." });
+    await assertCompanyLimit(scope.companyId, "warehouses");
     const doc = await createMasterInTenant({
       companyId: scope.companyId,
       companyName: scope.companyName,
@@ -76,11 +78,13 @@ router.post("/", requireAuth, async (req, res) => {
     });
     return res.status(201).json({ ok: true, warehouse: doc });
   } catch (e) {
-    return res.status(500).json({ ok: false, message: e?.code === 11000 ? "Warehouse ID already exists" : "Failed to create warehouse" });
+    if (e?.code === 11000) return res.status(409).json({ ok: false, message: "Warehouse ID already exists" });
+    if (/limit|plan|subscription/i.test(e?.message || "")) return res.status(402).json({ ok: false, message: e.message });
+    return res.status(500).json({ ok: false, message: "Failed to create warehouse" });
   }
 });
 
-router.get("/", requireAuth, async (req, res) => {
+router.get("/", requireAuth, requireCompanyModule("warehouses"), async (req, res) => {
   try {
     if (!isSystemLevelAdmin(req.user?.role)) {
       const items = await listTenantMasterByCompany(req.user?.companyId, "warehouses");
@@ -93,7 +97,7 @@ router.get("/", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/:id", requireAuth, async (req, res) => {
+router.get("/:id", requireAuth, requireCompanyModule("warehouses"), async (req, res) => {
   try {
     const scoped = await findScopedWarehouse(req.params.id, req);
     if (!scoped.doc) return res.status(404).json({ ok: false, message: "Not found" });
@@ -103,7 +107,7 @@ router.get("/:id", requireAuth, async (req, res) => {
   }
 });
 
-router.put("/:id", requireAuth, async (req, res) => {
+router.put("/:id", requireAuth, requireCompanyModule("warehouses"), async (req, res) => {
   try {
     const scoped = await findScopedWarehouse(req.params.id, req, resolveCompanyScope(req, req.body || {}));
     const existing = scoped.doc;
@@ -142,7 +146,7 @@ router.put("/:id", requireAuth, async (req, res) => {
   }
 });
 
-router.delete("/:id", requireAuth, async (req, res) => {
+router.delete("/:id", requireAuth, requireCompanyModule("warehouses"), async (req, res) => {
   try {
     const scoped = await findScopedWarehouse(req.params.id, req);
     const existing = scoped.doc;

@@ -14,7 +14,7 @@ export const SYSTEM_MODULE_KEYS = [
 ];
 
 const COMMON_COMPANY_MODULES = [
-  "dashboard", "users", "roles", "products", "customers", "suppliers", "warehouses", "inventory", "warehouse", "finance", "receipts", "payments", "expenses", "reports", "settings", "notifications",
+  "dashboard", "company-control", "users", "roles", "products", "customers", "suppliers", "warehouses", "inventory", "warehouse", "finance", "receipts", "payments", "expenses", "reports", "settings", "notifications",
 ];
 
 export const ERP_MODULE_SETS = {
@@ -36,10 +36,10 @@ export const ERP_MODULE_SETS = {
     "procurement", "purchase-requests", "purchase-orders", "supplier-payments", "goods-receipts", "manufacturing",
   ],
   retail_pos_erp: [
-    "dashboard", "users", "roles", "products", "customers", "warehouses", "inventory", "warehouse", "retail-pos", "customer-orders", "customer-billing", "returns", "goods-receipts", "finance", "receipts", "payments", "expenses", "reports", "settings", "notifications",
+    "dashboard", "company-control", "users", "roles", "products", "customers", "warehouses", "inventory", "warehouse", "retail-pos", "customer-orders", "customer-billing", "returns", "goods-receipts", "finance", "receipts", "payments", "expenses", "reports", "settings", "notifications",
   ],
   service_erp: [
-    "dashboard", "users", "roles", "customers", "products", "inventory", "warehouse", "service", "finance", "receipts", "payments", "expenses", "reports", "settings", "notifications",
+    "dashboard", "company-control", "users", "roles", "customers", "products", "inventory", "warehouse", "service", "finance", "receipts", "payments", "expenses", "reports", "settings", "notifications",
   ],
   custom_erp: [
     ...COMMON_COMPANY_MODULES,
@@ -99,7 +99,7 @@ export const ROLE_ALIASES = {
 
 export const ROLE_ACCESS_MATRIX = {
   "system admin": role("System Admin", "system", "/portals/system-admin", SYSTEM_MODULE_KEYS),
-  "company admin": role("Company Admin", "company", "/portals", ["*"], { companyAdmin: true }),
+  "company admin": role("Company Admin", "company", "/portals/company-control", ["*"], { companyAdmin: true }),
   ceo: role("CEO", "company", "/portals", ["dashboard", "reports", "finance", "inventory", "primary-sales-orders", "secondary-sales-orders", "retail-pos", "manufacturing", "service", "trading", "settings"]),
   "purchase manager": role("Purchase Manager", "company", "/portals/procurement", ["dashboard", "suppliers", "products", "procurement", "purchase-requests", "purchase-orders", "supplier-payments", "goods-receipts", "inventory", "warehouse", "reports", "settings", "notifications"]),
   "finance manager": role("Finance Manager", "company", "/portals/finance", ["dashboard", "finance", "receipts", "payments", "expenses", "loans", "reports", "settings", "notifications"]),
@@ -167,7 +167,7 @@ export function buildAllowedModuleKeys(user = {}, visibleModules = []) {
   const roleKeys = profile.moduleKeys || [];
   const planKeys = getPlanAllowedModules(user, visibleModules);
   const restrictByPlan = profile.scope !== "system" && planKeys.length > 0;
-  const allowed = restrictByPlan ? roleKeys.filter((key) => key === "dashboard" || key === "settings" || planKeys.includes(key)) : roleKeys;
+  const allowed = restrictByPlan ? roleKeys.filter((key) => key === "dashboard" || key === "company-control" || key === "settings" || planKeys.includes(key)) : roleKeys;
   return uniq(allowed);
 }
 

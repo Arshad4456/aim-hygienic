@@ -1,5 +1,6 @@
 const express = require("express");
 const { requireAuth } = require("../utils/auth");
+const { requireCompanyModule } = require("../core/access/companyAccessGuard");
 const SupplierInvoice = require("../models/SupplierInvoice");
 const SupplierPayment = require("../models/SupplierPayment");
 const { getScopedModels, asText } = require("../services/scopedModels");
@@ -7,6 +8,7 @@ const { postSupplierInvoice } = require("../services/posting/postSupplierInvoice
 const { postSupplierPayment } = require("../services/posting/postSupplierPayment");
 
 const router = express.Router();
+router.use(requireAuth, requireCompanyModule("payments"));
 
 router.get("/supplier-invoices", requireAuth, async (req, res) => {
   try {
