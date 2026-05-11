@@ -1,0 +1,85 @@
+import React, { useState } from 'react';
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useAuth } from '../../../../foundation/auth/useAuth';
+import Button from '../../../../foundation/ui/Button';
+import Input from '../../../../foundation/ui/Input';
+import Toast from '../../../../foundation/ui/Toast';
+import { APP_CONFIG, getAppInitials } from '../../../../config/app';
+
+export default function LoginScreen() {
+  const { login } = useAuth();
+  const [mobile, setMobile] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function onSubmit() {
+    setError('');
+
+    const normalizedMobile = mobile.trim();
+    if (!normalizedMobile || !password) {
+      setError('Please enter mobile number and password');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await login({ mobile: normalizedMobile, password });
+    } catch (err) {
+      setError(err.message || 'Failed to login');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.page}>
+      <View style={styles.card}>
+        <View style={styles.header}>
+          <View style={styles.badge}><Text style={styles.badgeText}>{getAppInitials()}</Text></View>
+          <View>
+            <Text style={styles.title}>{APP_CONFIG.name}</Text>
+            <Text style={styles.subtitle}>Login to continue</Text>
+          </View>
+        </View>
+
+        <Toast message={error} />
+
+        <View style={styles.form}>
+          <Input label="Mobile Number" value={mobile} onChangeText={setMobile} autoCapitalize="none" keyboardType="phone-pad" placeholder="03xxxxxxxxx" />
+          <View>
+            <Input
+              label="Password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+              placeholder="Enter Your Password"
+              inputStyle={styles.passwordInput}
+            />
+            <Pressable onPress={() => setShowPassword((v) => !v)} style={styles.eyeButton} hitSlop={8}>
+              <Text style={styles.eyeText}>{showPassword ? '🙈' : '👁️'}</Text>
+            </Pressable>
+          </View>
+          <Button title={loading ? 'Signing in...' : 'Login'} onPress={onSubmit} loading={loading} />
+          <Text style={styles.hint}>If password is forgotten, contact your ERP admin.</Text>
+        </View>
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  page: { flex: 1, backgroundColor: '#f4f4f5', justifyContent: 'center', padding: 16 },
+  card: { backgroundColor: '#fff', borderRadius: 20, borderWidth: 1, borderColor: '#e4e4e7', padding: 18, gap: 14 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  badge: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#d1fae5', alignItems: 'center', justifyContent: 'center' },
+  badgeText: { color: '#047857', fontWeight: '700' },
+  title: { fontSize: 20, fontWeight: '700', color: '#18181b' },
+  subtitle: { fontSize: 13, color: '#52525b', marginTop: 2 },
+  form: { gap: 12 },
+  passwordInput: { paddingRight: 42 },
+  eyeButton: { position: 'absolute', right: 12, top: 24, height: 46, justifyContent: 'center' },
+  eyeText: { fontSize: 16 },
+  hint: { textAlign: 'center', color: '#71717a', fontSize: 12, marginTop: 2 },
+});

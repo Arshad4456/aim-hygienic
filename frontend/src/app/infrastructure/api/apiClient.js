@@ -107,11 +107,33 @@ function serializeBody(body) {
   return JSON.stringify(body);
 }
 
+function stripHtml(value = "") {
+  return String(value || "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildHttpErrorMessage(response, payload) {
+  const status = response?.status;
+  const plainMessage = stripHtml(payload?.message || payload?.error || "");
+  if (status === 502) return "API gateway error 502. The frontend reached Cloudflare/Nginx, but the backend upstream did not respond. Check PM2 backend, backend port, and Nginx /api proxy.";
+  if (status === 503) return "API service unavailable 503. Backend service is temporarily unavailable or restarting.";
+  if (status === 504) return "API gateway timeout 504. Backend took too long to respond.";
+  return plainMessage || `Request failed (${status})`;
+}
+
 async function parseResponse(response) {
   const contentType = response.headers.get("content-type") || "";
   if (contentType.includes("application/json")) return response.json().catch(() => null);
   const text = await response.text().catch(() => "");
-  return text ? { message: text } : null;
+  return text ? { message: stripHtml(text), rawContentType: contentType } : null;
 }
 
 export async function apiFetch(path, { method = "GET", body, token, credentials, headers, ...rest } = {}) {
@@ -131,7 +153,7 @@ export async function apiFetch(path, { method = "GET", body, token, credentials,
       const response = await fetch(`${baseUrl}${path}`, requestOptions);
       const payload = await parseResponse(response);
       if (!response.ok) {
-        const error = new Error(payload?.message || payload?.error || `Request failed (${response.status})`);
+        const error = new Error(buildHttpErrorMessage(response, payload));
         error.status = response.status;
         error.payload = payload;
         throw error;

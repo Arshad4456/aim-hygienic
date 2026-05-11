@@ -3,9 +3,9 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { AuthProvider } from './src/auth/AuthProvider';
-import RootNavigator from './src/navigation/rootNavigator';
-import { installGlobalTextTranslator } from './src/i18n/globalTextTranslator';
+import { AuthProvider } from './src/app/foundation/auth/AuthProvider';
+import RootNavigator from './src/app/navigation/rootNavigator';
+import { installGlobalTextTranslator } from './src/app/i18n/globalTextTranslator';
 
 installGlobalTextTranslator();
 
