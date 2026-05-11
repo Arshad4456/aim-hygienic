@@ -1,31 +1,74 @@
 # Rawyan ERP
 
-Rawyan ERP is a modular SaaS ERP system for distribution, procurement, inventory, warehouse, sales, finance, fleet, live tracking, reports, and role-based mobile operations.
+Rawyan ERP is being upgraded into a modular SaaS ERP platform with separate ERP-type folders, role-aware portals, and module-owned frontend/backend code.
 
 ## Stack
 
 - Backend: Node.js, Express.js, MongoDB, Mongoose
 - Frontend: Next.js App Router, JavaScript, Tailwind CSS
 - Mobile: Expo React Native
+- Deployment target: VPS, MongoDB Atlas, Cloudflare R2, Nginx, PM2/systemd
 
-## Step 2 Architecture
+## Current Phase 1 Architecture
 
-- `backend/src/core` holds system-level ERP features such as ERP Templates, roles, permissions, audit, approvals, notifications.
-- `backend/src/modules` holds business module wrappers and future controller/service/repository implementations.
-- `frontend/app/portals` holds routes only.
-- `frontend/src/features` holds reusable ERP module logic.
-- `mobile/src/features` holds role-based mobile modules.
+### Backend
 
-See `docs/RAWYAN_ERP_STEP_2_REFACTOR.md` for details.
+Backend ERP code is organized under:
 
-## Phase 9 Status
+```txt
+backend/src/erp/{erp-name}/{module-name}/
+  controllers/
+  models/
+  permissions/
+  routes/
+  services/
+  utils/
+  validators/
+  workflows/
+```
 
-Phase 9 adds final mobile synchronization and deployment readiness:
+### Frontend
 
-- ERP-type-aware mobile menus and role routing
-- Retail POS, Manufacturing, Service, Trading, System Admin, and Company Admin mobile workspaces
-- Generic mobile document upload helpers for Cloudflare R2-backed uploads
-- Backend health/readiness checks at `/api/health` and `/api/health/ready`
-- Deployment checklist for MongoDB Atlas, Cloudflare, frontend, backend, and Expo mobile
+All frontend source code now lives under:
 
-See `docs/PHASE_9_MOBILE_TEST_DEPLOYMENT.md` and `docs/DEPLOYMENT_CHECKLIST.md`.
+```txt
+frontend/src/app/*
+```
+
+ERP and business modules now live under:
+
+```txt
+frontend/src/app/modules/{erp-name}/{module-name}/
+  pages/
+  components/
+  services/
+  hooks/
+  forms/
+  tables/
+  permissions/
+  utils/
+  validators/
+  workflows/
+```
+
+Examples:
+
+```txt
+frontend/src/app/modules/distribution/territory/
+frontend/src/app/modules/distribution/sales/
+frontend/src/app/modules/logistics/live-tracking/
+frontend/src/app/modules/manufacturing/production/
+frontend/src/app/modules/retail-pos/pos/
+frontend/src/app/modules/garment/hr-payroll/
+frontend/src/app/modules/common/notifications/
+frontend/src/app/modules/common/reports/
+frontend/src/app/modules/platform/system-admin/
+```
+
+Common modules are role-aware. Dashboard, notifications, messages, reports, settings, files, and audit logs must always filter by `companyId`, `erpType`, `role`, `permissions`, and assigned business scope.
+
+## Important Phase 1 Docs
+
+- `docs/PHASE_1_V3_FRONTEND_REFACTOR_REPORT.md`
+- `docs/PHASE_1_V3_FRONTEND_DELETED_PATHS.md`
+- `frontend/src/app/modules/erpModuleManifest.js`
