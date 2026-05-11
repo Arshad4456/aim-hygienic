@@ -2,10 +2,25 @@ import Link from "next/link";
 import PublicSiteLayout from "@/src/app/landing-page/components/PublicSiteLayout";
 import { CTASection, SectionIntro } from "@/src/app/landing-page/components/PublicSections";
 import { industrySolutions } from "@/src/app/landing-page/data/marketingData";
-export function generateStaticParams() { return industrySolutions.map((industry) => ({ slug: industry.slug })); }
-export function generateMetadata({ params }) { const industry = industrySolutions.find((item) => item.slug === params.slug); return { title: `${industry?.name || "ERP Solution"} | Rawyan ERP` }; }
-export default function IndustryDetailPage({ params }) {
-  const industry = industrySolutions.find((item) => item.slug === params.slug) || industrySolutions[0];
+
+export function generateStaticParams() {
+  return industrySolutions.map((industry) => ({ slug: industry.slug }));
+}
+
+async function resolveSlug(params) {
+  const resolvedParams = typeof params?.then === "function" ? await params : params;
+  return resolvedParams?.slug;
+}
+
+export async function generateMetadata({ params }) {
+  const slug = await resolveSlug(params);
+  const industry = industrySolutions.find((item) => item.slug === slug);
+  return { title: `${industry?.name || "ERP Solution"} | Rawyan ERP` };
+}
+
+export default async function IndustryDetailPage({ params }) {
+  const slug = await resolveSlug(params);
+  const industry = industrySolutions.find((item) => item.slug === slug) || industrySolutions[0];
   return (
     <PublicSiteLayout>
       <section className="px-4 py-16 sm:px-5 lg:px-8 lg:py-20">

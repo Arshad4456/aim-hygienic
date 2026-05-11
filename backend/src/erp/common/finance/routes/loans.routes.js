@@ -6,6 +6,7 @@ const Account = require("../models/Account");
 const AccountTransaction = require("../models/AccountTransaction");
 const Company = require("../../../platform/companies/models/Company");
 const { requireAuth, requireRole } = require("../../../platform/auth/utils/auth");
+const { requireCompanyModule } = require("../../../platform/access/permissions/companyAccessGuard");
 const { toTenantDatabaseName } = require("../../../platform/tenancy/utils/tenantDatabases");
 
 const router = express.Router();

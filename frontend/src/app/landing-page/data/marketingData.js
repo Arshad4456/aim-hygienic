@@ -5,9 +5,9 @@ export const whatsappLink = whatsappDigits ? `https://wa.me/${whatsappDigits}` :
 export const mailLink = `mailto:${BRAND_CONFIG.salesEmail}`;
 
 export const publicNav = [
-  { label: "Features", href: "../pages/FeaturesPage.js" },
+  { label: "Features", href: "/features" },
   { label: "Modules", href: "/modules" },
-  { label: "Pricing", href: "../pages/PricingPage.js" },
+  { label: "Pricing", href: "/pricing" },
   { label: "Book Demo", href: "/book-demo" },
   { label: "Contact", href: "/contact" },
 ];
