@@ -1,4 +1,4 @@
-import { apiFetch } from "@/src/services/apiClient";
+import { apiFetch } from "./api";
 
 function formatFields404(error) {
   if (/404/.test(String(error?.message || ""))) {

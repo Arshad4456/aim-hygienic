@@ -1,3 +1,0 @@
-const service = require("./service.service");
-function send(fn, code=200){ return async (req,res)=>{ try{ res.status(code).json(await service[fn](req)); }catch(e){ res.status(400).json({ok:false,message:e.message||"Service ERP error"}); } }; }
-module.exports={ overview:send("overview"), listAssets:send("listAssets"), createAsset:send("createAsset",201), listContracts:send("listContracts"), createContract:send("createContract",201), listTickets:send("listTickets"), createTicket:send("createTicket",201), updateTicketStatus:send("updateTicketStatus"), listOrders:send("listOrders"), createOrder:send("createOrder",201), completeOrder:send("completeOrder"), listTechnicians:send("listTechnicians"), printDocument:send("printDocument") };

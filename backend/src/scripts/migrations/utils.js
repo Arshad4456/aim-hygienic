@@ -4,7 +4,7 @@ require("dotenv").config({ path: path.join(__dirname, "../../../.env") });
 require("dotenv").config();
 
 const { connectDB } = require("../../db");
-const { listAllTenantTargets, getTenantModel } = require("../../utils/tenantModels");
+const { listAllTenantTargets, getTenantModel } = require("../../erp/platform/tenancy/utils/tenantModels");
 
 function parseArgs(argv = process.argv.slice(2)) {
   const flags = new Set(argv);

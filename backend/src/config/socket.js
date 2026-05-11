@@ -1,1 +1,1 @@
-module.exports = require("../socket");
+module.exports = require("../socket/index");

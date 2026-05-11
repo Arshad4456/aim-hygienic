@@ -1,0 +1,11 @@
+const express = require("express");
+const { requireAuth } = require("../../auth/utils/auth");
+const controller = require("../controllers/role.controller");
+const router = express.Router();
+router.get("/", requireAuth, controller.list);
+router.get("/options", requireAuth, controller.options);
+router.post("/seed-defaults", requireAuth, controller.seed);
+router.post("/", requireAuth, controller.create);
+router.put("/:id", requireAuth, controller.update);
+router.delete("/:id", requireAuth, controller.remove);
+module.exports = router;

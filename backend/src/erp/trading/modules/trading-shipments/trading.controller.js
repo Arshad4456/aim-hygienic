@@ -1,3 +1,0 @@
-const service = require("./trading.service");
-function send(fn, code=200){ return async (req,res)=>{ try{ res.status(code).json(await service[fn](req)); }catch(e){ res.status(400).json({ok:false,message:e.message||"Trading ERP error"}); } }; }
-module.exports={ overview:send("overview"), listShipments:send("listShipments"), createShipment:send("createShipment",201), updateShipmentStatus:send("updateShipmentStatus"), listLettersOfCredit:send("listLettersOfCredit"), createLetterOfCredit:send("createLetterOfCredit",201), listLandedCosts:send("listLandedCosts"), createLandedCost:send("createLandedCost",201), listProducts:send("listProducts"), listWarehouses:send("listWarehouses"), printDocument:send("printDocument") };

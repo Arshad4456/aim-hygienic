@@ -8,10 +8,10 @@ require("dotenv").config();
 
 const { connectDB } = require("./src/db");
 const { buildCorsOptions } = require("./src/config/cors");
-const { registerRoutes } = require("./src/routes");
+const { registerRoutes } = require("./src/erp.routes");
 const { APP_BRAND } = require("./src/config/brand");
-const { createSocketServer } = require("./src/socket");
-const { registerLocationSocket } = require("./src/erp/logistics/modules/live-tracking/socket");
+const { createSocketServer } = require("./src/socket/index");
+const { registerLocationSocket } = require("./src/erp/logistics/live-tracking/services/socket");
 const { validateEnvironment } = require("./src/config/validateEnv");
 
 validateEnvironment();

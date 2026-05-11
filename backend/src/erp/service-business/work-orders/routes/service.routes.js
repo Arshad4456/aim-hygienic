@@ -1,0 +1,14 @@
+const express = require("express");
+const { requireAuth } = require("../../../platform/auth/utils/auth");
+const { requireCompanyModule } = require("../../../platform/access/permissions/companyAccessGuard");
+const c = require("../controllers/service.controller");
+const router = express.Router();
+router.use(requireAuth, requireCompanyModule("service"));
+router.get("/overview", c.overview);
+router.get("/assets", c.listAssets); router.post("/assets", c.createAsset);
+router.get("/contracts", c.listContracts); router.post("/contracts", c.createContract);
+router.get("/tickets", c.listTickets); router.post("/tickets", c.createTicket); router.patch("/tickets/:id/status", c.updateTicketStatus);
+router.get("/orders", c.listOrders); router.post("/orders", c.createOrder); router.post("/orders/:id/complete", c.completeOrder);
+router.get("/technicians", c.listTechnicians);
+router.get("/print/:type/:id", c.printDocument);
+module.exports = router;

@@ -1,0 +1,8 @@
+const roleService = require("../services/role.service");
+async function list(req, res) { try { res.json({ ok: true, roles: await roleService.listRoles(req.query, req.user || {}) }); } catch (e) { res.status(500).json({ ok: false, message: e.message || "Unable to list roles" }); } }
+async function options(req, res) { try { res.json({ ok: true, roles: await roleService.listRoleOptions(req.query, req.user || {}) }); } catch (e) { res.status(500).json({ ok: false, message: e.message || "Unable to list role options" }); } }
+async function create(req, res) { try { res.status(201).json({ ok: true, role: await roleService.createRole(req.body, req.user || {}) }); } catch (e) { res.status(400).json({ ok: false, message: e.message || "Unable to create role" }); } }
+async function update(req, res) { try { res.json({ ok: true, role: await roleService.updateRole(req.params.id, req.body, req.user || {}) }); } catch (e) { res.status(400).json({ ok: false, message: e.message || "Unable to update role" }); } }
+async function remove(req, res) { try { res.json({ ok: true, role: await roleService.deleteRole(req.params.id) }); } catch (e) { res.status(400).json({ ok: false, message: e.message || "Unable to delete role" }); } }
+async function seed(req, res) { try { res.json({ ok: true, roles: await roleService.seedDefaultRoles({ ...(req.body || {}), ...(req.query || {}), companyId: req.body?.companyId || req.query?.companyId || req.user?.companyId, erpTemplateKey: req.body?.erpTemplateKey || req.query?.erpTemplateKey || req.user?.erpTemplateKey }) }); } catch (e) { res.status(400).json({ ok: false, message: e.message || "Unable to seed roles" }); } }
+module.exports = { list, options, create, update, remove, seed };

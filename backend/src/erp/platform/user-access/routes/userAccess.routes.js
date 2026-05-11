@@ -1,0 +1,11 @@
+const express = require("express");
+const { requireAuth } = require("../../auth/utils/auth");
+const controller = require("../controllers/userAccess.controller");
+const router = express.Router();
+router.get("/users", requireAuth, controller.listUsers);
+router.post("/users", requireAuth, controller.createUser);
+router.get("/users/:id", requireAuth, controller.getUser);
+router.patch("/users/:id/role", requireAuth, controller.assignRole);
+router.patch("/users/:id/access", requireAuth, controller.updateAccess);
+router.patch("/users/:id/status", requireAuth, controller.setStatus);
+module.exports = router;

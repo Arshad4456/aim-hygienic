@@ -1,0 +1,17 @@
+const express = require("express");
+const { requireAuth } = require("../../../platform/auth/utils/auth");
+const { requireCompanyModule } = require("../../../platform/access/permissions/companyAccessGuard");
+const controller = require("../controllers/retail-pos.controller");
+const router = express.Router();
+router.use(requireAuth, requireCompanyModule("retail-pos"));
+router.get("/overview", controller.overview);
+router.get("/sessions", controller.sessions);
+router.post("/sessions/open", controller.openSession);
+router.post("/sessions/:id/close", controller.closeSession);
+router.get("/products", controller.products);
+router.get("/customers", controller.customers);
+router.get("/sales", controller.sales);
+router.post("/sales", controller.createSale);
+router.post("/sales/:id/return", controller.returnSale);
+router.get("/print/:type/:id", controller.printDocument);
+module.exports = router;

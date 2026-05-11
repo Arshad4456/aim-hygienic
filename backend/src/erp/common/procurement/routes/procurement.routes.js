@@ -1,0 +1,32 @@
+const express = require("express");
+const { requireAuth } = require("../../../platform/auth/utils/auth");
+const { requireCompanyModule } = require("../../../platform/access/permissions/companyAccessGuard");
+const controller = require("../controllers/procurement.controller");
+const router = express.Router();
+router.use(requireAuth, requireCompanyModule("procurement"));
+
+router.get("/overview", requireAuth, requireCompanyModule("procurement"), controller.overview);
+router.get("/suppliers", requireAuth, controller.suppliers);
+router.get("/products", requireAuth, controller.products);
+router.get("/warehouses", requireAuth, controller.warehouses);
+router.post("/suppliers", requireAuth, controller.createSupplier);
+router.put("/suppliers/:id", requireAuth, controller.updateSupplier);
+router.delete("/suppliers/:id", requireAuth, controller.deleteSupplier);
+router.get("/print/:type/:id", requireAuth, controller.printDocument);
+router.get("/suppliers/:id/statement", requireAuth, controller.supplierStatement);
+router.get("/purchase-requests", requireAuth, controller.purchaseRequests);
+router.post("/purchase-requests", requireAuth, controller.createPurchaseRequest);
+router.post("/purchase-requests/:id/approve", requireAuth, controller.approvePurchaseRequest);
+router.post("/purchase-requests/:id/convert", requireAuth, controller.convertPurchaseRequest);
+router.get("/purchase-orders", requireAuth, controller.purchaseOrders);
+router.post("/purchase-orders", requireAuth, controller.createPurchaseOrder);
+router.post("/purchase-orders/:id/approve", requireAuth, controller.approvePurchaseOrder);
+router.post("/purchase-orders/:id/receive", requireAuth, controller.receivePurchaseOrder);
+router.get("/goods-receipts", requireAuth, controller.goodsReceipts);
+router.post("/goods-receipts/:id/post", requireAuth, controller.postGoodsReceipt);
+router.post("/goods-receipts/:id/proof", requireAuth, controller.attachGoodsReceiptProof);
+router.get("/supplier-invoices", requireAuth, controller.supplierInvoices);
+router.post("/supplier-invoices/:id/pay", requireAuth, controller.paySupplierInvoice);
+router.get("/supplier-payments", requireAuth, controller.supplierPayments);
+
+module.exports = router;
